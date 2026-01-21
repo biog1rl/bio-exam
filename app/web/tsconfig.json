@@ -1,0 +1,42 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"lib": ["dom", "dom.iterable", "esnext"],
+		"allowJs": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"forceConsistentCasingInFileNames": true,
+		"noEmit": true,
+		"esModuleInterop": true,
+		"module": "esnext",
+		"isolatedModules": true,
+		"jsx": "react-jsx",
+		"incremental": true,
+		"plugins": [
+			{
+				"name": "next"
+			}
+		],
+		"paths": {
+			"@/*": ["./*"]
+		},
+		"moduleResolution": "bundler",
+		"ignoreDeprecations": "5.0",
+		"resolveJsonModule": true
+	},
+	"include": [
+		"next-env.d.ts",
+		"**/*.ts",
+		"**/*.tsx",
+		".next/types/**/*.ts",
+		".next\\dev/types/**/*.ts",
+		".next/dev/types/**/*.ts",
+		"app/(internal)/(protected)/activecollab/ActiveCollabClient.tsx",
+		"app/(internal)/(protected)/dashboard/page.tsx",
+		"app/(internal)/(protected)/projects/page.tsx",
+		"components/Workload/WorkloadTable.tsx",
+		"app/(internal)/(protected)/projects/[id]/page.tsx",
+		"app/(internal)/(protected)/projects/[id]/ProjectDetailsWrapper.tsx"
+	],
+	"exclude": ["node_modules"]
+}
