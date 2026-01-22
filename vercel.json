@@ -1,7 +1,5 @@
 {
-	"version": 2,
-	"installCommand": "corepack enable && yarn install",
-	"buildCommand": "yarn build:server",
+	"installCommand": "corepack enable && yarn install && yarn build:server",
 	"rewrites": [
 		{
 			"source": "/(.*)",
