@@ -3,8 +3,18 @@
 	"buildCommand": "node vercel-build-once.cjs",
 	"rewrites": [
 		{
-			"source": "/(.*)",
-			"destination": "/api"
+			"source": "/api/(.*)",
+			"destination": "/api/index.ts"
+		},
+		{
+			"source": "/healthz",
+			"destination": "/api/index.ts"
 		}
-	]
+	],
+	"functions": {
+		"api/index.ts": {
+			"maxDuration": 30,
+			"memory": 1024
+		}
+	}
 }

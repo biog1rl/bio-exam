@@ -64,7 +64,9 @@ app.use(
 app.use(express.json({ limit: '2mb' }))
 
 // --- Раздача статических файлов uploads
-app.use('/uploads', express.static(path.join(process.cwd(), '../web/public/uploads')))
+if (process.env.NODE_ENV !== 'production') {
+	app.use('/uploads', express.static(path.join(process.cwd(), '../web/public/uploads')))
+}
 
 // --- Сессия из JWT (опционально, чтобы req.authUser был доступен в роутерах)
 app.use(sessionOptional())
