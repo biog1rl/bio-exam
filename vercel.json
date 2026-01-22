@@ -1,7 +1,7 @@
 {
 	"version": 2,
 	"installCommand": "corepack enable && yarn install",
-	"buildCommand": "node app/server/vercel-build.cjs",
+	"buildCommand": "yarn build:server",
 	"rewrites": [
 		{
 			"source": "/(.*)",

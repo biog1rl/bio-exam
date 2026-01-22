@@ -9,6 +9,7 @@
 	],
 	"scripts": {
 		"build:rbac": "yarn workspace @bio-exam/rbac build",
+		"build:server": "yarn build:rbac && yarn workspace @bio-exam/server build",
 		"build": "yarn build:rbac && concurrently \"yarn --cwd app/server build\" \"yarn --cwd app/web build\"",
 		"start": "concurrently \"yarn --cwd app/server start\" \"yarn --cwd app/web start\"",
 		"prod": "yarn build && yarn start",
