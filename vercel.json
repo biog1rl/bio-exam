@@ -1,5 +1,6 @@
 {
-	"installCommand": "corepack enable && yarn install && yarn build:server",
+	"installCommand": "corepack enable && yarn install",
+	"buildCommand": "node vercel-build-once.cjs",
 	"rewrites": [
 		{
 			"source": "/(.*)",

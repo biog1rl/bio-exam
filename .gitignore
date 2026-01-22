@@ -17,6 +17,7 @@ build
 out
 .next
 .vercel
+.vercel-build.lock
 
 # Environment variables
 .env
