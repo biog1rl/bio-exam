@@ -11,16 +11,18 @@ function run(cmd, cwd) {
 }
 
 try {
-  const rootDir = path.resolve(__dirname, '../..');
+  // Скрипт запускается из корня репо через: node app/server/vercel-build.cjs
+  const rootDir = process.cwd();
+  const serverDir = path.join(rootDir, 'app/server');
 
-  console.log('Installing dependencies...');
-  run('yarn install', rootDir);
+  console.log('Root directory:', rootDir);
+  console.log('Server directory:', serverDir);
 
   console.log('Building @bio-exam/rbac...');
   run('yarn workspace @bio-exam/rbac build', rootDir);
 
   console.log('Building server...');
-  run('yarn build', __dirname);
+  run('yarn workspace @bio-exam/server build', rootDir);
 
   console.log('Build completed successfully!');
 } catch (error) {

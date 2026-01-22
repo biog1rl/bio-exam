@@ -1,0 +1,12 @@
+# Exclude web app (only deploying server)
+app/web
+
+# Exclude docs
+md/
+
+# Exclude dev files
+*.log
+.env
+.env.*
+app/server/.env
+app/server/.env.*
