@@ -1,6 +1,6 @@
 {
 	"version": 2,
-	"installCommand": "npm install -g yarn@4.12.0 && cd ../.. && yarn install",
+	"installCommand": "corepack enable && cd ../.. && yarn install",
 	"buildCommand": "bash vercel-build.sh",
 	"rewrites": [
 		{
