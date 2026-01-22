@@ -5,7 +5,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 // @ts-ignore - compiled file
-import app from '../dist/app.js'
+import app from '../app/server/dist/app.js'
 
 export default async (req: VercelRequest, res: VercelResponse) => {
 	return app(req, res)

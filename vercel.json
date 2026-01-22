@@ -2,15 +2,10 @@
 	"version": 2,
 	"installCommand": "corepack enable && yarn install",
 	"buildCommand": "node app/server/vercel-build.cjs",
-	"functions": {
-		"app/server/api/**/*.ts": {
-			"runtime": "@vercel/node@3.0.22"
-		}
-	},
 	"rewrites": [
 		{
 			"source": "/(.*)",
-			"destination": "/app/server/api"
+			"destination": "/api"
 		}
 	]
 }
