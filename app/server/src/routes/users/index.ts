@@ -128,7 +128,7 @@ const PatchBody = z.object({
 	position: z.string().trim().max(100).optional(),
 	birthdate: z
 		.string()
-		.transform((val) => {
+		.transform((val: string) => {
 			if (!val) return null
 			// Если формат дд/мм/гггг - конвертируем в YYYY-MM-DD
 			if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
@@ -182,11 +182,11 @@ router.patch('/:id', sessionRequired(), requirePerm('users', 'edit'), async (req
 
 			if (body.roles) {
 				const allow = new Set<string>(ROLE_KEYS as ReadonlyArray<string>)
-				const roleKeys = body.roles.filter((r): r is RoleKey => allow.has(r))
+				const roleKeys = body.roles.filter((r: string): r is RoleKey => allow.has(r))
 
 				await tx.delete(userRoles).where(eq(userRoles.userId, id))
 				if (roleKeys.length > 0) {
-					await tx.insert(userRoles).values(roleKeys.map((rk) => ({ userId: id, roleKey: rk })))
+					await tx.insert(userRoles).values(roleKeys.map((rk: RoleKey) => ({ userId: id, roleKey: rk })))
 				}
 				rolesChanged = true
 			}

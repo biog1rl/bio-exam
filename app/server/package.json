@@ -36,7 +36,8 @@
 		"pino": "^10.0.0",
 		"pino-http": "^11.0.0",
 		"remove-markdown": "^0.6.2",
-		"sharp": "^0.34.5"
+		"sharp": "^0.34.5",
+		"zod": "^3.24.3"
 	},
 	"devDependencies": {
 		"@trivago/prettier-plugin-sort-imports": "^5.2.2",

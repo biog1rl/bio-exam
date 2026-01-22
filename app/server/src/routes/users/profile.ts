@@ -23,7 +23,7 @@ const updateProfileSchema = z.object({
 	position: z.string().trim().max(100, 'Должность слишком длинная').optional(),
 	birthdate: z
 		.string()
-		.transform((val) => {
+		.transform((val: string) => {
 			if (!val) return null
 			// Если формат дд/мм/гггг - конвертируем в YYYY-MM-DD
 			if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
@@ -108,7 +108,7 @@ router.patch('/', sessionRequired(), async (req, res) => {
 		}
 
 		res.json({ user: updatedUser[0] })
-	} catch (error) {
+	} catch (error: unknown) {
 		if (error instanceof z.ZodError) {
 			console.log('Zod validation error:', error.issues)
 			return res.status(400).json({ error: 'Ошибка валидации', details: error.issues, message: 'Validation failed' })
@@ -148,7 +148,7 @@ router.post('/password', sessionRequired(), async (req, res) => {
 		await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, userId))
 
 		res.json({ message: 'Пароль успешно изменен' })
-	} catch (error) {
+	} catch (error: unknown) {
 		if (error instanceof z.ZodError) {
 			return res.status(400).json({ error: 'Ошибка валидации', details: error.issues })
 		}

@@ -104,6 +104,9 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			})
 		} else {
 			userId = body.userId
+			if (!userId) {
+				return res.status(400).json({ error: 'User ID is required' })
+			}
 			const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
 			if (!u) return res.status(404).json({ error: 'User not found' })
 
