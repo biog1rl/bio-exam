@@ -14,16 +14,23 @@ import { sessionRequired } from '../../middleware/auth/session.js'
 const router = Router()
 
 // Путь к папке для сохранения аватаров
-const UPLOAD_DIR = path.join(process.cwd(), '../web/public/uploads/avatars')
+// На Vercel используем /tmp, локально - ../web/public/uploads/avatars
+const UPLOAD_DIR =
+	process.env.VERCEL || process.env.NODE_ENV === 'production'
+		? '/tmp/avatars'
+		: path.join(process.cwd(), '../web/public/uploads/avatars')
 
-// Создаем папку, если она не существует
-if (!fs.existsSync(UPLOAD_DIR)) {
-	fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+// Функция для создания директории (вызывается при загрузке)
+function ensureUploadDir() {
+	if (!fs.existsSync(UPLOAD_DIR)) {
+		fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+	}
 }
 
 // Настройка multer для загрузки файлов
 const storage = multer.diskStorage({
 	destination: (_req, _file, cb) => {
+		ensureUploadDir()
 		cb(null, UPLOAD_DIR)
 	},
 	filename: (_req, file, cb) => {
@@ -117,6 +124,15 @@ router.post('/', sessionRequired(), upload.single('avatar') as any, async (req, 
 		const userId = req.authUser?.id
 		if (!userId) {
 			return res.status(401).json({ error: 'Не авторизован' })
+		}
+
+		// Временно отключаем загрузку аватаров в production на Vercel
+		// TODO: Интегрировать S3/Cloudinary/Vercel Blob для хранения файлов
+		if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+			return res.status(501).json({
+				error: 'Загрузка аватаров временно недоступна',
+				message: 'Avatar upload is not available in production. Please use S3/Cloudinary integration.',
+			})
 		}
 
 		// Получаем параметры кропа из body
