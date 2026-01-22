@@ -4,12 +4,10 @@ app/web
 # Exclude docs
 md/
 
-# Exclude server source (keep dist)
-app/server/src
-
 # Exclude dev files
 *.log
 .env
 .env.*
+!.env.example
 app/server/.env
 app/server/.env.*
