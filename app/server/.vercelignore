@@ -4,4 +4,3 @@ src
 *.log
 .DS_Store
 drizzle.config.ts
-vercel-build.sh
