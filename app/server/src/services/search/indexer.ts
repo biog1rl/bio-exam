@@ -3,14 +3,19 @@ import path from 'node:path'
 import chokidar, { FSWatcher } from 'chokidar'
 import MiniSearch from 'minisearch'
 
-import { DOCS_ROOT, toPosix } from '../../config/docs.js'
 import type { DocNode } from '../../types/services/docs.services.js'
 import type { DocRecord } from '../../types/services/search.service.js'
-import { ensureDocAccessLoaded } from '../docs/access-control.js'
-import { getDocsTree } from '../docs/structure.js'
 import { createDocRecord } from './records.js'
 import { getIndex, getStore, resetStore, setIndex } from './state.js'
 import { processTermAll, tokenizeUnicode } from './tokenize.js'
+
+// import { ensureDocAccessLoaded } from '../docs/access-control.js'
+// import { getDocsTree } from '../docs/structure.js'
+
+const DOCS_ROOT = process.env.DOCS_ROOT || './docs'
+const toPosix = (p: string) => p.replace(/\\/g, '/')
+const ensureDocAccessLoaded = async () => {}
+const getDocsTree = (_path: string) => ({ nodes: [] as DocNode[] })
 
 /** Регэксп для файлов markdown/mdx. */
 const MARKDOWN_RX = /\.mdx?$/i

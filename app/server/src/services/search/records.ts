@@ -1,8 +1,10 @@
 import { transliterate } from '../../lib/transliterate.js'
 import type { DocRecord } from '../../types/services/search.service.js'
-import { getFile } from '../docs/files.js'
 import { extractHeadings, stripMarkdownToText } from './markdown.js'
 import { asciiFold } from './tokenize.js'
+
+// import { getFile } from '../docs/files.js'
+const getFile = (_rel: string) => null as any
 
 /** Имена «индексных» файлов, которые считаются родительской страницей. */
 const INDEX_SEGMENTS = new Set(['index', 'page', 'readme', 'README'])
