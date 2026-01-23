@@ -1,6 +1,3 @@
-# Exclude web app (deploying in separate project)
-app/web
-
 # Exclude docs
 md/
 
