@@ -1,4 +1,5 @@
-src
+# Only ignore local src, not packages/*/src
+/src
 .env
 .env.local
 *.log
