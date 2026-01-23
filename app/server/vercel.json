@@ -1,6 +1,6 @@
 {
 	"installCommand": "corepack enable && yarn --cwd ../.. install",
-	"buildCommand": "yarn --cwd ../.. workspace @bio-exam/rbac build && yarn --cwd ../.. workspace @bio-exam/server build",
+	"buildCommand": "node vercel-build.cjs",
 	"rewrites": [
 		{
 			"source": "/api/(.*)",
