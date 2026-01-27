@@ -5,17 +5,15 @@ export const breadcrumbConfig = {
 	hideOn: [/^\/auth(\/|$)/, /^\/login(\/|$)/, /^\/404$/] as RoutePattern[],
 
 	/** корневые сегменты, где крошки берут имена из дерева (segmentSlug → name) */
-	treeRoots: ['docs', 'editor'] as const,
+	treeRoots: ['editor'] as const,
 
 	/** переопределения лейблов для сегментов */
 	labelOverrides: {
-		docs: 'Документы',
 		editor: 'Редактор',
 		admin: 'Админка',
-		projects: 'Проекты',
 		dashboard: 'Дашборд',
-		workload: 'Нагрузка',
 		users: 'Пользователи',
+		tests: 'Тесты',
 	} as Record<string, string>,
 }
 
