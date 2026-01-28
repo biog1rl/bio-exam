@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +30,22 @@ interface Props {
 
 export default function QuestionEditor({ question, onSave, onCancel }: Props) {
 	const [form, setForm] = useState<Question>({ ...question })
+
+	const handlePromptTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setForm((prev) => ({ ...prev, promptText: e.target.value }))
+	}, [])
+
+	const handleExplanationTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setForm((prev) => ({ ...prev, explanationText: e.target.value || null }))
+	}, [])
+
+	const handlePointsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		setForm((prev) => ({ ...prev, points: parseFloat(e.target.value) || 1 }))
+	}, [])
+
+	const handleOrderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		setForm((prev) => ({ ...prev, order: parseInt(e.target.value) || 0 }))
+	}, [])
 
 	const handleTypeChange = (type: QuestionType) => {
 		let newForm: Question = { ...form, type }
@@ -76,7 +92,7 @@ export default function QuestionEditor({ question, onSave, onCancel }: Props) {
 							<Label>Текст вопроса</Label>
 							<Textarea
 								value={form.promptText}
-								onChange={(e) => setForm({ ...form, promptText: e.target.value })}
+								onChange={handlePromptTextChange}
 								placeholder="Введите текст вопроса... (поддерживается Markdown)"
 								rows={6}
 								className="font-mono text-sm"
@@ -90,7 +106,7 @@ export default function QuestionEditor({ question, onSave, onCancel }: Props) {
 							<Label>Пояснение к ответу (необязательно)</Label>
 							<Textarea
 								value={form.explanationText || ''}
-								onChange={(e) => setForm({ ...form, explanationText: e.target.value || null })}
+								onChange={handleExplanationTextChange}
 								placeholder="Пояснение, которое будет показано после ответа..."
 								rows={4}
 								className="font-mono text-sm"
@@ -137,18 +153,13 @@ export default function QuestionEditor({ question, onSave, onCancel }: Props) {
 								min={0.1}
 								step={0.1}
 								value={form.points}
-								onChange={(e) => setForm({ ...form, points: parseFloat(e.target.value) || 1 })}
+								onChange={handlePointsChange}
 							/>
 						</div>
 
 						<div className="space-y-2">
 							<Label>Порядок</Label>
-							<Input
-								type="number"
-								min={0}
-								value={form.order}
-								onChange={(e) => setForm({ ...form, order: parseInt(e.target.value) || 0 })}
-							/>
+							<Input type="number" min={0} value={form.order} onChange={handleOrderChange} />
 							<p className="text-muted-foreground text-xs">Порядок вопроса в тесте (можно изменить перетаскиванием)</p>
 						</div>
 					</TabsContent>

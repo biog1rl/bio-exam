@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, JSX, useContext } from 'react'
+import { createContext, JSX, useContext, useMemo } from 'react'
 
 import { LexicalEditor } from 'lexical'
 
@@ -33,19 +33,18 @@ export function ToolbarContext({
 	showModal: (title: string, showModal: (onClose: () => void) => JSX.Element) => void
 	children: React.ReactNode
 }) {
-	return (
-		<Context.Provider
-			value={{
-				activeEditor,
-				$updateToolbar,
-				blockType,
-				setBlockType,
-				showModal,
-			}}
-		>
-			{children}
-		</Context.Provider>
+	const value = useMemo(
+		() => ({
+			activeEditor,
+			$updateToolbar,
+			blockType,
+			setBlockType,
+			showModal,
+		}),
+		[activeEditor, $updateToolbar, blockType, setBlockType, showModal]
 	)
+
+	return <Context.Provider value={value}>{children}</Context.Provider>
 }
 
 export function useToolbarContext() {

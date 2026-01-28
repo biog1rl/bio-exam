@@ -61,7 +61,13 @@ export function EmojiPickerPlugin() {
 	const [emojis, setEmojis] = useState<Array<Emoji>>([])
 
 	useEffect(() => {
-		import('../utils/emoji-list').then((file) => setEmojis(file.emojiList))
+		let mounted = true
+		import('../utils/emoji-list').then((file) => {
+			if (mounted) setEmojis(file.emojiList)
+		})
+		return () => {
+			mounted = false
+		}
 	}, [])
 
 	const emojiOptions = useMemo(

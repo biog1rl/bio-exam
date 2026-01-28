@@ -47,7 +47,7 @@ export function useReport(): (arg0: string) => ReturnType<typeof setTimeout> {
 			if (timer.current !== null) {
 				clearTimeout(timer.current)
 			}
-			element.innerHTML = content
+			element.textContent = content
 			timer.current = setTimeout(cleanup, 1000)
 			return timer.current
 		},

@@ -106,6 +106,8 @@ function LazyImage({
       src={src}
       alt={altText}
       ref={imageRef}
+      width={typeof width === "number" ? width : 800}
+      height={typeof height === "number" ? height : 600}
       style={{
         height,
         maxWidth,

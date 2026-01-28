@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { BookOpen, ChevronRight, Download, Edit, EyeOff, FolderPlus, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -239,6 +239,30 @@ export default function TestsClient() {
 			.replace(/^-|-$/g, '')
 	}
 
+	const handleTitleChange = useCallback(
+		(e: React.ChangeEvent<HTMLInputElement>) => {
+			const title = e.target.value
+			setTopicForm((prev) => ({
+				...prev,
+				title,
+				slug: !editingTopic ? generateSlug(title) : prev.slug,
+			}))
+		},
+		[editingTopic]
+	)
+
+	const handleSlugChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		setTopicForm((prev) => ({ ...prev, slug: e.target.value }))
+	}, [])
+
+	const handleDescriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setTopicForm((prev) => ({ ...prev, description: e.target.value }))
+	}, [])
+
+	const handleIsActiveChange = useCallback((checked: boolean) => {
+		setTopicForm((prev) => ({ ...prev, isActive: checked }))
+	}, [])
+
 	if (topicsLoading || testsLoading) {
 		return <div className="p-6">Загрузка...</div>
 	}
@@ -403,27 +427,12 @@ export default function TestsClient() {
 					<div className="space-y-4">
 						<div className="space-y-2">
 							<Label>Название</Label>
-							<Input
-								value={topicForm.title}
-								onChange={(e) => {
-									const title = e.target.value
-									setTopicForm({
-										...topicForm,
-										title,
-										slug: !editingTopic ? generateSlug(title) : topicForm.slug,
-									})
-								}}
-								placeholder="Биология 9 класс"
-							/>
+							<Input value={topicForm.title} onChange={handleTitleChange} placeholder="Биология 9 класс" />
 						</div>
 
 						<div className="space-y-2">
 							<Label>Slug (URL)</Label>
-							<Input
-								value={topicForm.slug}
-								onChange={(e) => setTopicForm({ ...topicForm, slug: e.target.value })}
-								placeholder="biology-9"
-							/>
+							<Input value={topicForm.slug} onChange={handleSlugChange} placeholder="biology-9" />
 							<p className="text-muted-foreground text-xs">Только латинские буквы, цифры и дефисы</p>
 						</div>
 
@@ -431,7 +440,7 @@ export default function TestsClient() {
 							<Label>Описание</Label>
 							<Textarea
 								value={topicForm.description}
-								onChange={(e) => setTopicForm({ ...topicForm, description: e.target.value })}
+								onChange={handleDescriptionChange}
 								placeholder="Описание темы..."
 								rows={3}
 							/>
@@ -439,10 +448,7 @@ export default function TestsClient() {
 
 						<div className="flex items-center justify-between">
 							<Label>Активна</Label>
-							<Switch
-								checked={topicForm.isActive}
-								onCheckedChange={(checked) => setTopicForm({ ...topicForm, isActive: checked })}
-							/>
+							<Switch checked={topicForm.isActive} onCheckedChange={handleIsActiveChange} />
 						</div>
 					</div>
 
