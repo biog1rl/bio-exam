@@ -109,6 +109,8 @@ export const PRESET_CONFIGS = {
 			'FloatingLinkEditor',
 			'FloatingTextFormat',
 			'CodeHighlight',
+			'DraggableBlock',
+			'DragDropPaste',
 		],
 	} as PluginConfig,
 

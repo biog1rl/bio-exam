@@ -36,22 +36,32 @@ function MdxPlugin({
 	lastInitialContent: React.MutableRefObject<string | undefined>
 }) {
 	const [editor] = useLexicalComposerContext()
+	const initialized = useRef(false)
 
 	// Инициализация из MDX (при первой загрузке или изменении initialMdxContent)
 	useEffect(() => {
 		if (initialMdxContent !== undefined && initialMdxContent !== lastInitialContent.current) {
 			lastInitialContent.current = initialMdxContent
-			mdxToEditorState(editor, initialMdxContent).catch((error) => {
-				console.error('Failed to initialize editor from MDX:', error)
-			})
+			initialized.current = false
+			mdxToEditorState(editor, initialMdxContent)
+				.then(() => {
+					initialized.current = true
+				})
+				.catch((error) => {
+					console.error('Failed to initialize editor from MDX:', error)
+					initialized.current = true
+				})
+		} else if (initialMdxContent === undefined) {
+			initialized.current = true
 		}
 	}, [editor, initialMdxContent, lastInitialContent])
 
-	// Конвертация изменений в MDX
+	// Конвертация изменений в MDX — только после инициализации
 	useEffect(() => {
 		if (!onMdxChange) return
 
 		return editor.registerUpdateListener(({ editorState }) => {
+			if (!initialized.current) return
 			editorState.read(() => {
 				const mdx = editorStateToMdx()
 				onMdxChange(mdx)
@@ -91,7 +101,7 @@ export function Editor({
 	const finalPluginConfig = preset ? PRESET_CONFIGS[preset] : pluginConfig
 
 	return (
-		<div className="bg-background rounded-lg border shadow">
+		<div className="rounded-lg border shadow">
 			<LexicalComposer
 				initialConfig={{
 					...editorConfig,

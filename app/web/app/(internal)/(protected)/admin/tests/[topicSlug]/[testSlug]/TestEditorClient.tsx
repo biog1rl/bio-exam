@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -33,25 +34,27 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { transliterate } from '@/lib/utils/transliterate'
 
-import QuestionCard from '../components/QuestionCard'
-import QuestionEditor from '../components/QuestionEditor'
-import type { Question, TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../types'
-import { createDefaultQuestion } from '../types'
+import QuestionCard from '../../components/QuestionCard'
+import QuestionEditor from '../../components/QuestionEditor'
+import type { Question, TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../../types'
+import { createDefaultQuestion } from '../../types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
 interface Props {
-	testId?: string
+	topicSlug?: string
+	testSlug?: string
 }
 
-export default function TestEditorClient({ testId }: Props) {
+export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	const router = useRouter()
-	const isNew = !testId
+	const isNew = !topicSlug || !testSlug
 
 	const { data: topicsData, mutate: mutateTopics } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
 	const { data: testData, isLoading: testLoading } = useSWR<TestDetailResponse>(
-		testId ? `/api/tests/${testId}` : null,
+		!isNew ? `/api/tests/by-slug/${topicSlug}/${testSlug}` : null,
 		fetcher
 	)
 
@@ -115,51 +118,6 @@ export default function TestEditorClient({ testId }: Props) {
 			coordinateGetter: sortableKeyboardCoordinates,
 		})
 	)
-
-	const generateSlug = (title: string) => {
-		return title
-			.toLowerCase()
-			.replace(/[а-яё]/g, (char) => {
-				const map: Record<string, string> = {
-					а: 'a',
-					б: 'b',
-					в: 'v',
-					г: 'g',
-					д: 'd',
-					е: 'e',
-					ё: 'yo',
-					ж: 'zh',
-					з: 'z',
-					и: 'i',
-					й: 'y',
-					к: 'k',
-					л: 'l',
-					м: 'm',
-					н: 'n',
-					о: 'o',
-					п: 'p',
-					р: 'r',
-					с: 's',
-					т: 't',
-					у: 'u',
-					ф: 'f',
-					х: 'h',
-					ц: 'ts',
-					ч: 'ch',
-					ш: 'sh',
-					щ: 'sch',
-					ъ: '',
-					ы: 'y',
-					ь: '',
-					э: 'e',
-					ю: 'yu',
-					я: 'ya',
-				}
-				return map[char] || char
-			})
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '')
-	}
 
 	const handleCreateTopic = () => {
 		setTopicForm({
@@ -312,6 +270,7 @@ export default function TestEditorClient({ testId }: Props) {
 
 		setSaving(true)
 		try {
+			const testId = testData?.test?.id
 			const url = isNew ? '/api/tests/save' : `/api/tests/${testId}/save`
 			const res = await fetch(url, {
 				method: 'POST',
@@ -328,8 +287,16 @@ export default function TestEditorClient({ testId }: Props) {
 			const data = await res.json()
 			toast.success(isNew ? 'Тест создан' : 'Тест сохранен')
 
-			if (isNew && data.test?.id) {
-				router.push(`/admin/tests/${data.test.id}`)
+			if (isNew && data.test) {
+				// Redirect to slug-based URL after creation
+				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
+				router.push(`/admin/tests/${newTopicSlug}/${form.slug}`)
+			} else if (!isNew && data.test) {
+				// If slug or topic changed, update URL
+				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
+				if (newTopicSlug !== topicSlug || form.slug !== testSlug) {
+					router.replace(`/admin/tests/${newTopicSlug}/${form.slug}`)
+				}
 			}
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Ошибка сохранения')
@@ -339,6 +306,7 @@ export default function TestEditorClient({ testId }: Props) {
 	}
 
 	const handleExport = async (withAnswers: boolean) => {
+		const testId = testData?.test?.id
 		if (!testId) return
 
 		try {
@@ -362,7 +330,25 @@ export default function TestEditorClient({ testId }: Props) {
 		}
 	}
 
-	if (testId && testLoading) {
+	// Breadcrumb labels: показываем названия вместо slug'ов
+	const breadcrumbLabels = useMemo(() => {
+		const labels: Record<string, string> = {}
+		if (topicSlug) {
+			const topicTitle = testData?.test?.topicTitle || topics.find((t) => t.slug === topicSlug)?.title
+			if (topicTitle) {
+				labels[`/admin/tests/${topicSlug}`] = topicTitle
+			}
+		}
+		if (topicSlug && testSlug) {
+			const testTitle = testData?.test?.title || form.title
+			if (testTitle) {
+				labels[`/admin/tests/${topicSlug}/${testSlug}`] = testTitle
+			}
+		}
+		return labels
+	}, [topicSlug, testSlug, testData, topics, form.title])
+
+	if (!isNew && testLoading) {
 		return (
 			<div className="flex items-center justify-center p-12">
 				<Loader2 className="h-8 w-8 animate-spin" />
@@ -370,8 +356,23 @@ export default function TestEditorClient({ testId }: Props) {
 		)
 	}
 
+	// Question editor — full page replacement
+	if (editingQuestion) {
+		return (
+			<QuestionEditor
+				question={editingQuestion}
+				onSave={handleSaveQuestion}
+				onCancel={() => {
+					setEditingQuestion(null)
+					setEditingQuestionIndex(null)
+				}}
+			/>
+		)
+	}
+
 	return (
 		<div className="space-y-6">
+			<SetBreadcrumbsLabels labels={breadcrumbLabels} />
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-4">
@@ -452,7 +453,7 @@ export default function TestEditorClient({ testId }: Props) {
 									setForm({
 										...form,
 										title,
-										slug: isNew ? generateSlug(title) : form.slug,
+										slug: isNew ? transliterate(title) : form.slug,
 									})
 								}}
 								placeholder="Тест по теме..."
@@ -558,18 +559,6 @@ export default function TestEditorClient({ testId }: Props) {
 				</Card>
 			</div>
 
-			{/* Question Editor Dialog */}
-			{editingQuestion && (
-				<QuestionEditor
-					question={editingQuestion}
-					onSave={handleSaveQuestion}
-					onCancel={() => {
-						setEditingQuestion(null)
-						setEditingQuestionIndex(null)
-					}}
-				/>
-			)}
-
 			{/* Topic Creation Dialog */}
 			<Dialog open={topicDialogOpen} onOpenChange={setTopicDialogOpen}>
 				<DialogContent>
@@ -588,7 +577,7 @@ export default function TestEditorClient({ testId }: Props) {
 									setTopicForm({
 										...topicForm,
 										title,
-										slug: generateSlug(title),
+										slug: transliterate(title),
 									})
 								}}
 								placeholder="Биология 9 класс"

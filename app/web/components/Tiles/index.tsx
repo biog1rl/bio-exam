@@ -18,10 +18,10 @@ const Tiles: FC<TilesProps> = ({ items }) => {
 		<>
 			{items.map((item, index) => (
 				<Button asChild key={index} className="text-primary w-fit bg-white hover:text-white" variant="default">
-					<div>
+					<Link href={item.href as Route}>
 						<ArrowRightIcon className="mr-2 h-4 w-4" />
-						<Link href={item.href as Route}>{item.name}</Link>
-					</div>
+						<span>{item.name}</span>
+					</Link>
 				</Button>
 			))}
 		</>

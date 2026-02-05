@@ -132,7 +132,7 @@ export function Plugins({
 				{p('Toolbar') && (
 					<ToolbarPlugin>
 						{({ blockType }) => (
-							<div className="vertical-align-middle bg-background sticky top-0 z-10 flex items-center gap-2 overflow-auto rounded-t-lg border-b p-1">
+							<div className="vertical-align-middle sticky top-0 z-10 flex items-center gap-2 overflow-auto rounded-t-lg border-b p-1">
 								{p('HistoryToolbar') && (
 									<>
 										<HistoryToolbarPlugin />

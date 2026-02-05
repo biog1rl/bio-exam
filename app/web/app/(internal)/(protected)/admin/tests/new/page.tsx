@@ -1,6 +1,6 @@
 import { Metadata } from 'next'
 
-import TestEditorClient from '../[id]/TestEditorClient'
+import TestEditorClient from '../[topicSlug]/[testSlug]/TestEditorClient'
 
 export const metadata: Metadata = { title: 'Новый тест - bio-exam' }
 

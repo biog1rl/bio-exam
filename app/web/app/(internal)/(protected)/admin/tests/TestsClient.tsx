@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { transliterate } from '@/lib/utils/transliterate'
 
 import type { Test, Topic, TopicFormData, TopicsResponse, TestsResponse } from './types'
 
@@ -194,58 +195,13 @@ export default function TestsClient() {
 		}
 	}
 
-	const generateSlug = (title: string) => {
-		return title
-			.toLowerCase()
-			.replace(/[а-яё]/g, (char) => {
-				const map: Record<string, string> = {
-					а: 'a',
-					б: 'b',
-					в: 'v',
-					г: 'g',
-					д: 'd',
-					е: 'e',
-					ё: 'yo',
-					ж: 'zh',
-					з: 'z',
-					и: 'i',
-					й: 'y',
-					к: 'k',
-					л: 'l',
-					м: 'm',
-					н: 'n',
-					о: 'o',
-					п: 'p',
-					р: 'r',
-					с: 's',
-					т: 't',
-					у: 'u',
-					ф: 'f',
-					х: 'h',
-					ц: 'ts',
-					ч: 'ch',
-					ш: 'sh',
-					щ: 'sch',
-					ъ: '',
-					ы: 'y',
-					ь: '',
-					э: 'e',
-					ю: 'yu',
-					я: 'ya',
-				}
-				return map[char] || char
-			})
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '')
-	}
-
 	const handleTitleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
 			const title = e.target.value
 			setTopicForm((prev) => ({
 				...prev,
 				title,
-				slug: !editingTopic ? generateSlug(title) : prev.slug,
+				slug: !editingTopic ? transliterate(title) : prev.slug,
 			}))
 		},
 		[editingTopic]
@@ -288,7 +244,7 @@ export default function TestsClient() {
 
 			<div className="grid gap-6 lg:grid-cols-4">
 				{/* Topics Sidebar */}
-				<Card className="lg:col-span-1">
+				<Card className="h-fit lg:col-span-1">
 					<CardHeader className="pb-3">
 						<CardTitle className="text-lg">Темы</CardTitle>
 					</CardHeader>
@@ -382,7 +338,11 @@ export default function TestsClient() {
 										</p>
 									</div>
 									<div className="max-tab-sm:justify-between flex w-full items-center gap-2">
-										<Button variant="outline" size="sm" onClick={() => router.push(`/admin/tests/${test.id}`)}>
+										<Button
+											variant="outline"
+											size="sm"
+											onClick={() => router.push(`/admin/tests/${test.topicSlug}/${test.slug}`)}
+										>
 											<Edit className="mr-2 h-4 w-4" />
 											Редактировать
 										</Button>

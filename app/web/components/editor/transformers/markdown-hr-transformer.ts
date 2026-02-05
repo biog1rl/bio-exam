@@ -1,29 +1,29 @@
-import { ElementTransformer } from "@lexical/markdown";
+import { ElementTransformer } from '@lexical/markdown'
 import {
-  $createHorizontalRuleNode,
-  $isHorizontalRuleNode,
-  HorizontalRuleNode,
-} from "@lexical/react/LexicalHorizontalRuleNode";
+	$createHorizontalRuleNode,
+	$isHorizontalRuleNode,
+	HorizontalRuleNode,
+} from '@lexical/react/LexicalHorizontalRuleNode'
 
-import { LexicalNode } from "lexical";
+import { LexicalNode } from 'lexical'
 
 export const HR: ElementTransformer = {
-  dependencies: [HorizontalRuleNode],
-  export: (node: LexicalNode) => {
-    return $isHorizontalRuleNode(node) ? "***" : null;
-  },
-  regExp: /^(---|\*\*\*|___)\s?$/,
-  replace: (parentNode, _1, _2, isImport) => {
-    const line = $createHorizontalRuleNode();
+	dependencies: [HorizontalRuleNode],
+	export: (node: LexicalNode) => {
+		return $isHorizontalRuleNode(node) ? '***' : null
+	},
+	regExp: /^(---|\*\*\*|___)\s?$/,
+	replace: (parentNode, _1, _2, isImport) => {
+		const line = $createHorizontalRuleNode()
 
-    // TODO: Избавиться от флага isImport
-    if (isImport || parentNode.getNextSibling() != null) {
-      parentNode.replace(line);
-    } else {
-      parentNode.insertBefore(line);
-    }
+		// TODO: Избавиться от флага isImport
+		if (isImport || parentNode.getNextSibling() != null) {
+			parentNode.replace(line)
+		} else {
+			parentNode.insertBefore(line)
+		}
 
-    line.selectNext();
-  },
-  type: "element",
-};
+		line.selectNext()
+	},
+	type: 'element',
+}

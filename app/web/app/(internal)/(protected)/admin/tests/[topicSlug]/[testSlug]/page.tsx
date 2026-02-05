@@ -5,10 +5,10 @@ import TestEditorClient from './TestEditorClient'
 export const metadata: Metadata = { title: 'Редактор теста - bio-exam' }
 
 interface Props {
-	params: Promise<{ id: string }>
+	params: Promise<{ topicSlug: string; testSlug: string }>
 }
 
 export default async function EditTestPage({ params }: Props) {
-	const { id } = await params
-	return <TestEditorClient testId={id} />
+	const { topicSlug, testSlug } = await params
+	return <TestEditorClient topicSlug={topicSlug} testSlug={testSlug} />
 }

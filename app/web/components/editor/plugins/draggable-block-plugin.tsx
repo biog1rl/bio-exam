@@ -1,8 +1,9 @@
 'use client'
 
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { DraggableBlockPlugin_EXPERIMENTAL } from '@lexical/react/LexicalDraggableBlockPlugin'
 
-import { JSX, useRef } from 'react'
+import { JSX, useEffect, useRef } from 'react'
 
 import { GripVerticalIcon } from 'lucide-react'
 
@@ -12,7 +13,33 @@ function isOnMenu(element: HTMLElement): boolean {
 	return !!element.closest(`.${DRAGGABLE_BLOCK_MENU_CLASSNAME}`)
 }
 
+/**
+ * After a drag-and-drop the browser keeps focus on the contentEditable but
+ * stops rendering the caret. A blur → focus cycle fixes it.
+ */
+function useFixCaretAfterDrop() {
+	const [editor] = useLexicalComposerContext()
+
+	useEffect(() => {
+		const root = editor.getRootElement()
+		if (!root) return
+
+		const handleDrop = () => {
+			requestAnimationFrame(() => {
+				root.blur()
+				requestAnimationFrame(() => {
+					editor.focus()
+				})
+			})
+		}
+
+		root.addEventListener('drop', handleDrop)
+		return () => root.removeEventListener('drop', handleDrop)
+	}, [editor])
+}
+
 export function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }): JSX.Element | null {
+	useFixCaretAfterDrop()
 	const menuRef = useRef<HTMLDivElement>(null)
 	const targetLineRef = useRef<HTMLDivElement>(null)
 
