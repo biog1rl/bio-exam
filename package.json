@@ -17,7 +17,7 @@
 	},
 	"devDependencies": {
 		"baseline-browser-mapping": "^2.9.19",
-		"turbo": "^2.7.6"
+		"turbo": "^2.8.3"
 	},
 	"resolutions": {
 		"@types/react": "19.2.2",

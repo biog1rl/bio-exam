@@ -197,6 +197,92 @@ router.get('/', sessionRequired(), requirePerm('tests', 'read'), async (req, res
 	}
 })
 
+// GET /api/tests/by-slug/:topicSlug/:testSlug - загрузить тест по slug
+router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
+	try {
+		const { topicSlug, testSlug } = req.params
+
+		// Находим тему по slug
+		const topic = await db.query.topics.findFirst({
+			where: eq(topics.slug, topicSlug),
+		})
+		if (!topic) {
+			return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
+		}
+
+		// Находим тест по (topicId, slug)
+		const test = await db.query.tests.findFirst({
+			where: and(eq(tests.topicId, topic.id), eq(tests.slug, testSlug)),
+		})
+		if (!test) {
+			return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+		}
+
+		// Загружаем вопросы
+		const questionRows = await db.select().from(questions).where(eq(questions.testId, test.id)).orderBy(asc(questions.order))
+
+		// Загружаем активные ключи ответов
+		const questionIds = questionRows.map((q) => q.id)
+		const answerKeyRows =
+			questionIds.length > 0
+				? await db
+						.select()
+						.from(answerKeys)
+						.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
+				: []
+
+		const answerKeyMap = new Map(answerKeyRows.map((ak) => [ak.questionId, ak.correctAnswer]))
+
+		// Собираем все пути к файлам для чтения
+		const filePaths: string[] = []
+		const pathToQuestion = new Map<string, { questionId: string; type: 'prompt' | 'explanation' }>()
+
+		for (const q of questionRows) {
+			if (q.promptPath) {
+				filePaths.push(q.promptPath)
+				pathToQuestion.set(q.promptPath, { questionId: q.id, type: 'prompt' })
+			}
+			if (q.explanationPath) {
+				filePaths.push(q.explanationPath)
+				pathToQuestion.set(q.explanationPath, { questionId: q.id, type: 'explanation' })
+			}
+		}
+
+		// Пакетная загрузка файлов из Storage
+		const fileContents = await storageService.readFilesParallel(filePaths)
+
+		// Формируем объекты вопросов с текстами
+		const questionsWithTexts = questionRows.map((q) => {
+			const promptText = q.promptPath ? fileContents.get(q.promptPath) || '' : ''
+			const explanationText = q.explanationPath ? fileContents.get(q.explanationPath) || '' : ''
+			const correct = answerKeyMap.get(q.id) ?? null
+
+			return {
+				id: q.id,
+				type: q.type,
+				order: q.order,
+				points: q.points,
+				options: q.options,
+				matchingPairs: q.matchingPairs,
+				promptText,
+				explanationText,
+				correct,
+			}
+		})
+
+		res.json({
+			test: {
+				...test,
+				topicSlug: topic.slug,
+				topicTitle: topic.title,
+			},
+			questions: questionsWithTexts,
+		})
+	} catch (e) {
+		next(e)
+	}
+})
+
 // GET /api/tests/:id - загрузить тест для редактирования
 router.get('/:id', validateUUID('id'), sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
 	try {
@@ -396,7 +482,7 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 			updatedAt: new Date().toISOString(),
 		})
 
-		res.status(201).json({ test: result.test })
+		res.status(201).json({ test: { ...result.test, topicSlug: topic.slug } })
 	} catch (e) {
 		next(e)
 	}
@@ -620,7 +706,7 @@ router.post(
 				updatedAt: new Date().toISOString(),
 			})
 
-			res.json({ test: result.test })
+			res.json({ test: { ...result.test, topicSlug: topic.slug } })
 		} catch (e) {
 			next(e)
 		}
