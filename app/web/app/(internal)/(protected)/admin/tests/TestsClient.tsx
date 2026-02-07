@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react'
 
 import { BookOpen, ChevronRight, Download, Edit, EyeOff, FolderPlus, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
@@ -306,9 +307,9 @@ export default function TestsClient() {
 				</Card>
 
 				{/* Tests List */}
-				<div className="space-y-4 lg:col-span-3">
+				<div className="flex flex-col gap-2 lg:col-span-3">
 					{filteredTests.length === 0 ? (
-						<Card>
+						<Card className="justify-between">
 							<CardContent className="flex flex-col items-center justify-center py-12">
 								<BookOpen className="text-muted-foreground mb-4 h-12 w-12" />
 								<CardTitle className="mb-2">Нет тестов</CardTitle>
@@ -319,58 +320,51 @@ export default function TestsClient() {
 						</Card>
 					) : (
 						filteredTests.map((test) => (
-							<Card key={test.id} className="hover:bg-accent/50 transition-colors">
-								<CardContent className="tab-sm:items-center tab-sm:flex-row tab-sm:justify-between flex flex-col gap-2 p-4">
-									<div className="flex-1">
-										<div className="flex items-center gap-2">
-											<h3 className="font-medium">{test.title}</h3>
-											{test.isPublished ? (
-												<Badge variant="default">Опубликован</Badge>
-											) : (
-												<Badge variant="secondary">Черновик</Badge>
-											)}
-											<Badge variant="outline">v{test.version}</Badge>
+							<Link key={test.id} href={`/admin/tests/${test.topicSlug}/${test.slug}`}>
+								<Card className="hover:bg-accent/50 transition-colors">
+									<CardContent className="tab-sm:items-center tab-sm:flex-row tab-sm:justify-between flex flex-col gap-2 p-4">
+										<div className="flex-1">
+											<div className="flex items-center gap-2">
+												<h3 className="font-medium">{test.title}</h3>
+												{test.isPublished ? (
+													<Badge variant="default">Опубликован</Badge>
+												) : (
+													<Badge variant="secondary">Черновик</Badge>
+												)}
+											</div>
+											<p className="text-muted-foreground mt-2 text-sm">
+												{test.topicTitle}
+												{test.questionsCount !== undefined && ` • Вопросов: ${test.questionsCount}`}
+												{test.timeLimitMinutes && ` • ${test.timeLimitMinutes} мин`}
+											</p>
 										</div>
-										<p className="text-muted-foreground text-sm">
-											{test.topicTitle} / {test.slug}
-											{test.questionsCount !== undefined && ` • ${test.questionsCount} вопросов`}
-											{test.timeLimitMinutes && ` • ${test.timeLimitMinutes} мин`}
-										</p>
-									</div>
-									<div className="max-tab-sm:justify-between flex w-full items-center gap-2">
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={() => router.push(`/admin/tests/${test.topicSlug}/${test.slug}`)}
-										>
-											<Edit className="mr-2 h-4 w-4" />
-											Редактировать
-										</Button>
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button variant="ghost" size="icon">
-													<MoreHorizontal className="h-4 w-4" />
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end">
-												<DropdownMenuItem onClick={() => handleExport(test.id, false)}>
-													<Download className="mr-2 h-4 w-4" />
-													Экспорт
-												</DropdownMenuItem>
-												<DropdownMenuItem onClick={() => handleExport(test.id, true)}>
-													<Download className="mr-2 h-4 w-4" />
-													Экспорт с ответами
-												</DropdownMenuItem>
-												<DropdownMenuSeparator />
-												<DropdownMenuItem onClick={() => handleDeleteTest(test)} className="text-destructive">
-													<Trash2 className="mr-2 h-4 w-4" />
-													Удалить
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
-									</div>
-								</CardContent>
-							</Card>
+										<div className="max-tab-sm:justify-between flex items-center gap-2">
+											<DropdownMenu>
+												<DropdownMenuTrigger asChild>
+													<Button variant="ghost" size="icon">
+														<MoreHorizontal className="h-4 w-4" />
+													</Button>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end">
+													<DropdownMenuItem onClick={() => handleExport(test.id, false)}>
+														<Download className="mr-2 h-4 w-4" />
+														Экспорт
+													</DropdownMenuItem>
+													<DropdownMenuItem onClick={() => handleExport(test.id, true)}>
+														<Download className="mr-2 h-4 w-4" />
+														Экспорт с ответами
+													</DropdownMenuItem>
+													<DropdownMenuSeparator />
+													<DropdownMenuItem onClick={() => handleDeleteTest(test)} className="text-destructive">
+														<Trash2 className="mr-2 h-4 w-4" />
+														Удалить
+													</DropdownMenuItem>
+												</DropdownMenuContent>
+											</DropdownMenu>
+										</div>
+									</CardContent>
+								</Card>
+							</Link>
 						))
 					)}
 				</div>

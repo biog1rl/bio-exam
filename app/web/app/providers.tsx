@@ -6,6 +6,7 @@ import type { ThemeProviderProps } from 'next-themes'
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
 
 import { SearchProvider } from '@/components/Search/SearchProvider'
+import { AuthProvider } from '@/components/providers/AuthProvider'
 
 export interface ProvidersProps {
 	children: React.ReactNode
@@ -22,7 +23,9 @@ export function Providers({ children, themeProps }: ProvidersProps) {
 
 	return (
 		<NextThemesProvider defaultTheme="light" enableSystem={false} {...themeProps}>
-			<SearchProvider>{children}</SearchProvider>
+			<AuthProvider>
+				<SearchProvider>{children}</SearchProvider>
+			</AuthProvider>
 		</NextThemesProvider>
 	)
 }

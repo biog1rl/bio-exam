@@ -36,6 +36,7 @@ export const SaveTestSchema = z.object({
 		.max(100),
 	description: z.string().optional().nullable(),
 	isPublished: z.boolean().default(false),
+	showCorrectAnswer: z.boolean().default(true),
 	timeLimitMinutes: z.number().int().positive().optional().nullable(),
 	passingScore: z.number().min(0).max(100).optional().nullable(),
 	order: z.number().int().min(0).default(0),
@@ -54,9 +55,20 @@ export const TopicSchema = z.object({
 	isActive: z.boolean().default(true),
 })
 
+export const MoveQuestionSchema = z
+	.object({
+		targetTestId: z.string().uuid().optional(),
+		targetTopicId: z.string().uuid().optional(),
+	})
+	.refine((value) => Boolean(value.targetTestId || value.targetTopicId), {
+		message: 'targetTestId или targetTopicId обязателен',
+		path: ['targetTestId'],
+	})
+
 // Экспорт типов
 export type Option = z.infer<typeof OptionSchema>
 export type MatchingPairs = z.infer<typeof MatchingPairsSchema>
 export type Question = z.infer<typeof QuestionSchema>
 export type SaveTest = z.infer<typeof SaveTestSchema>
 export type Topic = z.infer<typeof TopicSchema>
+export type MoveQuestion = z.infer<typeof MoveQuestionSchema>

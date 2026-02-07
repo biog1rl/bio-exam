@@ -60,7 +60,7 @@ export default function OptionsEditor({ type, options, correct, onChange }: Prop
 	}
 
 	return (
-		<div className="space-y-4">
+		<div className="flex flex-col gap-2">
 			<div className="flex items-center justify-between">
 				<Label>Варианты ответов</Label>
 				<Button type="button" variant="outline" size="sm" onClick={handleAddOption}>
@@ -69,7 +69,7 @@ export default function OptionsEditor({ type, options, correct, onChange }: Prop
 				</Button>
 			</div>
 
-			<div className="space-y-2">
+			<div className="flex flex-col gap-2">
 				{isRadio ? (
 					<RadioGroup value={correct as string} onValueChange={handleSelectOption}>
 						{options.map((option, index) => (

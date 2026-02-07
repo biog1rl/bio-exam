@@ -3,7 +3,8 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-import { CheckSquare, Edit, GripVertical, List, Radio, Trash2 } from 'lucide-react'
+import { CheckSquare, Edit, Eye, GripVertical, List, Radio, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,9 @@ import type { Question } from '../types'
 interface Props {
 	question: Question
 	index: number
-	onEdit: () => void
+	editHref?: string
+	viewHref?: string
+	onEdit?: () => void
 	onDelete: () => void
 }
 
@@ -23,7 +26,7 @@ const typeLabels: Record<string, { label: string; icon: typeof Radio }> = {
 	matching: { label: 'Сопоставление', icon: List },
 }
 
-export default function QuestionCard({ question, index, onEdit, onDelete }: Props) {
+export default function QuestionCard({ question, index, editHref, viewHref, onEdit, onDelete }: Props) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
 		id: question.id || `new-${question.order}`,
 	})
@@ -41,7 +44,7 @@ export default function QuestionCard({ question, index, onEdit, onDelete }: Prop
 	const previewText = question.promptText
 		.replace(/[#*_`\[\]]/g, '')
 		.trim()
-		.slice(0, 100)
+		.slice(0, 50)
 
 	// Count options/pairs
 	const optionsCount =
@@ -78,9 +81,26 @@ export default function QuestionCard({ question, index, onEdit, onDelete }: Prop
 			</div>
 
 			<div className="flex items-center gap-1">
-				<Button size="sm" variant="ghost" onClick={onEdit}>
-					<Edit className="h-4 w-4" />
-				</Button>
+				{editHref ? (
+					<>
+						<Button size="sm" variant="ghost" asChild>
+							<Link href={editHref} title="Редактировать вопрос">
+								<Edit className="h-4 w-4" />
+							</Link>
+						</Button>
+						{viewHref ? (
+							<Button size="sm" variant="ghost" asChild>
+								<Link href={viewHref} title="Открыть вопрос в тесте">
+									<Eye className="h-4 w-4" />
+								</Link>
+							</Button>
+						) : null}
+					</>
+				) : (
+					<Button size="sm" variant="ghost" onClick={onEdit} disabled={!onEdit}>
+						<Edit className="h-4 w-4" />
+					</Button>
+				)}
 				<Button size="sm" variant="ghost" onClick={onDelete}>
 					<Trash2 className="text-destructive h-4 w-4" />
 				</Button>

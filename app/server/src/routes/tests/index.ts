@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
-import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, count, eq, gt, inArray, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import multer from 'multer'
 
@@ -15,7 +15,7 @@ import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
-import { SaveTestSchema, TopicSchema } from '../../schemas/tests.js'
+import { MoveQuestionSchema, SaveTestSchema, TopicSchema } from '../../schemas/tests.js'
 import { storageService } from '../../services/storage/storage.js'
 
 const router = Router()
@@ -175,6 +175,7 @@ router.get('/', sessionRequired(), requirePerm('tests', 'read'), async (req, res
 				description: tests.description,
 				version: tests.version,
 				isPublished: tests.isPublished,
+				showCorrectAnswer: tests.showCorrectAnswer,
 				timeLimitMinutes: tests.timeLimitMinutes,
 				passingScore: tests.passingScore,
 				order: tests.order,
@@ -411,6 +412,7 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 					title: data.title,
 					description: data.description,
 					isPublished: data.isPublished,
+					showCorrectAnswer: data.showCorrectAnswer,
 					timeLimitMinutes: data.timeLimitMinutes,
 					passingScore: data.passingScore,
 					order: data.order,
@@ -485,6 +487,7 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 			title: data.title,
 			description: data.description,
 			isPublished: data.isPublished,
+			showCorrectAnswer: data.showCorrectAnswer,
 			timeLimitMinutes: data.timeLimitMinutes,
 			passingScore: data.passingScore,
 			version: result.test.version,
@@ -554,6 +557,7 @@ router.post(
 						title: data.title,
 						description: data.description,
 						isPublished: data.isPublished,
+						showCorrectAnswer: data.showCorrectAnswer,
 						timeLimitMinutes: data.timeLimitMinutes,
 						passingScore: data.passingScore,
 						order: data.order,
@@ -724,6 +728,7 @@ router.post(
 				title: data.title,
 				description: data.description,
 				isPublished: data.isPublished,
+				showCorrectAnswer: data.showCorrectAnswer,
 				timeLimitMinutes: data.timeLimitMinutes,
 				passingScore: data.passingScore,
 				version: result.test.version,
@@ -821,6 +826,169 @@ router.post(
 			const resp: any = { test: { ...result.test, topicSlug: topic.slug } }
 			if (typeof assetsMoved !== 'undefined') resp.assetsMoved = assetsMoved
 			res.json(resp)
+		} catch (e) {
+			next(e)
+		}
+	}
+)
+
+// POST /api/tests/:id/questions/:questionId/move - перенести вопрос в другой тест/тему
+router.post(
+	'/:id/questions/:questionId/move',
+	validateUUID('id'),
+	validateUUID('questionId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const sourceTestId = req.params.id as string
+			const questionId = req.params.questionId as string
+
+			const parsed = MoveQuestionSchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+			}
+
+			const { targetTestId, targetTopicId } = parsed.data
+			const userId = req.authUser?.id
+
+			const sourceTest = await db.query.tests.findFirst({ where: eq(tests.id, sourceTestId) })
+			if (!sourceTest) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+
+			const question = await db.query.questions.findFirst({
+				where: and(eq(questions.id, questionId), eq(questions.testId, sourceTestId)),
+			})
+			if (!question) {
+				return res.status(404).json({ error: 'Вопрос не найден в текущем тесте' })
+			}
+
+			const sourceTopic = await db.query.topics.findFirst({ where: eq(topics.id, sourceTest.topicId) })
+			if (!sourceTopic) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
+			}
+
+			let resolvedTargetTest = targetTestId ? await db.query.tests.findFirst({ where: eq(tests.id, targetTestId) }) : null
+			let targetTopic =
+				resolvedTargetTest && resolvedTargetTest.topicId
+					? await db.query.topics.findFirst({ where: eq(topics.id, resolvedTargetTest.topicId) })
+					: null
+
+			if (!resolvedTargetTest && targetTopicId) {
+				targetTopic = await db.query.topics.findFirst({ where: eq(topics.id, targetTopicId) })
+				if (!targetTopic) {
+					return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
+				}
+
+				resolvedTargetTest = await db.query.tests.findFirst({
+					where: and(eq(tests.topicId, targetTopic.id), eq(tests.slug, sourceTest.slug)),
+				})
+
+				if (!resolvedTargetTest) {
+					let nextSlug = sourceTest.slug
+					let suffix = 2
+					while (
+						await db.query.tests.findFirst({
+							where: and(eq(tests.topicId, targetTopic.id), eq(tests.slug, nextSlug)),
+						})
+					) {
+						nextSlug = `${sourceTest.slug}-${suffix}`
+						suffix += 1
+					}
+
+					const [orderRow] = await db
+						.select({ maxOrder: sql<number>`COALESCE(MAX(${tests.order}), -1)` })
+						.from(tests)
+						.where(eq(tests.topicId, targetTopic.id))
+
+					const [createdTest] = await db
+						.insert(tests)
+						.values({
+							topicId: targetTopic.id,
+							slug: nextSlug,
+							title: sourceTest.title,
+							description: sourceTest.description,
+							version: 1,
+							isPublished: false,
+							timeLimitMinutes: sourceTest.timeLimitMinutes,
+							passingScore: sourceTest.passingScore,
+							order: (orderRow?.maxOrder ?? -1) + 1,
+							createdBy: userId,
+							updatedBy: userId,
+						})
+						.returning()
+
+					resolvedTargetTest = createdTest
+				}
+			}
+
+			if (!resolvedTargetTest) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+			if (!targetTopic) {
+				targetTopic = await db.query.topics.findFirst({ where: eq(topics.id, resolvedTargetTest.topicId) })
+			}
+			if (!targetTopic) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
+			}
+			if (resolvedTargetTest.id === sourceTestId) {
+				return res.status(400).json({ error: 'Выберите другую тему или тест для переноса вопроса' })
+			}
+
+			const oldQuestionPath = storageService.getQuestionPath(sourceTopic.slug, sourceTest.slug, questionId)
+			const newQuestionPath = storageService.getQuestionPath(targetTopic.slug, resolvedTargetTest.slug, questionId)
+			const newPromptPath = question.promptPath ? `${newQuestionPath}/prompt.md` : null
+			const newExplanationPath = question.explanationPath ? `${newQuestionPath}/explanation.md` : null
+
+			await storageService.moveDirectory(oldQuestionPath, newQuestionPath)
+
+			try {
+				await db.transaction(async (tx) => {
+					const [targetOrderRow] = await tx
+						.select({ maxOrder: sql<number>`COALESCE(MAX(${questions.order}), -1)` })
+						.from(questions)
+						.where(eq(questions.testId, resolvedTargetTest.id))
+					const nextOrder = (targetOrderRow?.maxOrder ?? -1) + 1
+
+					await tx
+						.update(questions)
+						.set({
+							order: sql`${questions.order} - 1`,
+							updatedAt: new Date(),
+						})
+						.where(and(eq(questions.testId, sourceTestId), gt(questions.order, question.order)))
+
+					await tx
+						.update(questions)
+						.set({
+							testId: resolvedTargetTest.id,
+							order: nextOrder,
+							promptPath: newPromptPath,
+							explanationPath: newExplanationPath,
+							updatedAt: new Date(),
+						})
+						.where(eq(questions.id, questionId))
+				})
+			} catch (txError) {
+				try {
+					await storageService.moveDirectory(newQuestionPath, oldQuestionPath)
+				} catch (rollbackError) {
+					console.error('[tests] Failed to rollback moved question files:', rollbackError)
+				}
+				throw txError
+			}
+
+			res.json({
+				ok: true,
+				questionId,
+				target: {
+					topicId: targetTopic.id,
+					topicSlug: targetTopic.slug,
+					testId: resolvedTargetTest.id,
+					testSlug: resolvedTargetTest.slug,
+				},
+			})
 		} catch (e) {
 			next(e)
 		}

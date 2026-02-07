@@ -33,6 +33,7 @@ export interface Test {
 	description: string | null
 	version: number
 	isPublished: boolean
+	showCorrectAnswer: boolean
 	timeLimitMinutes: number | null
 	passingScore: number | null
 	order: number
@@ -74,6 +75,7 @@ export interface TestFormData {
 	slug: string
 	description: string
 	isPublished: boolean
+	showCorrectAnswer: boolean
 	timeLimitMinutes: number | null
 	passingScore: number | null
 	order: number

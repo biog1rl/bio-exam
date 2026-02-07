@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 
+import { eq } from 'drizzle-orm'
 import { Router } from 'express'
 
 import { db } from '../../db/index.js'
@@ -32,7 +33,7 @@ router.post('/', async (req, res) => {
 			await db
 				.update(refreshTokens)
 				.set({ revokedAt: new Date() } as any)
-				.where(refreshTokens.tokenHash.equals(tokenHash))
+				.where(eq(refreshTokens.tokenHash, tokenHash))
 		}
 
 		clearSessionCookie(res)

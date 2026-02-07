@@ -13,7 +13,8 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 
 import { useState, useEffect, useMemo } from 'react'
 
-import { ArrowLeft, Download, FolderPlus, Loader2, Plus, Save } from 'lucide-react'
+import { Download, FolderPlus, Loader2, Plus, Save } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
@@ -37,9 +38,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import QuestionCard from '../../components/QuestionCard'
-import QuestionEditor from '../../components/QuestionEditor'
-import type { Question, TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../../types'
-import { createDefaultQuestion } from '../../types'
+import type { TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../../types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
@@ -66,14 +65,12 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		slug: '',
 		description: '',
 		isPublished: false,
+		showCorrectAnswer: true,
 		timeLimitMinutes: null,
 		passingScore: null,
 		order: 0,
 		questions: [],
 	})
-	const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
-	const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null)
-
 	// Topic creation dialog state
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
 	const [topicForm, setTopicForm] = useState<TopicFormData>({
@@ -95,6 +92,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				slug: testData.test.slug,
 				description: testData.test.description || '',
 				isPublished: testData.test.isPublished,
+				showCorrectAnswer: testData.test.showCorrectAnswer ?? true,
 				timeLimitMinutes: testData.test.timeLimitMinutes,
 				passingScore: testData.test.passingScore,
 				order: testData.test.order,
@@ -180,34 +178,26 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	}
 
 	const handleAddQuestion = () => {
-		const newQuestion = createDefaultQuestion(form.questions.length)
-		setEditingQuestion(newQuestion)
-		setEditingQuestionIndex(null)
+		if (isNew || !topicSlug || !testSlug) {
+			toast.error('Сначала сохраните тест, затем добавляйте вопросы')
+			return
+		}
+		router.push(`/admin/tests/${topicSlug}/${testSlug}/questions/new`)
 	}
 
 	const handleEditQuestion = (index: number) => {
-		setEditingQuestion({ ...form.questions[index] })
-		setEditingQuestionIndex(index)
+		const question = form.questions[index]
+		if (!topicSlug || !testSlug || !question?.id) {
+			toast.error('Не удалось открыть редактор вопроса')
+			return
+		}
+		router.push(`/admin/tests/${topicSlug}/${testSlug}/questions/${question.id}`)
 	}
 
 	const handleDeleteQuestion = (index: number) => {
 		if (!confirm('Удалить этот вопрос?')) return
 		const newQuestions = form.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, order: i }))
 		setForm({ ...form, questions: newQuestions })
-	}
-
-	const handleSaveQuestion = (question: Question) => {
-		if (editingQuestionIndex !== null) {
-			// Update existing
-			const newQuestions = [...form.questions]
-			newQuestions[editingQuestionIndex] = question
-			setForm({ ...form, questions: newQuestions })
-		} else {
-			// Add new
-			setForm({ ...form, questions: [...form.questions, question] })
-		}
-		setEditingQuestion(null)
-		setEditingQuestionIndex(null)
 	}
 
 	const handleSave = async () => {
@@ -369,29 +359,12 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		)
 	}
 
-	// Question editor — full page replacement
-	if (editingQuestion) {
-		return (
-			<QuestionEditor
-				question={editingQuestion}
-				onSave={handleSaveQuestion}
-				onCancel={() => {
-					setEditingQuestion(null)
-					setEditingQuestionIndex(null)
-				}}
-			/>
-		)
-	}
-
 	return (
 		<div className="space-y-6">
 			<SetBreadcrumbsLabels labels={breadcrumbLabels} />
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-4">
-					<Button variant="ghost" size="icon" onClick={() => router.push('/admin/tests')}>
-						<ArrowLeft className="h-4 w-4" />
-					</Button>
 					<div>
 						<h1 className="text-2xl font-semibold">{isNew ? 'Новый тест' : 'Редактирование теста'}</h1>
 						<p className="text-muted-foreground">
@@ -403,19 +376,15 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				<div className="flex gap-2">
 					{!isNew && (
 						<>
-							<Button variant="outline" onClick={() => handleExport(false)}>
+							<Button variant="secondary" onClick={() => handleExport(false)}>
 								<Download className="mr-2 h-4 w-4" />
 								Экспорт
 							</Button>
-							<Button variant="outline" onClick={() => handleExport(true)}>
+							<Button variant="secondary" onClick={() => handleExport(true)}>
 								<Download className="mr-2 h-4 w-4" />С ответами
 							</Button>
 						</>
 					)}
-					<Button onClick={handleSave} disabled={saving}>
-						{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-						Сохранить
-					</Button>
 				</div>
 			</div>
 
@@ -531,6 +500,18 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 								onCheckedChange={(checked) => setForm({ ...form, isPublished: checked })}
 							/>
 						</div>
+
+						<div className="flex items-center justify-between pt-2">
+							<Label>Показывать правильный ответ после проверки</Label>
+							<Switch
+								checked={form.showCorrectAnswer}
+								onCheckedChange={(checked) => setForm({ ...form, showCorrectAnswer: checked })}
+							/>
+						</div>
+						<Button onClick={handleSave} disabled={saving} className="w-full">
+							{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+							Сохранить
+						</Button>
 					</CardContent>
 				</Card>
 
@@ -538,10 +519,19 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				<Card className="lg:col-span-2">
 					<CardHeader className="flex flex-row items-center justify-between">
 						<CardTitle>Вопросы</CardTitle>
-						<Button onClick={handleAddQuestion}>
-							<Plus className="mr-2 h-4 w-4" />
-							Добавить вопрос
-						</Button>
+						{!isNew && topicSlug && testSlug ? (
+							<Button asChild>
+								<Link href={`/admin/tests/${topicSlug}/${testSlug}/questions/new`}>
+									<Plus className="mr-2 h-4 w-4" />
+									Добавить вопрос
+								</Link>
+							</Button>
+						) : (
+							<Button onClick={handleAddQuestion}>
+								<Plus className="mr-2 h-4 w-4" />
+								Добавить вопрос
+							</Button>
+						)}
 					</CardHeader>
 					<CardContent>
 						{form.questions.length === 0 ? (
@@ -560,6 +550,16 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 												key={question.id || `new-${question.order}`}
 												question={question}
 												index={index}
+												editHref={
+													question.id && topicSlug && testSlug
+														? `/admin/tests/${topicSlug}/${testSlug}/questions/${question.id}`
+														: undefined
+												}
+												viewHref={
+													question.id && topicSlug && testSlug
+														? `/tests/${topicSlug}/${testSlug}#question-${question.id}`
+														: undefined
+												}
 												onEdit={() => handleEditQuestion(index)}
 												onDelete={() => handleDeleteQuestion(index)}
 											/>

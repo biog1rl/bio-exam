@@ -101,7 +101,7 @@ export function Editor({
 	const finalPluginConfig = preset ? PRESET_CONFIGS[preset] : pluginConfig
 
 	return (
-		<div className="rounded-lg border shadow">
+		<div className="rounded-lg border bg-white shadow">
 			<LexicalComposer
 				initialConfig={{
 					...editorConfig,

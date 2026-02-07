@@ -208,6 +208,7 @@ export const tests = pgTable(
 		description: text('description'),
 		version: integer('version').notNull().default(1),
 		isPublished: boolean('is_published').notNull().default(false),
+		showCorrectAnswer: boolean('show_correct_answer').notNull().default(true),
 		timeLimitMinutes: integer('time_limit_minutes'),
 		passingScore: real('passing_score'),
 		order: integer('order').notNull().default(0),
@@ -266,6 +267,33 @@ export const answerKeys = pgTable(
 	})
 )
 
+/** Попытки прохождения тестов пользователями */
+export const testAttempts = pgTable(
+	'test_attempts',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		testId: uuid('test_id')
+			.notNull()
+			.references(() => tests.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		answers: jsonb('answers').notNull(), // questionId -> user answer
+		results: jsonb('results').notNull(), // per-question result breakdown
+		earnedPoints: real('earned_points').notNull(),
+		totalPoints: real('total_points').notNull(),
+		scorePercentage: real('score_percentage').notNull(),
+		passed: boolean('passed').notNull().default(false),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		submittedAt: timestamp('submitted_at').notNull().defaultNow(),
+	},
+	(t) => ({
+		testIdIdx: index('test_attempts_test_id_idx').on(t.testId),
+		userIdIdx: index('test_attempts_user_id_idx').on(t.userId),
+		submittedAtIdx: index('test_attempts_submitted_at_idx').on(t.submittedAt),
+	})
+)
+
 /** Refresh tokens for session management */
 export const refreshTokens = pgTable(
 	'refresh_tokens',
@@ -313,6 +341,7 @@ export const testsRelations = relations(tests, ({ one, many }) => ({
 		relationName: 'updatedByUser',
 	}),
 	questions: many(questions),
+	attempts: many(testAttempts),
 }))
 
 export const questionsRelations = relations(questions, ({ one, many }) => ({
@@ -330,6 +359,17 @@ export const answerKeysRelations = relations(answerKeys, ({ one }) => ({
 	}),
 	createdByUser: one(users, {
 		fields: [answerKeys.createdBy],
+		references: [users.id],
+	}),
+}))
+
+export const testAttemptsRelations = relations(testAttempts, ({ one }) => ({
+	test: one(tests, {
+		fields: [testAttempts.testId],
+		references: [tests.id],
+	}),
+	user: one(users, {
+		fields: [testAttempts.userId],
 		references: [users.id],
 	}),
 }))

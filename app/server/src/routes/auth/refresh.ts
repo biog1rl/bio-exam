@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 
+import { eq } from 'drizzle-orm'
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 
@@ -37,7 +38,7 @@ router.post('/', async (req, res) => {
 		const rows = await db
 			.select()
 			.from(refreshTokens)
-			.where((t) => t.tokenHash.equals(tokenHash))
+			.where(eq(refreshTokens.tokenHash, tokenHash))
 			.limit(1)
 		const row = rows[0]
 		if (!row) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
@@ -46,7 +47,7 @@ router.post('/', async (req, res) => {
 		if (new Date(row.expiresAt) < new Date()) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 
 		// Issue new access token
-		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(userRoles.userId.equals(row.userId))
+		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, row.userId))
 		const roles = rs.map((r) => r.role)
 
 		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? 60 * 60)
@@ -63,7 +64,7 @@ router.post('/', async (req, res) => {
 		await db
 			.update(refreshTokens)
 			.set({ revokedAt: new Date() } as any)
-			.where(refreshTokens.id.equals(row.id))
+			.where(eq(refreshTokens.id, row.id))
 		await db
 			.insert(refreshTokens)
 			.values({

@@ -66,7 +66,7 @@ async function fetchMeOnce(): Promise<Me | null> {
 
 export function AuthProvider({ children, initialMe }: { children: React.ReactNode; initialMe?: Me | null }) {
 	const [me, setMe] = useState<Me | null>(initialMe ?? null)
-	const [loading, setLoading] = useState<boolean>(!initialMe)
+	const [loading, setLoading] = useState<boolean>(initialMe === undefined)
 	const [avatarVersion, setAvatarVersion] = useState<number>(Date.now())
 
 	// берём perms с сервера

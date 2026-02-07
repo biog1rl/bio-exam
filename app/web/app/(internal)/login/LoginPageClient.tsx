@@ -36,7 +36,13 @@ function safeRedirect(url?: string | null) {
 
 async function fetchMe(): Promise<boolean> {
 	try {
-		const r = await fetch('/api/auth/me', { credentials: 'include' })
+		let r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
+		if (r.status === 401) {
+			const rf = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+			if (rf.ok) {
+				r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
+			}
+		}
 		if (!r.ok) return false
 		const j: unknown = await r.json()
 		const obj = typeof j === 'object' && j !== null ? (j as Record<string, unknown>) : null
@@ -115,7 +121,13 @@ export default function LoginPage() {
 
 			// Обновляем состояние авторизации после успешного входа
 			await refresh()
-			router.replace(safeRedirect(callbackUrl))
+			const target = safeRedirect(callbackUrl)
+			const isReady = await fetchMe()
+			if (!isReady) {
+				setError('Сессия не установилась. Обновите страницу и попробуйте снова.')
+				return
+			}
+			window.location.assign(target)
 		} catch {
 			setError('Не удалось связаться с сервером')
 		} finally {

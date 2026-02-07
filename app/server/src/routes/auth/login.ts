@@ -19,6 +19,50 @@ const router = Router()
 // Заранее вычисленный bcrypt хэш случайной строки для использования когда пользователь не существует
 const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
 
+const usersColumns = (
+	users as unknown as {
+		_?: {
+			columns?: Record<string, unknown>
+		}
+	}
+)._?.columns
+
+const hasFailedLoginAttemptsColumn = Boolean(usersColumns && 'failedLoginAttempts' in usersColumns)
+const hasLockedUntilColumn = Boolean(usersColumns && 'lockedUntil' in usersColumns)
+
+function getLoginGuardUpdates(payload: {
+	failedLoginAttempts?: number
+	lockedUntil?: Date | null
+}): Record<string, unknown> {
+	const updates: Record<string, unknown> = {}
+
+	// Keep login working even if these columns are absent in current schema/migrations.
+	if (hasFailedLoginAttemptsColumn && payload.failedLoginAttempts !== undefined) {
+		updates.failedLoginAttempts = payload.failedLoginAttempts
+	}
+	if (hasLockedUntilColumn && payload.lockedUntil !== undefined) {
+		updates.lockedUntil = payload.lockedUntil
+	}
+
+	return updates
+}
+
+async function updateLoginGuardFields(
+	userId: string,
+	payload: {
+		failedLoginAttempts?: number
+		lockedUntil?: Date | null
+	}
+): Promise<void> {
+	const updates = getLoginGuardUpdates(payload)
+	if (Object.keys(updates).length === 0) return
+
+	await db
+		.update(users)
+		.set(updates as any)
+		.where(eq(users.id, userId))
+}
+
 /**
  * POST /api/auth/login
  * body: { username, password }
@@ -69,15 +113,12 @@ router.post('/', async (req, res, next) => {
 				const THRESHOLD = 5
 				const LOCK_MINUTES = 30
 				if (current >= THRESHOLD) {
-					await db
-						.update(users)
-						.set({ failedLoginAttempts: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60 * 1000) } as any)
-						.where(eq(users.id, u.id))
+					await updateLoginGuardFields(u.id, {
+						failedLoginAttempts: 0,
+						lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60 * 1000),
+					})
 				} else {
-					await db
-						.update(users)
-						.set({ failedLoginAttempts: current } as any)
-						.where(eq(users.id, u.id))
+					await updateLoginGuardFields(u.id, { failedLoginAttempts: current })
 				}
 			}
 			return res.status(401).json({ error: ERROR_MESSAGES.INVALID_CREDENTIALS })
@@ -87,12 +128,9 @@ router.post('/', async (req, res, next) => {
 			return res.status(403).json({ error: ERROR_MESSAGES.ACCOUNT_NOT_ACTIVATED })
 		}
 
-		// Успешный вход — обнуляем счётчики
+		// Успешный вход - обнуляем счётчики
 		if (u) {
-			await db
-				.update(users)
-				.set({ failedLoginAttempts: 0, lockedUntil: null } as any)
-				.where(eq(users.id, u.id))
+			await updateLoginGuardFields(u.id, { failedLoginAttempts: 0, lockedUntil: null })
 		}
 
 		// Получаем роли из БД
