@@ -39,7 +39,12 @@ import { transliterate } from '@/lib/utils/transliterate'
 
 import QuestionCard from '../../components/QuestionCard'
 import type { TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../../types'
-import { isValidSequenceCorrectValue, normalizeQuestionForSave, resolveQuestionTemplate } from '../../types'
+import {
+	isValidSequenceCorrectValue,
+	normalizeQuestionForSave,
+	normalizeShortTextCorrectValue,
+	resolveQuestionTemplate,
+} from '../../types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
@@ -226,6 +231,10 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		for (let i = 0; i < form.questions.length; i++) {
 			const q = form.questions[i]
 			const template = resolveQuestionTemplate(q)
+			if (!template) {
+				toast.error(`Вопрос ${i + 1}: тип вопроса не настроен в БД`)
+				return
+			}
 			if (!q.promptText.trim()) {
 				toast.error(`Вопрос ${i + 1}: введите текст вопроса`)
 				return
@@ -263,7 +272,8 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				}
 			}
 			if (template === 'short_text') {
-				if (typeof q.correct !== 'string' || !q.correct.trim()) {
+				const normalized = normalizeShortTextCorrectValue(q.correct)
+				if (!normalized || !normalized.trim()) {
 					toast.error(`Вопрос ${i + 1}: укажите правильный краткий ответ`)
 					return
 				}

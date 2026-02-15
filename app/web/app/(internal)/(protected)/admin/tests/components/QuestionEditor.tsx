@@ -23,93 +23,18 @@ interface Props {
 	headerActions?: ReactNode
 }
 
-function legacyTypeToTemplate(type: string): QuestionUiTemplate {
-	if (type === 'radio') return 'single_choice'
-	if (type === 'checkbox') return 'multi_choice'
-	if (type === 'matching') return 'matching'
-	if (type === 'sequence') return 'sequence_digits'
-	return 'short_text'
-}
-
-function resolveTemplate(type: string, questionTypes: QuestionTypeDefinition[]): QuestionUiTemplate {
-	return questionTypes.find((item) => item.key === type)?.uiTemplate ?? legacyTypeToTemplate(type)
-}
-
-function fallbackQuestionTypes(): QuestionTypeDefinition[] {
-	return [
-		{
-			key: 'short_answer',
-			title: 'Краткий ответ',
-			description: 'Один ответ строкой',
-			uiTemplate: 'short_text',
-			validationSchema: null,
-			scoringRule: { formula: 'exact_match', mistakeMetric: 'compact_text_equal', correctPoints: 1 },
-			isSystem: true,
-			isActive: true,
-		},
-		{
-			key: 'sequence',
-			title: 'Правильная последовательность',
-			description: 'Строка из цифр в правильном порядке',
-			uiTemplate: 'sequence_digits',
-			validationSchema: null,
-			scoringRule: {
-				formula: 'one_mistake_partial',
-				mistakeMetric: 'hamming_digits',
-				correctPoints: 2,
-				oneMistakePoints: 1,
-			},
-			isSystem: true,
-			isActive: true,
-		},
-		{
-			key: 'checkbox',
-			title: 'Множественный выбор',
-			description: 'Выбор нескольких вариантов',
-			uiTemplate: 'multi_choice',
-			validationSchema: null,
-			scoringRule: {
-				formula: 'one_mistake_partial',
-				mistakeMetric: 'set_distance',
-				correctPoints: 2,
-				oneMistakePoints: 1,
-			},
-			isSystem: true,
-			isActive: true,
-		},
-		{
-			key: 'matching',
-			title: 'Сопоставление',
-			description: 'Сопоставление пар',
-			uiTemplate: 'matching',
-			validationSchema: null,
-			scoringRule: {
-				formula: 'one_mistake_partial',
-				mistakeMetric: 'pair_mismatch_count',
-				correctPoints: 2,
-				oneMistakePoints: 1,
-			},
-			isSystem: true,
-			isActive: true,
-		},
-		{
-			key: 'radio',
-			title: 'Один правильный вариант',
-			description: 'Один вариант ответа',
-			uiTemplate: 'single_choice',
-			validationSchema: null,
-			scoringRule: { formula: 'exact_match', mistakeMetric: 'boolean_correct', correctPoints: 1 },
-			isSystem: true,
-			isActive: true,
-		},
-	]
+function resolveTemplate(
+	type: string,
+	questionTypes: QuestionTypeDefinition[],
+	fallback: QuestionUiTemplate | null
+): QuestionUiTemplate | null {
+	return questionTypes.find((item) => item.key === type)?.uiTemplate ?? fallback
 }
 
 export default function QuestionEditor({ question, questionTypes, onSave, onCancel, docPath, headerActions }: Props) {
 	const [form, setForm] = useState<Question>({ ...question })
-	const availableQuestionTypes =
-		questionTypes.length > 0 ? questionTypes.filter((item) => item.isActive) : fallbackQuestionTypes()
-	const activeTemplate = resolveTemplate(form.type, availableQuestionTypes)
+	const availableQuestionTypes = questionTypes.filter((item) => item.isActive || item.key === form.type)
+	const activeTemplate = resolveTemplate(form.type, questionTypes, form.questionUiTemplate ?? null)
 
 	const handlePromptMdxChange = useCallback((mdx: string) => {
 		setForm((prev) => ({ ...prev, promptText: mdx }))
@@ -120,8 +45,9 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 	// }, [])
 
 	const handleTypeChange = (type: QuestionType) => {
-		const template = resolveTemplate(type, availableQuestionTypes)
-		const selectedType = availableQuestionTypes.find((item) => item.key === type)
+		const selectedType = questionTypes.find((item) => item.key === type)
+		if (!selectedType) return
+		const template = selectedType.uiTemplate
 		let newForm: Question = {
 			...form,
 			type,
@@ -207,9 +133,9 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 				<CardContent className="flex flex-col gap-4">
 					<div className="flex flex-col gap-2">
 						<Label>Тип вопроса</Label>
-						<Select value={form.type} onValueChange={(v) => handleTypeChange(v as QuestionType)}>
+						<Select value={form.type} onValueChange={(v) => handleTypeChange(v as QuestionType)} disabled={availableQuestionTypes.length === 0}>
 							<SelectTrigger>
-								<SelectValue />
+								<SelectValue placeholder="Типы вопросов не загружены" />
 							</SelectTrigger>
 							<SelectContent>
 								{availableQuestionTypes.map((item) => (
@@ -219,9 +145,18 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 								))}
 							</SelectContent>
 						</Select>
+						{availableQuestionTypes.length === 0 ? (
+							<p className="text-muted-foreground text-xs">
+								Типы вопросов не загружены из БД. Проверьте настройки в разделе типов вопросов.
+							</p>
+						) : null}
 					</div>
 
-					{activeTemplate === 'matching' ? (
+					{!activeTemplate ? (
+						<p className="text-muted-foreground text-sm">
+							Тип вопроса не настроен в БД. Выберите корректный тип в списке выше.
+						</p>
+					) : activeTemplate === 'matching' ? (
 						<MatchingEditor
 							pairs={form.matchingPairs || createDefaultMatchingPairs()}
 							correct={(form.correct as Record<string, string>) || {}}
@@ -240,7 +175,7 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 							<Input
 								type="text"
 								inputMode={activeTemplate === 'sequence_digits' ? 'numeric' : 'text'}
-								value={typeof form.correct === 'string' ? form.correct : ''}
+								value={typeof form.correct === 'string' ? form.correct : typeof form.correct === 'number' ? String(form.correct) : ''}
 								onChange={(e) => setForm((prev) => ({ ...prev, correct: e.target.value }))}
 								placeholder={activeTemplate === 'sequence_digits' ? 'Например: 2314' : 'Введите правильный ответ'}
 							/>

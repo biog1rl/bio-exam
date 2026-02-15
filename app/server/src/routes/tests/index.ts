@@ -937,12 +937,16 @@ router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), requirePerm('test
 			const promptText = q.promptPath ? fileContents.get(q.promptPath) || '' : ''
 			const explanationText = q.explanationPath ? fileContents.get(q.explanationPath) || '' : ''
 			const correct = answerKeyMap.get(q.id) ?? null
+			const typeConfig = questionTypesMap[q.type]
+			if (!typeConfig) {
+				throw new Error(`Question type is not configured: ${q.type}`)
+			}
 
 			return {
 				id: q.id,
 				type: q.type,
-				questionUiTemplate: questionTypesMap[q.type]?.uiTemplate ?? null,
-				questionTypeTitle: questionTypesMap[q.type]?.title ?? q.type,
+				questionUiTemplate: typeConfig.uiTemplate,
+				questionTypeTitle: typeConfig.title,
 				order: q.order,
 				points: q.points,
 				options: q.options,
@@ -1023,12 +1027,16 @@ router.get('/:id', validateUUID('id'), sessionRequired(), requirePerm('tests', '
 			const promptText = q.promptPath ? fileContents.get(q.promptPath) || '' : ''
 			const explanationText = q.explanationPath ? fileContents.get(q.explanationPath) || '' : ''
 			const correct = answerKeyMap.get(q.id) ?? null
+			const typeConfig = questionTypesMap[q.type]
+			if (!typeConfig) {
+				throw new Error(`Question type is not configured: ${q.type}`)
+			}
 
 			return {
 				id: q.id,
 				type: q.type,
-				questionUiTemplate: questionTypesMap[q.type]?.uiTemplate ?? null,
-				questionTypeTitle: questionTypesMap[q.type]?.title ?? q.type,
+				questionUiTemplate: typeConfig.uiTemplate,
+				questionTypeTitle: typeConfig.title,
 				order: q.order,
 				points: q.points,
 				options: q.options,

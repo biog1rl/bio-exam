@@ -244,11 +244,15 @@ router.get('/topics/:topicSlug/tests/:testSlug', async (req, res, next) => {
 				})
 
 				const promptText = await readFirstMarkdown(promptCandidates)
+				const typeConfig = questionTypesMap[q.type]
+				if (!typeConfig) {
+					throw new Error(`Question type is not configured: ${q.type}`)
+				}
 				return {
 					id: q.id,
 					type: q.type,
-					questionUiTemplate: questionTypesMap[q.type]?.uiTemplate ?? null,
-					questionTypeTitle: questionTypesMap[q.type]?.title ?? q.type,
+					questionUiTemplate: typeConfig.uiTemplate,
+					questionTypeTitle: typeConfig.title,
 					order: q.order,
 					points: q.points,
 					options: q.options,
@@ -322,11 +326,15 @@ router.get('/tests/:id', validateUUID('id'), async (req, res, next) => {
 				})
 
 				const promptText = await readFirstMarkdown(promptCandidates)
+				const typeConfig = questionTypesMap[q.type]
+				if (!typeConfig) {
+					throw new Error(`Question type is not configured: ${q.type}`)
+				}
 				return {
 					id: q.id,
 					type: q.type,
-					questionUiTemplate: questionTypesMap[q.type]?.uiTemplate ?? null,
-					questionTypeTitle: questionTypesMap[q.type]?.title ?? q.type,
+					questionUiTemplate: typeConfig.uiTemplate,
+					questionTypeTitle: typeConfig.title,
 					order: q.order,
 					points: q.points,
 					options: q.options,
@@ -431,6 +439,10 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		}> = []
 
 		for (const q of questionRows) {
+			const typeConfig = questionTypesMap[q.type]
+			if (!typeConfig) {
+				return res.status(500).json({ error: `Question type is not configured: ${q.type}` })
+			}
 			const correctAnswer = correctAnswersMap.get(q.id)
 			const userAnswer = userAnswers[q.id] ?? null
 			const score = scoreQuestionByType({

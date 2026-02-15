@@ -287,15 +287,13 @@ export function scoreQuestionByType(input: ScoreQuestionByTypeInput): ScoreQuest
 	const { questionType, userAnswer, correctAnswer, fallbackMaxPoints, questionTypesMap } = input
 	const typeConfig = questionTypesMap[questionType]
 
-	// Legacy fallback for unknown custom key to keep backwards compatibility.
 	if (!typeConfig) {
-		return scoreQuestion({
-			questionType,
-			userAnswer,
-			correctAnswer,
-			fallbackMaxPoints,
-			rules: createDefaultTestScoringRules(),
-		})
+		return {
+			maxPoints: Number.isFinite(fallbackMaxPoints) ? Math.max(0, fallbackMaxPoints) : 0,
+			earnedPoints: 0,
+			isCorrect: false,
+			mistakesCount: Number.MAX_SAFE_INTEGER,
+		}
 	}
 
 	const normalizedRule = normalizeRule({

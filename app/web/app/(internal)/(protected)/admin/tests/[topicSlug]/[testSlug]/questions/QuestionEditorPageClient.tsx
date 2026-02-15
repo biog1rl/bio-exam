@@ -32,6 +32,7 @@ import {
 	createDefaultQuestion,
 	isValidSequenceCorrectValue,
 	normalizeQuestionForSave,
+	normalizeShortTextCorrectValue,
 	resolveQuestionTemplate,
 } from '../../../types'
 
@@ -52,6 +53,9 @@ interface Props {
 
 function validateQuestion(question: Question): string | null {
 	const template = resolveQuestionTemplate(question)
+	if (!template) {
+		return 'Тип вопроса не настроен в БД'
+	}
 
 	if (!question.promptText.trim()) {
 		return 'Введите текст вопроса'
@@ -89,7 +93,8 @@ function validateQuestion(question: Question): string | null {
 		}
 	}
 	if (template === 'short_text') {
-		if (typeof question.correct !== 'string' || !question.correct.trim()) {
+		const normalized = normalizeShortTextCorrectValue(question.correct)
+		if (!normalized || !normalized.trim()) {
 			return 'Укажите правильный краткий ответ'
 		}
 	}

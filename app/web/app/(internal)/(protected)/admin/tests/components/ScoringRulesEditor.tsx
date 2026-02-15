@@ -6,14 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import type { TestScoringRules } from '../types'
 
-type LegacyQuestionType = keyof TestScoringRules
+type ScoringQuestionType = keyof TestScoringRules
 
-const scoringRuleMeta: Array<{ type: LegacyQuestionType; label: string; description: string }> = [
+const scoringRuleMeta: Array<{ type: ScoringQuestionType; label: string; description: string }> = [
 	{ type: 'short_answer', label: 'Краткий ответ', description: 'Одно слово или числовой ответ' },
 	{ type: 'sequence', label: 'Последовательность', description: 'Проверка порядка цифр' },
 	{ type: 'matching', label: 'Соответствие', description: 'Сопоставление утверждений и признаков' },
 	{ type: 'checkbox', label: 'Множественный выбор', description: 'Выбор нескольких вариантов' },
-	{ type: 'radio', label: 'Один вариант (legacy)', description: 'Для обратной совместимости старых тестов' },
+	{ type: 'radio', label: 'Один вариант', description: 'Один правильный вариант ответа' },
 ]
 
 type Props = {
@@ -23,7 +23,7 @@ type Props = {
 
 export default function ScoringRulesEditor({ rules, onChange }: Props) {
 	const updateRule = (
-		type: LegacyQuestionType,
+		type: ScoringQuestionType,
 		patch: Partial<{
 			formula: 'exact_match' | 'one_mistake_partial'
 			correctPoints: number

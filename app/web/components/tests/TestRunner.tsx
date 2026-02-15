@@ -34,17 +34,8 @@ type Props = {
 	initialAttempts?: TestAttemptSummary[]
 }
 
-function legacyTypeToTemplate(type: string): PublicTestQuestion['questionUiTemplate'] {
-	if (type === 'radio') return 'single_choice'
-	if (type === 'checkbox') return 'multi_choice'
-	if (type === 'matching') return 'matching'
-	if (type === 'sequence') return 'sequence_digits'
-	if (type === 'short_answer') return 'short_text'
-	return null
-}
-
 function resolveTemplate(question: PublicTestQuestion): NonNullable<PublicTestQuestion['questionUiTemplate']> | null {
-	return question.questionUiTemplate ?? legacyTypeToTemplate(question.type)
+	return question.questionUiTemplate
 }
 
 function isAnswered(question: PublicTestQuestion, value: TestAnswerValue | undefined): boolean {
@@ -326,6 +317,11 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 											)
 										})}
 									</div>
+								) : null}
+								{template == null ? (
+									<p className="text-sm text-amber-600">
+										Тип этого вопроса не настроен. Обратитесь к администратору.
+									</p>
 								) : null}
 
 								{questionResult ? (

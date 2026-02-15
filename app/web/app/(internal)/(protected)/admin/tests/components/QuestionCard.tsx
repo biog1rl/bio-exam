@@ -28,15 +28,8 @@ const typeLabels: Record<string, { label: string; icon: typeof Radio }> = {
 	sequence: { label: 'Последовательность', icon: ListOrdered },
 }
 
-function resolveTemplate(
-	question: Question
-): 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits' {
-	if (question.questionUiTemplate) return question.questionUiTemplate
-	if (question.type === 'radio') return 'single_choice'
-	if (question.type === 'checkbox') return 'multi_choice'
-	if (question.type === 'matching') return 'matching'
-	if (question.type === 'sequence') return 'sequence_digits'
-	return 'short_text'
+function resolveTemplate(question: Question): 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits' | null {
+	return question.questionUiTemplate ?? null
 }
 
 function getIconByTemplate(template: string): typeof Radio {
@@ -61,9 +54,9 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 	const template = resolveTemplate(question)
 	const typeConfig = typeLabels[question.type] || {
 		label: question.questionTypeTitle || question.type,
-		icon: getIconByTemplate(template),
+		icon: getIconByTemplate(template ?? 'single_choice'),
 	}
-	const TypeIcon = getIconByTemplate(template)
+	const TypeIcon = getIconByTemplate(template ?? 'single_choice')
 
 	// Get preview text (first 100 chars of prompt)
 	const previewText = question.promptText
@@ -73,7 +66,9 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 
 	// Count options/pairs
 	const optionsCount =
-		template === 'matching'
+		template == null
+			? 'тип не настроен'
+			: template === 'matching'
 			? `${question.matchingPairs?.left.length ?? 0} пар`
 			: template === 'short_text' || template === 'sequence_digits'
 				? 'без вариантов'

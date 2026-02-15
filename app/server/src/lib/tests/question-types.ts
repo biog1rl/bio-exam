@@ -160,7 +160,7 @@ type BuiltinQuestionTypeSeed = {
 export const BUILTIN_QUESTION_TYPES: BuiltinQuestionTypeSeed[] = [
 	{
 		key: 'radio',
-		title: 'Один правильный вариант (legacy)',
+		title: 'Один правильный вариант',
 		description: 'Один ответ из списка вариантов',
 		uiTemplate: 'single_choice',
 		scoringRule: { formula: 'exact_match', mistakeMetric: 'boolean_correct', correctPoints: 1 },

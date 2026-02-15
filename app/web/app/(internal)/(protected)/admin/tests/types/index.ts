@@ -246,19 +246,8 @@ export interface QuestionTypesResponse {
 	questionTypes: QuestionTypeDefinition[]
 }
 
-export function resolveQuestionTemplate(question: Pick<Question, 'type' | 'questionUiTemplate'>): QuestionUiTemplate {
-	return (
-		question.questionUiTemplate ??
-		(question.type === 'radio'
-			? 'single_choice'
-			: question.type === 'checkbox'
-				? 'multi_choice'
-				: question.type === 'matching'
-					? 'matching'
-					: question.type === 'sequence'
-						? 'sequence_digits'
-						: 'short_text')
-	)
+export function resolveQuestionTemplate(question: Pick<Question, 'questionUiTemplate'>): QuestionUiTemplate | null {
+	return question.questionUiTemplate ?? null
 }
 
 export function normalizeSequenceCorrectValue(value: unknown): string | null {
@@ -271,6 +260,16 @@ export function normalizeSequenceCorrectValue(value: unknown): string | null {
 	return null
 }
 
+export function normalizeShortTextCorrectValue(value: unknown): string | null {
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		return String(value)
+	}
+	if (typeof value === 'string') {
+		return value
+	}
+	return null
+}
+
 export function isValidSequenceCorrectValue(value: unknown): boolean {
 	const normalized = normalizeSequenceCorrectValue(value)
 	if (!normalized) return false
@@ -278,7 +277,17 @@ export function isValidSequenceCorrectValue(value: unknown): boolean {
 }
 
 export function normalizeQuestionForSave(question: Question): Question {
-	if (resolveQuestionTemplate(question) !== 'sequence_digits') return question
+	const template = resolveQuestionTemplate(question)
+	if (template === 'short_text') {
+		const normalized = normalizeShortTextCorrectValue(question.correct)
+		if (normalized == null) return question
+		return {
+			...question,
+			correct: normalized,
+		}
+	}
+
+	if (template !== 'sequence_digits') return question
 
 	const normalized = normalizeSequenceCorrectValue(question.correct)
 	if (!normalized) return question

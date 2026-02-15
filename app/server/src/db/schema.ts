@@ -174,7 +174,7 @@ export const sidebarItems = pgTable(
 // ТЕСТЫ
 // =============================================================================
 
-/** Legacy enum типов вопроса (оставлен для обратной совместимости миграций) */
+/** Enum типов вопроса (сохранён для совместимости старых миграций) */
 export const questionType = pgEnum('question_type', ['radio', 'checkbox', 'matching', 'short_answer', 'sequence'])
 
 /** Темы тестов */

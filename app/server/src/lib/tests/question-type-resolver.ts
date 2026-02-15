@@ -4,10 +4,8 @@ import { z } from 'zod'
 import { db } from '../../db/index.js'
 import { questionTypes, testQuestionTypeOverrides } from '../../db/schema.js'
 import {
-	BUILTIN_QUESTION_TYPES,
 	QuestionTypeScoringRuleSchema,
 	QuestionTypeValidationSchema,
-	getBuiltinQuestionTypeByKey,
 	isMistakeMetricAllowedForTemplate,
 	type QuestionTypeDefinition,
 	type QuestionTypeScoringRule,
@@ -38,12 +36,6 @@ type RuntimeQuestionTypeOverride = {
 
 const EMPTY_VALIDATION_SCHEMA: ValidationSchema = {}
 
-function uniqueByKey(items: RuntimeQuestionType[]): RuntimeQuestionType[] {
-	const map = new Map<string, RuntimeQuestionType>()
-	for (const item of items) map.set(item.key, item)
-	return [...map.values()]
-}
-
 function parseValidationSchema(value: unknown): ValidationSchema | null {
 	if (value == null) return null
 	const parsed = QuestionTypeValidationSchema.safeParse(value)
@@ -57,21 +49,6 @@ function parseScoringRule(value: unknown, template: QuestionUiTemplate): Questio
 		return parsed.data
 	}
 	return createDefaultScoringRuleForTemplate(template)
-}
-
-function toRuntimeFromBuiltin(key: string): RuntimeQuestionType | null {
-	const builtin = getBuiltinQuestionTypeByKey(key)
-	if (!builtin) return null
-	return {
-		key: builtin.key,
-		title: builtin.title,
-		description: builtin.description,
-		uiTemplate: builtin.uiTemplate,
-		validationSchema: null,
-		scoringRule: builtin.scoringRule,
-		isSystem: true,
-		isActive: true,
-	}
 }
 
 function toRuntimeFromDb(row: {
@@ -114,24 +91,7 @@ export async function getGlobalQuestionTypes(params?: {
 }): Promise<RuntimeQuestionType[]> {
 	const includeInactive = params?.includeInactive === true
 	const rows = await db.query.questionTypes.findMany()
-
-	const dbTypes = rows.map(toRuntimeFromDb)
-	const dbKeys = new Set(dbTypes.map((item) => item.key))
-
-	const builtinFallbacks: RuntimeQuestionType[] = BUILTIN_QUESTION_TYPES.filter((item) => !dbKeys.has(item.key)).map(
-		(item) => ({
-			key: item.key,
-			title: item.title,
-			description: item.description,
-			uiTemplate: item.uiTemplate,
-			validationSchema: null,
-			scoringRule: item.scoringRule,
-			isSystem: true,
-			isActive: true,
-		})
-	)
-
-	const merged = uniqueByKey([...dbTypes, ...builtinFallbacks]).sort((a, b) => {
+	const merged = rows.map(toRuntimeFromDb).sort((a, b) => {
 		if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1
 		return a.title.localeCompare(b.title, 'ru')
 	})
@@ -164,7 +124,7 @@ export async function getEffectiveQuestionTypesForTest(params: {
 	const resolved: RuntimeQuestionType[] = []
 
 	for (const key of allKeys) {
-		const base = globalMap.get(key) ?? toRuntimeFromBuiltin(key)
+		const base = globalMap.get(key)
 		if (!base) continue
 		const merged = applyOverride(base, overridesMap.get(key))
 		resolved.push(merged)
@@ -313,7 +273,7 @@ export function validateQuestionWithType(
 	},
 	typesMap: RuntimeQuestionTypesMap
 ): string | null {
-	const resolvedType = typesMap[question.type] ?? toRuntimeFromBuiltin(question.type)
+	const resolvedType = typesMap[question.type]
 	if (!resolvedType) return `Неизвестный тип вопроса: ${question.type}`
 	if (!resolvedType.isActive) return `Тип вопроса отключён: ${resolvedType.title}`
 
@@ -340,10 +300,17 @@ export async function upsertTestQuestionTypeOverride(params: {
 			eq(testQuestionTypeOverrides.questionTypeKey, params.questionTypeKey)
 		),
 	})
-	const nextScoringRule =
-		params.scoringRuleOverride == null
-			? null
-			: parseScoringRule(params.scoringRuleOverride, getBuiltinQuestionTypeByKey(params.questionTypeKey)?.uiTemplate ?? 'short_text')
+
+	let nextScoringRule: QuestionTypeScoringRule | null = null
+	if (params.scoringRuleOverride != null) {
+		const baseType = await db.query.questionTypes.findFirst({
+			where: eq(questionTypes.key, params.questionTypeKey),
+		})
+		if (!baseType) {
+			throw new Error(`Question type not found: ${params.questionTypeKey}`)
+		}
+		nextScoringRule = parseScoringRule(params.scoringRuleOverride, baseType.uiTemplate)
+	}
 
 	if (!existing) {
 		await db.insert(testQuestionTypeOverrides).values({
