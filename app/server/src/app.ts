@@ -19,6 +19,7 @@ import healthRouter from './routes/db/health.js'
 import apiRouter from './routes/index.js'
 
 const app = express()
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT ?? '10mb'
 
 // --- Безопасность/заголовки
 app.use(
@@ -68,7 +69,7 @@ app.use(
 )
 
 // --- Парсинг JSON тел
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: JSON_BODY_LIMIT }))
 
 // --- Раздача статических файлов uploads
 if (process.env.NODE_ENV !== 'production') {

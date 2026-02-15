@@ -39,6 +39,7 @@ import { transliterate } from '@/lib/utils/transliterate'
 
 import QuestionCard from '../../components/QuestionCard'
 import type { TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../../types'
+import { isValidSequenceCorrectValue, normalizeQuestionForSave, resolveQuestionTemplate } from '../../types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
@@ -96,10 +97,13 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				timeLimitMinutes: testData.test.timeLimitMinutes,
 				passingScore: testData.test.passingScore,
 				order: testData.test.order,
-				questions: testData.questions.map((q, i) => ({
-					...q,
-					order: q.order ?? i,
-				})),
+				questions: testData.questions.map((q, i) => {
+					const normalized = normalizeQuestionForSave(q)
+					return {
+						...normalized,
+						order: q.order ?? i,
+					}
+				}),
 			})
 		}
 	}, [testData])
@@ -221,17 +225,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		// Validate questions
 		for (let i = 0; i < form.questions.length; i++) {
 			const q = form.questions[i]
-			const template =
-				q.questionUiTemplate ??
-				(q.type === 'radio'
-					? 'single_choice'
-					: q.type === 'checkbox'
-						? 'multi_choice'
-						: q.type === 'matching'
-							? 'matching'
-							: q.type === 'sequence'
-								? 'sequence_digits'
-								: 'short_text')
+			const template = resolveQuestionTemplate(q)
 			if (!q.promptText.trim()) {
 				toast.error(`Вопрос ${i + 1}: введите текст вопроса`)
 				return
@@ -275,11 +269,16 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				}
 			}
 			if (template === 'sequence_digits') {
-				if (typeof q.correct !== 'string' || !/^\d+$/.test(q.correct.replace(/\s+/g, ''))) {
+				if (!isValidSequenceCorrectValue(q.correct)) {
 					toast.error(`Вопрос ${i + 1}: для последовательности используйте только цифры`)
 					return
 				}
 			}
+		}
+
+		const payload: TestFormData = {
+			...form,
+			questions: form.questions.map((question) => normalizeQuestionForSave(question)),
 		}
 
 		setSaving(true)
@@ -290,7 +289,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify(form),
+				body: JSON.stringify(payload),
 			})
 
 			if (!res.ok) {

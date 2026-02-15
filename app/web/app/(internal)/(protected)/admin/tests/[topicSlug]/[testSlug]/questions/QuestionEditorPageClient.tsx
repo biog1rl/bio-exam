@@ -28,7 +28,12 @@ import type {
 	TestsResponse,
 	TopicsResponse,
 } from '../../../types'
-import { createDefaultQuestion } from '../../../types'
+import {
+	createDefaultQuestion,
+	isValidSequenceCorrectValue,
+	normalizeQuestionForSave,
+	resolveQuestionTemplate,
+} from '../../../types'
 
 const fetcher = async (url: string) => {
 	const res = await fetch(url, { credentials: 'include' })
@@ -46,17 +51,7 @@ interface Props {
 }
 
 function validateQuestion(question: Question): string | null {
-	const template =
-		question.questionUiTemplate ??
-		(question.type === 'radio'
-			? 'single_choice'
-			: question.type === 'checkbox'
-				? 'multi_choice'
-				: question.type === 'matching'
-					? 'matching'
-					: question.type === 'sequence'
-						? 'sequence_digits'
-						: 'short_text')
+	const template = resolveQuestionTemplate(question)
 
 	if (!question.promptText.trim()) {
 		return 'Введите текст вопроса'
@@ -99,7 +94,7 @@ function validateQuestion(question: Question): string | null {
 		}
 	}
 	if (template === 'sequence_digits') {
-		if (typeof question.correct !== 'string' || !/^\d+$/.test(question.correct.replace(/\s+/g, ''))) {
+		if (!isValidSequenceCorrectValue(question.correct)) {
 			return 'Для последовательности используйте только цифры без пробелов'
 		}
 	}
@@ -143,7 +138,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	const currentQuestion = useMemo(() => {
 		if (!testData) return null
 		if (isNewQuestion) return createDefaultQuestion(testData.questions.length)
-		return testData.questions.find((question) => question.id === questionId) ?? null
+		const found = testData.questions.find((question) => question.id === questionId) ?? null
+		return found ? normalizeQuestionForSave(found) : null
 	}, [testData, isNewQuestion, questionId])
 
 	const backToTestEditor = useCallback(() => {
@@ -233,7 +229,10 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 						question.id === questionId ? { ...nextQuestion, id: questionId } : question
 					)
 
-			const normalizedQuestions = questions.map((question, order) => ({ ...question, order }))
+			const normalizedQuestions = questions.map((question, order) => ({
+				...normalizeQuestionForSave(question),
+				order,
+			}))
 			const payload: TestFormData = {
 				topicId: testData.test.topicId,
 				title: testData.test.title,
