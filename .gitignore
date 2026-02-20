@@ -87,6 +87,7 @@ next-env.d.ts
 # Misc
 .turbo
 .contentlayer
+.planning
 
 # Uploads
 app/web/public/uploads/**
