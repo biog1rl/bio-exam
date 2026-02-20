@@ -51,6 +51,8 @@ export type PublicTestQuestion = {
 
 export type TestAnswerValue = string | string[] | Record<string, string>
 
+// Shape mirrors SubmitResultSchema in app/server/src/lib/tests/submit-result.ts
+// Keep in sync manually (no shared package for these types)
 export type SubmitResultItem = {
 	questionId: string
 	isCorrect: boolean
@@ -61,6 +63,8 @@ export type SubmitResultItem = {
 	explanationText: string | null
 }
 
+// Shape mirrors SubmitResultSchema in app/server/src/lib/tests/submit-result.ts
+// Keep in sync manually (no shared package for these types)
 export type SubmitResult = {
 	attemptId: string
 	submittedAt: string

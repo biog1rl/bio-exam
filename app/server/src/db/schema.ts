@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
 	pgTable,
 	pgEnum,
@@ -344,11 +344,15 @@ export const testAttempts = pgTable(
 		passed: boolean('passed').notNull().default(false),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		submittedAt: timestamp('submitted_at').notNull().defaultNow(),
+		clientAttemptId: text('client_attempt_id'), // optional idempotency key from client
 	},
 	(t) => ({
 		testIdIdx: index('test_attempts_test_id_idx').on(t.testId),
 		userIdIdx: index('test_attempts_user_id_idx').on(t.userId),
 		submittedAtIdx: index('test_attempts_submitted_at_idx').on(t.submittedAt),
+		userClientAttemptUniq: uniqueIndex('test_attempts_user_client_attempt_idx')
+			.on(t.userId, t.clientAttemptId)
+			.where(sql`${t.clientAttemptId} IS NOT NULL`),
 	})
 )
 

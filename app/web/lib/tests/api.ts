@@ -45,8 +45,9 @@ export async function fetchMyTestAttempts(testId: string) {
 }
 
 export async function submitPublicTestAnswers(testId: string, answers: Record<string, TestAnswerValue>) {
+	const clientAttemptId = crypto.randomUUID()
 	return fetchJson<SubmitResult>(`/api/tests/public/tests/${testId}/submit`, {
 		method: 'POST',
-		body: JSON.stringify({ answers }),
+		body: JSON.stringify({ answers, clientAttemptId }),
 	})
 }

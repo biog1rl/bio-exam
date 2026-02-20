@@ -18,11 +18,6 @@ import { breadcrumbConfig, matchPath } from '@/config/breadcrumbs'
 import LoaderComponent from '../LoaderComponent'
 import { useBreadcrumbs } from './BreadcrumbsContext'
 
-/**
- * Узел дерева документов.
- * Ожидаем, что каждый узел знает свой slug (segmentSlug), отображаемое имя (name)
- * и может иметь дочерние элементы (children).
- */
 type DocsNode = {
 	segmentSlug: string
 	name: string
@@ -30,21 +25,11 @@ type DocsNode = {
 	children?: DocsNode[]
 }
 
-/**
- * Унифицируем доступ к children: на вход может прийти сам узел, массив узлов или ничего.
- * Возвращаем всегда массив дочерних узлов (или пустой массив).
- */
 function getChildren(nodeOrArray: DocsNode | DocsNode[] | null | undefined): DocsNode[] {
 	if (!nodeOrArray) return []
 	return Array.isArray(nodeOrArray) ? nodeOrArray : (nodeOrArray.children ?? [])
 }
 
-/**
- * Превращаем сегмент URL в «читаемый» заголовок:
- * - декодируем URI-компонент
- * - дефисы/подчёркивания → пробелы
- * - первая буква заглавная
- */
 function humanize(segment: string) {
 	try {
 		segment = decodeURIComponent(segment)
@@ -53,9 +38,6 @@ function humanize(segment: string) {
 	return segment.charAt(0).toUpperCase() + segment.slice(1)
 }
 
-/**
- * Безопасная версия decodeURIComponent, чтобы не падать на некорректных строках.
- */
 function safeDecode(s: string) {
 	try {
 		return decodeURIComponent(s)
@@ -64,29 +46,16 @@ function safeDecode(s: string) {
 	}
 }
 
-/**
- * Компонент «Хлебные крошки».
- * - Поддерживает централизованный конфиг (скрывать крошки на отдельных страницах, переопределять лейблы и т.п.).
- * - Для роутов из списка treeRoots (например, /docs или /editor) берёт подписи из дерева документов (segmentSlug → name).
- * - Для остальных — использует labelOverrides → humanize.
- */
 export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<string, string> }) {
-	// Дерево документов больше не используется
 	const tree = null
 	const { labels: contextLabels } = useBreadcrumbs()
-
-	// Объединяем labels из props и контекста (контекст имеет приоритет)
 	const allLabels = { ...initialLabels, ...contextLabels }
 
-	// Текущий путь и его сегменты
 	const pathname = usePathname() || '/'
 	const parts = pathname.split('?')[0].split('#')[0].split('/').filter(Boolean)
-	const root = parts[0] // Корневой сегмент (/docs/..., /editor/..., /admin/...)
+	const root = parts[0]
+	const { hideOn, treeRoots, labelOverrides, asyncLabelOn } = breadcrumbConfig
 
-	// Централизованные настройки крошек
-	const { hideOn, treeRoots, labelOverrides } = breadcrumbConfig
-
-	// Превращаем сегменты в набор «пункт крошек» с href и флагом last
 	const items = parts.map((seg, idx) => {
 		const href = '/' + parts.slice(0, idx + 1).join('/')
 		return { label: seg, href, last: idx === parts.length - 1 }
@@ -94,15 +63,6 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 
 	const shouldHide = matchPath(hideOn, pathname, parts)
 
-	/**
-	 * Строим карту соответствий href → «красивый лейбл» из дерева (name),
-	 * но только если корень маршрута включён в treeRoots (например, docs или editor).
-	 *
-	 * Проход идёт «в глубину»: на каждом уровне ищем дочерний узел по segmentSlug.
-	 * Как только не нашли — прекращаем маппинг и дальше используем humanize/overrides.
-	 *
-	 * useMemo: пересчитываем, когда меняется путь или дерево.
-	 */
 	type StoreTree = DocsNode | DocsNode[] | null | undefined
 	const treeHrefToLabel = useMemo(() => {
 		const map = new Map<string, string>()
@@ -126,29 +86,39 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 		return map
 	}, [parts, root, tree, treeRoots])
 
-	// ----- ОЖИДАНИЕ «НОРМАЛЬНЫХ» ЛЕЙБЛОВ -----
-	const isDocsRoot = !!root && treeRoots.includes(root as (typeof treeRoots)[number])
-	const lastHref = items.length ? items[items.length - 1].href : undefined
-	const hasInitial = lastHref ? allLabels?.[lastHref] !== undefined : false
-	const hasTree = lastHref ? treeHrefToLabel.has(lastHref!) : false
-	const hasReadyLabel = !!(hasInitial || hasTree)
-
-	// ждём коротко (чтобы избежать мигания), затем — фолбэк из сегментов
-	const WAIT_MS = 500
-	const [waiting, setWaiting] = useState<boolean>(isDocsRoot && !hasReadyLabel)
+	const WAIT_MS = 1200
+	const [allowFallback, setAllowFallback] = useState(false)
 
 	useEffect(() => {
-		if (!isDocsRoot) {
-			setWaiting(false)
-			return
-		}
-		if (hasReadyLabel) {
-			setWaiting(false)
-			return
-		}
-		const t = setTimeout(() => setWaiting(false), WAIT_MS)
+		setAllowFallback(false)
+	}, [pathname])
+
+	const displayItems = useMemo(() => {
+		return items.map((item) => {
+			const raw = item.label
+			const prettyFromTree =
+				root && treeRoots.includes(root as (typeof treeRoots)[number]) ? treeHrefToLabel.get(item.href) : undefined
+			const prettyFromLabels = allLabels?.[item.href]
+			const prettyFromOverrides = labelOverrides[raw]
+			const resolvedLabel = prettyFromLabels ?? prettyFromTree ?? prettyFromOverrides
+			const itemParts = item.href.split('?')[0].split('#')[0].split('/').filter(Boolean)
+			const shouldWaitForAsyncLabel = !resolvedLabel && matchPath(asyncLabelOn, item.href, itemParts)
+
+			return {
+				...item,
+				pretty: resolvedLabel ?? humanize(raw),
+				shouldShowLoader: shouldWaitForAsyncLabel && !allowFallback,
+			}
+		})
+	}, [allLabels, allowFallback, asyncLabelOn, items, labelOverrides, root, treeHrefToLabel, treeRoots])
+
+	const hasPendingAsyncLabels = displayItems.some((item) => item.shouldShowLoader)
+
+	useEffect(() => {
+		if (!hasPendingAsyncLabels) return
+		const t = setTimeout(() => setAllowFallback(true), WAIT_MS)
 		return () => clearTimeout(t)
-	}, [isDocsRoot, hasReadyLabel])
+	}, [hasPendingAsyncLabels])
 
 	if (shouldHide) {
 		return null
@@ -157,7 +127,6 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 	return (
 		<Breadcrumb>
 			<BreadcrumbList>
-				{/* Первый пункт — ссылка на главную (или просто текст, если мы уже на главной) */}
 				<BreadcrumbItem>
 					{items.length === 0 ? (
 						<BreadcrumbPage>Главная</BreadcrumbPage>
@@ -168,48 +137,24 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 					)}
 				</BreadcrumbItem>
 
-				{/* Пока ждём «нормальную» метку для последнего пункта — показываем лоадер */}
-				{waiting ? (
-					<span className="flex items-center gap-x-2">
+				{displayItems.map((item) => (
+					<span key={item.href} className="flex items-center gap-x-2">
 						<BreadcrumbSeparator />
 						<BreadcrumbItem>
-							<BreadcrumbPage>
-								<LoaderComponent />
-							</BreadcrumbPage>
+							{item.shouldShowLoader ? (
+								<BreadcrumbPage>
+									<LoaderComponent />
+								</BreadcrumbPage>
+							) : item.last ? (
+								<BreadcrumbPage>{item.pretty}</BreadcrumbPage>
+							) : (
+								<BreadcrumbLink asChild>
+									<Link href={item.href}>{item.pretty}</Link>
+								</BreadcrumbLink>
+							)}
 						</BreadcrumbItem>
 					</span>
-				) : (
-					/* Остальные пункты пути */
-					items.map((item) => {
-						const raw = item.label
-
-						// Пытаемся взять красивый label из дерева (актуально для корней из treeRoots)
-						const prettyFromTree =
-							root && treeRoots.includes(root as (typeof treeRoots)[number])
-								? treeHrefToLabel.get(item.href)
-								: undefined
-
-						// Если не нашли в дереве — пробуем allLabels, overrides, иначе humanize
-						const pretty = allLabels?.[item.href] ?? prettyFromTree ?? labelOverrides[raw] ?? humanize(raw)
-
-						return (
-							<span key={item.href} className="flex items-center gap-x-2">
-								<BreadcrumbSeparator />
-								<BreadcrumbItem>
-									{item.last ? (
-										// Последний пункт — текущая страница (без ссылки)
-										<BreadcrumbPage>{pretty}</BreadcrumbPage>
-									) : (
-										// Промежуточные — кликабельные
-										<BreadcrumbLink asChild>
-											<Link href={item.href}>{pretty}</Link>
-										</BreadcrumbLink>
-									)}
-								</BreadcrumbItem>
-							</span>
-						)
-					})
-				)}
+				))}
 			</BreadcrumbList>
 		</Breadcrumb>
 	)

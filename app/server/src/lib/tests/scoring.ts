@@ -70,29 +70,57 @@ export function resolveEffectiveScoringRules(params: {
 }
 
 function normalizeCompactString(value: unknown): string | null {
-	if (typeof value !== 'string') return null
-	const normalized = value.replace(/\s+/g, '').toLowerCase()
+	const raw =
+		typeof value === 'string'
+			? value
+			: typeof value === 'number' && Number.isFinite(value)
+				? String(value)
+				: typeof value === 'bigint'
+					? value.toString()
+					: null
+	if (raw == null) return null
+	const normalized = raw.replace(/\s+/g, '').toLowerCase()
 	return normalized.length > 0 ? normalized : null
 }
 
 function normalizeDigitsSequence(value: unknown): string | null {
-	const normalized = normalizeCompactString(value)
+	// Явное приведение числа к строке — JSONB может вернуть числовой тип для digit-only значений
+	const coerced = typeof value === 'number' ? String(value) : value
+	const normalized = normalizeCompactString(coerced)
 	if (!normalized) return null
 	return /^\d+$/.test(normalized) ? normalized : null
 }
 
-function normalizeStringArray(value: unknown): string[] | null {
-	if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) return null
-	return value
+function normalizeIdValue(value: unknown): string | null {
+	if (typeof value === 'string') return value
+	if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+	if (typeof value === 'bigint') return value.toString()
+	return null
 }
 
-function isStringRecord(value: unknown): value is Record<string, string> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-	return Object.values(value).every((item) => typeof item === 'string')
+function normalizeIdArray(value: unknown): string[] | null {
+	if (!Array.isArray(value)) return null
+	const normalized = value.map((item) => normalizeIdValue(item))
+	if (normalized.some((item) => item == null)) return null
+	return normalized as string[]
+}
+
+function normalizeIdRecord(value: unknown): Record<string, string> | null {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+	const entries = Object.entries(value)
+	const normalizedEntries: Array<[string, string]> = []
+	for (const [key, raw] of entries) {
+		const normalizedValue = normalizeIdValue(raw)
+		if (normalizedValue == null) return null
+		normalizedEntries.push([key, normalizedValue])
+	}
+	return Object.fromEntries(normalizedEntries)
 }
 
 function countRadioMistakes(userAnswer: unknown, correctAnswer: unknown): number {
-	return typeof userAnswer === 'string' && typeof correctAnswer === 'string' && userAnswer === correctAnswer ? 0 : 1
+	const userNormalized = normalizeIdValue(userAnswer)
+	const correctNormalized = normalizeIdValue(correctAnswer)
+	return userNormalized != null && correctNormalized != null && userNormalized === correctNormalized ? 0 : 1
 }
 
 function countShortAnswerMistakes(userAnswer: unknown, correctAnswer: unknown): number {
@@ -117,8 +145,8 @@ function countSequenceMistakes(userAnswer: unknown, correctAnswer: unknown): num
 }
 
 function countCheckboxMistakes(userAnswer: unknown, correctAnswer: unknown): number {
-	const user = normalizeStringArray(userAnswer)
-	const correct = normalizeStringArray(correctAnswer)
+	const user = normalizeIdArray(userAnswer)
+	const correct = normalizeIdArray(correctAnswer)
 	if (!user || !correct) return Number.MAX_SAFE_INTEGER
 
 	const userSet = new Set(user)
@@ -138,33 +166,19 @@ function countCheckboxMistakes(userAnswer: unknown, correctAnswer: unknown): num
 }
 
 function countMatchingMistakes(userAnswer: unknown, correctAnswer: unknown): number {
-	if (!isStringRecord(userAnswer) || !isStringRecord(correctAnswer)) return Number.MAX_SAFE_INTEGER
+	const normalizedUser = normalizeIdRecord(userAnswer)
+	const normalizedCorrect = normalizeIdRecord(correctAnswer)
+	if (!normalizedUser || !normalizedCorrect) return Number.MAX_SAFE_INTEGER
 
-	const correctKeys = Object.keys(correctAnswer)
+	const correctKeys = Object.keys(normalizedCorrect)
 	if (correctKeys.length === 0) return Number.MAX_SAFE_INTEGER
 
 	let mistakes = 0
 	for (const leftId of correctKeys) {
-		if (userAnswer[leftId] !== correctAnswer[leftId]) mistakes += 1
+		if (normalizedUser[leftId] !== normalizedCorrect[leftId]) mistakes += 1
 	}
 
 	return mistakes
-}
-
-function calculateEarnedPoints(rule: QuestionScoringRule, mistakesCount: number): number {
-	if (mistakesCount === 0) return rule.correctPoints
-	if (rule.formula === 'one_mistake_partial' && mistakesCount === 1) {
-		return Math.min(rule.oneMistakePoints ?? 0, rule.correctPoints)
-	}
-	return 0
-}
-
-export type ScoreQuestionInput = {
-	questionType: string
-	userAnswer: unknown
-	correctAnswer: unknown
-	fallbackMaxPoints: number
-	rules: TestScoringRules
 }
 
 export type ScoreQuestionResult = {
@@ -172,47 +186,6 @@ export type ScoreQuestionResult = {
 	earnedPoints: number
 	isCorrect: boolean
 	mistakesCount: number
-}
-
-export function scoreQuestion(input: ScoreQuestionInput): ScoreQuestionResult {
-	const { questionType, userAnswer, correctAnswer, fallbackMaxPoints, rules } = input
-
-	const typeRule = QUESTION_TYPES.includes(questionType as QuestionType)
-		? rules[questionType as QuestionType]
-		: ({ formula: 'exact_match', correctPoints: fallbackMaxPoints } as QuestionScoringRule)
-
-	let mistakesCount = Number.MAX_SAFE_INTEGER
-
-	switch (questionType) {
-		case 'radio':
-			mistakesCount = countRadioMistakes(userAnswer, correctAnswer)
-			break
-		case 'checkbox':
-			mistakesCount = countCheckboxMistakes(userAnswer, correctAnswer)
-			break
-		case 'matching':
-			mistakesCount = countMatchingMistakes(userAnswer, correctAnswer)
-			break
-		case 'short_answer':
-			mistakesCount = countShortAnswerMistakes(userAnswer, correctAnswer)
-			break
-		case 'sequence':
-			mistakesCount = countSequenceMistakes(userAnswer, correctAnswer)
-			break
-		default:
-			mistakesCount = countRadioMistakes(userAnswer, correctAnswer)
-			break
-	}
-
-	const maxPoints = typeRule.correctPoints
-	const earnedPoints = calculateEarnedPoints(typeRule, mistakesCount)
-
-	return {
-		maxPoints,
-		earnedPoints,
-		isCorrect: mistakesCount === 0,
-		mistakesCount,
-	}
 }
 
 export type RuntimeQuestionTypeConfig = {

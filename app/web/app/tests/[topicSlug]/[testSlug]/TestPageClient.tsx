@@ -20,9 +20,9 @@ export default function TestPageClient({ topicSlug, testSlug }: Props) {
 	} = useSWR(detailKey, () => fetchPublicTestBySlug(topicSlug, testSlug))
 
 	const testId = testData?.test?.id
-	const { data: attemptsData } = useSWR(testId ? `${testId}-attempts` : null, () => fetchMyTestAttempts(testId!))
+	const { data: attemptsData, isLoading: loadingAttempts } = useSWR(testId ? `${testId}-attempts` : null, () => fetchMyTestAttempts(testId!))
 
-	if (loadingTest) {
+	if (loadingTest || (testId && loadingAttempts)) {
 		return <div className="p-6">Загрузка теста...</div>
 	}
 

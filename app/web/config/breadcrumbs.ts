@@ -4,6 +4,18 @@ export const breadcrumbConfig = {
 	/** где крошки вообще не показываем */
 	hideOn: [/^\/auth(\/|$)/, /^\/login(\/|$)/, /^\/404$/] as RoutePattern[],
 
+	/**
+	 * Пути, где подписи сегментов приходят асинхронно (через SetBreadcrumbsLabels).
+	 * Пока подпись не получена, показываем loader вместо slug/translit.
+	 */
+	asyncLabelOn: [
+		/^\/tests\/[^/]+$/,
+		/^\/tests\/[^/]+\/[^/]+$/,
+		/^\/admin\/tests\/[^/]+$/,
+		/^\/admin\/tests\/[^/]+\/[^/]+$/,
+		/^\/admin\/tests\/question-types\/[^/]+$/,
+	] as RoutePattern[],
+
 	/** корневые сегменты, где крошки берут имена из дерева (segmentSlug → name) */
 	treeRoots: ['editor'] as const,
 
