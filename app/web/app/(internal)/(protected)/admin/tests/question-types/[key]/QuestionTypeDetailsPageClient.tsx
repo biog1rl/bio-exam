@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
+import { apiFetch } from '@/lib/api-fetch'
 import QuestionTypeScoringRuleEditor from '../../components/QuestionTypeScoringRuleEditor'
 import type {
 	QuestionTypeDefinition,
@@ -149,9 +150,8 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 				scoringRule: globalForm.scoringRule,
 				validationSchema: toValidationPayload(globalForm),
 			}
-			const res = await fetch(`/api/tests/question-types/${typeKey}`, {
+			const res = await apiFetch(`/api/tests/question-types/${typeKey}`, {
 				method: 'PATCH',
-				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(payload),
 			})
@@ -173,9 +173,8 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 		if (!confirm('Отключить этот тип вопроса?')) return
 		setSavingGlobal(true)
 		try {
-			const res = await fetch(`/api/tests/question-types/${typeKey}`, {
+			const res = await apiFetch(`/api/tests/question-types/${typeKey}`, {
 				method: 'DELETE',
-				credentials: 'include',
 			})
 			if (!res.ok) {
 				const data = await res.json().catch(() => null)
@@ -199,9 +198,8 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 				scoringRuleOverride: overrideForm.scoringRuleOverride,
 				isDisabled: overrideForm.isDisabled,
 			}
-			const res = await fetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${typeKey}`, {
+			const res = await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${typeKey}`, {
 				method: 'PUT',
-				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(payload),
 			})
@@ -222,9 +220,8 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 		if (!selectedTestId) return
 		setSavingOverride(true)
 		try {
-			const res = await fetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${typeKey}`, {
+			const res = await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${typeKey}`, {
 				method: 'DELETE',
-				credentials: 'include',
 			})
 			if (!res.ok) {
 				const data = await res.json().catch(() => null)

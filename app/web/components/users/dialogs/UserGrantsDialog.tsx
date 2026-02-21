@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 
 import useSWR from 'swr'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { RbacSwitchesRow, type GrantsState } from '@/components/rbac/RbacSwitchesRow'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -67,20 +68,18 @@ export function UserGrantsDialog({ open, onOpenChange, userId }: Props) {
 			if (next === roleHas) {
 				// хотим вернуться к поведению роли -> удалить override (если есть)
 				if (hasOverride) {
-					const res = await fetch('/api/rbac/user/grant', {
+					const res = await apiFetch('/api/rbac/user/grant', {
 						method: 'DELETE',
 						headers: { 'Content-Type': 'application/json' },
-						credentials: 'include',
 						body: JSON.stringify({ userId, domain, action }),
 					})
 					if (!res.ok) throw new Error(await res.text())
 				}
 			} else {
 				// хотим переопределить поведение роли -> upsert allow = next (true=allow, false=deny)
-				const res = await fetch('/api/rbac/user/grant', {
+				const res = await apiFetch('/api/rbac/user/grant', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					credentials: 'include',
 					body: JSON.stringify({ userId, domain, action, allow: next }),
 				})
 				if (!res.ok) throw new Error(await res.text())

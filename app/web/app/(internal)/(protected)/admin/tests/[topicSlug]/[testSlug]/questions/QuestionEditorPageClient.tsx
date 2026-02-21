@@ -19,6 +19,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
+import { apiFetch } from '@/lib/api-fetch'
 import QuestionEditor from '../../../components/QuestionEditor'
 import type {
 	Question,
@@ -192,10 +193,9 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		setMoving(true)
 		try {
 			const payload = targetTestId ? { targetTestId } : { targetTopicId }
-			const res = await fetch(`/api/tests/${testData.test.id}/questions/${questionId}/move`, {
+			const res = await apiFetch(`/api/tests/${testData.test.id}/questions/${questionId}/move`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify(payload),
 			})
 
@@ -253,10 +253,9 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 			setSaving(true)
 			try {
-				const res = await fetch(`/api/tests/${testData.test.id}/save`, {
+				const res = await apiFetch(`/api/tests/${testData.test.id}/save`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					credentials: 'include',
 					body: JSON.stringify(payload),
 				})
 

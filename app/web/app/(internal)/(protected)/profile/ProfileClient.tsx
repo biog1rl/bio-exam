@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
+import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -157,12 +158,11 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 				initials: initialsToSave,
 			}
 
-			const response = await fetch('/api/users/profile', {
+			const response = await apiFetch('/api/users/profile', {
 				method: 'PATCH',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				credentials: 'include',
 				body: JSON.stringify(dataToSave),
 			})
 
@@ -192,12 +192,11 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 
 		setIsPasswordLoading(true)
 		try {
-			const response = await fetch('/api/users/profile/password', {
+			const response = await apiFetch('/api/users/profile/password', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				credentials: 'include',
 				body: JSON.stringify({
 					oldPassword: passwordData.oldPassword,
 					newPassword: passwordData.newPassword,
@@ -223,11 +222,10 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 		setAcLoading(true)
 
 		try {
-			const res = await fetch('/api/integrations/activecollab/authenticate', {
+			const res = await apiFetch('/api/integrations/activecollab/authenticate', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email: acEmail, password: acPassword }),
-				credentials: 'include',
 			})
 
 			const data = await res.json()
@@ -249,9 +247,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	// ActiveCollab выход
 	const handleAcLogout = async () => {
 		try {
-			await fetch('/api/integrations/activecollab/logout', {
+			await apiFetch('/api/integrations/activecollab/logout', {
 				method: 'POST',
-				credentials: 'include',
 			})
 			setAcHasToken(false)
 			toast.success('Токен ActiveCollab удален')
@@ -263,10 +260,13 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	// Выход из аккаунта
 	const handleLogout = async () => {
 		try {
-			await fetch('/api/auth/logout', {
-				method: 'POST',
-				credentials: 'include',
-			})
+			try {
+				await apiFetch('/api/auth/logout', {
+					method: 'POST',
+				})
+			} catch (error) {
+				if (!(error instanceof AuthExpiredError)) throw error
+			}
 
 			// Принудительно обновляем состояние авторизации
 			await refresh()

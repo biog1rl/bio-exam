@@ -21,6 +21,7 @@ import * as Icons from 'lucide-react'
 import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import { toast } from 'sonner'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -209,10 +210,9 @@ export function SidebarSettingsClient() {
 		setItems(reorderedItems)
 
 		try {
-			await fetch('/api/sidebar/reorder', {
+			await apiFetch('/api/sidebar/reorder', {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify({
 					items: reorderedItems.map((item) => ({ id: item.id, order: item.order })),
 				}),
@@ -252,19 +252,17 @@ export function SidebarSettingsClient() {
 
 		try {
 			if (editingItem) {
-				const res = await fetch(`/api/sidebar/${editingItem.id}`, {
+				const res = await apiFetch(`/api/sidebar/${editingItem.id}`, {
 					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
-					credentials: 'include',
 					body: JSON.stringify(formData),
 				})
 				if (!res.ok) throw new Error('Failed to update')
 				toast.success('Пункт обновлен')
 			} else {
-				const res = await fetch('/api/sidebar', {
+				const res = await apiFetch('/api/sidebar', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					credentials: 'include',
 					body: JSON.stringify({ ...formData, order: items.length }),
 				})
 				if (!res.ok) throw new Error('Failed to create')
@@ -283,10 +281,9 @@ export function SidebarSettingsClient() {
 		if (!item) return
 
 		try {
-			await fetch(`/api/sidebar/${id}`, {
+			await apiFetch(`/api/sidebar/${id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify({ isActive: !item.isActive }),
 			})
 			loadItems()
@@ -301,9 +298,8 @@ export function SidebarSettingsClient() {
 		if (!confirm('Удалить этот пункт меню?')) return
 
 		try {
-			await fetch(`/api/sidebar/${id}`, {
+			await apiFetch(`/api/sidebar/${id}`, {
 				method: 'DELETE',
-				credentials: 'include',
 			})
 			loadItems()
 			toast.success('Пункт удален')

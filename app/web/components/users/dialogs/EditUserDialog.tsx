@@ -8,6 +8,7 @@ import { IMaskInput } from 'react-imask'
 import { ChevronDownIcon, ShieldCheck, Trash2 } from 'lucide-react'
 import useSWR, { useSWRConfig } from 'swr'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
@@ -145,10 +146,9 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 				showInTeam,
 			}
 
-			const res = await fetch(`/api/users/${user.id}`, {
+			const res = await apiFetch(`/api/users/${user.id}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify(payload),
 			})
 
@@ -179,10 +179,9 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		setDeleting(true)
 		setError(null)
 		try {
-			const res = await fetch(`/api/users/${user.id}`, {
+			const res = await apiFetch(`/api/users/${user.id}`, {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 			})
 
 			if (!res.ok) {

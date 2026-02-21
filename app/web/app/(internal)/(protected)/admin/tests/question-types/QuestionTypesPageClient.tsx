@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
+import { apiFetch } from '@/lib/api-fetch'
 import QuestionTypeScoringRuleEditor from '../components/QuestionTypeScoringRuleEditor'
 import {
 	TEMPLATE_META,
@@ -95,9 +96,8 @@ export default function QuestionTypesPageClient() {
 				scoringRule: form.scoringRule,
 				isActive: form.isActive,
 			}
-			const res = await fetch('/api/tests/question-types', {
+			const res = await apiFetch('/api/tests/question-types', {
 				method: 'POST',
-				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(payload),
 			})

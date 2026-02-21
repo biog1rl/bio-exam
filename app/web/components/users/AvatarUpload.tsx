@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 
 import { Camera, X } from 'lucide-react'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { getAvatarColor, getInitials } from '@/helpers/getAvatarColor'
@@ -67,9 +68,8 @@ export function AvatarUpload({
 			formData.append('avatar', file)
 
 			// Загружаем файл на сервер
-			const response = await fetch('/api/users/upload/avatar', {
+			const response = await apiFetch('/api/users/upload/avatar', {
 				method: 'POST',
-				credentials: 'include',
 				body: formData,
 			})
 

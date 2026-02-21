@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 
 import { Download, FolderPlus, Loader2, Plus, Save } from 'lucide-react'
 import Link from 'next/link'
@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { apiFetch } from '@/lib/api-fetch'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import QuestionCard from '../../components/QuestionCard'
@@ -45,6 +46,8 @@ import {
 	normalizeShortTextCorrectValue,
 	resolveQuestionTemplate,
 } from '../../types'
+
+const DRAFT_KEY = 'test-editor-draft'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
@@ -77,6 +80,8 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		order: 0,
 		questions: [],
 	})
+	const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
 	// Topic creation dialog state
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
 	const [topicForm, setTopicForm] = useState<TopicFormData>({
@@ -120,6 +125,49 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		}
 	}, [isNew, topics, form.topicId])
 
+	// Auto-save draft to localStorage (only when isNew)
+	useEffect(() => {
+		if (!isNew) return
+		if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+		draftTimerRef.current = setTimeout(() => {
+			if (form.title || form.questions.length > 0) {
+				localStorage.setItem(DRAFT_KEY, JSON.stringify(form))
+			} else {
+				localStorage.removeItem(DRAFT_KEY)
+			}
+		}, 1000)
+		return () => {
+			if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+		}
+	}, [form, isNew])
+
+	// Restore draft from localStorage on mount (only when isNew)
+	useEffect(() => {
+		if (!isNew) return
+		try {
+			const raw = localStorage.getItem(DRAFT_KEY)
+			if (!raw) return
+			const draft = JSON.parse(raw) as TestFormData
+			if (!draft.title && !draft.questions?.length) {
+				localStorage.removeItem(DRAFT_KEY)
+				return
+			}
+			toast.info('Найден несохранённый черновик', {
+				action: {
+					label: 'Восстановить',
+					onClick: () => {
+						setForm(draft)
+						localStorage.removeItem(DRAFT_KEY)
+					},
+				},
+				duration: 10000,
+			})
+		} catch {
+			localStorage.removeItem(DRAFT_KEY)
+		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
 	const sensors = useSensors(
 		useSensor(PointerSensor),
 		useSensor(KeyboardSensor, {
@@ -145,10 +193,9 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		}
 
 		try {
-			const res = await fetch('/api/tests/topics', {
+			const res = await apiFetch('/api/tests/topics', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify(topicForm),
 			})
 
@@ -295,10 +342,9 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		try {
 			const testId = testData?.test?.id
 			const url = isNew ? '/api/tests/save' : `/api/tests/${testId}/save`
-			const res = await fetch(url, {
+			const res = await apiFetch(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify(payload),
 			})
 
@@ -309,6 +355,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 			const data = await res.json()
 			toast.success(isNew ? 'Тест создан' : 'Тест сохранен')
+			localStorage.removeItem(DRAFT_KEY)
 
 			if (isNew && data.test) {
 				// Redirect to slug-based URL after creation
@@ -345,9 +392,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		if (!testId) return
 
 		try {
-			const res = await fetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`, {
-				credentials: 'include',
-			})
+			const res = await apiFetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`)
 
 			if (!res.ok) throw new Error('Ошибка экспорта')
 

@@ -6,6 +6,7 @@ import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSWRConfig } from 'swr'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -40,7 +41,7 @@ export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props
 		setLoading(true)
 		setError(null)
 		try {
-			const res = await fetch('/api/auth/invites', {
+			const res = await apiFetch('/api/auth/invites', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ userId: user.id }),

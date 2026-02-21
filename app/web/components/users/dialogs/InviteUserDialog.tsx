@@ -7,6 +7,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -48,7 +49,7 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 			const loginErr = validateLogin(loginNorm)
 			if (loginErr) throw new Error(loginErr)
 
-			const res = await fetch('/api/auth/invites', {
+			const res = await apiFetch('/api/auth/invites', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ login: loginNorm, firstName, lastName, position, roleKey: role, showInTeam }),

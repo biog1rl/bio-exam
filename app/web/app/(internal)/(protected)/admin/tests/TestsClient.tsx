@@ -44,6 +44,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { transliterate } from '@/lib/utils/transliterate'
 
+import { apiFetch } from '@/lib/api-fetch'
 import type { Test, Topic, TopicFormData, TopicsResponse, TestsResponse } from './types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
@@ -106,10 +107,9 @@ export default function TestsClient() {
 			const url = editingTopic ? `/api/tests/topics/${editingTopic.id}` : '/api/tests/topics'
 			const method = editingTopic ? 'PATCH' : 'POST'
 
-			const res = await fetch(url, {
+			const res = await apiFetch(url, {
 				method,
 				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
 				body: JSON.stringify(topicForm),
 			})
 
@@ -130,9 +130,8 @@ export default function TestsClient() {
 		if (!confirm(`Удалить тему "${topic.title}" и все её тесты?`)) return
 
 		try {
-			const res = await fetch(`/api/tests/topics/${topic.id}`, {
+			const res = await apiFetch(`/api/tests/topics/${topic.id}`, {
 				method: 'DELETE',
-				credentials: 'include',
 			})
 
 			if (!res.ok) throw new Error('Ошибка удаления')
@@ -150,9 +149,8 @@ export default function TestsClient() {
 		if (!confirm(`Удалить тест "${test.title}"?`)) return
 
 		try {
-			const res = await fetch(`/api/tests/${test.id}`, {
+			const res = await apiFetch(`/api/tests/${test.id}`, {
 				method: 'DELETE',
-				credentials: 'include',
 			})
 
 			if (!res.ok) throw new Error('Ошибка удаления')
@@ -166,9 +164,7 @@ export default function TestsClient() {
 
 	const handleExport = async (testId: string, withAnswers: boolean) => {
 		try {
-			const res = await fetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`, {
-				credentials: 'include',
-			})
+			const res = await apiFetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`)
 
 			if (!res.ok) throw new Error('Ошибка экспорта')
 
@@ -188,9 +184,7 @@ export default function TestsClient() {
 
 	const handleExportTopic = async (topicSlug: string, withAnswers: boolean) => {
 		try {
-			const res = await fetch(`/api/tests/topics/${topicSlug}/export?withAnswers=${withAnswers}`, {
-				credentials: 'include',
-			})
+			const res = await apiFetch(`/api/tests/topics/${topicSlug}/export?withAnswers=${withAnswers}`)
 
 			if (!res.ok) throw new Error('Ошибка экспорта')
 

@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { apiFetch } from '@/lib/api-fetch'
 import { QuestionTypeScoringRuleEditorFields } from '../components/QuestionTypeScoringRuleEditor'
 import {
 	TEMPLATE_META,
@@ -157,9 +158,8 @@ export default function ScoringSettingsPageClient() {
 		try {
 			if (scope === 'global') {
 				for (const type of types) {
-					const res = await fetch(`/api/tests/question-types/${type.key}`, {
+					const res = await apiFetch(`/api/tests/question-types/${type.key}`, {
 						method: 'PATCH',
-						credentials: 'include',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ scoringRule: type.scoringRule }),
 					})
@@ -174,9 +174,8 @@ export default function ScoringSettingsPageClient() {
 
 			for (const type of types) {
 				if (overrideEnabled[type.key]) {
-					const res = await fetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${type.key}`, {
+					const res = await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${type.key}`, {
 						method: 'PUT',
-						credentials: 'include',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
 							scoringRuleOverride: type.scoringRule,
@@ -188,9 +187,8 @@ export default function ScoringSettingsPageClient() {
 						throw new Error(data?.error || `Не удалось сохранить override для ${type.key}`)
 					}
 				} else {
-					await fetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${type.key}`, {
+					await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${type.key}`, {
 						method: 'DELETE',
-						credentials: 'include',
 					})
 				}
 			}

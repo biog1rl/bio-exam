@@ -4,6 +4,7 @@ import { LogOutIcon, MoreVerticalIcon, UserCircleIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
+import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -36,10 +37,13 @@ export function NavUser() {
 
 	const handleLogout = async () => {
 		try {
-			await fetch('/api/auth/logout', {
-				method: 'POST',
-				credentials: 'include',
-			})
+			try {
+				await apiFetch('/api/auth/logout', {
+					method: 'POST',
+				})
+			} catch (error) {
+				if (!(error instanceof AuthExpiredError)) throw error
+			}
 
 			// Принудительно обновляем состояние авторизации
 			await refresh()
