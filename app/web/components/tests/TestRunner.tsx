@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { cn } from "@/lib/utils";
 
 import MdxRenderer from "@/components/tests/MdxRenderer";
 import { submitPublicTestAnswers } from "@/lib/tests/api";
@@ -122,6 +124,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState<TestAttemptSummary[]>(initialAttempts);
+  const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(
+    () => orderedQuestions[0]?.id ?? null,
+  );
 
   const resultByQuestion = useMemo<ResultByQuestion>(() => {
     const map: ResultByQuestion = {};
@@ -165,6 +170,52 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 
   const onInputTextAnswer = (questionId: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  };
+
+  const scrollingRef = useRef(false);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (orderedQuestions.length === 0) return;
+    const visibleRatios = new Map<string, number>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = entry.target.id.replace("question-", "");
+          visibleRatios.set(id, entry.intersectionRatio);
+        }
+        if (scrollingRef.current) return;
+        let bestId: string | null = null;
+        let bestRatio = 0;
+        for (const [id, ratio] of visibleRatios) {
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            bestId = id;
+          }
+        }
+        if (bestId) setCurrentQuestionId(bestId);
+      },
+      { threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+
+    for (const question of orderedQuestions) {
+      const el = document.getElementById(`question-${question.id}`);
+      if (el) observer.observe(el);
+    }
+
+    return () => observer.disconnect();
+  }, [orderedQuestions]);
+
+  const scrollToQuestion = (questionId: string) => {
+    setCurrentQuestionId(questionId);
+    scrollingRef.current = true;
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(() => {
+      scrollingRef.current = false;
+    }, 800);
+    const el = document.getElementById(`question-${questionId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleSubmit = async () => {
@@ -379,15 +430,50 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
         ) : null}
       </div>
 
-      <section className="sticky top-4 h-fit rounded-lg border bg-white p-4">
-        <div className="flex flex-col flex-wrap items-center justify-between gap-3">
-          <p className="text-sm">
-            Отвечено: {answeredCount} из {orderedQuestions.length}
+      <section className="sticky top-4 h-fit w-48 shrink-0 rounded-lg border bg-white p-4 space-y-4">
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">
+            Отвечено: {answeredCount} / {orderedQuestions.length}
           </p>
-          <Button type="button" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Отправка..." : "Завершить и проверить"}
-          </Button>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-green-500 transition-all duration-300"
+              style={{
+                width:
+                  orderedQuestions.length > 0
+                    ? `${(answeredCount / orderedQuestions.length) * 100}%`
+                    : "0%",
+              }}
+            />
+          </div>
         </div>
+
+        <div className="grid grid-cols-5 gap-1">
+          {orderedQuestions.map((question, index) => {
+            const answered = isAnswered(question, answers[question.id]);
+            const isCurrent = question.id === currentQuestionId;
+            return (
+              <button
+                key={question.id}
+                type="button"
+                onClick={() => scrollToQuestion(question.id)}
+                className={cn(
+                  "flex aspect-square items-center justify-center rounded text-xs font-medium transition-colors",
+                  answered
+                    ? "bg-green-500 text-white"
+                    : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                  isCurrent && "ring-2 ring-green-500 ring-offset-1",
+                )}
+              >
+                {index + 1}
+              </button>
+            );
+          })}
+        </div>
+
+        <Button type="button" onClick={handleSubmit} disabled={submitting} className="w-full">
+          {submitting ? "Отправка..." : "Завершить"}
+        </Button>
       </section>
     </div>
   );
