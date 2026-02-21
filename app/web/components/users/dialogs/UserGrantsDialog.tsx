@@ -6,11 +6,11 @@ import { useMemo, useState } from 'react'
 
 import useSWR from 'swr'
 
-import { apiFetch } from '@/lib/api-fetch'
 import { RbacSwitchesRow, type GrantsState } from '@/components/rbac/RbacSwitchesRow'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { apiFetch } from '@/lib/api-fetch'
 
 type Props = {
 	open: boolean

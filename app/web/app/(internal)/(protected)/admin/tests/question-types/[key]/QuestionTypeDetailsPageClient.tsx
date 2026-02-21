@@ -15,8 +15,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-
+import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
+
 import QuestionTypeScoringRuleEditor from '../../components/QuestionTypeScoringRuleEditor'
 import type {
 	QuestionTypeDefinition,
@@ -64,6 +65,7 @@ function toValidationPayload(state: {
 }
 
 export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
+	const { confirm, alertDialog } = useUiAlertDialog()
 	const [savingGlobal, setSavingGlobal] = useState(false)
 	const [savingOverride, setSavingOverride] = useState(false)
 	const [selectedTopicId, setSelectedTopicId] = useState('')
@@ -170,7 +172,14 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 	}
 
 	const removeType = async () => {
-		if (!confirm('Отключить этот тип вопроса?')) return
+		const confirmed = await confirm({
+			title: 'Отключить тип вопроса?',
+			description: 'Тип станет недоступен для новых вопросов.',
+			confirmText: 'Отключить',
+			cancelText: 'Отмена',
+			destructive: true,
+		})
+		if (!confirmed) return
 		setSavingGlobal(true)
 		try {
 			const res = await apiFetch(`/api/tests/question-types/${typeKey}`, {
@@ -537,6 +546,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 					)}
 				</CardContent>
 			</Card>
+			{alertDialog}
 		</div>
 	)
 }

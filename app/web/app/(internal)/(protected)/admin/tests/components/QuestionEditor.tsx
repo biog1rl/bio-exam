@@ -1,6 +1,8 @@
 'use client'
 
-import { type ReactNode, useCallback, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
+
+import { Loader2 } from 'lucide-react'
 
 import { Editor } from '@/components/editor/editor'
 import { Button } from '@/components/ui/button'
@@ -18,9 +20,11 @@ interface Props {
 	question: Question
 	questionTypes: QuestionTypeDefinition[]
 	onSave: (question: Question) => void
+	onDraftChange?: (question: Question) => void
 	onCancel: () => void
 	docPath?: string
 	headerActions?: ReactNode
+	isSaving?: boolean
 }
 
 function resolveTemplate(
@@ -31,18 +35,31 @@ function resolveTemplate(
 	return questionTypes.find((item) => item.key === type)?.uiTemplate ?? fallback
 }
 
-export default function QuestionEditor({ question, questionTypes, onSave, onCancel, docPath, headerActions }: Props) {
+export default function QuestionEditor({
+	question,
+	questionTypes,
+	onSave,
+	onDraftChange,
+	onCancel,
+	docPath,
+	headerActions,
+	isSaving,
+}: Props) {
 	const [form, setForm] = useState<Question>({ ...question })
 	const availableQuestionTypes = questionTypes.filter((item) => item.isActive || item.key === form.type)
 	const activeTemplate = resolveTemplate(form.type, questionTypes, form.questionUiTemplate ?? null)
 
+	useEffect(() => {
+		setForm({ ...question })
+	}, [question])
+
+	useEffect(() => {
+		onDraftChange?.(form)
+	}, [form, onDraftChange])
+
 	const handlePromptMdxChange = useCallback((mdx: string) => {
 		setForm((prev) => ({ ...prev, promptText: mdx }))
 	}, [])
-
-	// const handleExplanationMdxChange = useCallback((mdx: string) => {
-	// 	setForm((prev) => ({ ...prev, explanationText: mdx || null }))
-	// }, [])
 
 	const handleTypeChange = (type: QuestionType) => {
 		const selectedType = questionTypes.find((item) => item.key === type)
@@ -97,7 +114,12 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 					<Button variant="secondary" onClick={onCancel}>
 						Отмена
 					</Button>
-					<Button onClick={handleSave}>Сохранить вопрос</Button>
+					<Button className="relative" onClick={handleSave}>
+						<span className={isSaving ? 'invisible' : ''}>Сохранить вопрос</span>
+						{isSaving && (
+							<Loader2 className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
+						)}
+					</Button>
 				</div>
 			</div>
 
@@ -133,7 +155,11 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 				<CardContent className="flex flex-col gap-4">
 					<div className="flex flex-col gap-2">
 						<Label>Тип вопроса</Label>
-						<Select value={form.type} onValueChange={(v) => handleTypeChange(v as QuestionType)} disabled={availableQuestionTypes.length === 0}>
+						<Select
+							value={form.type}
+							onValueChange={(v) => handleTypeChange(v as QuestionType)}
+							disabled={availableQuestionTypes.length === 0}
+						>
 							<SelectTrigger>
 								<SelectValue placeholder="Типы вопросов не загружены" />
 							</SelectTrigger>
@@ -175,7 +201,13 @@ export default function QuestionEditor({ question, questionTypes, onSave, onCanc
 							<Input
 								type="text"
 								inputMode={activeTemplate === 'sequence_digits' ? 'numeric' : 'text'}
-								value={typeof form.correct === 'string' ? form.correct : typeof form.correct === 'number' ? String(form.correct) : ''}
+								value={
+									typeof form.correct === 'string'
+										? form.correct
+										: typeof form.correct === 'number'
+											? String(form.correct)
+											: ''
+								}
 								onChange={(e) => setForm((prev) => ({ ...prev, correct: e.target.value }))}
 								placeholder={activeTemplate === 'sequence_digits' ? 'Например: 2314' : 'Введите правильный ответ'}
 							/>

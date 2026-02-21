@@ -16,7 +16,6 @@ import {
 	Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
@@ -42,15 +41,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
+import { apiFetch } from '@/lib/api-fetch'
 import { transliterate } from '@/lib/utils/transliterate'
 
-import { apiFetch } from '@/lib/api-fetch'
 import type { Test, Topic, TopicFormData, TopicsResponse, TestsResponse } from './types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
 export default function TestsClient() {
-	const router = useRouter()
+	const { confirm, alertDialog } = useUiAlertDialog()
 	const {
 		data: topicsData,
 		mutate: mutateTopics,
@@ -127,7 +127,14 @@ export default function TestsClient() {
 	}
 
 	const handleDeleteTopic = async (topic: Topic) => {
-		if (!confirm(`Удалить тему "${topic.title}" и все её тесты?`)) return
+		const confirmed = await confirm({
+			title: 'Удалить тему?',
+			description: `Тема "${topic.title}" и все её тесты будут удалены.`,
+			confirmText: 'Удалить',
+			cancelText: 'Отмена',
+			destructive: true,
+		})
+		if (!confirmed) return
 
 		try {
 			const res = await apiFetch(`/api/tests/topics/${topic.id}`, {
@@ -146,7 +153,14 @@ export default function TestsClient() {
 	}
 
 	const handleDeleteTest = async (test: Test) => {
-		if (!confirm(`Удалить тест "${test.title}"?`)) return
+		const confirmed = await confirm({
+			title: 'Удалить тест?',
+			description: `Тест "${test.title}" будет удален без возможности восстановления.`,
+			confirmText: 'Удалить',
+			cancelText: 'Отмена',
+			destructive: true,
+		})
+		if (!confirmed) return
 
 		try {
 			const res = await apiFetch(`/api/tests/${test.id}`, {
@@ -232,7 +246,7 @@ export default function TestsClient() {
 
 	return (
 		<div className="space-y-6">
-			<div className="tab-sm:flex-row tab-sm:justify-between tab-sm:items-center flex flex-col gap-4">
+			<div className="tab-sm:flex-row tab-sm:items-center tab-sm:justify-between flex flex-col gap-4">
 				<div>
 					<h1 className="text-2xl font-semibold">Управление тестами</h1>
 					<p className="text-muted-foreground">Создание и редактирование тестов</p>
@@ -254,9 +268,11 @@ export default function TestsClient() {
 						<FolderPlus className="mr-2 h-4 w-4" />
 						Новая тема
 					</Button>
-					<Button onClick={() => router.push('/admin/tests/new')}>
-						<Plus className="mr-2 h-4 w-4" />
-						Новый тест
+					<Button asChild>
+						<Link href="/admin/tests/new">
+							<Plus className="mr-2 h-4 w-4" />
+							Новый тест
+						</Link>
 					</Button>
 				</div>
 			</div>
@@ -340,7 +356,7 @@ export default function TestsClient() {
 						filteredTests.map((test) => (
 							<Link key={test.id} href={`/admin/tests/${test.topicSlug}/${test.slug}`}>
 								<Card className="hover:bg-accent/50 transition-colors">
-									<CardContent className="tab-sm:items-center tab-sm:flex-row tab-sm:justify-between flex flex-col gap-2 p-4">
+									<CardContent className="tab-sm:flex-row tab-sm:items-center tab-sm:justify-between flex flex-col gap-2 p-4">
 										<div className="flex-1">
 											<div className="flex items-center gap-2">
 												<h3 className="font-medium">{test.title}</h3>
@@ -432,6 +448,7 @@ export default function TestsClient() {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+			{alertDialog}
 		</div>
 	)
 }

@@ -2,8 +2,8 @@ import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 
 import rehypeStyleToObject from '@/lib/mdx/rehypeStyleToObject'
-import remarkParagraphPerLine from '@/lib/mdx/remarkParagraphPerLine'
 import remarkMdxStyleToEstree from '@/lib/mdx/remarkMdxStyleToEstree'
+import remarkParagraphPerLine from '@/lib/mdx/remarkParagraphPerLine'
 
 export const MDX_PASS = [
 	'mdxjsEsm',

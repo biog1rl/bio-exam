@@ -1,31 +1,31 @@
-import { FC } from "react";
+import { FC } from 'react'
 
-import { ArrowRightIcon } from "lucide-react";
-import { Route } from "next";
-import Link from "next/link";
+import { ArrowRightIcon } from 'lucide-react'
+import { Route } from 'next'
+import Link from 'next/link'
 
-import { Button } from "../ui/button";
+import { Button } from '../ui/button'
 
 type TilesProps = {
-  items: Array<{
-    name: string;
-    href: string;
-  }>;
-};
+	items: Array<{
+		name: string
+		href: string
+	}>
+}
 
 const Tiles: FC<TilesProps> = ({ items }) => {
-  return (
-    <>
-      {items.map((item, index) => (
-        <Button asChild key={index} className="w-fit bg-background text-primary hover:text-white" variant="default">
-          <Link href={item.href as Route}>
-            <ArrowRightIcon className="mr-2 h-4 w-4" />
-            <span>{item.name}</span>
-          </Link>
-        </Button>
-      ))}
-    </>
-  );
-};
+	return (
+		<>
+			{items.map((item, index) => (
+				<Button asChild key={index} className="bg-background text-primary w-fit hover:text-white" variant="default">
+					<Link href={item.href as Route}>
+						<ArrowRightIcon className="mr-2 h-4 w-4" />
+						<span>{item.name}</span>
+					</Link>
+				</Button>
+			))}
+		</>
+	)
+}
 
-export default Tiles;
+export default Tiles

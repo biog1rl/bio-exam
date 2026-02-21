@@ -15,8 +15,8 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-
 import { apiFetch } from '@/lib/api-fetch'
+
 import QuestionTypeScoringRuleEditor from '../components/QuestionTypeScoringRuleEditor'
 import {
 	TEMPLATE_META,

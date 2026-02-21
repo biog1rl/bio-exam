@@ -235,6 +235,23 @@ export interface TestsResponse {
 	tests: Test[]
 }
 
+export interface QuestionDraft {
+	id: string
+	testId: string
+	lockVersion: number
+	updatedAt: string
+	createdAt: string
+	payload: Record<string, unknown>
+}
+
+export interface QuestionDraftsResponse {
+	drafts: QuestionDraft[]
+}
+
+export interface QuestionDraftDetailResponse {
+	draft: QuestionDraft
+}
+
 export interface TestDetailResponse {
 	test: Test
 	questions: Question[]

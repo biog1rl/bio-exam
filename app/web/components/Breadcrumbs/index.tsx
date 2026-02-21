@@ -54,12 +54,27 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 	const pathname = usePathname() || '/'
 	const parts = pathname.split('?')[0].split('#')[0].split('/').filter(Boolean)
 	const root = parts[0]
-	const { hideOn, treeRoots, labelOverrides, asyncLabelOn } = breadcrumbConfig
+	const { hideOn, treeRoots, labelOverrides, asyncLabelOn, hideSegmentsOn } = breadcrumbConfig
+
+	const hiddenSegments = useMemo(() => {
+		const acc = new Set<string>()
+		for (const rule of hideSegmentsOn ?? []) {
+			if (matchPath([rule.pattern], pathname, parts)) {
+				for (const segment of rule.segments) {
+					acc.add(segment)
+				}
+			}
+		}
+		return acc
+	}, [hideSegmentsOn, pathname, parts])
 
 	const items = parts.map((seg, idx) => {
 		const href = '/' + parts.slice(0, idx + 1).join('/')
 		return { label: seg, href, last: idx === parts.length - 1 }
 	})
+	const filteredItems = items
+		.filter((item) => !hiddenSegments.has(item.label))
+		.map((item, idx, arr) => ({ ...item, last: idx === arr.length - 1 }))
 
 	const shouldHide = matchPath(hideOn, pathname, parts)
 
@@ -94,7 +109,7 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 	}, [pathname])
 
 	const displayItems = useMemo(() => {
-		return items.map((item) => {
+		return filteredItems.map((item) => {
 			const raw = item.label
 			const prettyFromTree =
 				root && treeRoots.includes(root as (typeof treeRoots)[number]) ? treeHrefToLabel.get(item.href) : undefined
@@ -110,7 +125,7 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 				shouldShowLoader: shouldWaitForAsyncLabel && !allowFallback,
 			}
 		})
-	}, [allLabels, allowFallback, asyncLabelOn, items, labelOverrides, root, treeHrefToLabel, treeRoots])
+	}, [allLabels, allowFallback, asyncLabelOn, filteredItems, labelOverrides, root, treeHrefToLabel, treeRoots])
 
 	const hasPendingAsyncLabels = displayItems.some((item) => item.shouldShowLoader)
 
@@ -128,7 +143,7 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 		<Breadcrumb>
 			<BreadcrumbList>
 				<BreadcrumbItem>
-					{items.length === 0 ? (
+					{filteredItems.length === 0 ? (
 						<BreadcrumbPage>Главная</BreadcrumbPage>
 					) : (
 						<BreadcrumbLink asChild>

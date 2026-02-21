@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
-import { and, asc, count, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { db } from '../../db/index.js'
 import {
 	answerKeys,
+	questionDrafts,
 	questionTypes,
 	questions,
 	testQuestionTypeOverrides,
@@ -38,7 +39,7 @@ import {
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
-import { MoveQuestionSchema, SaveTestSchema, TopicSchema } from '../../schemas/tests.js'
+import { MoveQuestionSchema, SaveTestSchema, TopicSchema, UpdateQuestionDraftSchema } from '../../schemas/tests.js'
 import { storageService } from '../../services/storage/storage.js'
 
 const router = Router()
@@ -179,6 +180,59 @@ async function syncQuestionPointsForTestByTypeConfig(testId: string) {
 				updatedAt: new Date(),
 			})
 			.where(eq(questions.id, question.id))
+	}
+}
+
+type QuestionDraftRow = typeof questionDrafts.$inferSelect
+type QuestionDraftPayload = Record<string, unknown>
+
+const QUESTION_DRAFT_NOT_FOUND_ERROR = 'Question draft not found'
+const QUESTION_DRAFT_LOCK_CONFLICT_ERROR = 'Question draft lock version mismatch'
+
+const DEFAULT_QUESTION_DRAFT_PAYLOAD: QuestionDraftPayload = {
+	question: {},
+}
+
+const questionDraftSelect = {
+	id: questionDrafts.id,
+	testId: questionDrafts.testId,
+	payload: questionDrafts.payload,
+	lockVersion: questionDrafts.lockVersion,
+	createdAt: questionDrafts.createdAt,
+	updatedAt: questionDrafts.updatedAt,
+}
+
+function normalizeQuestionDraftPayload(payload: unknown): QuestionDraftPayload {
+	if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+		return payload as QuestionDraftPayload
+	}
+	return {}
+}
+
+function toQuestionDraftResponse(
+	draft: Pick<QuestionDraftRow, 'id' | 'testId' | 'payload' | 'lockVersion' | 'createdAt' | 'updatedAt'>
+) {
+	return {
+		id: draft.id,
+		testId: draft.testId,
+		payload: normalizeQuestionDraftPayload(draft.payload),
+		lockVersion: draft.lockVersion,
+		createdAt: draft.createdAt,
+		updatedAt: draft.updatedAt,
+	}
+}
+
+function toQuestionDraftListItem(
+	draft: Pick<QuestionDraftRow, 'id' | 'testId' | 'payload' | 'lockVersion' | 'createdAt' | 'updatedAt'>
+) {
+	const payload = normalizeQuestionDraftPayload(draft.payload)
+	return {
+		id: draft.id,
+		testId: draft.testId,
+		payload,
+		lockVersion: draft.lockVersion,
+		createdAt: draft.createdAt,
+		updatedAt: draft.updatedAt,
 	}
 }
 
@@ -969,6 +1023,233 @@ router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), requirePerm('test
 		next(e)
 	}
 })
+
+// POST /api/tests/:testId/question-drafts - создать черновик вопроса внутри теста
+router.post(
+	'/:testId/question-drafts',
+	validateUUID('testId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const ownerId = req.authUser?.id
+			if (!ownerId) {
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+			}
+
+			const testId = req.params.testId as string
+			const [existingTest] = await db.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).limit(1)
+			if (!existingTest) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+
+			const [created] = await db
+				.insert(questionDrafts)
+				.values({
+					testId,
+					ownerId,
+					payload: { ...DEFAULT_QUESTION_DRAFT_PAYLOAD },
+				})
+				.returning(questionDraftSelect)
+
+			res.status(201).json({ draft: toQuestionDraftResponse(created) })
+		} catch (e) {
+			next(e)
+		}
+	}
+)
+
+// GET /api/tests/:testId/question-drafts - список черновиков вопросов текущего теста
+router.get(
+	'/:testId/question-drafts',
+	validateUUID('testId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const ownerId = req.authUser?.id
+			if (!ownerId) {
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+			}
+
+			const testId = req.params.testId as string
+			const rows = await db
+				.select(questionDraftSelect)
+				.from(questionDrafts)
+				.where(and(eq(questionDrafts.ownerId, ownerId), eq(questionDrafts.testId, testId)))
+				.orderBy(desc(questionDrafts.updatedAt))
+
+			res.json({
+				drafts: rows.map((draft) => toQuestionDraftListItem(draft)),
+			})
+		} catch (e) {
+			next(e)
+		}
+	}
+)
+
+// GET /api/tests/:testId/question-drafts/:draftId - получить черновик вопроса
+router.get(
+	'/:testId/question-drafts/:draftId',
+	validateUUID('testId'),
+	validateUUID('draftId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const ownerId = req.authUser?.id
+			if (!ownerId) {
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+			}
+
+			const testId = req.params.testId as string
+			const draftId = req.params.draftId as string
+			const [draft] = await db
+				.select(questionDraftSelect)
+				.from(questionDrafts)
+				.where(
+					and(
+						eq(questionDrafts.id, draftId),
+						eq(questionDrafts.testId, testId),
+						eq(questionDrafts.ownerId, ownerId)
+					)
+				)
+				.limit(1)
+
+			if (!draft) {
+				return res.status(404).json({ error: QUESTION_DRAFT_NOT_FOUND_ERROR })
+			}
+
+			res.json({ draft: toQuestionDraftResponse(draft) })
+		} catch (e) {
+			next(e)
+		}
+	}
+)
+
+// PATCH /api/tests/:testId/question-drafts/:draftId - обновить payload черновика вопроса
+router.patch(
+	'/:testId/question-drafts/:draftId',
+	validateUUID('testId'),
+	validateUUID('draftId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const ownerId = req.authUser?.id
+			if (!ownerId) {
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+			}
+
+			const testId = req.params.testId as string
+			const draftId = req.params.draftId as string
+			const parsed = UpdateQuestionDraftSchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+			}
+
+			const updateSet = {
+				payload: parsed.data.payload,
+				lockVersion: sql`${questionDrafts.lockVersion} + 1`,
+				updatedAt: new Date(),
+			}
+
+			let updated:
+				| Pick<QuestionDraftRow, 'id' | 'testId' | 'payload' | 'lockVersion' | 'createdAt' | 'updatedAt'>
+				| undefined
+			if (typeof parsed.data.lockVersion === 'number') {
+				;[updated] = await db
+					.update(questionDrafts)
+					.set(updateSet)
+					.where(
+						and(
+							eq(questionDrafts.id, draftId),
+							eq(questionDrafts.testId, testId),
+							eq(questionDrafts.ownerId, ownerId),
+							eq(questionDrafts.lockVersion, parsed.data.lockVersion)
+						)
+					)
+					.returning(questionDraftSelect)
+
+				if (!updated) {
+					const [existing] = await db
+						.select({ id: questionDrafts.id })
+						.from(questionDrafts)
+						.where(
+							and(
+								eq(questionDrafts.id, draftId),
+								eq(questionDrafts.testId, testId),
+								eq(questionDrafts.ownerId, ownerId)
+							)
+						)
+						.limit(1)
+					if (!existing) {
+						return res.status(404).json({ error: QUESTION_DRAFT_NOT_FOUND_ERROR })
+					}
+					return res.status(409).json({ error: QUESTION_DRAFT_LOCK_CONFLICT_ERROR })
+				}
+			} else {
+				;[updated] = await db
+					.update(questionDrafts)
+					.set(updateSet)
+					.where(
+						and(
+							eq(questionDrafts.id, draftId),
+							eq(questionDrafts.testId, testId),
+							eq(questionDrafts.ownerId, ownerId)
+						)
+					)
+					.returning(questionDraftSelect)
+
+				if (!updated) {
+					return res.status(404).json({ error: QUESTION_DRAFT_NOT_FOUND_ERROR })
+				}
+			}
+
+			res.json({ draft: toQuestionDraftResponse(updated) })
+		} catch (e) {
+			next(e)
+		}
+	}
+)
+
+// DELETE /api/tests/:testId/question-drafts/:draftId - удалить черновик вопроса
+router.delete(
+	'/:testId/question-drafts/:draftId',
+	validateUUID('testId'),
+	validateUUID('draftId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const ownerId = req.authUser?.id
+			if (!ownerId) {
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+			}
+
+			const testId = req.params.testId as string
+			const draftId = req.params.draftId as string
+			const [removed] = await db
+				.delete(questionDrafts)
+				.where(
+					and(
+						eq(questionDrafts.id, draftId),
+						eq(questionDrafts.testId, testId),
+						eq(questionDrafts.ownerId, ownerId)
+					)
+				)
+				.returning({ id: questionDrafts.id })
+
+			if (!removed) {
+				return res.status(404).json({ error: QUESTION_DRAFT_NOT_FOUND_ERROR })
+			}
+
+			res.json({ ok: true })
+		} catch (e) {
+			next(e)
+		}
+	}
+)
 
 // GET /api/tests/:id - загрузить тест для редактирования
 router.get('/:id', validateUUID('id'), sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {

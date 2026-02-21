@@ -4,10 +4,11 @@ import { useState, useRef, useEffect } from 'react'
 
 import { Camera, X } from 'lucide-react'
 
-import { apiFetch } from '@/lib/api-fetch'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { getAvatarColor, getInitials } from '@/helpers/getAvatarColor'
+import { apiFetch } from '@/lib/api-fetch'
 
 interface AvatarUploadProps {
 	firstName?: string | null
@@ -40,6 +41,7 @@ export function AvatarUpload({
 	}, [avatar])
 	const [isUploading, setIsUploading] = useState(false)
 	const fileInputRef = useRef<HTMLInputElement>(null)
+	const { showAlert, alertDialog } = useUiAlertDialog()
 
 	const initials = getInitials(firstName, lastName)
 	const backgroundColor = getAvatarColor(initials || 'User')
@@ -50,13 +52,19 @@ export function AvatarUpload({
 
 		// Проверяем тип файла
 		if (!file.type.startsWith('image/')) {
-			alert('Пожалуйста, выберите изображение')
+			void showAlert({
+				title: 'Неверный файл',
+				description: 'Пожалуйста, выберите изображение.',
+			})
 			return
 		}
 
 		// Проверяем размер файла (максимум 5MB)
 		if (file.size > 5 * 1024 * 1024) {
-			alert('Размер файла не должен превышать 5MB')
+			void showAlert({
+				title: 'Слишком большой файл',
+				description: 'Размер файла не должен превышать 5MB.',
+			})
 			return
 		}
 
@@ -85,7 +93,10 @@ export function AvatarUpload({
 			onAvatarChange(result.avatarUrl)
 		} catch (error) {
 			console.error('Error uploading avatar:', error)
-			alert(error instanceof Error ? error.message : 'Ошибка при загрузке файла')
+			void showAlert({
+				title: 'Ошибка загрузки',
+				description: error instanceof Error ? error.message : 'Ошибка при загрузке файла',
+			})
 		} finally {
 			setIsUploading(false)
 		}
@@ -152,6 +163,7 @@ export function AvatarUpload({
 				className="hidden"
 				disabled={disabled}
 			/>
+			{alertDialog}
 		</div>
 	)
 }

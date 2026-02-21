@@ -6,7 +6,6 @@ import { CheckCircle2, Loader2, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { AvatarEditor } from '@/components/users/AvatarEditor'
+import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 
 interface ProfileData {
 	firstName: string | null

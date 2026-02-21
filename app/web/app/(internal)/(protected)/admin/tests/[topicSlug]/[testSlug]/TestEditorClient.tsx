@@ -11,9 +11,9 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 
-import { Download, FolderPlus, Loader2, Plus, Save } from 'lucide-react'
+import { Download, FolderPlus, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -35,11 +35,19 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import QuestionCard from '../../components/QuestionCard'
-import type { TestFormData, TopicFormData, TopicsResponse, TestDetailResponse } from '../../types'
+import type {
+	QuestionDraft,
+	QuestionDraftsResponse,
+	TestDetailResponse,
+	TestFormData,
+	TopicFormData,
+	TopicsResponse,
+} from '../../types'
 import {
 	isValidSequenceCorrectValue,
 	normalizeQuestionForSave,
@@ -47,9 +55,35 @@ import {
 	resolveQuestionTemplate,
 } from '../../types'
 
-const DRAFT_KEY = 'test-editor-draft'
-
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
+
+function normalizeFormPayload(payload: TestFormData): TestFormData {
+	return {
+		...payload,
+		questions: payload.questions.map((question) => normalizeQuestionForSave(question)),
+	}
+}
+
+function resolveQuestionDraftId(data: unknown): string | null {
+	if (!data || typeof data !== 'object') return null
+	const candidate = data as {
+		draftId?: string
+		id?: string
+		draft?: { id?: string }
+	}
+	return candidate.draftId ?? candidate.id ?? candidate.draft?.id ?? null
+}
+
+function resolveQuestionDraftLabel(draft: QuestionDraft): string {
+	const payload = draft.payload
+	const questionValue = payload && typeof payload === 'object' ? (payload as { question?: unknown }).question : null
+	if (!questionValue || typeof questionValue !== 'object') return 'Черновик вопроса'
+	const promptRaw = (questionValue as { promptText?: unknown }).promptText
+	const prompt = typeof promptRaw === 'string' ? promptRaw.trim() : ''
+	if (!prompt) return 'Черновик вопроса'
+	const singleLine = prompt.replace(/\s+/g, ' ')
+	return singleLine.slice(0, 64) + (singleLine.length > 64 ? '...' : '')
+}
 
 interface Props {
 	topicSlug?: string
@@ -58,16 +92,24 @@ interface Props {
 
 export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	const router = useRouter()
-	const isNew = !topicSlug || !testSlug
+	const { confirm, alertDialog } = useUiAlertDialog()
+	const isEditingExisting = Boolean(topicSlug && testSlug)
+	const isCreateMode = !isEditingExisting
 
 	const { data: topicsData, mutate: mutateTopics } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
 	const {
 		data: testData,
 		isLoading: testLoading,
 		mutate: mutateTest,
-	} = useSWR<TestDetailResponse>(!isNew ? `/api/tests/by-slug/${topicSlug}/${testSlug}` : null, fetcher)
+	} = useSWR<TestDetailResponse>(isEditingExisting ? `/api/tests/by-slug/${topicSlug}/${testSlug}` : null, fetcher)
+	const testId = testData?.test?.id
+	const { data: questionDraftsData, mutate: mutateQuestionDrafts } = useSWR<QuestionDraftsResponse>(
+		testId ? `/api/tests/${testId}/question-drafts` : null,
+		fetcher
+	)
 
 	const [saving, setSaving] = useState(false)
+	const [creatingQuestionDraft, setCreatingQuestionDraft] = useState(false)
 	const [form, setForm] = useState<TestFormData>({
 		topicId: '',
 		title: '',
@@ -80,7 +122,6 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		order: 0,
 		questions: [],
 	})
-	const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// Topic creation dialog state
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
@@ -93,9 +134,11 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	})
 
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData])
+	const questionDrafts = useMemo(() => questionDraftsData?.drafts ?? [], [questionDraftsData])
 
 	// Load existing test data
 	useEffect(() => {
+		if (!isEditingExisting) return
 		if (testData?.test && testData?.questions) {
 			setForm({
 				topicId: testData.test.topicId,
@@ -116,57 +159,15 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				}),
 			})
 		}
-	}, [testData])
+	}, [isEditingExisting, testData])
 
 	// Set first topic as default for new tests
 	useEffect(() => {
-		if (isNew && topics.length > 0 && !form.topicId) {
-			setForm((f) => ({ ...f, topicId: topics[0].id }))
-		}
-	}, [isNew, topics, form.topicId])
+		if (!isCreateMode) return
+		if (topics.length === 0 || form.topicId) return
 
-	// Auto-save draft to localStorage (only when isNew)
-	useEffect(() => {
-		if (!isNew) return
-		if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-		draftTimerRef.current = setTimeout(() => {
-			if (form.title || form.questions.length > 0) {
-				localStorage.setItem(DRAFT_KEY, JSON.stringify(form))
-			} else {
-				localStorage.removeItem(DRAFT_KEY)
-			}
-		}, 1000)
-		return () => {
-			if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-		}
-	}, [form, isNew])
-
-	// Restore draft from localStorage on mount (only when isNew)
-	useEffect(() => {
-		if (!isNew) return
-		try {
-			const raw = localStorage.getItem(DRAFT_KEY)
-			if (!raw) return
-			const draft = JSON.parse(raw) as TestFormData
-			if (!draft.title && !draft.questions?.length) {
-				localStorage.removeItem(DRAFT_KEY)
-				return
-			}
-			toast.info('Найден несохранённый черновик', {
-				action: {
-					label: 'Восстановить',
-					onClick: () => {
-						setForm(draft)
-						localStorage.removeItem(DRAFT_KEY)
-					},
-				},
-				duration: 10000,
-			})
-		} catch {
-			localStorage.removeItem(DRAFT_KEY)
-		}
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [])
+		setForm((prev) => ({ ...prev, topicId: topics[0].id }))
+	}, [isCreateMode, topics, form.topicId])
 
 	const sensors = useSensors(
 		useSensor(PointerSensor),
@@ -233,12 +234,54 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		setForm({ ...form, questions: newQuestions })
 	}
 
-	const handleAddQuestion = () => {
-		if (isNew || !topicSlug || !testSlug) {
+	const handleAddQuestion = async () => {
+		if (!isEditingExisting || !topicSlug || !testSlug || !testId) {
 			toast.error('Сначала сохраните тест, затем добавляйте вопросы')
 			return
 		}
-		router.push(`/admin/tests/${topicSlug}/${testSlug}/questions/new`)
+
+		if (creatingQuestionDraft) return
+		setCreatingQuestionDraft(true)
+		try {
+			const res = await apiFetch(`/api/tests/${testId}/question-drafts`, { method: 'POST' })
+			if (!res.ok) {
+				const data = (await res.json().catch(() => null)) as { error?: string } | null
+				throw new Error(data?.error || 'Не удалось создать черновик вопроса')
+			}
+			const data = (await res.json().catch(() => null)) as unknown
+			const draftId = resolveQuestionDraftId(data)
+			if (!draftId) {
+				throw new Error('API не вернул draftId черновика вопроса')
+			}
+			router.push(`/admin/tests/${topicSlug}/${testSlug}/questions/drafts/${draftId}`)
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Не удалось создать черновик вопроса')
+		} finally {
+			setCreatingQuestionDraft(false)
+		}
+	}
+
+	const handleDeleteQuestionDraft = async (draft: QuestionDraft) => {
+		if (!testId) return
+		const confirmed = await confirm({
+			title: 'Удалить черновик вопроса?',
+			description: 'Это действие нельзя отменить.',
+			confirmText: 'Удалить',
+			cancelText: 'Отмена',
+			destructive: true,
+		})
+		if (!confirmed) return
+		try {
+			const res = await apiFetch(`/api/tests/${testId}/question-drafts/${draft.id}`, { method: 'DELETE' })
+			if (!res.ok) {
+				const data = (await res.json().catch(() => null)) as { error?: string } | null
+				throw new Error(data?.error || 'Не удалось удалить черновик вопроса')
+			}
+			await mutateQuestionDrafts()
+			toast.success('Черновик вопроса удален')
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Ошибка удаления черновика вопроса')
+		}
 	}
 
 	const handleEditQuestion = (index: number) => {
@@ -250,8 +293,15 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		router.push(`/admin/tests/${topicSlug}/${testSlug}/questions/${question.id}`)
 	}
 
-	const handleDeleteQuestion = (index: number) => {
-		if (!confirm('Удалить этот вопрос?')) return
+	const handleDeleteQuestion = async (index: number) => {
+		const confirmed = await confirm({
+			title: 'Удалить вопрос?',
+			description: 'Вопрос будет удален из текущего теста.',
+			confirmText: 'Удалить',
+			cancelText: 'Отмена',
+			destructive: true,
+		})
+		if (!confirmed) return
 		const newQuestions = form.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, order: i }))
 		setForm({ ...form, questions: newQuestions })
 	}
@@ -333,15 +383,15 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			}
 		}
 
-		const payload: TestFormData = {
-			...form,
-			questions: form.questions.map((question) => normalizeQuestionForSave(question)),
-		}
+		const payload = normalizeFormPayload(form)
 
 		setSaving(true)
 		try {
 			const testId = testData?.test?.id
-			const url = isNew ? '/api/tests/save' : `/api/tests/${testId}/save`
+			if (isEditingExisting && !testId) {
+				throw new Error('Не удалось определить ID теста')
+			}
+			const url = isEditingExisting ? `/api/tests/${testId}/save` : '/api/tests/save'
 			const res = await apiFetch(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -354,14 +404,16 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			}
 
 			const data = await res.json()
-			toast.success(isNew ? 'Тест создан' : 'Тест сохранен')
-			localStorage.removeItem(DRAFT_KEY)
+			toast.success(isEditingExisting ? 'Тест сохранен' : 'Тест создан')
 
-			if (isNew && data.test) {
+			if (!isEditingExisting && data.test) {
 				// Redirect to slug-based URL after creation
 				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
-				router.push(`/admin/tests/${newTopicSlug}/${form.slug}`)
-			} else if (!isNew && data.test) {
+				const newTestSlug = data.test.slug || form.slug
+				if (newTopicSlug && newTestSlug) {
+					router.push(`/admin/tests/${newTopicSlug}/${newTestSlug}`)
+				}
+			} else if (isEditingExisting && data.test) {
 				// If slug or topic changed, update URL
 				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
 				if (newTopicSlug !== topicSlug || form.slug !== testSlug) {
@@ -428,7 +480,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		return labels
 	}, [topicSlug, testSlug, testData, topics, form.title])
 
-	if (!isNew && testLoading) {
+	if (isEditingExisting && testLoading) {
 		return (
 			<div className="flex items-center justify-center p-12">
 				<Loader2 className="h-8 w-8 animate-spin" />
@@ -443,7 +495,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-4">
 					<div>
-						<h1 className="text-2xl font-semibold">{isNew ? 'Новый тест' : 'Редактирование теста'}</h1>
+						<h1 className="text-2xl font-semibold">{isEditingExisting ? 'Редактирование теста' : 'Новый тест'}</h1>
 						<p className="text-muted-foreground">
 							{form.questions.length} вопросов
 							{form.isPublished ? ' • Опубликован' : ' • Черновик'}
@@ -451,7 +503,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 					</div>
 				</div>
 				<div className="flex gap-2">
-					{!isNew && (
+					{isEditingExisting && (
 						<>
 							<Button variant="secondary" onClick={() => handleExport(false)}>
 								<Download className="mr-2 h-4 w-4" />
@@ -512,7 +564,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 									setForm({
 										...form,
 										title,
-										slug: isNew ? transliterate(title) : form.slug,
+										slug: isCreateMode ? transliterate(title) : form.slug,
 									})
 								}}
 								placeholder="Тест по теме..."
@@ -572,7 +624,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 						<div className="space-y-3">
 							<Label>Начисление баллов</Label>
-							{!isNew && topicSlug && testSlug ? (
+							{isEditingExisting && topicSlug && testSlug ? (
 								<div className="space-y-2">
 									<Button variant="outline" asChild className="w-full">
 										<Link href={`/admin/tests/scoring?scope=test&topicSlug=${topicSlug}&testSlug=${testSlug}`}>
@@ -612,61 +664,89 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 					</CardContent>
 				</Card>
 
-				{/* Questions List */}
-				<Card className="lg:col-span-2">
-					<CardHeader className="flex flex-row items-center justify-between">
-						<CardTitle>Вопросы</CardTitle>
-						{!isNew && topicSlug && testSlug ? (
-							<Button asChild>
-								<Link href={`/admin/tests/${topicSlug}/${testSlug}/questions/new`}>
+				<div className="space-y-4 lg:col-span-2">
+					{questionDrafts.length > 0 ? (
+						<Card>
+							<CardHeader>
+								<CardTitle>Черновики вопросов</CardTitle>
+							</CardHeader>
+							<CardContent>
+								{questionDrafts.map((draft) => (
+									<div key={draft.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5">
+										<Link
+											className="min-w-0 flex-1 truncate text-sm hover:underline"
+											href={`/admin/tests/${topicSlug}/${testSlug}/questions/drafts/${draft.id}`}
+										>
+											{resolveQuestionDraftLabel(draft)}
+										</Link>
+										<div className="text-muted-foreground text-xs">
+											{new Date(draft.updatedAt).toLocaleString('ru-RU')}
+										</div>
+										<Button
+											size="icon"
+											variant="ghost"
+											aria-label="Удалить черновик вопроса"
+											onClick={() => handleDeleteQuestionDraft(draft)}
+										>
+											<Trash2 className="h-4 w-4" />
+										</Button>
+									</div>
+								))}
+							</CardContent>
+						</Card>
+					) : null}
+
+					{/* Questions List */}
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between">
+							<CardTitle>Вопросы</CardTitle>
+							<Button onClick={handleAddQuestion} disabled={creatingQuestionDraft}>
+								{creatingQuestionDraft ? (
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+								) : (
 									<Plus className="mr-2 h-4 w-4" />
-									Добавить вопрос
-								</Link>
-							</Button>
-						) : (
-							<Button onClick={handleAddQuestion}>
-								<Plus className="mr-2 h-4 w-4" />
+								)}
 								Добавить вопрос
 							</Button>
-						)}
-					</CardHeader>
-					<CardContent>
-						{form.questions.length === 0 ? (
-							<div className="text-muted-foreground py-12 text-center">
-								Нет вопросов. Нажмите &quot;Добавить вопрос&quot; чтобы начать.
-							</div>
-						) : (
-							<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-								<SortableContext
-									items={form.questions.map((q) => q.id || `new-${q.order}`)}
-									strategy={verticalListSortingStrategy}
-								>
-									<div className="space-y-2">
-										{form.questions.map((question, index) => (
-											<QuestionCard
-												key={question.id || `new-${question.order}`}
-												question={question}
-												index={index}
-												editHref={
-													question.id && topicSlug && testSlug
-														? `/admin/tests/${topicSlug}/${testSlug}/questions/${question.id}`
-														: undefined
-												}
-												viewHref={
-													question.id && topicSlug && testSlug
-														? `/tests/${topicSlug}/${testSlug}#question-${question.id}`
-														: undefined
-												}
-												onEdit={() => handleEditQuestion(index)}
-												onDelete={() => handleDeleteQuestion(index)}
-											/>
-										))}
-									</div>
-								</SortableContext>
-							</DndContext>
-						)}
-					</CardContent>
-				</Card>
+						</CardHeader>
+						<CardContent>
+							{form.questions.length === 0 ? (
+								<div className="text-muted-foreground py-12 text-center">
+									Нет вопросов. Нажмите &quot;Добавить вопрос&quot; чтобы начать.
+								</div>
+							) : (
+								<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+									<SortableContext
+										items={form.questions.map((q) => q.id || `new-${q.order}`)}
+										strategy={verticalListSortingStrategy}
+									>
+										<div className="space-y-2">
+											{form.questions.map((question, index) => (
+												<QuestionCard
+													key={question.id || `new-${question.order}`}
+													question={question}
+													index={index}
+													editHref={
+														question.id && topicSlug && testSlug
+															? `/admin/tests/${topicSlug}/${testSlug}/questions/${question.id}`
+															: undefined
+													}
+													viewHref={
+														question.id && topicSlug && testSlug
+															? `/tests/${topicSlug}/${testSlug}#question-${question.id}`
+															: undefined
+													}
+													onEdit={() => handleEditQuestion(index)}
+													onDelete={() => handleDeleteQuestion(index)}
+												/>
+											))}
+										</div>
+									</SortableContext>
+								</DndContext>
+							)}
+						</CardContent>
+					</Card>
+				</div>
 			</div>
 
 			{/* Topic Creation Dialog */}
@@ -723,6 +803,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+			{alertDialog}
 		</div>
 	)
 }

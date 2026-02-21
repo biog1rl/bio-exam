@@ -226,6 +226,28 @@ export const tests = pgTable(
 	})
 )
 
+/** Черновики вопросов внутри теста */
+export const questionDrafts = pgTable(
+	'question_drafts',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		testId: uuid('test_id')
+			.notNull()
+			.references(() => tests.id, { onDelete: 'cascade' }),
+		ownerId: uuid('owner_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+		lockVersion: integer('lock_version').notNull().default(0),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+	},
+	(t) => ({
+		ownerTestUpdatedIdx: index('question_drafts_owner_test_updated_idx').on(t.ownerId, t.testId, t.updatedAt),
+		testUpdatedIdx: index('question_drafts_test_updated_idx').on(t.testId, t.updatedAt),
+	})
+)
+
 /** Глобальные настройки начисления баллов для тестов */
 export const testScoringSettings = pgTable('test_scoring_settings', {
 	id: text('id').primaryKey().default('global'),

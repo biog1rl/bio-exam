@@ -28,7 +28,9 @@ const typeLabels: Record<string, { label: string; icon: typeof Radio }> = {
 	sequence: { label: 'Последовательность', icon: ListOrdered },
 }
 
-function resolveTemplate(question: Question): 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits' | null {
+function resolveTemplate(
+	question: Question
+): 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits' | null {
 	return question.questionUiTemplate ?? null
 }
 
@@ -69,10 +71,10 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 		template == null
 			? 'тип не настроен'
 			: template === 'matching'
-			? `${question.matchingPairs?.left.length ?? 0} пар`
-			: template === 'short_text' || template === 'sequence_digits'
-				? 'без вариантов'
-				: `${question.options?.length ?? 0} вариантов`
+				? `${question.matchingPairs?.left.length ?? 0} пар`
+				: template === 'short_text' || template === 'sequence_digits'
+					? 'без вариантов'
+					: `${question.options?.length ?? 0} вариантов`
 
 	return (
 		<div

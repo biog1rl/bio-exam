@@ -7,7 +7,6 @@ import { useMemo, useRef, useState } from 'react'
 import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { apiFetch } from '@/lib/api-fetch'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -15,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { apiFetch } from '@/lib/api-fetch'
 import { LOGIN_PATTERN, LOGIN_HINT, normalizeLogin, validateLogin } from '@/lib/auth/validators'
 
 type Props = {

@@ -21,7 +21,6 @@ import * as Icons from 'lucide-react'
 import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import { toast } from 'sonner'
 
-import { apiFetch } from '@/lib/api-fetch'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -36,6 +35,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
+import { apiFetch } from '@/lib/api-fetch'
 
 interface SidebarItem {
 	id: string
@@ -119,6 +120,7 @@ function SortableItem({
 }
 
 export function SidebarSettingsClient() {
+	const { confirm, alertDialog } = useUiAlertDialog()
 	const [items, setItems] = useState<SidebarItem[]>([])
 	const [loading, setLoading] = useState(true)
 	const [dialogOpen, setDialogOpen] = useState(false)
@@ -295,7 +297,14 @@ export function SidebarSettingsClient() {
 	}
 
 	const handleDelete = async (id: string) => {
-		if (!confirm('Удалить этот пункт меню?')) return
+		const confirmed = await confirm({
+			title: 'Удалить пункт меню?',
+			description: 'Пункт будет удален без возможности восстановления.',
+			confirmText: 'Удалить',
+			cancelText: 'Отмена',
+			destructive: true,
+		})
+		if (!confirmed) return
 
 		try {
 			await apiFetch(`/api/sidebar/${id}`, {
@@ -509,6 +518,7 @@ export function SidebarSettingsClient() {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+			{alertDialog}
 		</div>
 	)
 }

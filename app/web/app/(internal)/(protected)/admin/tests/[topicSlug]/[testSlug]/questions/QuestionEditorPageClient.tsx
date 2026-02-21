@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowRightLeft, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { Button } from '@/components/ui/button'
 import {
 	Dialog,
@@ -18,11 +19,12 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
 import { apiFetch } from '@/lib/api-fetch'
+
 import QuestionEditor from '../../../components/QuestionEditor'
 import type {
 	Question,
+	QuestionDraftDetailResponse,
 	QuestionTypesResponse,
 	TestDetailResponse,
 	TestFormData,
@@ -37,6 +39,8 @@ import {
 	resolveQuestionTemplate,
 } from '../../../types'
 
+const QUESTION_DRAFT_SAVE_DEBOUNCE_MS = 700
+
 const fetcher = async (url: string) => {
 	const res = await fetch(url, { credentials: 'include' })
 	if (!res.ok) {
@@ -46,10 +50,66 @@ const fetcher = async (url: string) => {
 	return res.json()
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null
+}
+
+function normalizeDraftOptions(value: unknown): Question['options'] {
+	if (!Array.isArray(value)) return null
+	const options = value
+		.filter(
+			(item): item is { id: string; text: string } =>
+				isRecord(item) && typeof item.id === 'string' && typeof item.text === 'string'
+		)
+		.map((item) => ({ id: item.id, text: item.text }))
+	return options.length > 0 ? options : null
+}
+
+function normalizeDraftMatchingPairs(value: unknown): Question['matchingPairs'] {
+	if (!isRecord(value)) return null
+	const left = normalizeDraftOptions(value.left)
+	const right = normalizeDraftOptions(value.right)
+	if (!left || !right) return null
+	return { left, right }
+}
+
+function normalizeDraftCorrect(value: unknown): Question['correct'] {
+	if (typeof value === 'string') return value
+	if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value
+	if (!isRecord(value)) return ''
+	const entries = Object.entries(value).filter(([, entryValue]) => typeof entryValue === 'string')
+	return Object.fromEntries(entries) as Record<string, string>
+}
+
+function extractQuestionFromDraftPayload(payload: unknown, order: number): Question | null {
+	const payloadRecord = isRecord(payload) ? payload : null
+	const candidate = payloadRecord && 'question' in payloadRecord ? payloadRecord.question : payload
+	if (!isRecord(candidate) || typeof candidate.type !== 'string' || typeof candidate.promptText !== 'string') {
+		return null
+	}
+
+	const fallback = createDefaultQuestion(order)
+	return normalizeQuestionForSave({
+		...fallback,
+		...candidate,
+		id: undefined,
+		order,
+		promptText: candidate.promptText,
+		explanationText:
+			typeof candidate.explanationText === 'string' || candidate.explanationText === null
+				? candidate.explanationText
+				: null,
+		options: normalizeDraftOptions(candidate.options),
+		matchingPairs: normalizeDraftMatchingPairs(candidate.matchingPairs),
+		correct: normalizeDraftCorrect(candidate.correct),
+	})
+}
+
 interface Props {
 	topicSlug: string
 	testSlug: string
 	questionId?: string
+	questionDraftId?: string
 }
 
 function validateQuestion(question: Question): string | null {
@@ -107,14 +167,22 @@ function validateQuestion(question: Question): string | null {
 	return null
 }
 
-export default function QuestionEditorPageClient({ topicSlug, testSlug, questionId }: Props) {
+export default function QuestionEditorPageClient({ topicSlug, testSlug, questionId, questionDraftId }: Props) {
 	const router = useRouter()
-	const [saving, setSaving] = useState(false)
+	const [isSaving, setIsSaving] = useState(false)
 	const [moving, setMoving] = useState(false)
 	const [moveDialogOpen, setMoveDialogOpen] = useState(false)
 	const [targetTopicId, setTargetTopicId] = useState('')
 	const [targetTestId, setTargetTestId] = useState('')
+	const [draftQuestion, setDraftQuestion] = useState<Question | null>(null)
+	const [draftLockVersion, setDraftLockVersion] = useState(0)
+	const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const isDraftHydratedRef = useRef(false)
+	const latestDraftQuestionRef = useRef<Question | null>(null)
+	const lockVersionRef = useRef(0)
+	const isDraftMode = Boolean(questionDraftId)
 	const isNewQuestion = questionId === undefined
+	const isEditingExistingQuestion = Boolean(questionId)
 
 	const {
 		data: testData,
@@ -128,6 +196,48 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	)
 	const { data: topicsData } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
 	const { data: testsData } = useSWR<TestsResponse>('/api/tests', fetcher)
+	const {
+		data: questionDraftData,
+		error: questionDraftError,
+		isLoading: questionDraftLoading,
+		mutate: mutateQuestionDraft,
+	} = useSWR<QuestionDraftDetailResponse>(
+		isDraftMode && testData?.test?.id ? `/api/tests/${testData.test.id}/question-drafts/${questionDraftId}` : null,
+		fetcher
+	)
+
+	useEffect(() => {
+		lockVersionRef.current = draftLockVersion
+	}, [draftLockVersion])
+
+	useEffect(() => {
+		if (!isDraftMode) return
+		if (questionDraftData === undefined) return
+
+		const order = testData?.questions.length ?? 0
+		const parsed = extractQuestionFromDraftPayload(questionDraftData?.draft?.payload, order)
+		if (parsed) {
+			setDraftQuestion(parsed)
+			latestDraftQuestionRef.current = parsed
+		} else {
+			setDraftQuestion(createDefaultQuestion(order))
+			latestDraftQuestionRef.current = createDefaultQuestion(order)
+		}
+
+		const nextLockVersion = questionDraftData?.draft?.lockVersion ?? 0
+		setDraftLockVersion(nextLockVersion)
+		lockVersionRef.current = nextLockVersion
+		isDraftHydratedRef.current = true
+	}, [isDraftMode, questionDraftData, testData?.questions.length])
+
+	useEffect(() => {
+		return () => {
+			if (draftAutosaveTimerRef.current) {
+				clearTimeout(draftAutosaveTimerRef.current)
+				draftAutosaveTimerRef.current = null
+			}
+		}
+	}, [])
 
 	const availableTopics = useMemo(() => {
 		const allTopics = topicsData?.topics ?? []
@@ -143,17 +253,100 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	const currentQuestion = useMemo(() => {
 		if (!testData) return null
+		if (isDraftMode) return draftQuestion ?? createDefaultQuestion(testData.questions.length)
 		if (isNewQuestion) return createDefaultQuestion(testData.questions.length)
 		const found = testData.questions.find((question) => question.id === questionId) ?? null
 		return found ? normalizeQuestionForSave(found) : null
-	}, [testData, isNewQuestion, questionId])
+	}, [testData, isDraftMode, draftQuestion, isNewQuestion, questionId])
+
+	const breadcrumbLabels = useMemo(() => {
+		const labels: Record<string, string> = {}
+		const topicTitle = testData?.test?.topicTitle
+		const testTitle = testData?.test?.title
+
+		if (topicTitle) {
+			labels[`/admin/tests/${topicSlug}`] = topicTitle
+		}
+		if (testTitle) {
+			labels[`/admin/tests/${topicSlug}/${testSlug}`] = testTitle
+		}
+		if (isDraftMode && questionDraftId) {
+			labels[`/admin/tests/${topicSlug}/${testSlug}/questions/drafts/${questionDraftId}`] = 'Черновик вопроса'
+		}
+		if (!isDraftMode && isEditingExistingQuestion && questionId) {
+			labels[`/admin/tests/${topicSlug}/${testSlug}/questions/${questionId}`] = 'Редактирование вопроса'
+		}
+
+		return labels
+	}, [isDraftMode, isEditingExistingQuestion, questionDraftId, questionId, testData?.test?.title, testData?.test?.topicTitle, testSlug, topicSlug])
 
 	const backToTestEditor = useCallback(() => {
 		router.push(`/admin/tests/${topicSlug}/${testSlug}`)
 	}, [router, topicSlug, testSlug])
 
+	const persistDraftQuestion = useCallback(
+		async (nextQuestion: Question) => {
+			if (!isDraftMode || !questionDraftId || !testData?.test?.id) return
+
+			const payloadQuestion = {
+				...normalizeQuestionForSave(nextQuestion),
+				id: undefined,
+				order: testData.questions.length,
+			}
+			const res = await apiFetch(`/api/tests/${testData.test.id}/question-drafts/${questionDraftId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					payload: { question: payloadQuestion },
+					lockVersion: lockVersionRef.current,
+				}),
+			})
+
+			if (!res.ok) {
+				const data = (await res.json().catch(() => null)) as { error?: string } | null
+				if (res.status === 409) {
+					toast.error(data?.error || 'Черновик изменен в другой вкладке, загружаю актуальную версию')
+					await mutateQuestionDraft()
+					return
+				}
+				throw new Error(data?.error || 'Ошибка автосохранения черновика вопроса')
+			}
+
+			const data = (await res.json().catch(() => null)) as {
+				lockVersion?: number
+				draft?: { lockVersion?: number }
+			} | null
+			const nextLockVersion = data?.draft?.lockVersion ?? data?.lockVersion
+			if (typeof nextLockVersion === 'number') {
+				lockVersionRef.current = nextLockVersion
+				setDraftLockVersion(nextLockVersion)
+			}
+		},
+		[isDraftMode, questionDraftId, testData?.test?.id, testData?.questions.length, mutateQuestionDraft]
+	)
+
+	const handleQuestionDraftChange = useCallback(
+		(nextQuestion: Question) => {
+			if (!isDraftMode) return
+			latestDraftQuestionRef.current = nextQuestion
+			if (!isDraftHydratedRef.current) return
+
+			if (draftAutosaveTimerRef.current) {
+				clearTimeout(draftAutosaveTimerRef.current)
+			}
+
+			draftAutosaveTimerRef.current = setTimeout(() => {
+				if (!latestDraftQuestionRef.current) return
+				void persistDraftQuestion(latestDraftQuestionRef.current).catch((err) => {
+					console.warn('Failed to autosave question draft', err)
+				})
+			}, QUESTION_DRAFT_SAVE_DEBOUNCE_MS)
+		},
+		[isDraftMode, persistDraftQuestion]
+	)
+
 	const openMoveDialog = useCallback(() => {
-		if (isNewQuestion || !testData?.test?.id || !questionId) {
+		if (!isEditingExistingQuestion || !testData?.test?.id || !questionId) {
 			toast.error('Сначала сохраните вопрос')
 			return
 		}
@@ -170,7 +363,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		setTargetTopicId(initialTopicId)
 		setTargetTestId(initialTest?.id || '')
 		setMoveDialogOpen(true)
-	}, [isNewQuestion, questionId, testData, testsData, availableTopics])
+	}, [isEditingExistingQuestion, questionId, testData, testsData, availableTopics])
 
 	const handleTargetTopicChange = useCallback(
 		(nextTopicId: string) => {
@@ -228,7 +421,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				return
 			}
 
-			const questions = isNewQuestion
+			const appendAsNew = isDraftMode || isNewQuestion
+			const questions = appendAsNew
 				? [...testData.questions, nextQuestion]
 				: testData.questions.map((question) =>
 						question.id === questionId ? { ...nextQuestion, id: questionId } : question
@@ -251,7 +445,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				questions: normalizedQuestions,
 			}
 
-			setSaving(true)
+			setIsSaving(true)
 			try {
 				const res = await apiFetch(`/api/tests/${testData.test.id}/save`, {
 					method: 'POST',
@@ -264,19 +458,28 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 					throw new Error(data?.error || 'Ошибка сохранения вопроса')
 				}
 
+				if (isDraftMode && questionDraftId) {
+					const deleteRes = await apiFetch(`/api/tests/${testData.test.id}/question-drafts/${questionDraftId}`, {
+						method: 'DELETE',
+					})
+					if (!deleteRes.ok) {
+						console.warn('Failed to delete question draft after save', questionDraftId)
+					}
+				}
+
 				await mutate()
-				toast.success(isNewQuestion ? 'Вопрос добавлен' : 'Вопрос сохранен')
+				toast.success(appendAsNew ? 'Вопрос добавлен' : 'Вопрос сохранен')
 				backToTestEditor()
 			} catch (err) {
 				toast.error(err instanceof Error ? err.message : 'Ошибка сохранения вопроса')
 			} finally {
-				setSaving(false)
+				setIsSaving(false)
 			}
 		},
-		[testData, isNewQuestion, questionId, mutate, backToTestEditor]
+		[testData, isDraftMode, isNewQuestion, questionId, questionDraftId, mutate, backToTestEditor]
 	)
 
-	if (isLoading) {
+	if (isLoading || (isDraftMode && questionDraftLoading && !isDraftHydratedRef.current)) {
 		return (
 			<div className="flex items-center justify-center p-12">
 				<Loader2 className="h-8 w-8 animate-spin" />
@@ -284,10 +487,16 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		)
 	}
 
-	if (error || !testData) {
+	if (error || questionDraftError || !testData) {
 		return (
 			<div className="space-y-4 p-6">
-				<p className="text-sm text-red-600">{error instanceof Error ? error.message : 'Не удалось загрузить тест'}</p>
+				<p className="text-sm text-red-600">
+					{error instanceof Error
+						? error.message
+						: questionDraftError instanceof Error
+							? questionDraftError.message
+							: 'Не удалось загрузить данные'}
+				</p>
 				<Button variant="outline" onClick={backToTestEditor}>
 					Назад к тесту
 				</Button>
@@ -298,7 +507,9 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	if (!currentQuestion) {
 		return (
 			<div className="space-y-4 p-6">
-				<p className="text-sm text-red-600">Вопрос не найден</p>
+				<p className="text-sm text-red-600">
+					{isEditingExistingQuestion ? 'Вопрос не найден' : 'Черновик вопроса не найден'}
+				</p>
 				<Button variant="outline" onClick={backToTestEditor}>
 					Назад к тесту
 				</Button>
@@ -307,20 +518,24 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	}
 
 	return (
-		<div className={saving ? 'pointer-events-none opacity-80' : undefined}>
+		<div className={isSaving ? 'pointer-events-none opacity-80' : undefined}>
+			<SetBreadcrumbsLabels labels={breadcrumbLabels} />
 			<QuestionEditor
 				question={currentQuestion}
 				questionTypes={questionTypesData?.questionTypes ?? []}
 				onSave={handleSaveQuestion}
+				onDraftChange={isDraftMode ? handleQuestionDraftChange : undefined}
 				onCancel={backToTestEditor}
 				headerActions={
-					!isNewQuestion && questionId ? (
+					isEditingExistingQuestion && questionId ? (
 						<Button variant="secondary" onClick={openMoveDialog} disabled={moving}>
 							<ArrowRightLeft className="mr-2 h-4 w-4" />
 							Перенести
 						</Button>
 					) : undefined
 				}
+				isSaving={isSaving}
+
 			/>
 
 			<Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>

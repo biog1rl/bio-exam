@@ -1,7 +1,4 @@
 import { apiFetch, AuthExpiredError } from '../api-fetch'
-
-export { AuthExpiredError } from '../api-fetch'
-
 import type {
 	PublicTestDetail,
 	PublicTestListItem,
@@ -10,6 +7,8 @@ import type {
 	TestAnswerValue,
 	TestAttemptSummary,
 } from './types'
+
+export { AuthExpiredError } from '../api-fetch'
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await apiFetch(url, {

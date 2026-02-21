@@ -29,6 +29,14 @@ export const breadcrumbConfig = {
 		scoring: 'Настройка баллов',
 		'question-types': 'Типы вопросов',
 	} as Record<string, string>,
+
+	/** скрыть технические сегменты в конкретных ветках */
+	hideSegmentsOn: [
+		{
+			pattern: /^\/admin\/tests\/[^/]+\/[^/]+\/questions(\/|$)/,
+			segments: ['questions', 'drafts', 'new'],
+		},
+	] as Array<{ pattern: RoutePattern; segments: string[] }>,
 }
 
 export function matchPath(patterns: RoutePattern[] | undefined, path: string, parts: string[]): boolean {

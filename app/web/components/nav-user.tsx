@@ -4,7 +4,6 @@ import { LogOutIcon, MoreVerticalIcon, UserCircleIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
 import { getInitials } from '@/helpers/getAvatarColor'
+import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 
 export function NavUser() {
 	const { isMobile } = useSidebar()

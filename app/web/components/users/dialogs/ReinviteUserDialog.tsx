@@ -6,10 +6,10 @@ import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSWRConfig } from 'swr'
 
-import { apiFetch } from '@/lib/api-fetch'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { apiFetch } from '@/lib/api-fetch'
 import type { UserRow } from '@/types/users'
 
 type Props = {

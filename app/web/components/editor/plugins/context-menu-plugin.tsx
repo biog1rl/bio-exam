@@ -21,8 +21,11 @@ import {
 } from 'lexical'
 import { Clipboard, ClipboardType, Copy, Link2Off, Scissors, Trash2 } from 'lucide-react'
 
+import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
+
 export function ContextMenuPlugin(): JSX.Element {
 	const [editor] = useLexicalComposerContext()
+	const { showAlert, alertDialog } = useUiAlertDialog()
 
 	const items = useMemo(() => {
 		return [
@@ -64,7 +67,10 @@ export function ContextMenuPlugin(): JSX.Element {
 							name: 'clipboard-read',
 						})
 						if (permission.state === 'denied') {
-							alert('Not allowed to paste from clipboard.')
+							void showAlert({
+								title: 'Доступ запрещен',
+								description: 'Браузер не разрешил чтение из буфера обмена.',
+							})
 							return
 						}
 
@@ -92,7 +98,10 @@ export function ContextMenuPlugin(): JSX.Element {
 						})
 
 						if (permission.state === 'denied') {
-							alert('Not allowed to paste from clipboard.')
+							void showAlert({
+								title: 'Доступ запрещен',
+								description: 'Браузер не разрешил чтение из буфера обмена.',
+							})
 							return
 						}
 
@@ -134,11 +143,14 @@ export function ContextMenuPlugin(): JSX.Element {
 	}, [editor])
 
 	return (
-		<NodeContextMenuPlugin
-			className="z-50! bg-popover text-popover-foreground [&:has(*)]:z-10! overflow-hidden rounded-md border shadow-md outline-none"
-			itemClassName="relative w-full flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50"
-			separatorClassName="bg-border -mx-1 h-px"
-			items={items}
-		/>
+		<>
+			<NodeContextMenuPlugin
+				className="z-50! bg-popover text-popover-foreground [&:has(*)]:z-10! overflow-hidden rounded-md border shadow-md outline-none"
+				itemClassName="relative w-full flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50"
+				separatorClassName="bg-border -mx-1 h-px"
+				items={items}
+			/>
+			{alertDialog}
+		</>
 	)
 }

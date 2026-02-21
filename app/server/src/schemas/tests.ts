@@ -225,6 +225,13 @@ export const MoveQuestionSchema = z
 		path: ['targetTestId'],
 	})
 
+export const QuestionDraftPayloadSchema = z.record(z.unknown())
+
+export const UpdateQuestionDraftSchema = z.object({
+	payload: QuestionDraftPayloadSchema,
+	lockVersion: z.number().int().min(0).optional(),
+})
+
 // Экспорт типов
 export type Option = z.infer<typeof OptionSchema>
 export type MatchingPairs = z.infer<typeof MatchingPairsSchema>
@@ -232,3 +239,5 @@ export type Question = z.infer<typeof QuestionSchema>
 export type SaveTest = z.infer<typeof SaveTestSchema>
 export type Topic = z.infer<typeof TopicSchema>
 export type MoveQuestion = z.infer<typeof MoveQuestionSchema>
+export type QuestionDraftPayload = z.infer<typeof QuestionDraftPayloadSchema>
+export type UpdateQuestionDraft = z.infer<typeof UpdateQuestionDraftSchema>
