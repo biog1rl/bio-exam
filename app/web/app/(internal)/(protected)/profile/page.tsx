@@ -1,31 +1,25 @@
-import { redirect } from 'next/navigation'
-
 import { getServerMe } from '@/lib/auth/getServerMe'
 
 import { ProfileClient } from './ProfileClient'
 
 export default async function ProfilePage() {
 	const me = await getServerMe()
-	if (!me) {
-		redirect('/login')
-	}
-
 	return (
 		<ProfileClient
 			initialData={{
-				firstName: me.firstName,
-				lastName: me.lastName,
-				login: me.login,
-				avatar: me.avatar,
-				avatarCropped: me.avatarCropped,
-				avatarColor: me.avatarColor,
-				initials: me.initials,
-				avatarCropX: me.avatarCropX,
-				avatarCropY: me.avatarCropY,
-				avatarCropZoom: me.avatarCropZoom,
-				avatarCropRotation: me.avatarCropRotation,
-				avatarCropViewX: me.avatarCropViewX,
-				avatarCropViewY: me.avatarCropViewY,
+				firstName: me?.firstName ?? null,
+				lastName: me?.lastName ?? null,
+				login: me?.login ?? null,
+				avatar: me?.avatar ?? null,
+				avatarCropped: me?.avatarCropped ?? null,
+				avatarColor: me?.avatarColor ?? null,
+				initials: me?.initials ?? null,
+				avatarCropX: me?.avatarCropX ?? null,
+				avatarCropY: me?.avatarCropY ?? null,
+				avatarCropZoom: me?.avatarCropZoom ?? null,
+				avatarCropRotation: me?.avatarCropRotation ?? null,
+				avatarCropViewX: me?.avatarCropViewX ?? null,
+				avatarCropViewY: me?.avatarCropViewY ?? null,
 			}}
 		/>
 	)

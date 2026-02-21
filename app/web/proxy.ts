@@ -9,6 +9,7 @@ const SESSION_COOKIE_CANDIDATES = Array.from(
 		].filter((value): value is string => typeof value === 'string' && value.length > 0)
 	)
 )
+const REFRESH_COOKIE_NAME = 'refresh_token'
 
 const PUBLIC_PATHS = new Set(['/login'])
 const PUBLIC_PREFIXES = ['/invite']
@@ -21,12 +22,13 @@ function isPublicPath(pathname: string): boolean {
 export function proxy(req: NextRequest) {
 	const { pathname, search } = req.nextUrl
 	const hasSession = SESSION_COOKIE_CANDIDATES.some((cookieName) => Boolean(req.cookies.get(cookieName)?.value))
+	const hasRefresh = Boolean(req.cookies.get(REFRESH_COOKIE_NAME)?.value)
 
 	if (isPublicPath(pathname)) {
 		return NextResponse.next()
 	}
 
-	if (hasSession) return NextResponse.next()
+	if (hasSession || hasRefresh) return NextResponse.next()
 
 	const loginUrl = new URL('/login', req.url)
 	loginUrl.searchParams.set('callbackUrl', `${pathname}${search}`)

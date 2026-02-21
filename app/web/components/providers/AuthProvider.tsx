@@ -66,7 +66,7 @@ async function fetchMeOnce(): Promise<Me | null> {
 
 export function AuthProvider({ children, initialMe }: { children: React.ReactNode; initialMe?: Me | null }) {
 	const [me, setMe] = useState<Me | null>(initialMe ?? null)
-	const [loading, setLoading] = useState<boolean>(initialMe === undefined)
+	const [loading, setLoading] = useState<boolean>(initialMe == null)
 	const [avatarVersion, setAvatarVersion] = useState<number>(Date.now())
 
 	// берём perms с сервера
@@ -93,11 +93,27 @@ export function AuthProvider({ children, initialMe }: { children: React.ReactNod
 	}, [])
 
 	useEffect(() => {
-		if (initialMe === undefined) {
+		if (initialMe == null) {
 			void refresh()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
+
+	useEffect(() => {
+		if (!me) return
+		const migrationKey = 'auth_refresh_cookie_migrated_v2'
+		if (localStorage.getItem(migrationKey)) return
+
+		void fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+			.then((response) => {
+				if (!response.ok) return
+				localStorage.setItem(migrationKey, '1')
+				void refresh()
+			})
+			.catch(() => {
+				// ignore migration errors
+			})
+	}, [me, refresh])
 
 	// Автоматический рефреш при разлогинивании
 	useEffect(() => {

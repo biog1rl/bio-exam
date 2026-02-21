@@ -37,9 +37,17 @@ router.post('/', async (req, res) => {
 		}
 
 		clearSessionCookie(res)
-		// Clear refresh cookie
+		// Clear refresh cookie (current path + legacy path)
 		const secure = process.env.NODE_ENV === 'production'
-		const parts = [
+		const clearRootPathParts = [
+			`refresh_token=`,
+			`Path=/`,
+			`HttpOnly`,
+			`SameSite=Lax`,
+			`Max-Age=0`,
+			secure ? 'Secure' : undefined,
+		].filter(Boolean)
+		const clearLegacyPathParts = [
 			`refresh_token=`,
 			`Path=/api/auth/refresh`,
 			`HttpOnly`,
@@ -47,7 +55,13 @@ router.post('/', async (req, res) => {
 			`Max-Age=0`,
 			secure ? 'Secure' : undefined,
 		].filter(Boolean)
-		res.setHeader('Set-Cookie', parts.join('; '))
+		const prev = res.getHeader('Set-Cookie')
+		const nextCookies = [
+			...(Array.isArray(prev) ? prev.map(String) : prev ? [String(prev)] : []),
+			clearRootPathParts.join('; '),
+			clearLegacyPathParts.join('; '),
+		]
+		res.setHeader('Set-Cookie', nextCookies)
 
 		res.json({ ok: true })
 	} catch (e) {

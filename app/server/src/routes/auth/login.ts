@@ -164,7 +164,7 @@ router.post('/', async (req, res, next) => {
 		const secure = process.env.NODE_ENV === 'production'
 		const refreshParts = [
 			`refresh_token=${encodeURIComponent(refreshToken)}`,
-			`Path=/api/auth/refresh`,
+			`Path=/`,
 			`HttpOnly`,
 			`SameSite=Lax`,
 			`Max-Age=${REFRESH_EXPIRES_DAYS * 24 * 60 * 60}`,
