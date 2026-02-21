@@ -84,7 +84,12 @@ src/
 | GET | `/` | Список тестов | `tests.write` |
 | GET | `/:id` | Тест для редактирования | `tests.write` |
 | POST | `/save` | Создать тест | `tests.write` |
-| POST | `/:id/save` | Обновить тест | `tests.write` |
+| PATCH | `/:id/settings` | Обновить настройки теста | `tests.write` |
+| POST | `/:id/questions` | Создать вопрос | `tests.write` |
+| PATCH | `/:id/questions/:questionId` | Обновить вопрос | `tests.write` |
+| PUT | `/:id/questions/reorder` | Изменить порядок вопросов | `tests.write` |
+| DELETE | `/:id/questions/:questionId` | Удалить вопрос | `tests.write` |
+| POST | `/:id/questions/:questionId/move` | Перенести вопрос | `tests.write` |
 | DELETE | `/:id` | Удалить тест | `tests.write` |
 | GET | `/:id/export` | Экспорт теста (ZIP) | `tests.write` |
 | GET | `/topics/:slug/export` | Экспорт темы (ZIP) | `tests.write` |

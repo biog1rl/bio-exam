@@ -39,7 +39,15 @@ import {
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
-import { MoveQuestionSchema, SaveTestSchema, TopicSchema, UpdateQuestionDraftSchema } from '../../schemas/tests.js'
+import {
+	MoveQuestionSchema,
+	ReorderQuestionsSchema,
+	SaveQuestionSchema,
+	SaveTestSchema,
+	TopicSchema,
+	UpdateQuestionDraftSchema,
+	UpdateTestSettingsSchema,
+} from '../../schemas/tests.js'
 import { storageService } from '../../services/storage/storage.js'
 
 const router = Router()
@@ -154,6 +162,36 @@ function resolveQuestionPoints(params: {
 		return rulePoints
 	}
 	return params.fallbackPoints
+}
+
+async function writeTestSettingsFile(params: {
+	topicSlug: string
+	testSlug: string
+	testId: string
+	title: string
+	description: string | null | undefined
+	isPublished: boolean
+	showCorrectAnswer: boolean
+	timeLimitMinutes: number | null | undefined
+	passingScore: number | null | undefined
+	version: number
+	effectiveScoringRules: z.infer<typeof TestScoringRulesSchema>
+	testOverrideRules: z.infer<typeof TestScoringRulesSchema> | null | undefined
+}) {
+	const testPath = storageService.getTestPath(params.topicSlug, params.testSlug)
+	await storageService.writeJson(`${testPath}/settings.json`, {
+		id: params.testId,
+		title: params.title,
+		description: params.description,
+		isPublished: params.isPublished,
+		showCorrectAnswer: params.showCorrectAnswer,
+		scoringRules: params.effectiveScoringRules,
+		useGlobalScoringRules: params.testOverrideRules == null,
+		timeLimitMinutes: params.timeLimitMinutes,
+		passingScore: params.passingScore,
+		version: params.version,
+		updatedAt: new Date().toISOString(),
+	})
 }
 
 async function syncQuestionPointsForTestByTypeConfig(testId: string) {
@@ -1472,20 +1510,19 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 			}
 		}
 
-		// Записываем settings.json
-		const testPath = storageService.getTestPath(topic.slug, data.slug)
-		await storageService.writeJson(`${testPath}/settings.json`, {
-			id: result.test.id,
+		await writeTestSettingsFile({
+			topicSlug: topic.slug,
+			testSlug: data.slug,
+			testId: result.test.id,
 			title: data.title,
 			description: data.description,
 			isPublished: data.isPublished,
 			showCorrectAnswer: data.showCorrectAnswer,
-			scoringRules: effectiveScoringRules,
-			useGlobalScoringRules: data.scoringRules == null,
 			timeLimitMinutes: data.timeLimitMinutes,
 			passingScore: data.passingScore,
 			version: result.test.version,
-			updatedAt: new Date().toISOString(),
+			effectiveScoringRules,
+			testOverrideRules: data.scoringRules ?? null,
 		})
 
 		res.status(201).json({ test: { ...result.test, topicSlug: topic.slug } })
@@ -1494,59 +1531,33 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 	}
 })
 
-// POST /api/tests/:id/save - обновить существующий тест
-router.post(
-	'/:id/save',
+// PATCH /api/tests/:id/settings - обновить настройки теста без изменения вопросов
+router.patch(
+	'/:id/settings',
 	validateUUID('id'),
 	sessionRequired(),
 	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
 			const testId = req.params.id as string
-			const parsed = SaveTestSchema.safeParse(req.body)
+			const parsed = UpdateTestSettingsSchema.safeParse(req.body)
 			if (!parsed.success) {
 				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 			}
 
-			const userId = req.authUser?.id
+			const userId = req.authUser?.id ?? null
 			const data = parsed.data
 
-			// Проверяем существование теста
 			const existingTest = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
 			if (!existingTest) {
 				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 			}
-			const globalScoringRules = await ensureGlobalScoringRules(userId)
-			const nextScoringOverride = data.scoringRules === undefined ? existingTest.scoringRules : data.scoringRules
-			const effectiveScoringRules = resolveEffectiveScoringRules({
-				globalRules: globalScoringRules,
-				testOverrideRules: nextScoringOverride,
-			})
-			const effectiveQuestionTypesMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
 
-			for (let index = 0; index < data.questions.length; index++) {
-				const question = data.questions[index]
-				const questionValidationError = validateQuestionWithType(question, effectiveQuestionTypesMap)
-				if (questionValidationError) {
-					return res.status(400).json({
-						error: ERROR_MESSAGES.BAD_REQUEST,
-						details: {
-							formErrors: [],
-							fieldErrors: {
-								questions: [`Вопрос ${index + 1}: ${questionValidationError}`],
-							},
-						},
-					})
-				}
-			}
-
-			// Получаем тему
 			const topic = await db.query.topics.findFirst({ where: eq(topics.id, data.topicId) })
 			if (!topic) {
 				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
 			}
 
-			// Проверяем уникальность slug (если изменился)
 			if (data.slug !== existingTest.slug || data.topicId !== existingTest.topicId) {
 				const slugExists = await db.query.tests.findFirst({
 					where: and(eq(tests.topicId, data.topicId), eq(tests.slug, data.slug)),
@@ -1556,16 +1567,29 @@ router.post(
 				}
 			}
 
-			// Определяем, нужно ли инкрементировать версию
+			const [{ count: questionsCountRaw }] = await db
+				.select({ count: sql<number>`count(*)::int` })
+				.from(questions)
+				.where(eq(questions.testId, testId))
+			const questionsCount = Number(questionsCountRaw ?? 0)
+			if (data.isPublished && questionsCount === 0) {
+				return res.status(400).json({ error: 'Для публикации добавьте хотя бы один вопрос' })
+			}
+
+			const globalScoringRules = await ensureGlobalScoringRules(userId)
+			const nextScoringOverride = data.scoringRules === undefined ? existingTest.scoringRules : data.scoringRules
+			const effectiveScoringRules = resolveEffectiveScoringRules({
+				globalRules: globalScoringRules,
+				testOverrideRules: nextScoringOverride,
+			})
+
+			const oldTopic = await db.query.topics.findFirst({ where: eq(topics.id, existingTest.topicId) })
+			const oldPrefix = oldTopic ? storageService.getTestPath(oldTopic.slug, existingTest.slug) : null
+			const newPrefix = storageService.getTestPath(topic.slug, data.slug)
+			const shouldRebaseQuestionPaths = Boolean(oldPrefix && oldPrefix !== newPrefix)
 			const shouldIncrementVersion = data.isPublished && !existingTest.isPublished
 
-			// Получаем старые данные для очистки Storage
-			const oldTopic = await db.query.topics.findFirst({ where: eq(topics.id, existingTest.topicId) })
-			const oldQuestions = await db.select().from(questions).where(eq(questions.testId, testId))
-
-			// Начинаем транзакцию
 			const result = await db.transaction(async (tx) => {
-				// Обновляем тест
 				const [updatedTest] = await tx
 					.update(tests)
 					.set({
@@ -1586,131 +1610,44 @@ router.post(
 					.where(eq(tests.id, testId))
 					.returning()
 
-				// Определяем какие вопросы удалить, обновить, создать
-				const existingQuestionIds = new Set(oldQuestions.map((q) => q.id))
-				const incomingQuestionIds = new Set(data.questions.filter((q) => q.id).map((q) => q.id!))
+				if (shouldRebaseQuestionPaths && oldPrefix) {
+					const questionRows = await tx
+						.select({
+							id: questions.id,
+							promptPath: questions.promptPath,
+							explanationPath: questions.explanationPath,
+						})
+						.from(questions)
+						.where(eq(questions.testId, testId))
 
-				// Удаляем вопросы, которых нет в новых данных
-				const toDelete = oldQuestions.filter((q) => !incomingQuestionIds.has(q.id))
-				if (toDelete.length > 0) {
-					await tx.delete(questions).where(
-						inArray(
-							questions.id,
-							toDelete.map((q) => q.id)
-						)
-					)
-				}
+					for (const row of questionRows) {
+						const promptPath = row.promptPath?.startsWith(oldPrefix)
+							? `${newPrefix}${row.promptPath.slice(oldPrefix.length)}`
+							: row.promptPath
+						const explanationPath = row.explanationPath?.startsWith(oldPrefix)
+							? `${newPrefix}${row.explanationPath.slice(oldPrefix.length)}`
+							: row.explanationPath
 
-				// Обновляем/создаём вопросы
-				const updatedQuestions = []
-				for (const q of data.questions) {
-					if (q.id && existingQuestionIds.has(q.id)) {
-						// Обновляем существующий вопрос
-						const existingQ = oldQuestions.find((oq) => oq.id === q.id)!
-						const promptPath = storageService.getQuestionPath(topic.slug, data.slug, q.id) + '/prompt.md'
-						const explanationPath = q.explanationText
-							? storageService.getQuestionPath(topic.slug, data.slug, q.id) + '/explanation.md'
-							: null
+						if (promptPath === row.promptPath && explanationPath === row.explanationPath) continue
 
 						await tx
 							.update(questions)
 							.set({
-								type: q.type,
-								order: q.order,
-								points: resolveQuestionPoints({
-									type: q.type,
-									fallbackPoints: Number(q.points ?? 0),
-									typeMap: effectiveQuestionTypesMap,
-								}),
-								options: q.options ?? null,
-								matchingPairs: q.matchingPairs ?? null,
 								promptPath,
 								explanationPath,
 								updatedAt: new Date(),
 							})
-							.where(eq(questions.id, q.id))
-
-						// Деактивируем старые ключи и создаём новый
-						await tx.update(answerKeys).set({ isActive: false }).where(eq(answerKeys.questionId, q.id))
-
-						const maxVersion = await tx
-							.select({ maxV: sql<number>`COALESCE(MAX(version), 0)` })
-							.from(answerKeys)
-							.where(eq(answerKeys.questionId, q.id))
-
-						await tx.insert(answerKeys).values({
-							questionId: q.id,
-							version: (maxVersion[0]?.maxV ?? 0) + 1,
-							correctAnswer: q.correct,
-							isActive: true,
-							createdBy: userId,
-						})
-
-						updatedQuestions.push({
-							id: q.id,
-							promptPath,
-							explanationPath,
-							promptText: q.promptText,
-							explanationText: q.explanationText,
-							oldPromptPath: existingQ.promptPath,
-							oldExplanationPath: existingQ.explanationPath,
-						})
-					} else {
-						// Создаём новый вопрос
-						const [newQuestion] = await tx
-							.insert(questions)
-							.values({
-								testId,
-								type: q.type,
-								order: q.order,
-								points: resolveQuestionPoints({
-									type: q.type,
-									fallbackPoints: Number(q.points ?? 0),
-									typeMap: effectiveQuestionTypesMap,
-								}),
-								options: q.options ?? null,
-								matchingPairs: q.matchingPairs ?? null,
-							})
-							.returning()
-
-						const promptPath = storageService.getQuestionPath(topic.slug, data.slug, newQuestion.id) + '/prompt.md'
-						const explanationPath = q.explanationText
-							? storageService.getQuestionPath(topic.slug, data.slug, newQuestion.id) + '/explanation.md'
-							: null
-
-						await tx.update(questions).set({ promptPath, explanationPath }).where(eq(questions.id, newQuestion.id))
-
-						await tx.insert(answerKeys).values({
-							questionId: newQuestion.id,
-							version: 1,
-							correctAnswer: q.correct,
-							isActive: true,
-							createdBy: userId,
-						})
-
-						updatedQuestions.push({
-							id: newQuestion.id,
-							promptPath,
-							explanationPath,
-							promptText: q.promptText,
-							explanationText: q.explanationText,
-							oldPromptPath: null,
-							oldExplanationPath: null,
-						})
+							.where(eq(questions.id, row.id))
 					}
 				}
 
-				return { test: updatedTest, questions: updatedQuestions, toDelete }
+				return { test: updatedTest }
 			})
 
-			// После транзакции: если поменялись тема или slug, пробуем переместить директорию с ассетами
 			let assetsMoved: boolean | undefined = undefined
-			const oldTopicSlug = oldTopic?.slug
-			if (oldTopicSlug && (oldTopicSlug !== topic.slug || existingTest.slug !== data.slug)) {
-				const oldTestPath = storageService.getTestPath(oldTopicSlug, existingTest.slug)
-				const newTestPath = storageService.getTestPath(topic.slug, data.slug)
+			if (shouldRebaseQuestionPaths && oldPrefix) {
 				try {
-					await storageService.moveDirectory(oldTestPath, newTestPath)
+					await storageService.moveDirectory(oldPrefix, newPrefix)
 					assetsMoved = true
 				} catch (err) {
 					console.error('[tests] Failed to move assets directory:', err)
@@ -1718,144 +1655,326 @@ router.post(
 				}
 			}
 
-			// Очищаем старые файлы удалённых вопросов
-			const filesToDelete: string[] = []
-			for (const q of result.toDelete) {
-				if (q.promptPath) filesToDelete.push(q.promptPath)
-				if (q.explanationPath) filesToDelete.push(q.explanationPath)
-			}
-			if (filesToDelete.length > 0) {
-				await storageService.deleteFiles(filesToDelete)
-			}
-
-			// Записываем новые файлы
-			for (const q of result.questions) {
-				// Удаляем старые файлы если путь изменился
-				if (q.oldPromptPath && q.oldPromptPath !== q.promptPath) {
-					await storageService.deleteFiles([q.oldPromptPath])
-				}
-				if (q.oldExplanationPath && q.oldExplanationPath !== q.explanationPath) {
-					await storageService.deleteFiles([q.oldExplanationPath])
-				}
-
-				// Записываем новые
-				if (q.promptPath && q.promptText) {
-					await storageService.writeFile(q.promptPath, q.promptText)
-				}
-				if (q.explanationPath && q.explanationText) {
-					await storageService.writeFile(q.explanationPath, q.explanationText)
-				}
-			}
-
-			// Обновляем settings.json
-			const testPath = storageService.getTestPath(topic.slug, data.slug)
-			await storageService.writeJson(`${testPath}/settings.json`, {
-				id: result.test.id,
+			await writeTestSettingsFile({
+				topicSlug: topic.slug,
+				testSlug: data.slug,
+				testId: result.test.id,
 				title: data.title,
 				description: data.description,
 				isPublished: data.isPublished,
 				showCorrectAnswer: data.showCorrectAnswer,
-				scoringRules: effectiveScoringRules,
-				useGlobalScoringRules: nextScoringOverride == null,
 				timeLimitMinutes: data.timeLimitMinutes,
 				passingScore: data.passingScore,
 				version: result.test.version,
-				updatedAt: new Date().toISOString(),
+				effectiveScoringRules,
+				testOverrideRules: nextScoringOverride ?? null,
 			})
 
-			// Удаляем неиспользуемые файлы в папке assets (garbage collection)
-			try {
-				const referenced = new Set<string>()
+			const response: { test: typeof result.test & { topicSlug: string }; assetsMoved?: boolean } = {
+				test: { ...result.test, topicSlug: topic.slug },
+			}
+			if (typeof assetsMoved !== 'undefined') {
+				response.assetsMoved = assetsMoved
+			}
+			return res.json(response)
+		} catch (e) {
+			return next(e)
+		}
+	}
+)
 
-				// собираем тексты из вопросов (текущие сохранённые тексты)
-				for (const q of result.questions) {
-					if (q.promptText) {
-						const txt = q.promptText as string
-						const re = new RegExp(`${testPath}/assets/([^\)\"'\\s]+)`, 'g')
-						let m: RegExpExecArray | null
-						while ((m = re.exec(txt)) !== null) {
-							referenced.add(`${testPath}/assets/${m[1]}`)
-						}
-						// Also match public uploads path
-						const pubRe = new RegExp(`/uploads/tests/${topic.slug}/${data.slug}/assets/([^\)\"'\\s]+)`, 'g')
-						while ((m = pubRe.exec(txt)) !== null) {
-							referenced.add(`${testPath}/assets/${m[1]}`)
-						}
-					}
-					if (q.explanationText) {
-						const txt = q.explanationText as string
-						const re2 = new RegExp(`${testPath}/assets/([^\)\"'\\s]+)`, 'g')
-						let m: RegExpExecArray | null
-						while ((m = re2.exec(txt)) !== null) {
-							referenced.add(`${testPath}/assets/${m[1]}`)
-						}
-						const pubRe2 = new RegExp(`/uploads/tests/${topic.slug}/${data.slug}/assets/([^\)\"'\\s]+)`, 'g')
-						while ((m = pubRe2.exec(txt)) !== null) {
-							referenced.add(`${testPath}/assets/${m[1]}`)
-						}
-					}
-				}
+// POST /api/tests/:id/questions - создать вопрос в тесте
+router.post(
+	'/:id/questions',
+	validateUUID('id'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const parsed = SaveQuestionSchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+			}
+			const data = parsed.data
+			const userId = req.authUser?.id ?? null
 
-				// Получаем список фактических файлов в assets
-				let actualFiles: string[] = []
-				if (storageService.isConfigured()) {
-					actualFiles = await storageService.listFilesRecursive(`${testPath}/assets`)
-				} else {
-					// local fallback: list files under web/public/uploads/tests/{topic}/{test}/assets
-					const localDir = path.join(process.cwd(), `../web/public/uploads/tests/${topic.slug}/${data.slug}/assets`)
-					if (fs.existsSync(localDir)) {
-						const walk: string[] = []
-						const stack = [localDir]
-						while (stack.length) {
-							const cur = stack.pop()!
-							for (const name of fs.readdirSync(cur)) {
-								const full = path.join(cur, name)
-								const stat = fs.statSync(full)
-								if (stat.isDirectory()) stack.push(full)
-								else {
-									// convert to storage path
-									const rel = path.relative(path.join(process.cwd(), '../web/public'), full).replace(/\\/g, '/')
-									// rel like uploads/tests/{topic}/{test}/assets/... -> map to topics/{topic}/{test}/assets/...
-									const parts = rel.split('/')
-									const idx = parts.indexOf('uploads')
-									if (idx !== -1 && parts[idx+1] === 'tests') {
-										const tslug = parts[idx+2]
-										const testslug = parts[idx+3]
-										const rest = parts.slice(idx+4).join('/')
-										walk.push(`topics/${tslug}/${testslug}/${rest}`)
-									}
-								}
-							}
-						}
-						actualFiles = walk
-					}
-				}
-
-				// Определяем неиспользуемые файлы
-				const toRemove = actualFiles.filter((f) => !referenced.has(f))
-				if (toRemove.length > 0) {
-					if (storageService.isConfigured()) {
-						await storageService.deleteFiles(toRemove)
-					} else {
-						for (const f of toRemove) {
-							// map storage path topics/{topic}/{test}/... -> web/public/uploads/tests/{topic}/{test}/...
-							const parts = f.split('/')
-							if (parts[0] === 'topics' && parts.length >= 3) {
-								const local = path.join(process.cwd(), '../web/public/uploads/tests', parts[1], parts[2], ...parts.slice(3))
-								if (fs.existsSync(local)) fs.unlinkSync(local)
-							}
-						}
-					}
-				}
-			} catch (gcErr) {
-				console.error('[tests] Failed to garbage-collect assets:', gcErr)
+			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+			if (!test) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
+			if (!topic) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
 			}
 
-			const resp: any = { test: { ...result.test, topicSlug: topic.slug } }
-			if (typeof assetsMoved !== 'undefined') resp.assetsMoved = assetsMoved
-			res.json(resp)
+			const typeMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
+			const questionValidationError = validateQuestionWithType(data, typeMap)
+			if (questionValidationError) {
+				return res.status(400).json({ error: questionValidationError })
+			}
+
+			const [orderRow] = await db
+				.select({ count: sql<number>`count(*)::int` })
+				.from(questions)
+				.where(eq(questions.testId, testId))
+			const questionsCount = Number(orderRow?.count ?? 0)
+			const targetOrderRaw = typeof data.order === 'number' ? data.order : questionsCount
+			const targetOrder = Math.max(0, Math.min(targetOrderRaw, questionsCount))
+
+			const result = await db.transaction(async (tx) => {
+				const now = new Date()
+				if (targetOrder < questionsCount) {
+					await tx
+						.update(questions)
+						.set({
+							order: sql`${questions.order} + 1`,
+							updatedAt: now,
+						})
+						.where(and(eq(questions.testId, testId), sql`${questions.order} >= ${targetOrder}`))
+				}
+
+				const [createdQuestion] = await tx
+					.insert(questions)
+					.values({
+						testId,
+						type: data.type,
+						order: targetOrder,
+						points: resolveQuestionPoints({
+							type: data.type,
+							fallbackPoints: Number(data.points ?? 0),
+							typeMap,
+						}),
+						options: data.options ?? null,
+						matchingPairs: data.matchingPairs ?? null,
+					})
+					.returning()
+
+				const promptPath = storageService.getQuestionPath(topic.slug, test.slug, createdQuestion.id) + '/prompt.md'
+				const explanationPath = data.explanationText
+					? storageService.getQuestionPath(topic.slug, test.slug, createdQuestion.id) + '/explanation.md'
+					: null
+
+				await tx
+					.update(questions)
+					.set({
+						promptPath,
+						explanationPath,
+						updatedAt: now,
+					})
+					.where(eq(questions.id, createdQuestion.id))
+
+				await tx.insert(answerKeys).values({
+					questionId: createdQuestion.id,
+					version: 1,
+					correctAnswer: data.correct,
+					isActive: true,
+					createdBy: userId,
+				})
+
+				await tx
+					.update(tests)
+					.set({
+						updatedAt: now,
+						updatedBy: userId,
+					})
+					.where(eq(tests.id, testId))
+
+				return {
+					id: createdQuestion.id,
+					order: targetOrder,
+					promptPath,
+					explanationPath,
+				}
+			})
+
+			if (result.promptPath && data.promptText) {
+				await storageService.writeFile(result.promptPath, data.promptText)
+			}
+			if (result.explanationPath && data.explanationText) {
+				await storageService.writeFile(result.explanationPath, data.explanationText)
+			}
+
+			return res.status(201).json({
+				ok: true,
+				questionId: result.id,
+				order: result.order,
+			})
 		} catch (e) {
-			next(e)
+			return next(e)
+		}
+	}
+)
+
+// PATCH /api/tests/:id/questions/:questionId - обновить вопрос
+router.patch(
+	'/:id/questions/:questionId',
+	validateUUID('id'),
+	validateUUID('questionId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const questionId = req.params.questionId as string
+			const parsed = SaveQuestionSchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+			}
+			const data = parsed.data
+			const userId = req.authUser?.id ?? null
+
+			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+			if (!test) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
+			if (!topic) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
+			}
+			const existingQuestion = await db.query.questions.findFirst({
+				where: and(eq(questions.id, questionId), eq(questions.testId, testId)),
+			})
+			if (!existingQuestion) {
+				return res.status(404).json({ error: 'Вопрос не найден в текущем тесте' })
+			}
+
+			const typeMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
+			const questionValidationError = validateQuestionWithType(data, typeMap)
+			if (questionValidationError) {
+				return res.status(400).json({ error: questionValidationError })
+			}
+
+			const result = await db.transaction(async (tx) => {
+				const now = new Date()
+				const promptPath = storageService.getQuestionPath(topic.slug, test.slug, questionId) + '/prompt.md'
+				const explanationPath = data.explanationText
+					? storageService.getQuestionPath(topic.slug, test.slug, questionId) + '/explanation.md'
+					: null
+
+				await tx
+					.update(questions)
+					.set({
+						type: data.type,
+						points: resolveQuestionPoints({
+							type: data.type,
+							fallbackPoints: Number(data.points ?? 0),
+							typeMap,
+						}),
+						options: data.options ?? null,
+						matchingPairs: data.matchingPairs ?? null,
+						promptPath,
+						explanationPath,
+						updatedAt: now,
+					})
+					.where(eq(questions.id, questionId))
+
+				await tx.update(answerKeys).set({ isActive: false }).where(eq(answerKeys.questionId, questionId))
+
+				const [maxVersion] = await tx
+					.select({ maxV: sql<number>`COALESCE(MAX(version), 0)` })
+					.from(answerKeys)
+					.where(eq(answerKeys.questionId, questionId))
+
+				await tx.insert(answerKeys).values({
+					questionId,
+					version: (maxVersion?.maxV ?? 0) + 1,
+					correctAnswer: data.correct,
+					isActive: true,
+					createdBy: userId,
+				})
+
+				await tx
+					.update(tests)
+					.set({
+						updatedAt: now,
+						updatedBy: userId,
+					})
+					.where(eq(tests.id, testId))
+
+				return {
+					oldPromptPath: existingQuestion.promptPath,
+					oldExplanationPath: existingQuestion.explanationPath,
+					promptPath,
+					explanationPath,
+				}
+			})
+
+			if (result.oldPromptPath && result.oldPromptPath !== result.promptPath) {
+				await storageService.deleteFiles([result.oldPromptPath])
+			}
+			if (result.oldExplanationPath && result.oldExplanationPath !== result.explanationPath) {
+				await storageService.deleteFiles([result.oldExplanationPath])
+			}
+			if (result.promptPath && data.promptText) {
+				await storageService.writeFile(result.promptPath, data.promptText)
+			}
+			if (result.explanationPath && data.explanationText) {
+				await storageService.writeFile(result.explanationPath, data.explanationText)
+			}
+
+			return res.json({ ok: true, questionId })
+		} catch (e) {
+			return next(e)
+		}
+	}
+)
+
+// PUT /api/tests/:id/questions/reorder - изменить порядок вопросов
+router.put(
+	'/:id/questions/reorder',
+	validateUUID('id'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const parsed = ReorderQuestionsSchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+			}
+			const userId = req.authUser?.id ?? null
+			const { questionIds } = parsed.data
+
+			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+			if (!test) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+
+			const existingQuestions = await db
+				.select({ id: questions.id, order: questions.order })
+				.from(questions)
+				.where(eq(questions.testId, testId))
+				.orderBy(asc(questions.order))
+
+			if (existingQuestions.length !== questionIds.length) {
+				return res.status(400).json({ error: 'Неверный набор вопросов для сортировки' })
+			}
+			const existingIdsSet = new Set(existingQuestions.map((question) => question.id))
+			if (!questionIds.every((id) => existingIdsSet.has(id))) {
+				return res.status(400).json({ error: 'Неверный набор вопросов для сортировки' })
+			}
+
+			await db.transaction(async (tx) => {
+				const now = new Date()
+				for (let order = 0; order < questionIds.length; order += 1) {
+					await tx
+						.update(questions)
+						.set({ order, updatedAt: now })
+						.where(and(eq(questions.id, questionIds[order]), eq(questions.testId, testId)))
+				}
+				await tx
+					.update(tests)
+					.set({
+						updatedAt: now,
+						updatedBy: userId,
+					})
+					.where(eq(tests.id, testId))
+			})
+
+			return res.json({ ok: true })
+		} catch (e) {
+			return next(e)
 		}
 	}
 )
@@ -2021,6 +2140,80 @@ router.post(
 			})
 		} catch (e) {
 			next(e)
+		}
+	}
+)
+
+// DELETE /api/tests/:id/questions/:questionId - удалить вопрос из теста
+router.delete(
+	'/:id/questions/:questionId',
+	validateUUID('id'),
+	validateUUID('questionId'),
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const questionId = req.params.questionId as string
+			const userId = req.authUser?.id ?? null
+
+			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+			if (!test) {
+				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			}
+
+			const question = await db.query.questions.findFirst({
+				where: and(eq(questions.id, questionId), eq(questions.testId, testId)),
+			})
+			if (!question) {
+				return res.status(404).json({ error: 'Вопрос не найден в текущем тесте' })
+			}
+
+			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
+
+			await db.transaction(async (tx) => {
+				const now = new Date()
+
+				await tx
+					.update(questions)
+					.set({
+						order: sql`${questions.order} - 1`,
+						updatedAt: now,
+					})
+					.where(and(eq(questions.testId, testId), gt(questions.order, question.order)))
+
+				const [removedQuestion] = await tx
+					.delete(questions)
+					.where(and(eq(questions.id, questionId), eq(questions.testId, testId)))
+					.returning({ id: questions.id })
+
+				if (!removedQuestion) {
+					throw new Error('Не удалось удалить вопрос')
+				}
+
+				await tx
+					.update(tests)
+					.set({
+						updatedAt: now,
+						updatedBy: userId,
+					})
+					.where(eq(tests.id, testId))
+			})
+
+			let assetsDeleted = true
+			if (topic?.slug && test.slug) {
+				const questionPath = storageService.getQuestionPath(topic.slug, test.slug, questionId)
+				try {
+					await storageService.deleteDirectory(questionPath)
+				} catch (error) {
+					assetsDeleted = false
+					console.error('[tests] Failed to delete question assets directory:', error)
+				}
+			}
+
+			return res.json({ ok: true, questionId, assetsDeleted })
+		} catch (e) {
+			return next(e)
 		}
 	}
 )

@@ -115,6 +115,8 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [creatingQuestionDraft, setCreatingQuestionDraft] = useState(false);
+  const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null);
+  const [reorderingQuestions, setReorderingQuestions] = useState(false);
   const [form, setForm] = useState<TestFormData>({
     topicId: "",
     title: "",
@@ -224,19 +226,48 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
     }
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id || reorderingQuestions) return;
 
     const oldIndex = form.questions.findIndex((q) => (q.id || `new-${q.order}`) === active.id);
     const newIndex = form.questions.findIndex((q) => (q.id || `new-${q.order}`) === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
 
-    const newQuestions = arrayMove(form.questions, oldIndex, newIndex).map((q, i) => ({
+    const previousQuestions = form.questions;
+    const newQuestions = arrayMove(previousQuestions, oldIndex, newIndex).map((q, i) => ({
       ...q,
       order: i,
     }));
 
-    setForm({ ...form, questions: newQuestions });
+    setForm((prev) => ({ ...prev, questions: newQuestions }));
+
+    if (!isEditingExisting || !testId) return;
+
+    const questionIds = newQuestions.map((question) => question.id).filter((id): id is string => Boolean(id));
+    if (questionIds.length !== newQuestions.length) {
+      toast.error("Нельзя сортировать несохраненные вопросы");
+      setForm((prev) => ({ ...prev, questions: previousQuestions }));
+      return;
+    }
+
+    setReorderingQuestions(true);
+    try {
+      const res = await apiFetch(`/api/tests/${testId}/questions/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionIds }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "Не удалось сохранить порядок вопросов");
+      }
+    } catch (err) {
+      setForm((prev) => ({ ...prev, questions: previousQuestions }));
+      toast.error(err instanceof Error ? err.message : "Ошибка сортировки вопросов");
+    } finally {
+      setReorderingQuestions(false);
+    }
   };
 
   const handleAddQuestion = async () => {
@@ -299,16 +330,46 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
   };
 
   const handleDeleteQuestion = async (index: number) => {
+    if (deletingQuestionId) return;
+    const question = form.questions[index];
+    if (!question) return;
+
     const confirmed = await confirm({
       title: "Удалить вопрос?",
-      description: "Вопрос будет удален из текущего теста.",
+      description: "Вопрос будет удален из теста сразу, без сохранения настроек теста.",
       confirmText: "Удалить",
       cancelText: "Отмена",
       destructive: true,
     });
     if (!confirmed) return;
-    const newQuestions = form.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, order: i }));
-    setForm({ ...form, questions: newQuestions });
+
+    if (isEditingExisting && testId && question.id) {
+      setDeletingQuestionId(question.id);
+      try {
+        const res = await apiFetch(`/api/tests/${testId}/questions/${question.id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(data?.error || "Не удалось удалить вопрос");
+        }
+
+        setForm((prev) => ({
+          ...prev,
+          questions: prev.questions.filter((q) => q.id !== question.id).map((q, i) => ({ ...q, order: i })),
+        }));
+        toast.success("Вопрос удален");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Ошибка удаления вопроса");
+      } finally {
+        setDeletingQuestionId(null);
+      }
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      questions: prev.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, order: i })),
+    }));
+    toast.success("Вопрос удален");
   };
 
   const handleSave = async () => {
@@ -329,79 +390,85 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
       return;
     }
 
-    // Validate questions
-    for (let i = 0; i < form.questions.length; i++) {
-      const q = form.questions[i];
-      const template = resolveQuestionTemplate(q);
-      if (!template) {
-        toast.error(`Вопрос ${i + 1}: тип вопроса не настроен в БД`);
-        return;
-      }
-      if (!q.promptText.trim()) {
-        toast.error(`Вопрос ${i + 1}: введите текст вопроса`);
-        return;
-      }
-      if (template === "single_choice" || template === "multi_choice") {
-        if (!q.options || q.options.length < 2) {
-          toast.error(`Вопрос ${i + 1}: добавьте минимум 2 варианта ответа`);
-          return;
-        }
-        if (q.options.some((o) => !o.text.trim())) {
-          toast.error(`Вопрос ${i + 1}: заполните все варианты ответа`);
-          return;
-        }
-        if (template === "single_choice" && !q.correct) {
-          toast.error(`Вопрос ${i + 1}: выберите правильный ответ`);
-          return;
-        }
-        if (template === "multi_choice" && (!Array.isArray(q.correct) || q.correct.length === 0)) {
-          toast.error(`Вопрос ${i + 1}: выберите правильные ответы`);
-          return;
-        }
-      }
-      if (template === "matching") {
-        if (!q.matchingPairs || q.matchingPairs.left.length < 2 || q.matchingPairs.right.length < 2) {
-          toast.error(`Вопрос ${i + 1}: добавьте минимум 2 пары для сопоставления`);
-          return;
-        }
-        if (q.matchingPairs.left.some((p) => !p.text.trim()) || q.matchingPairs.right.some((p) => !p.text.trim())) {
-          toast.error(`Вопрос ${i + 1}: заполните все элементы сопоставления`);
-          return;
-        }
-        if (typeof q.correct !== "object" || Array.isArray(q.correct) || Object.keys(q.correct).length === 0) {
-          toast.error(`Вопрос ${i + 1}: укажите правильные соответствия`);
-          return;
-        }
-      }
-      if (template === "short_text") {
-        const normalized = normalizeShortTextCorrectValue(q.correct);
-        if (!normalized || !normalized.trim()) {
-          toast.error(`Вопрос ${i + 1}: укажите правильный краткий ответ`);
-          return;
-        }
-      }
-      if (template === "sequence_digits") {
-        if (!isValidSequenceCorrectValue(q.correct)) {
-          toast.error(`Вопрос ${i + 1}: для последовательности используйте только цифры`);
-          return;
-        }
-      }
-    }
-
-    const payload = normalizeFormPayload(form);
-
     setSaving(true);
     try {
       const testId = testData?.test?.id;
       if (isEditingExisting && !testId) {
         throw new Error("Не удалось определить ID теста");
       }
-      const url = isEditingExisting ? `/api/tests/${testId}/save` : "/api/tests/save";
-      const res = await apiFetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await (async () => {
+        if (isEditingExisting) {
+          return apiFetch(`/api/tests/${testId}/settings`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              topicId: form.topicId,
+              title: form.title,
+              slug: form.slug,
+              description: form.description,
+              isPublished: form.isPublished,
+              showCorrectAnswer: form.showCorrectAnswer,
+              scoringRules: form.scoringRules,
+              timeLimitMinutes: form.timeLimitMinutes,
+              passingScore: form.passingScore,
+              order: form.order,
+            }),
+          });
+        }
+
+        for (let i = 0; i < form.questions.length; i++) {
+          const q = form.questions[i];
+          const template = resolveQuestionTemplate(q);
+          if (!template) {
+            throw new Error(`Вопрос ${i + 1}: тип вопроса не настроен в БД`);
+          }
+          if (!q.promptText.trim()) {
+            throw new Error(`Вопрос ${i + 1}: введите текст вопроса`);
+          }
+          if (template === "single_choice" || template === "multi_choice") {
+            if (!q.options || q.options.length < 2) {
+              throw new Error(`Вопрос ${i + 1}: добавьте минимум 2 варианта ответа`);
+            }
+            if (q.options.some((o) => !o.text.trim())) {
+              throw new Error(`Вопрос ${i + 1}: заполните все варианты ответа`);
+            }
+            if (template === "single_choice" && !q.correct) {
+              throw new Error(`Вопрос ${i + 1}: выберите правильный ответ`);
+            }
+            if (template === "multi_choice" && (!Array.isArray(q.correct) || q.correct.length === 0)) {
+              throw new Error(`Вопрос ${i + 1}: выберите правильные ответы`);
+            }
+          }
+          if (template === "matching") {
+            if (!q.matchingPairs || q.matchingPairs.left.length < 2 || q.matchingPairs.right.length < 2) {
+              throw new Error(`Вопрос ${i + 1}: добавьте минимум 2 пары для сопоставления`);
+            }
+            if (q.matchingPairs.left.some((p) => !p.text.trim()) || q.matchingPairs.right.some((p) => !p.text.trim())) {
+              throw new Error(`Вопрос ${i + 1}: заполните все элементы сопоставления`);
+            }
+            if (typeof q.correct !== "object" || Array.isArray(q.correct) || Object.keys(q.correct).length === 0) {
+              throw new Error(`Вопрос ${i + 1}: укажите правильные соответствия`);
+            }
+          }
+          if (template === "short_text") {
+            const normalized = normalizeShortTextCorrectValue(q.correct);
+            if (!normalized || !normalized.trim()) {
+              throw new Error(`Вопрос ${i + 1}: укажите правильный краткий ответ`);
+            }
+          }
+          if (template === "sequence_digits") {
+            if (!isValidSequenceCorrectValue(q.correct)) {
+              throw new Error(`Вопрос ${i + 1}: для последовательности используйте только цифры`);
+            }
+          }
+        }
+
+        return apiFetch("/api/tests/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(normalizeFormPayload(form)),
+        });
+      })();
 
       if (!res.ok) {
         const data = await res.json();
@@ -409,7 +476,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
       }
 
       const data = await res.json();
-      toast.success(isEditingExisting ? "Тест сохранен" : "Тест создан");
+      toast.success(isEditingExisting ? "Настройки теста сохранены" : "Тест создан");
 
       if (!isEditingExisting && data.test) {
         // Redirect to slug-based URL after creation

@@ -27,7 +27,6 @@ import type {
 	QuestionDraftDetailResponse,
 	QuestionTypesResponse,
 	TestDetailResponse,
-	TestFormData,
 	TestsResponse,
 	TopicsResponse,
 } from '../../../types'
@@ -422,35 +421,22 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			}
 
 			const appendAsNew = isDraftMode || isNewQuestion
-			const questions = appendAsNew
-				? [...testData.questions, nextQuestion]
-				: testData.questions.map((question) =>
-						question.id === questionId ? { ...nextQuestion, id: questionId } : question
-					)
-
-			const normalizedQuestions = questions.map((question, order) => ({
-				...normalizeQuestionForSave(question),
-				order,
-			}))
-			const payload: TestFormData = {
-				topicId: testData.test.topicId,
-				title: testData.test.title,
-				slug: testData.test.slug,
-				description: testData.test.description || '',
-				isPublished: testData.test.isPublished,
-				showCorrectAnswer: testData.test.showCorrectAnswer ?? true,
-				timeLimitMinutes: testData.test.timeLimitMinutes,
-				passingScore: testData.test.passingScore,
-				order: testData.test.order,
-				questions: normalizedQuestions,
-			}
+			const payloadQuestion = normalizeQuestionForSave({
+				...nextQuestion,
+				id: undefined,
+				order: appendAsNew ? testData.questions.length : nextQuestion.order,
+			})
 
 			setIsSaving(true)
 			try {
-				const res = await apiFetch(`/api/tests/${testData.test.id}/save`, {
-					method: 'POST',
+				const endpoint = appendAsNew
+					? `/api/tests/${testData.test.id}/questions`
+					: `/api/tests/${testData.test.id}/questions/${questionId}`
+				const method = appendAsNew ? 'POST' : 'PATCH'
+				const res = await apiFetch(endpoint, {
+					method,
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(payload),
+					body: JSON.stringify(payloadQuestion),
 				})
 
 				if (!res.ok) {
