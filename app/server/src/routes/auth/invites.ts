@@ -44,9 +44,7 @@ const CreateInviteSchema = z.object({
 	login: z.preprocess(normalizeLogin, z.string()).optional(), // нормализуем тут
 	firstName: z.string().trim().optional(),
 	lastName: z.string().trim().optional(),
-	position: z.string().trim().optional(),
 	roleKey: z.string().trim().min(1, 'Role is required').optional(), // опционально, если перегенерируем для существующего пользователя
-	showInTeam: z.boolean().optional(),
 })
 
 const AcceptSchema = z.object({
@@ -83,10 +81,8 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 						login,
 						firstName: body.firstName ?? null,
 						lastName: body.lastName ?? null,
-						position: body.position ?? null,
 						isActive: false,
 						createdBy: req.authUser?.id ?? null,
-						showInTeam: body.showInTeam ?? false,
 					})
 					.returning({ id: users.id })
 				userId = u.id

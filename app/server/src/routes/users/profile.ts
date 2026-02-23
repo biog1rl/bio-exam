@@ -20,7 +20,6 @@ const updateProfileSchema = z.object({
 		.regex(/^#[0-9A-Fa-f]{6}$/, 'Некорректный цвет')
 		.optional(),
 	initials: z.string().min(1, 'Инициалы обязательны').max(5, 'Максимум 5 символов').optional(),
-	position: z.string().trim().max(100, 'Должность слишком длинная').optional(),
 	birthdate: z
 		.string()
 		.transform((val: string) => {
@@ -41,7 +40,6 @@ const updateProfileSchema = z.object({
 	telegram: z.string().trim().max(100, 'Telegram слишком длинный').optional(),
 	phone: z.string().trim().max(50, 'Телефон слишком длинный').optional(),
 	email: z.string().email('Некорректный email').optional().or(z.literal('')).or(z.null()),
-	showInTeam: z.boolean().optional(),
 })
 
 // Валидация для смены пароля
@@ -79,12 +77,10 @@ router.patch('/', sessionRequired(), async (req, res) => {
 				avatar: body.avatar === '' ? null : body.avatar,
 				avatarColor: body.avatarColor,
 				initials: body.initials,
-				position: body.position,
 				birthdate: body.birthdate,
 				telegram: body.telegram,
 				phone: body.phone,
 				email: body.email === '' ? null : body.email,
-				showInTeam: body.showInTeam,
 			})
 			.where(eq(users.id, userId))
 			.returning({
@@ -95,12 +91,10 @@ router.patch('/', sessionRequired(), async (req, res) => {
 				avatar: users.avatar,
 				avatarColor: users.avatarColor,
 				initials: users.initials,
-				position: users.position,
 				birthdate: users.birthdate,
 				telegram: users.telegram,
 				phone: users.phone,
 				email: users.email,
-				showInTeam: users.showInTeam,
 			})
 
 		if (updatedUser.length === 0) {

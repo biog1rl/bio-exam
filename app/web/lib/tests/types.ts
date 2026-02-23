@@ -88,3 +88,24 @@ export type SessionInfo = {
 	sessionId: string
 	startedAt: string // ISO 8601 timestamp
 }
+
+export type QuestionTelemetry = {
+	timeSpentMs: number
+	focusLossCount: number
+	visitCount: number
+}
+
+// Shape mirrors testAttempts row returned by GET /api/tests/admin/attempts/:id
+export type AttemptReviewData = {
+	id: string
+	testId: string
+	userId: string
+	answers: Record<string, unknown>
+	results: unknown[]
+	earnedPoints: number
+	totalPoints: number
+	scorePercentage: number
+	passed: boolean
+	submittedAt: string
+	telemetry: Record<string, QuestionTelemetry> | null
+}

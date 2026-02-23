@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
 import { apiFetch } from '@/lib/api-fetch'
 import { LOGIN_PATTERN, LOGIN_HINT, normalizeLogin, validateLogin } from '@/lib/auth/validators'
 
@@ -30,8 +29,6 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 	const [login, setLogin] = useState<string>('')
 	const [firstName, setFirstName] = useState<string>('')
 	const [lastName, setLastName] = useState<string>('')
-	const [position, setPosition] = useState<string>('')
-	const [showInTeam, setShowInTeam] = useState<boolean>(true)
 	const [role, setRole] = useState<RoleKey>(defaultRole)
 	const [inviteLink, setInviteLink] = useState<string | null>(null)
 	const [loading, setLoading] = useState<boolean>(false)
@@ -52,7 +49,7 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 			const res = await apiFetch('/api/auth/invites', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ login: loginNorm, firstName, lastName, position, roleKey: role, showInTeam }),
+				body: JSON.stringify({ login: loginNorm, firstName, lastName, roleKey: role }),
 			})
 
 			const json: unknown = await res.json().catch(() => null)
@@ -140,23 +137,6 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 						/>
 						<p className="text-muted-foreground mt-1 text-xs">{LOGIN_HINT}</p>
 					</div>
-
-					<div>
-						<Label htmlFor="position">Должность</Label>
-						<Input
-							id="position"
-							value={position}
-							onChange={(e) => setPosition(e.target.value)}
-							placeholder="Frontend Developer, Designer, Client и т.д."
-							autoComplete="off"
-						/>
-					</div>
-
-					<Label className="bg-input/30 border-input flex cursor-pointer items-center justify-between gap-x-4 rounded-md border px-3 py-2">
-						<span>Показывать в команде</span>
-						<Switch id="showInTeam" checked={showInTeam} onCheckedChange={(v) => setShowInTeam(v)} />
-					</Label>
-
 					<div>
 						<Label>Роль</Label>
 						<Select value={role} onValueChange={(v) => setRole(v as RoleKey)}>

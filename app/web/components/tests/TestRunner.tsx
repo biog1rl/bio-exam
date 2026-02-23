@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useDebouncedCallback } from 'use-debounce'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { saveAnswer, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import type {
@@ -35,6 +36,13 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+
+type QuestionTelemetry = {
+	timeSpentMs: number
+	focusLossCount: number
+	visitCount: number
+}
+type TelemetryMap = Record<string, QuestionTelemetry>
 
 type ResultByQuestion = Record<
 	string,
@@ -174,6 +182,8 @@ function formatTime(seconds: number, showHours: boolean): string {
 }
 
 export default function TestRunner({ test, questions, initialAttempts = [] }: Props) {
+	const { me } = useAuth()
+	const userId = me?.id ?? 'anonymous'
 	const orderedQuestions = useMemo(() => [...questions].sort((a, b) => a.order - b.order), [questions])
 	const [answers, setAnswers] = useState<Record<string, TestAnswerValue>>({})
 	const [submitting, setSubmitting] = useState(false)
@@ -188,11 +198,14 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const [showTimeExpiredDialog, setShowTimeExpiredDialog] = useState(false)
 	const [expiredAttemptId, setExpiredAttemptId] = useState<string | null>(null)
 	const [awaitingStart, setAwaitingStart] = useState(false)
+	const [telemetry, setTelemetry] = useState<TelemetryMap>({})
+	const enterTimeRef = useRef<number | null>(null)
 	const warningFiredRef = useRef(false)
 	const sessionInitRef = useRef(false)
-	const frozenKey = `test-frozen-${test.id}`
-	const walKey = `test-answers-wal-${test.id}`
-	const sessionKey = `test-session-${test.id}`
+	const autoSubmitFiredRef = useRef(false)
+	const frozenKey = `test-frozen-${test.id}-${userId}`
+	const walKey = `test-answers-wal-${test.id}-${userId}`
+	const sessionKey = `test-session-${test.id}-${userId}`
 
 	const secondsLeft = useCountdown(session?.startedAt ?? null, test.timeLimitMinutes ?? null)
 	const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT
@@ -243,14 +256,37 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
-	// WAL restore effect: restore answers from localStorage on mount
+	// WAL restore effect: restore answers and last position from localStorage on mount
 	useEffect(() => {
-		const wal = localStorage.getItem(walKey)
-		if (wal) {
+		const raw = localStorage.getItem(walKey)
+		if (raw) {
 			try {
-				const parsed = JSON.parse(wal) as Record<string, TestAnswerValue>
-				if (Object.keys(parsed).length > 0) {
-					setAnswers((prev) => ({ ...prev, ...parsed }))
+				// Support both old format (plain answers map) and new format ({answers, lastQuestionId, telemetry})
+				const parsed = JSON.parse(raw) as Record<string, unknown>
+				let restoredAnswers: Record<string, TestAnswerValue> = {}
+				let lastQuestionId: string | null = null
+
+				if (parsed.answers && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers)) {
+					// New format
+					restoredAnswers = parsed.answers as Record<string, TestAnswerValue>
+					lastQuestionId = typeof parsed.lastQuestionId === 'string' ? parsed.lastQuestionId : null
+				} else {
+					// Old format (plain answers map) — backward compat
+					restoredAnswers = parsed as Record<string, TestAnswerValue>
+				}
+
+				if (Object.keys(restoredAnswers).length > 0) {
+					setAnswers((prev) => ({ ...prev, ...restoredAnswers }))
+				}
+				// Restore position: navigate to last answered question
+				if (lastQuestionId) {
+					const idx = orderedQuestions.findIndex((q) => q.id === lastQuestionId)
+					if (idx !== -1) {
+						setCurrentQuestionId(lastQuestionId)
+					}
+				}
+				if (parsed.telemetry && typeof parsed.telemetry === 'object') {
+					setTelemetry(parsed.telemetry as TelemetryMap)
 				}
 			} catch {
 				/* ignore */
@@ -284,9 +320,23 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				if (!session) return
 				// Write to localStorage WAL before server send
 				try {
-					const current = JSON.parse(localStorage.getItem(walKey) ?? '{}') as Record<string, TestAnswerValue>
-					current[questionId] = value
-					localStorage.setItem(walKey, JSON.stringify(current))
+					const existing = localStorage.getItem(walKey)
+					let currentAnswers: Record<string, TestAnswerValue> = {}
+					if (existing) {
+						const parsed = JSON.parse(existing) as Record<string, unknown>
+						if (parsed.answers && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers)) {
+							currentAnswers = parsed.answers as Record<string, TestAnswerValue>
+						} else {
+							currentAnswers = parsed as Record<string, TestAnswerValue>
+						}
+					}
+					currentAnswers[questionId] = value
+					const wal = {
+						answers: currentAnswers,
+						lastQuestionId: currentQuestionId,
+						telemetry,
+					}
+					localStorage.setItem(walKey, JSON.stringify(wal))
 				} catch {
 					/* ignore */
 				}
@@ -296,7 +346,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					// localStorage already has value; silently ignore server errors
 				}
 			},
-			[session, walKey, test.id]
+			[session, walKey, test.id, currentQuestionId, telemetry]
 		),
 		600
 	)
@@ -332,57 +382,56 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		void debouncedSaveAnswer(questionId, value)
 	}
 
-	const scrollingRef = useRef(false)
-	const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const currentIndex = useMemo(
+		() => orderedQuestions.findIndex((q) => q.id === currentQuestionId),
+		[orderedQuestions, currentQuestionId]
+	)
 
-	useEffect(() => {
-		if (orderedQuestions.length === 0) return
-		const visibleRatios = new Map<string, number>()
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				for (const entry of entries) {
-					const id = entry.target.id.replace('question-', '')
-					visibleRatios.set(id, entry.intersectionRatio)
-				}
-				if (scrollingRef.current) return
-				let bestId: string | null = null
-				let bestRatio = 0
-				for (const [id, ratio] of visibleRatios) {
-					if (ratio > bestRatio) {
-						bestRatio = ratio
-						bestId = id
-					}
-				}
-				if (bestId) setCurrentQuestionId(bestId)
+	const flushQuestionTime = useCallback((questionId: string | null) => {
+		if (!questionId || enterTimeRef.current === null) return
+		const elapsed = Date.now() - enterTimeRef.current
+		setTelemetry((prev) => ({
+			...prev,
+			[questionId]: {
+				timeSpentMs: (prev[questionId]?.timeSpentMs ?? 0) + elapsed,
+				focusLossCount: prev[questionId]?.focusLossCount ?? 0,
+				visitCount: prev[questionId]?.visitCount ?? 0,
 			},
-			{ threshold: [0, 0.25, 0.5, 0.75, 1] }
-		)
+		}))
+		enterTimeRef.current = null
+	}, [])
 
-		for (const question of orderedQuestions) {
-			const el = document.getElementById(`question-${question.id}`)
-			if (el) observer.observe(el)
-		}
+	const goToQuestion = useCallback(
+		(index: number) => {
+			const q = orderedQuestions[index]
+			if (!q) return
+			// Flush time spent on current question
+			flushQuestionTime(currentQuestionId)
+			setCurrentQuestionId(q.id)
+			enterTimeRef.current = Date.now()
+			// Increment visitCount for the destination question
+			setTelemetry((prev) => ({
+				...prev,
+				[q.id]: {
+					timeSpentMs: prev[q.id]?.timeSpentMs ?? 0,
+					focusLossCount: prev[q.id]?.focusLossCount ?? 0,
+					visitCount: (prev[q.id]?.visitCount ?? 0) + 1,
+				},
+			}))
+		},
+		[orderedQuestions, currentQuestionId, flushQuestionTime]
+	)
 
-		return () => observer.disconnect()
-	}, [orderedQuestions])
-
-	const scrollToQuestion = (questionId: string) => {
-		setCurrentQuestionId(questionId)
-		scrollingRef.current = true
-		if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
-		scrollTimerRef.current = setTimeout(() => {
-			scrollingRef.current = false
-		}, 800)
-		const el = document.getElementById(`question-${questionId}`)
-		if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-	}
+	const goPrev = useCallback(() => goToQuestion(currentIndex - 1), [goToQuestion, currentIndex])
+	const goNext = useCallback(() => goToQuestion(currentIndex + 1), [goToQuestion, currentIndex])
 
 	const doSubmit = async ({ isAutoSubmit = false }: { isAutoSubmit?: boolean } = {}) => {
 		setSubmitting(true)
 		setSubmitError(null)
+		// Flush any pending question time before submitting
+		flushQuestionTime(currentQuestionId)
 		try {
-			const result = await submitPublicTestAnswers(test.id, answers)
+			const result = await submitPublicTestAnswers(test.id, answers, telemetry)
 			if (isAutoSubmit) {
 				setShowTimeUp(true)
 				// Brief delay to show "Время вышло" screen before transitioning to results
@@ -417,6 +466,11 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 			}
 			console.error('Failed to submit test answers:', error)
 			setSubmitError('Не удалось сохранить ответы. Попробуйте еще раз.')
+			// On auto-submit failure: unfreeze so user can retry manually
+			if (isAutoSubmit) {
+				setFrozen(false)
+				localStorage.removeItem(frozenKey)
+			}
 		} finally {
 			setSubmitting(false)
 		}
@@ -433,14 +487,59 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 			toast.warning('Осталась 1 минута — тест будет сдан автоматически', { duration: 8000 })
 		}
 
-		// Auto-submit at zero
-		if (secondsLeft === 0 && !frozen && !submitResult) {
+		// Auto-submit at zero (fire once per component lifecycle — ref prevents loop on unfreeze)
+		if (secondsLeft === 0 && !frozen && !submitResult && !autoSubmitFiredRef.current) {
+			autoSubmitFiredRef.current = true
 			setFrozen(true)
 			localStorage.setItem(frozenKey, '1')
 			void doSubmit({ isAutoSubmit: true })
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [secondsLeft, frozen, submitResult])
+
+	// Telemetry: track tab visibility changes (pause/resume timer, count focus loss)
+	useEffect(() => {
+		const handler = () => {
+			if (document.hidden) {
+				// Tab hidden: flush time + count focus loss
+				flushQuestionTime(currentQuestionId)
+				if (currentQuestionId) {
+					setTelemetry((prev) => ({
+						...prev,
+						[currentQuestionId]: {
+							...(prev[currentQuestionId] ?? { timeSpentMs: 0, visitCount: 0 }),
+							focusLossCount: (prev[currentQuestionId]?.focusLossCount ?? 0) + 1,
+						},
+					}))
+				}
+			} else {
+				// Tab visible again: restart timer
+				if (!submitResult && !frozen) {
+					enterTimeRef.current = Date.now()
+				}
+			}
+		}
+		document.addEventListener('visibilitychange', handler)
+		return () => document.removeEventListener('visibilitychange', handler)
+	}, [currentQuestionId, flushQuestionTime, submitResult, frozen])
+
+	// Telemetry: start timer and count first visit on initial question mount
+	useEffect(() => {
+		enterTimeRef.current = Date.now()
+		setTelemetry((prev) => ({
+			...prev,
+			...(currentQuestionId
+				? {
+						[currentQuestionId]: {
+							timeSpentMs: prev[currentQuestionId]?.timeSpentMs ?? 0,
+							focusLossCount: prev[currentQuestionId]?.focusLossCount ?? 0,
+							visitCount: (prev[currentQuestionId]?.visitCount ?? 0) + 1,
+						},
+					}
+				: {}),
+		}))
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []) // run once on mount
 
 	const handleSubmit = () => {
 		if (answeredCount < orderedQuestions.length) {
@@ -465,12 +564,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		setSubmitResult(null)
 		setAnswers({})
 		setSubmitError(null)
-		const firstId = orderedQuestions[0]?.id ?? null
-		setCurrentQuestionId(firstId)
-		if (firstId) {
-			const el = document.getElementById(`question-${firstId}`)
-			if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-		}
+		goToQuestion(0)
 	}
 
 	return (
@@ -501,7 +595,12 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				) : null}
 
 				{submitError ? (
-					<section className="rounded-lg border border-rose-200 bg-rose-50 p-4">{submitError}</section>
+					<section className="flex items-center justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
+						<span>{submitError}</span>
+						<Button variant="outline" size="sm" onClick={() => void doSubmit()}>
+							Повторить
+						</Button>
+					</section>
 				) : null}
 
 				{showTimeUp ? (
@@ -513,7 +612,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					</section>
 				) : null}
 
-				{orderedQuestions.map((question, index) => {
+				{(() => {
+					const question = orderedQuestions[currentIndex]
+					if (!question) return null
 					const questionResult = resultByQuestion[question.id]
 					const template = resolveTemplate(question)
 
@@ -523,7 +624,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 							id={`question-${question.id}`}
 							className="gap-unit-mob tab:gap-unit grid scroll-mt-24"
 						>
-							<p className="text-lg font-medium">{index + 1}.</p>
+							<p className="text-lg font-medium">{currentIndex + 1}.</p>
 							<div className="bg-secondary flex-1 space-y-4 rounded-lg border p-4">
 								<div className="space-y-2">
 									<MdxRenderer source={question.promptText} className="prose max-w-none text-sm" />
@@ -582,6 +683,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 											onChange={(e) => onInputTextAnswer(question.id, e.target.value)}
 											placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
 											disabled={frozen || !!submitResult}
+											className="bg-white"
 										/>
 										{template === 'sequence_digits' ? (
 											<p className="text-muted-foreground text-xs">Последовательность вводится цифрами без пробелов.</p>
@@ -656,9 +758,25 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 									</div>
 								) : null}
 							</div>
+
+							{/* Navigation buttons */}
+							<div className="mt-6 flex items-center justify-between">
+								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || !!submitResult || frozen}>
+									Назад
+								</Button>
+								{currentIndex < orderedQuestions.length - 1 ? (
+									<Button variant="outline" onClick={goNext} disabled={!!submitResult || frozen}>
+										Далее
+									</Button>
+								) : (
+									<Button onClick={handleSubmit} disabled={submitting || !!submitResult || frozen}>
+										{submitting ? 'Отправка...' : 'Завершить'}
+									</Button>
+								)}
+							</div>
 						</section>
 					)
-				})}
+				})()}
 
 				{attempts.length > 0 ? (
 					<Accordion type="single" collapsible className="bg-secondary mt-8 max-w-lg rounded-lg px-4">
@@ -681,7 +799,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 
 			{/* Панель навигации по вопросам и прогресс */}
 			<section className="sticky top-4 h-fit w-48 shrink-0 space-y-4 rounded-lg border bg-white p-4">
-				{secondsLeft !== null && (
+				{secondsLeft !== null && !submitResult && (
 					<div
 						className={cn(
 							'text-right font-mono text-sm font-medium',
@@ -713,7 +831,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 							<button
 								key={question.id}
 								type="button"
-								onClick={() => scrollToQuestion(question.id)}
+								onClick={() => goToQuestion(index)}
 								className={cn(
 									'flex aspect-square items-center justify-center rounded text-xs font-medium transition-colors',
 									answered
@@ -728,7 +846,12 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					})}
 				</div>
 
-				<Button type="button" onClick={handleSubmit} disabled={submitting || frozen} className="w-full">
+				<Button
+					type="button"
+					onClick={handleSubmit}
+					disabled={submitting || frozen || !!submitResult}
+					className="w-full"
+				>
 					{submitting ? 'Отправка...' : 'Завершить'}
 				</Button>
 			</section>

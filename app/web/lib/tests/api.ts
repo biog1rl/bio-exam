@@ -1,5 +1,6 @@
 import { apiFetch } from '../api-fetch'
 import type {
+	AttemptReviewData,
 	PublicTestDetail,
 	PublicTestListItem,
 	PublicTestQuestion,
@@ -64,10 +65,27 @@ export async function saveAnswer(
 	})
 }
 
-export async function submitPublicTestAnswers(testId: string, answers: Record<string, TestAnswerValue>) {
+type QuestionTelemetry = {
+	timeSpentMs: number
+	focusLossCount: number
+	visitCount: number
+}
+type TelemetryMap = Record<string, QuestionTelemetry>
+
+export async function submitPublicTestAnswers(
+	testId: string,
+	answers: Record<string, TestAnswerValue>,
+	telemetry?: TelemetryMap
+) {
 	const clientAttemptId = crypto.randomUUID()
 	return fetchJson<SubmitResult>(`/api/tests/public/tests/${testId}/submit`, {
 		method: 'POST',
-		body: JSON.stringify({ answers, clientAttemptId }),
+		body: JSON.stringify({ answers, clientAttemptId, telemetry }),
 	})
+}
+
+export async function fetchAttemptReview(attemptId: string) {
+	const res = await apiFetch(`/api/tests/admin/attempts/${attemptId}`)
+	if (!res.ok) throw new Error('Failed to fetch attempt')
+	return res.json() as Promise<{ attempt: AttemptReviewData; questions: PublicTestQuestion[] }>
 }

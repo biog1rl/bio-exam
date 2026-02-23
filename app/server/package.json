@@ -16,7 +16,6 @@
 		"drizzle:migrate": "tsx src/scripts/apply-migration.ts",
 		"drizzle:studio": "drizzle-kit studio --config=drizzle.config.ts",
 		"seed": "tsx src/db/seed.ts",
-		"seed:sidebar": "tsx src/scripts/seed-sidebar.ts",
 		"bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts"
 	},
 	"dependencies": {

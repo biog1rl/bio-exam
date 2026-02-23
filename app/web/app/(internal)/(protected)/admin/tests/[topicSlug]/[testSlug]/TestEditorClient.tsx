@@ -11,9 +11,9 @@ import {
 } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Download, FolderPlus, Loader2, Plus, Save, Trash2 } from 'lucide-react'
+import { Download, FolderPlus, Loader2, Plus, Save, Trash2, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -106,6 +106,83 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	const { data: questionDraftsData, mutate: mutateQuestionDrafts } = useSWR<QuestionDraftsResponse>(
 		testId ? `/api/tests/${testId}/question-drafts` : null,
 		fetcher
+	)
+
+	type StudentAssignment = {
+		userId: string
+		assignedAt: string
+		name: string | null
+		login: string | null
+	}
+	type UserItem = {
+		id: string
+		login: string | null
+		name: string | null
+		firstName: string | null
+		lastName: string | null
+	}
+
+	const { data: studentAssignmentsData, mutate: mutateStudentAssignments } = useSWR<{
+		assignments: StudentAssignment[]
+	}>(testId ? `/api/tests/${testId}/assignments` : null, fetcher)
+	const { data: allUsersData } = useSWR<{ users: UserItem[] }>(testId ? '/api/users' : null, fetcher)
+
+	const [assigningUserId, setAssigningUserId] = useState<string | null>(null)
+	const [removingUserId, setRemovingUserId] = useState<string | null>(null)
+
+	const studentAssignments = useMemo(() => studentAssignmentsData?.assignments ?? [], [studentAssignmentsData])
+	const assignedUserIds = useMemo(() => new Set(studentAssignments.map((a) => a.userId)), [studentAssignments])
+	const availableUsers = useMemo(
+		() => (allUsersData?.users ?? []).filter((u) => !assignedUserIds.has(u.id)),
+		[allUsersData, assignedUserIds]
+	)
+
+	const handleAssignStudent = useCallback(
+		async (userId: string) => {
+			if (!testId || assigningUserId) return
+			setAssigningUserId(userId)
+			try {
+				const res = await apiFetch(`/api/tests/${testId}/assignments`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ userId }),
+				})
+				if (!res.ok) {
+					const data = (await res.json().catch(() => null)) as { error?: string } | null
+					throw new Error(data?.error || 'Ошибка назначения студента')
+				}
+				await mutateStudentAssignments()
+				toast.success('Студент добавлен')
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Ошибка назначения студента')
+			} finally {
+				setAssigningUserId(null)
+			}
+		},
+		[testId, assigningUserId, mutateStudentAssignments]
+	)
+
+	const handleRemoveStudent = useCallback(
+		async (userId: string) => {
+			if (!testId || removingUserId) return
+			setRemovingUserId(userId)
+			try {
+				const res = await apiFetch(`/api/tests/${testId}/assignments/${userId}`, {
+					method: 'DELETE',
+				})
+				if (!res.ok) {
+					const data = (await res.json().catch(() => null)) as { error?: string } | null
+					throw new Error(data?.error || 'Ошибка удаления студента')
+				}
+				await mutateStudentAssignments()
+				toast.success('Доступ удален')
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'Ошибка удаления студента')
+			} finally {
+				setRemovingUserId(null)
+			}
+		},
+		[testId, removingUserId, mutateStudentAssignments]
 	)
 
 	const [saving, setSaving] = useState(false)
@@ -889,6 +966,105 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 					</Card>
 				</div>
 			</div>
+
+			{/* Student Access Section */}
+			{isEditingExisting && testId && (
+				<div className="grid gap-6 lg:grid-cols-2">
+					{/* Assigned students list */}
+					<Card>
+						<CardHeader>
+							<CardTitle>Доступ студентов</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{!studentAssignmentsData ? (
+								<div className="text-muted-foreground flex items-center gap-2 text-sm">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									Загрузка...
+								</div>
+							) : studentAssignments.length === 0 ? (
+								<p className="text-muted-foreground text-sm">Нет студентов с доступом к этому тесту</p>
+							) : (
+								<div className="space-y-2">
+									{studentAssignments.map((a) => {
+										const displayName = a.name || a.login || a.userId
+										return (
+											<div
+												key={a.userId}
+												className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+											>
+												<div className="min-w-0 flex-1">
+													<p className="truncate text-sm font-medium">{displayName}</p>
+													{a.login && a.name && <p className="text-muted-foreground text-xs">{a.login}</p>}
+												</div>
+												<Button
+													size="icon"
+													variant="ghost"
+													aria-label="Удалить доступ"
+													onClick={() => handleRemoveStudent(a.userId)}
+													disabled={removingUserId === a.userId}
+												>
+													{removingUserId === a.userId ? (
+														<Loader2 className="h-4 w-4 animate-spin" />
+													) : (
+														<Trash2 className="h-4 w-4" />
+													)}
+												</Button>
+											</div>
+										)
+									})}
+								</div>
+							)}
+						</CardContent>
+					</Card>
+
+					{/* Assign student */}
+					<Card>
+						<CardHeader>
+							<CardTitle>Добавить студента</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{!allUsersData ? (
+								<div className="text-muted-foreground flex items-center gap-2 text-sm">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									Загрузка пользователей...
+								</div>
+							) : availableUsers.length === 0 ? (
+								<p className="text-muted-foreground text-sm">Все пользователи уже имеют доступ</p>
+							) : (
+								<div className="max-h-80 space-y-2 overflow-y-auto">
+									{availableUsers.map((u) => {
+										const fullName = [u.firstName, u.lastName].filter(Boolean).join(' ')
+										const displayName = u.name || fullName || u.login || u.id
+										return (
+											<div key={u.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+												<div className="min-w-0 flex-1">
+													<p className="truncate text-sm font-medium">{displayName}</p>
+													{u.login && displayName !== u.login && (
+														<p className="text-muted-foreground text-xs">{u.login}</p>
+													)}
+												</div>
+												<Button
+													size="sm"
+													variant="outline"
+													onClick={() => handleAssignStudent(u.id)}
+													disabled={assigningUserId === u.id}
+												>
+													{assigningUserId === u.id ? (
+														<Loader2 className="mr-1 h-3 w-3 animate-spin" />
+													) : (
+														<UserPlus className="mr-1 h-3 w-3" />
+													)}
+													Добавить
+												</Button>
+											</div>
+										)
+									})}
+								</div>
+							)}
+						</CardContent>
+					</Card>
+				</div>
+			)}
 
 			{/* Topic Creation Dialog */}
 			<Dialog open={topicDialogOpen} onOpenChange={setTopicDialogOpen}>

@@ -22,7 +22,7 @@ export function SearchResultsUsers({ users, onSelect }: Props) {
 			{users.map((user) => (
 				<CommandItem
 					key={user.id}
-					value={makeSearchValue(user.name, user.login, user.position)}
+					value={makeSearchValue(user.name, user.login)}
 					onSelect={() => onSelect(user.href)}
 					className="cursor-pointer"
 				>
@@ -37,10 +37,7 @@ export function SearchResultsUsers({ users, onSelect }: Props) {
 					</Avatar>
 					<div className="ml-2 min-w-0">
 						<div className="truncate">{user.name}</div>
-						<div className="text-muted-foreground flex gap-2 text-xs">
-							{user.login && <span>@{user.login}</span>}
-							{user.position && <span className="truncate">• {user.position}</span>}
-						</div>
+						<div className="text-muted-foreground flex gap-2 text-xs">{user.login && <span>@{user.login}</span>}</div>
 					</div>
 				</CommandItem>
 			))}

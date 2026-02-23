@@ -18,6 +18,13 @@ import {
 import type { TestScoringRules } from '../lib/tests/scoring.js'
 import type { QuestionTypeScoringRule, QuestionUiTemplate } from '../lib/tests/question-types.js'
 
+export type QuestionTelemetry = {
+  timeSpentMs: number
+  focusLossCount: number
+  visitCount: number
+}
+export type TelemetryMap = Record<string, QuestionTelemetry>
+
 /** Тип открытия ссылки */
 export const linkTarget = pgEnum('link_target', ['_self', '_blank'])
 
@@ -40,12 +47,10 @@ export const users = pgTable(
 		activatedAt: timestamp('activated_at'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		createdBy: uuid('created_by'),
-		position: text('position'),
 		birthdate: date('birthdate', { mode: 'string' }),
 		telegram: text('telegram'),
 		phone: text('phone'),
 		email: text('email'),
-		showInTeam: boolean('show_in_team').notNull().default(false),
 		// Параметры кропа аватара
 		avatarCropX: real('avatar_crop_x'),
 		avatarCropY: real('avatar_crop_y'),
@@ -369,6 +374,7 @@ export const testAttempts = pgTable(
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		submittedAt: timestamp('submitted_at').notNull().defaultNow(),
 		clientAttemptId: text('client_attempt_id'), // optional idempotency key from client
+		telemetry: jsonb('telemetry').$type<TelemetryMap>(), // per-question telemetry: questionId -> { timeSpentMs, focusLossCount, visitCount }
 	},
 	(t) => ({
 		testIdIdx: index('test_attempts_test_id_idx').on(t.testId),
@@ -393,6 +399,22 @@ export const testSessions = pgTable(
 	},
 	(t) => ({
 		testUserIdx: index('test_sessions_test_user_idx').on(t.testId, t.userId),
+	})
+)
+
+/** Назначения тестов студентам (per-student access control) */
+export const testAssignments = pgTable(
+	'test_assignments',
+	{
+		testId: uuid('test_id').notNull().references(() => tests.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+		assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
+		assignedAt: timestamp('assigned_at').notNull().defaultNow(),
+	},
+	(t) => ({
+		pk: primaryKey({ columns: [t.testId, t.userId] }),
+		userIdx: index('test_assignments_user_idx').on(t.userId),
+		testIdx: index('test_assignments_test_idx').on(t.testId),
 	})
 )
 

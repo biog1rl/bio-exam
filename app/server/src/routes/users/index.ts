@@ -1,15 +1,16 @@
 import type { RoleKey } from '@bio-exam/rbac'
 import { ROLE_KEYS } from '@bio-exam/rbac'
 
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { Router } from 'express'
 
 import { db } from '../../db/index.js'
-import { users, userRoles } from '../../db/schema.js'
+import { testAssignments, testAttempts, tests, topics, users, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
+import { AssignTestSchema } from '../../schemas/assignments.js'
 import { PatchUserSchema } from '../../schemas/users.js'
 import { invalidateRBACCache } from '../../services/rbac/rbac.js'
 import type { UserRow } from '../../types/db/users.js'
@@ -54,12 +55,10 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 				roles: sql<string[]>`
           coalesce(array_agg(${userRoles.roleKey}) filter (where ${userRoles.roleKey} is not null), '{}')
         `.as('roles'),
-				position: users.position,
 				birthdate: users.birthdate,
 				telegram: users.telegram,
 				phone: users.phone,
 				email: users.email,
-				showInTeam: users.showInTeam,
 			})
 			.from(users)
 			.leftJoin(userRoles, eq(userRoles.userId, users.id))
@@ -78,12 +77,10 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 				users.activatedAt,
 				users.createdAt,
 				users.createdBy,
-				users.position,
 				users.birthdate,
 				users.telegram,
 				users.phone,
-				users.email,
-				users.showInTeam
+				users.email
 			)
 			.orderBy(desc(users.createdAt))
 
@@ -103,12 +100,10 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 			createdAt: new Date(r.createdAt).toISOString(),
 			createdByName: r.createdByName,
 			roles: r.roles ?? [],
-			position: r.position,
 			birthdate: r.birthdate,
 			telegram: r.telegram,
 			phone: r.phone,
 			email: r.email,
-			showInTeam: Boolean(r.showInTeam),
 		}))
 
 		res.json({ users: result })
@@ -136,12 +131,10 @@ router.patch('/:id', validateUUID('id'), sessionRequired(), requirePerm('users',
 		if (body.lastName !== undefined) updates.lastName = body.lastName
 		if (body.login !== undefined) updates.login = body.login
 		if (body.isActive !== undefined) updates.isActive = body.isActive
-		if (body.position !== undefined) updates.position = body.position
 		if (body.birthdate !== undefined) updates.birthdate = body.birthdate
 		if (body.telegram !== undefined) updates.telegram = body.telegram
 		if (body.phone !== undefined) updates.phone = body.phone
 		if (body.email !== undefined) updates.email = body.email === '' ? null : body.email
-		if (body.showInTeam !== undefined) updates.showInTeam = body.showInTeam
 
 		await db.transaction(async (tx) => {
 			if (Object.keys(updates).length > 0) {
@@ -188,5 +181,118 @@ router.delete('/:id', validateUUID('id'), sessionRequired(), requirePerm('users'
 		next(e)
 	}
 })
+
+// GET /api/users/:userId/test-attempts — list completed attempts for a user
+router.get(
+	'/:userId/test-attempts',
+	validateUUID('userId'),
+	sessionRequired(),
+	requirePerm('tests', 'read'),
+	async (req, res, next) => {
+		try {
+			const { userId } = req.params as { userId: string }
+			const rows = await db
+				.select({
+					attemptId: testAttempts.id,
+					testId: testAttempts.testId,
+					testTitle: tests.title,
+					testSlug: tests.slug,
+					topicSlug: topics.slug,
+					submittedAt: testAttempts.submittedAt,
+					earnedPoints: testAttempts.earnedPoints,
+					totalPoints: testAttempts.totalPoints,
+					scorePercentage: testAttempts.scorePercentage,
+					passed: testAttempts.passed,
+				})
+				.from(testAttempts)
+				.innerJoin(tests, eq(tests.id, testAttempts.testId))
+				.innerJoin(topics, eq(topics.id, tests.topicId))
+				.where(eq(testAttempts.userId, userId))
+				.orderBy(desc(testAttempts.submittedAt))
+
+			res.json({
+				attempts: rows.map((row) => ({
+					...row,
+					submittedAt: row.submittedAt instanceof Date ? row.submittedAt.toISOString() : row.submittedAt,
+				})),
+			})
+		} catch (err) {
+			next(err)
+		}
+	}
+)
+
+// GET /api/users/:userId/test-assignments — list tests assigned to a user
+router.get(
+	'/:userId/test-assignments',
+	validateUUID('userId'),
+	sessionRequired(),
+	requirePerm('tests', 'manage_assignments'),
+	async (req, res, next) => {
+		try {
+			const { userId } = req.params as { userId: string }
+			const rows = await db
+				.select({
+					testId: testAssignments.testId,
+					assignedAt: testAssignments.assignedAt,
+					testTitle: tests.title,
+					testSlug: tests.slug,
+				})
+				.from(testAssignments)
+				.innerJoin(tests, eq(tests.id, testAssignments.testId))
+				.where(eq(testAssignments.userId, userId))
+			res.json({ assignments: rows })
+		} catch (err) {
+			next(err)
+		}
+	}
+)
+
+// POST /api/users/:userId/test-assignments — assign a test to a user
+router.post(
+	'/:userId/test-assignments',
+	validateUUID('userId'),
+	sessionRequired(),
+	requirePerm('tests', 'manage_assignments'),
+	async (req, res, next) => {
+		try {
+			const { userId } = req.params as { userId: string }
+			const parsed = AssignTestSchema.safeParse(req.body)
+			if (!parsed.success) {
+				res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() })
+				return
+			}
+			const { testId } = parsed.data
+			const adminId = req.authUser!.id
+			await db
+				.insert(testAssignments)
+				.values({ testId, userId, assignedBy: adminId })
+				.onConflictDoNothing()
+			res.json({ ok: true })
+		} catch (err) {
+			next(err)
+		}
+	}
+)
+
+// DELETE /api/users/:userId/test-assignments/:testId — remove a test assignment from a user
+router.delete(
+	'/:userId/test-assignments/:testId',
+	validateUUID('userId'),
+	validateUUID('testId'),
+	sessionRequired(),
+	requirePerm('tests', 'manage_assignments'),
+	async (req, res, next) => {
+		try {
+			const { userId, testId } = req.params as { userId: string; testId: string }
+			await db
+				.delete(testAssignments)
+				.where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
+			res.json({ ok: true })
+		} catch (err) {
+			next(err)
+		}
+	}
+)
 
 export default router

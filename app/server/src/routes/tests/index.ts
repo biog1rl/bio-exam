@@ -16,6 +16,7 @@ import {
 	questionDrafts,
 	questionTypes,
 	questions,
+	testAttempts,
 	testQuestionTypeOverrides,
 	testScoringSettings,
 	tests,
@@ -49,6 +50,7 @@ import {
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
 import { storageService } from '../../services/storage/storage.js'
+import { assignmentsRouter } from './assignments.js'
 
 const router = Router()
 
@@ -2410,5 +2412,128 @@ router.get('/topics/:slug/export', sessionRequired(), requirePerm('tests', 'read
 		next(e)
 	}
 })
+
+// Admin: test-side assignment endpoints
+router.use('/:testId/assignments', assignmentsRouter)
+
+// =============================================================================
+// Admin: Attempt Review
+// =============================================================================
+
+// GET /api/tests/admin/attempts/:attemptId — fetch full attempt + questions for admin review
+router.get(
+	'/admin/attempts/:attemptId',
+	validateUUID('attemptId'),
+	sessionRequired(),
+	requirePerm('tests', 'read'),
+	async (req, res, next) => {
+		try {
+			const attemptId = req.params.attemptId as string
+
+			const [attempt] = await db
+				.select({
+					id: testAttempts.id,
+					testId: testAttempts.testId,
+					userId: testAttempts.userId,
+					answers: testAttempts.answers,
+					results: testAttempts.results,
+					earnedPoints: testAttempts.earnedPoints,
+					totalPoints: testAttempts.totalPoints,
+					scorePercentage: testAttempts.scorePercentage,
+					passed: testAttempts.passed,
+					submittedAt: testAttempts.submittedAt,
+					telemetry: testAttempts.telemetry,
+				})
+				.from(testAttempts)
+				.where(eq(testAttempts.id, attemptId))
+				.limit(1)
+
+			if (!attempt) {
+				return res.status(404).json({ error: 'Attempt not found' })
+			}
+
+			// Load questions for this attempt's test (same pattern as public test detail endpoint)
+			const questionRows = await db
+				.select({
+					id: questions.id,
+					type: questions.type,
+					order: questions.order,
+					points: questions.points,
+					options: questions.options,
+					matchingPairs: questions.matchingPairs,
+					promptPath: questions.promptPath,
+				})
+				.from(questions)
+				.where(eq(questions.testId, attempt.testId))
+				.orderBy(asc(questions.order))
+
+			const questionTypesMap = await getQuestionTypeMapForTest({ testId: attempt.testId, includeInactive: true })
+
+			// Load prompt text for each question
+			const testRow = await db.query.tests.findFirst({
+				where: eq(tests.id, attempt.testId),
+				columns: { id: true, slug: true },
+				with: {
+					topic: { columns: { slug: true } },
+				},
+			})
+
+			const questionsWithTexts = await Promise.all(
+				questionRows.map(async (q) => {
+					let promptText = ''
+					if (testRow) {
+						const candidates = [
+							q.promptPath,
+							`topics/${testRow.topic.slug}/${testRow.slug}/questions/${q.id}/prompt.md`,
+							`topics/${testRow.topic.slug}/${testRow.id}/questions/${q.id}/prompt.md`,
+						].filter((v): v is string => typeof v === 'string' && v.length > 0)
+
+						for (const candidate of candidates) {
+							const content = await storageService.readFile(candidate)
+							if (content.trim().length > 0) {
+								promptText = content
+								break
+							}
+						}
+					}
+
+					const typeConfig = questionTypesMap[q.type]
+					return {
+						id: q.id,
+						type: q.type,
+						questionUiTemplate: typeConfig?.uiTemplate ?? null,
+						questionTypeTitle: typeConfig?.title ?? q.type,
+						order: q.order,
+						points: q.points,
+						options: q.options,
+						matchingPairs: q.matchingPairs,
+						promptText,
+					}
+				})
+			)
+
+			res.json({
+				attempt: {
+					id: attempt.id,
+					testId: attempt.testId,
+					userId: attempt.userId,
+					answers: attempt.answers,
+					results: attempt.results,
+					earnedPoints: attempt.earnedPoints,
+					totalPoints: attempt.totalPoints,
+					scorePercentage: attempt.scorePercentage,
+					passed: attempt.passed,
+					submittedAt: attempt.submittedAt instanceof Date
+						? attempt.submittedAt.toISOString()
+						: attempt.submittedAt,
+					telemetry: attempt.telemetry ?? null,
+				},
+				questions: questionsWithTexts,
+			})
+		} catch (e) {
+			next(e)
+		}
+	}
+)
 
 export default router

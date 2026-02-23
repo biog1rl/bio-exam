@@ -13,10 +13,8 @@ export type UserRow = {
 	activatedAt: string | null
 	createdAt: string
 	createdByName: string | null
-	position: string | null
 	birthdate: string | null
 	telegram: string | null
 	phone: string | null
 	email: string | null
-	showInTeam: boolean
 }

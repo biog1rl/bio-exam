@@ -31,12 +31,7 @@
 		".next/types/**/*.ts",
 		".next\\dev/types/**/*.ts",
 		".next/dev/types/**/*.ts",
-		"app/(internal)/(protected)/activecollab/ActiveCollabClient.tsx",
-		"app/(internal)/(protected)/dashboard/page.tsx",
-		"app/(internal)/(protected)/projects/page.tsx",
-		"components/Workload/WorkloadTable.tsx",
-		"app/(internal)/(protected)/projects/[id]/page.tsx",
-		"app/(internal)/(protected)/projects/[id]/ProjectDetailsWrapper.tsx"
+		"app/(internal)/(protected)/dashboard/page.tsx"
 	],
 	"exclude": ["node_modules"]
 }

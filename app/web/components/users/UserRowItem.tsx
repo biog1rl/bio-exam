@@ -3,6 +3,7 @@
 import { roleDisplayName } from '@bio-exam/rbac'
 
 import { Pencil, Link as LinkIcon } from 'lucide-react'
+import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditCl
 	const active = Boolean(user.isActive)
 	const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
 	const allowReinvite = !active && canInvite
+	const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
 
 	const loginDisplay = user.login ?? '—'
 	const nameDisplay = fullName || user.name || '—'
@@ -34,7 +36,7 @@ export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditCl
 		<TableRow>
 			<TableCell className="font-medium">
 				<div className="flex flex-col">
-					<span dangerouslySetInnerHTML={{ __html: highlightedLogin }} />
+					<Link href={profileHref} className="hover:underline" dangerouslySetInnerHTML={{ __html: highlightedLogin }} />
 				</div>
 			</TableCell>
 

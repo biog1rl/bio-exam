@@ -628,16 +628,6 @@
 	}
 }
 
-@utility grid-cols-workload {
-	--workload-columns-count: 7;
-	--workload-avatar-size: 32px;
-	--workload-avatar-gap: 8px;
-	--workload-name-width: calc(115px + var(--workload-avatar-size) + var(--workload-avatar-gap));
-	--workload-remaining-width: calc(100% - (var(--workload-drag-handle-width, 36px) + var(--workload-name-width)));
-
-	@apply grid-cols-[var(--workload-drag-handle-width,36px)_var(--workload-name-width)_repeat(var(--workload-columns-count),calc(var(--workload-remaining-width)/var(--workload-columns-count)))];
-}
-
 @layer components {
 	.steps {
 		&:first-child {

@@ -28,7 +28,6 @@ export interface UserResult {
 	name: string
 	login: string
 	avatar?: string
-	position?: string
 	href: string
 }
 

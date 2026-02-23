@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 
-import { CheckCircle2, Loader2, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -68,12 +67,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 		confirmPassword: '',
 	})
 
-	// ActiveCollab состояние
-	const [acEmail, setAcEmail] = useState('')
-	const [acPassword, setAcPassword] = useState('')
-	const [acLoading, setAcLoading] = useState(false)
-	const [acHasToken, setAcHasToken] = useState(false)
-	const [acChecking, setAcChecking] = useState(true)
+	const isAdmin = me?.roles?.includes('admin') ?? false
 
 	// Обновляем состояние формы при изменении данных пользователя
 	useEffect(() => {
@@ -95,24 +89,6 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 			})
 		}
 	}, [me])
-
-	// Проверка токена ActiveCollab при загрузке
-	useEffect(() => {
-		const checkAcToken = async () => {
-			try {
-				const response = await fetch('/api/integrations/activecollab/token', {
-					credentials: 'include',
-				})
-				const data = await response.json()
-				setAcHasToken(!!data.token)
-			} catch {
-				setAcHasToken(false)
-			} finally {
-				setAcChecking(false)
-			}
-		}
-		checkAcToken()
-	}, [])
 
 	// Обработка изменения данных профиля
 	const handleProfileChange = (field: keyof ProfileData, value: string | null) => {
@@ -190,6 +166,11 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 			return
 		}
 
+		if (passwordData.newPassword.length < 5) {
+			toast.error('Новый пароль должен содержать минимум 5 символов')
+			return
+		}
+
 		setIsPasswordLoading(true)
 		try {
 			const response = await apiFetch('/api/users/profile/password', {
@@ -214,46 +195,6 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 			toast.error(error instanceof Error ? error.message : 'Ошибка при смене пароля')
 		} finally {
 			setIsPasswordLoading(false)
-		}
-	}
-
-	// ActiveCollab авторизация
-	const handleAcAuth = async () => {
-		setAcLoading(true)
-
-		try {
-			const res = await apiFetch('/api/integrations/activecollab/authenticate', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email: acEmail, password: acPassword }),
-			})
-
-			const data = await res.json()
-
-			if (!res.ok) throw new Error(data.error)
-
-			setAcHasToken(true)
-			setAcEmail('')
-			setAcPassword('')
-
-			toast.success('Токен ActiveCollab сохранен')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка авторизации')
-		} finally {
-			setAcLoading(false)
-		}
-	}
-
-	// ActiveCollab выход
-	const handleAcLogout = async () => {
-		try {
-			await apiFetch('/api/integrations/activecollab/logout', {
-				method: 'POST',
-			})
-			setAcHasToken(false)
-			toast.success('Токен ActiveCollab удален')
-		} catch {
-			toast.error('Не удалось выйти из ActiveCollab')
 		}
 	}
 
@@ -288,38 +229,40 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 			<h1 className="text-3xl font-bold">Личный кабинет</h1>
 
 			<div className="mt-6 grid gap-6 md:grid-cols-2">
-				{/* Левая колонка - аватар */}
-				<div className="space-y-6">
-					<Card>
-						<CardHeader>
-							<CardTitle>Аватар</CardTitle>
-							<CardDescription>Загрузите фото или настройте инициалы и цвет аватара</CardDescription>
-						</CardHeader>
-						<CardContent className="flex justify-center">
-							<AvatarEditor
-								firstName={profileData.firstName}
-								lastName={profileData.lastName}
-								avatar={profileData.avatar}
-								avatarCropped={profileData.avatarCropped}
-								avatarColor={profileData.avatarColor}
-								initials={profileData.initials}
-								avatarCropX={profileData.avatarCropX}
-								avatarCropY={profileData.avatarCropY}
-								avatarCropZoom={profileData.avatarCropZoom}
-								avatarCropRotation={profileData.avatarCropRotation}
-								avatarCropViewX={profileData.avatarCropViewX}
-								avatarCropViewY={profileData.avatarCropViewY}
-								onAvatarChange={handleAvatarChange}
-								onColorChange={(color) => handleProfileChange('avatarColor', color)}
-								onInitialsChange={(initials) => handleProfileChange('initials', initials)}
-								size="lg"
-							/>
-						</CardContent>
-					</Card>
-				</div>
+				{/* Левая колонка - аватар (только для администраторов) */}
+				{isAdmin && (
+					<div className="space-y-6">
+						<Card>
+							<CardHeader>
+								<CardTitle>Аватар</CardTitle>
+								<CardDescription>Загрузите фото или настройте инициалы и цвет аватара</CardDescription>
+							</CardHeader>
+							<CardContent className="flex justify-center">
+								<AvatarEditor
+									firstName={profileData.firstName}
+									lastName={profileData.lastName}
+									avatar={profileData.avatar}
+									avatarCropped={profileData.avatarCropped}
+									avatarColor={profileData.avatarColor}
+									initials={profileData.initials}
+									avatarCropX={profileData.avatarCropX}
+									avatarCropY={profileData.avatarCropY}
+									avatarCropZoom={profileData.avatarCropZoom}
+									avatarCropRotation={profileData.avatarCropRotation}
+									avatarCropViewX={profileData.avatarCropViewX}
+									avatarCropViewY={profileData.avatarCropViewY}
+									onAvatarChange={handleAvatarChange}
+									onColorChange={(color) => handleProfileChange('avatarColor', color)}
+									onInitialsChange={(initials) => handleProfileChange('initials', initials)}
+									size="lg"
+								/>
+							</CardContent>
+						</Card>
+					</div>
+				)}
 
 				{/* Правая колонка - форма редактирования */}
-				<div className="space-y-6">
+				<div className={`space-y-6 ${!isAdmin ? 'max-w-xl md:col-span-2' : ''}`}>
 					{/* Основная информация */}
 					<Card>
 						<CardHeader>
@@ -402,73 +345,6 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 							<Button onClick={handleChangePassword} disabled={isPasswordLoading} className="w-full">
 								{isPasswordLoading ? 'Смена пароля...' : 'Сменить пароль'}
 							</Button>
-						</CardContent>
-					</Card>
-
-					{/* ActiveCollab интеграция */}
-					<Card>
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								ActiveCollab
-								{acHasToken && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-							</CardTitle>
-							<CardDescription>Подключение к ActiveCollab для синхронизации проектов и задач</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							{acChecking ? (
-								<div className="flex items-center justify-center py-4">
-									<Loader2 className="h-6 w-6 animate-spin" />
-								</div>
-							) : acHasToken ? (
-								<div className="space-y-4">
-									<div className="rounded-md bg-green-50 p-4">
-										<p className="text-sm text-green-800">
-											✓ Токен ActiveCollab активен. Все страницы с интеграцией будут использовать этот токен.
-										</p>
-									</div>
-									<Button onClick={handleAcLogout} variant="outline" className="w-full">
-										<LogOut className="mr-2 h-4 w-4" />
-										Выйти из ActiveCollab
-									</Button>
-								</div>
-							) : (
-								<div className="space-y-4">
-									<div>
-										<Label htmlFor="ac-email">Email</Label>
-										<Input
-											id="ac-email"
-											type="email"
-											value={acEmail}
-											onChange={(e) => setAcEmail(e.target.value)}
-											placeholder="your@email.com"
-											autoComplete="email"
-											disabled={acLoading}
-										/>
-									</div>
-									<div>
-										<Label htmlFor="ac-password">Пароль</Label>
-										<Input
-											id="ac-password"
-											type="password"
-											value={acPassword}
-											onChange={(e) => setAcPassword(e.target.value)}
-											placeholder="••••••••"
-											autoComplete="current-password"
-											disabled={acLoading}
-										/>
-									</div>
-									<Button onClick={handleAcAuth} disabled={acLoading || !acEmail || !acPassword} className="w-full">
-										{acLoading ? (
-											<>
-												<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-												Аутентификация...
-											</>
-										) : (
-											'Войти в ActiveCollab'
-										)}
-									</Button>
-								</div>
-							)}
 						</CardContent>
 					</Card>
 

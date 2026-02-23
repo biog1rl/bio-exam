@@ -52,13 +52,11 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const [firstName, setFirstName] = useState<string>('')
 	const [lastName, setLastName] = useState<string>('')
 	const [login, setLogin] = useState<string>('')
-	const [position, setPosition] = useState<string>('')
 	const [isActive, setIsActive] = useState<boolean>(false)
 	const [birthdate, setBirthdate] = useState<string>('')
 	const [telegram, setTelegram] = useState<string>('')
 	const [phone, setPhone] = useState<string>('')
 	const [email, setEmail] = useState<string>('')
-	const [showInTeam, setShowInTeam] = useState<boolean>(false)
 
 	// выбранная роль и исходная роль (для сравнения)
 	const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null)
@@ -82,7 +80,6 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		setFirstName(user.firstName ?? '')
 		setLastName(user.lastName ?? '')
 		setLogin(user.login ?? '')
-		setPosition(user.position ?? '')
 		setIsActive(Boolean(user.isActive))
 
 		// Конвертируем дату из YYYY-MM-DD в дд/мм/гггг
@@ -96,7 +93,6 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		setTelegram(user.telegram ?? '')
 		setPhone(user.phone ?? '')
 		setEmail(user.email ?? '')
-		setShowInTeam(Boolean(user.showInTeam))
 
 		// берём ПЕРВУЮ валидную роль из пользователя
 		const allow = new Set<string>(ROLE_KEYS as ReadonlyArray<string>)
@@ -124,26 +120,22 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 				firstName?: string
 				lastName?: string
 				login?: string
-				position?: string
 				isActive?: boolean
 				roles: string[]
 				birthdate?: string | null
 				telegram?: string
 				phone?: string
 				email?: string
-				showInTeam?: boolean
 			} = {
 				firstName,
 				lastName,
 				login,
-				position,
 				isActive,
 				roles: [selectedRole],
 				birthdate: birthdate || null,
 				telegram,
 				phone,
 				email,
-				showInTeam,
 			}
 
 			const res = await apiFetch(`/api/users/${user.id}`, {
@@ -212,11 +204,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	return (
 		<>
 			<Dialog open={open} onOpenChange={onOpenChange}>
-				<DialogContent
-					aria-modal={true}
-					aria-describedby={title}
-					className="max-h-dvh overflow-y-auto sm:max-w-[560px]"
-				>
+				<DialogContent aria-modal={true} aria-describedby={title} className="sm:max-w-140 max-h-dvh overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle>{title}</DialogTitle>
 					</DialogHeader>
@@ -257,16 +245,6 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								inputMode="text"
 							/>
 							<p className="text-muted-foreground mt-1 text-xs">{LOGIN_HINT}</p>
-						</div>
-
-						<div>
-							<Label htmlFor="position">Должность</Label>
-							<Input
-								id="position"
-								value={position}
-								onChange={(e) => setPosition(e.target.value)}
-								placeholder="Frontend Developer, Designer, Client и т.д."
-							/>
 						</div>
 
 						<div>
@@ -315,14 +293,6 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								<div className="text-muted-foreground text-xs">Имеет доступ без инвайта</div>
 							</div>
 							<Switch checked={isActive} onCheckedChange={setIsActive} />
-						</div>
-
-						<div className="flex items-center justify-between rounded-md border p-3">
-							<div>
-								<div className="font-medium">Отображать в команде</div>
-								<div className="text-muted-foreground text-xs">Показывать на странице сотрудников</div>
-							</div>
-							<Switch checked={showInTeam} onCheckedChange={setShowInTeam} />
 						</div>
 
 						<div className="space-y-2">
@@ -411,7 +381,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 
 			{/* Модалка подтверждения удаления */}
 			<Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-				<DialogContent aria-modal={true} aria-describedby={title} className="sm:max-w-[560px]">
+				<DialogContent aria-modal={true} aria-describedby={title} className="sm:max-w-140">
 					<DialogHeader>
 						<DialogTitle>Подтверждение удаления</DialogTitle>
 					</DialogHeader>

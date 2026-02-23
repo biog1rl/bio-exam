@@ -14,7 +14,6 @@ export const PatchUserSchema = z.object({
 		.optional(),
 	isActive: z.boolean().optional(),
 	roles: z.array(z.string()).optional(),
-	position: z.string().trim().max(100).optional(),
 	birthdate: z
 		.string()
 		.transform((val: string) => {
@@ -35,7 +34,6 @@ export const PatchUserSchema = z.object({
 	telegram: z.string().trim().max(100).optional(),
 	phone: z.string().trim().max(50).optional(),
 	email: z.string().email().optional().or(z.literal('')).or(z.null()),
-	showInTeam: z.boolean().optional(),
 })
 
 // Экспорт типов
