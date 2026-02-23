@@ -1,12 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import { toast } from 'sonner'
+import { useDebouncedCallback } from 'use-debounce'
 
 import MdxRenderer from '@/components/tests/MdxRenderer'
-import { submitPublicTestAnswers } from '@/lib/tests/api'
+import { saveAnswer, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import type {
 	PublicTestDetail,
 	PublicTestQuestion,
+	SessionInfo,
 	SubmitResult,
 	TestAnswerValue,
 	TestAttemptSummary,
@@ -14,8 +18,19 @@ import type {
 import { cn } from '@/lib/utils'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '../ui/alert-dialog'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
@@ -25,6 +40,8 @@ type ResultByQuestion = Record<
 	string,
 	{
 		isCorrect: boolean
+		earnedPoints: number
+		points: number
 		correctAnswer: unknown
 		explanationText: string | null
 	}
@@ -116,6 +133,46 @@ function formatCorrectAnswer(question: PublicTestQuestion, correctAnswer: unknow
 	return typeof correctAnswer === 'string' ? correctAnswer : JSON.stringify(correctAnswer)
 }
 
+function tryParseJson(text: string): Record<string, unknown> | null {
+	try {
+		return JSON.parse(text) as Record<string, unknown>
+	} catch {
+		return null
+	}
+}
+
+const RED_THRESHOLD_SECONDS_DEFAULT = 5 * 60 // 300 seconds = 5 minutes
+
+function useCountdown(startedAt: string | null, limitMinutes: number | null): number | null {
+	const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+
+	useEffect(() => {
+		if (!startedAt || !limitMinutes) return
+		const endMs = new Date(startedAt).getTime() + limitMinutes * 60 * 1000
+
+		const tick = () => {
+			const remaining = Math.max(0, Math.floor((endMs - Date.now()) / 1000))
+			setSecondsLeft(remaining)
+		}
+		tick()
+
+		const id = setInterval(tick, 1000)
+		return () => clearInterval(id)
+	}, [startedAt, limitMinutes])
+
+	return secondsLeft
+}
+
+function formatTime(seconds: number, showHours: boolean): string {
+	const h = Math.floor(seconds / 3600)
+	const m = Math.floor((seconds % 3600) / 60)
+	const s = seconds % 60
+	if (showHours) {
+		return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+	}
+	return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
 export default function TestRunner({ test, questions, initialAttempts = [] }: Props) {
 	const orderedQuestions = useMemo(() => [...questions].sort((a, b) => a.order - b.order), [questions])
 	const [answers, setAnswers] = useState<Record<string, TestAnswerValue>>({})
@@ -124,12 +181,91 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const [submitError, setSubmitError] = useState<string | null>(null)
 	const [attempts, setAttempts] = useState<TestAttemptSummary[]>(initialAttempts)
 	const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(() => orderedQuestions[0]?.id ?? null)
+	const [showUnansweredDialog, setShowUnansweredDialog] = useState(false)
+	const [session, setSession] = useState<SessionInfo | null>(null)
+	const [frozen, setFrozen] = useState(false)
+	const [showTimeUp, setShowTimeUp] = useState(false)
+	const [showTimeExpiredDialog, setShowTimeExpiredDialog] = useState(false)
+	const [expiredAttemptId, setExpiredAttemptId] = useState<string | null>(null)
+	const [awaitingStart, setAwaitingStart] = useState(false)
+	const warningFiredRef = useRef(false)
+	const sessionInitRef = useRef(false)
+	const frozenKey = `test-frozen-${test.id}`
+	const walKey = `test-answers-wal-${test.id}`
+	const sessionKey = `test-session-${test.id}`
+
+	const secondsLeft = useCountdown(session?.startedAt ?? null, test.timeLimitMinutes ?? null)
+	const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT
+	const showHours = (test.timeLimitMinutes ?? 0) > 60
+
+	// Session start effect: restore frozen state and start/restore timer session
+	useEffect(() => {
+		// Restore frozen state from localStorage (user returned after auto-submit)
+		if (localStorage.getItem(frozenKey)) {
+			setFrozen(true)
+		}
+
+		// Only start a session for tests with a time limit
+		if (!test.timeLimitMinutes) return
+
+		// Guard against React StrictMode double-invoke
+		if (sessionInitRef.current) return
+		sessionInitRef.current = true
+
+		const cached = localStorage.getItem(sessionKey)
+		if (cached) {
+			// Existing session — restore silently without confirmation
+			async function restoreSession(raw: string) {
+				let wasRestored = false
+				try {
+					const parsed = JSON.parse(raw) as SessionInfo
+					setSession(parsed)
+					wasRestored = true
+				} catch {
+					localStorage.removeItem(sessionKey)
+				}
+				try {
+					const serverSession = await startTestSession(test.id)
+					setSession(serverSession)
+					localStorage.setItem(sessionKey, JSON.stringify(serverSession))
+					if (wasRestored) {
+						toast.info('Сессия восстановлена')
+					}
+				} catch {
+					/* graceful degradation */
+				}
+			}
+			void restoreSession(cached)
+		} else {
+			// No session yet — ask for confirmation before starting the timer
+			setAwaitingStart(true)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// WAL restore effect: restore answers from localStorage on mount
+	useEffect(() => {
+		const wal = localStorage.getItem(walKey)
+		if (wal) {
+			try {
+				const parsed = JSON.parse(wal) as Record<string, TestAnswerValue>
+				if (Object.keys(parsed).length > 0) {
+					setAnswers((prev) => ({ ...prev, ...parsed }))
+				}
+			} catch {
+				/* ignore */
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	const resultByQuestion = useMemo<ResultByQuestion>(() => {
 		const map: ResultByQuestion = {}
 		for (const item of submitResult?.results ?? []) {
 			map[item.questionId] = {
 				isCorrect: item.isCorrect,
+				earnedPoints: item.earnedPoints,
+				points: item.points,
 				correctAnswer: item.correctAnswer,
 				explanationText: item.explanationText,
 			}
@@ -142,14 +278,39 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		[answers, orderedQuestions]
 	)
 
+	const debouncedSaveAnswer = useDebouncedCallback(
+		useCallback(
+			async (questionId: string, value: TestAnswerValue) => {
+				if (!session) return
+				// Write to localStorage WAL before server send
+				try {
+					const current = JSON.parse(localStorage.getItem(walKey) ?? '{}') as Record<string, TestAnswerValue>
+					current[questionId] = value
+					localStorage.setItem(walKey, JSON.stringify(current))
+				} catch {
+					/* ignore */
+				}
+				try {
+					await saveAnswer(test.id, session.sessionId, questionId, value)
+				} catch {
+					// localStorage already has value; silently ignore server errors
+				}
+			},
+			[session, walKey, test.id]
+		),
+		600
+	)
+
 	const onSelectRadio = (questionId: string, optionId: string) => {
 		setAnswers((prev) => ({ ...prev, [questionId]: optionId }))
+		void debouncedSaveAnswer(questionId, optionId)
 	}
 
 	const onToggleCheckbox = (questionId: string, optionId: string) => {
 		setAnswers((prev) => {
 			const current = Array.isArray(prev[questionId]) ? [...(prev[questionId] as string[])] : []
 			const next = current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
+			void debouncedSaveAnswer(questionId, next)
 			return { ...prev, [questionId]: next }
 		})
 	}
@@ -161,12 +322,14 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					? { ...(prev[questionId] as Record<string, string>) }
 					: {}
 			current[leftId] = rightId
+			void debouncedSaveAnswer(questionId, current)
 			return { ...prev, [questionId]: current }
 		})
 	}
 
 	const onInputTextAnswer = (questionId: string, value: string) => {
 		setAnswers((prev) => ({ ...prev, [questionId]: value }))
+		void debouncedSaveAnswer(questionId, value)
 	}
 
 	const scrollingRef = useRef(false)
@@ -215,11 +378,17 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 	}
 
-	const handleSubmit = async () => {
+	const doSubmit = async ({ isAutoSubmit = false }: { isAutoSubmit?: boolean } = {}) => {
 		setSubmitting(true)
 		setSubmitError(null)
 		try {
 			const result = await submitPublicTestAnswers(test.id, answers)
+			if (isAutoSubmit) {
+				setShowTimeUp(true)
+				// Brief delay to show "Время вышло" screen before transitioning to results
+				await new Promise((resolve) => setTimeout(resolve, 1500))
+				setShowTimeUp(false)
+			}
 			setSubmitResult(result)
 			setAttempts((prev) => [
 				{
@@ -232,11 +401,75 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				},
 				...prev,
 			])
+			// Clean up frozen flag and WAL on successful submit
+			localStorage.removeItem(frozenKey)
+			localStorage.removeItem(walKey)
+			localStorage.removeItem(sessionKey)
 		} catch (error) {
+			// Check for TIME_EXPIRED_ALREADY_SUBMITTED
+			if (error instanceof Error) {
+				const body = tryParseJson(error.message)
+				if (body?.error === 'TIME_EXPIRED_ALREADY_SUBMITTED') {
+					setExpiredAttemptId((body as { attemptId?: string }).attemptId ?? null)
+					setShowTimeExpiredDialog(true)
+					return
+				}
+			}
 			console.error('Failed to submit test answers:', error)
 			setSubmitError('Не удалось сохранить ответы. Попробуйте еще раз.')
 		} finally {
 			setSubmitting(false)
+		}
+	}
+
+	// Auto-submit effect: fires 1-minute warning toast and auto-submits at zero
+	useEffect(() => {
+		if (secondsLeft === null) return
+
+		// 1-minute warning toast
+		const warningThresholdSeconds = 60
+		if (secondsLeft === warningThresholdSeconds && !warningFiredRef.current) {
+			warningFiredRef.current = true
+			toast.warning('Осталась 1 минута — тест будет сдан автоматически', { duration: 8000 })
+		}
+
+		// Auto-submit at zero
+		if (secondsLeft === 0 && !frozen && !submitResult) {
+			setFrozen(true)
+			localStorage.setItem(frozenKey, '1')
+			void doSubmit({ isAutoSubmit: true })
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [secondsLeft, frozen, submitResult])
+
+	const handleSubmit = () => {
+		if (answeredCount < orderedQuestions.length) {
+			setShowUnansweredDialog(true)
+		} else {
+			void doSubmit()
+		}
+	}
+
+	const handleConfirmStart = async () => {
+		setAwaitingStart(false)
+		try {
+			const serverSession = await startTestSession(test.id)
+			setSession(serverSession)
+			localStorage.setItem(sessionKey, JSON.stringify(serverSession))
+		} catch {
+			toast.error('Не удалось начать тест. Попробуйте ещё раз.')
+		}
+	}
+
+	const handleRetake = () => {
+		setSubmitResult(null)
+		setAnswers({})
+		setSubmitError(null)
+		const firstId = orderedQuestions[0]?.id ?? null
+		setCurrentQuestionId(firstId)
+		if (firstId) {
+			const el = document.getElementById(`question-${firstId}`)
+			if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 		}
 	}
 
@@ -261,11 +494,23 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 						</p>
 						<p>Процент: {submitResult.scorePercentage.toFixed(1)}%</p>
 						<p>{submitResult.passed ? 'Статус: пройден' : 'Статус: не пройден'}</p>
+						<Button type="button" variant="outline" className="mt-3" onClick={handleRetake}>
+							Пройти ещё раз
+						</Button>
 					</section>
 				) : null}
 
 				{submitError ? (
 					<section className="rounded-lg border border-rose-200 bg-rose-50 p-4">{submitError}</section>
+				) : null}
+
+				{showTimeUp ? (
+					<section className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+						<div className="rounded-lg bg-white p-8 text-center shadow-xl">
+							<p className="text-2xl font-semibold">Время вышло</p>
+							<p className="text-muted-foreground mt-2 text-sm">Отправка ответов...</p>
+						</div>
+					</section>
 				) : null}
 
 				{orderedQuestions.map((question, index) => {
@@ -289,6 +534,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 										className="w-fit space-y-2"
 										value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
 										onValueChange={(value) => onSelectRadio(question.id, value)}
+										disabled={frozen || !!submitResult}
 									>
 										{question.options.map((option) => {
 											const inputId = `q-${question.id}-opt-${option.id}`
@@ -316,6 +562,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 														id={inputId}
 														checked={selected}
 														onCheckedChange={() => onToggleCheckbox(question.id, option.id)}
+														disabled={frozen || !!submitResult}
 													/>
 													<Label htmlFor={inputId} className="cursor-pointer font-normal">
 														{option.text}
@@ -334,6 +581,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 											value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
 											onChange={(e) => onInputTextAnswer(question.id, e.target.value)}
 											placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
+											disabled={frozen || !!submitResult}
 										/>
 										{template === 'sequence_digits' ? (
 											<p className="text-muted-foreground text-xs">Последовательность вводится цифрами без пробелов.</p>
@@ -357,6 +605,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 													<Select
 														value={selectedRightId || undefined}
 														onValueChange={(value) => onSelectMatching(question.id, left.id, value)}
+														disabled={frozen || !!submitResult}
 													>
 														<SelectTrigger className="sm:w-55 w-full">
 															<SelectValue placeholder="Выберите вариант" />
@@ -387,6 +636,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 										}
 									>
 										<p>{questionResult.isCorrect ? 'Верно' : 'Неверно'}</p>
+										<p className="text-muted-foreground mt-0.5 text-xs">
+											{questionResult.earnedPoints} / {questionResult.points} баллов
+										</p>
 										{!questionResult.isCorrect && test.showCorrectAnswer && questionResult.correctAnswer != null ? (
 											<p className="mt-1">
 												Правильный ответ:{' '}
@@ -427,7 +679,18 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				) : null}
 			</div>
 
+			{/* Панель навигации по вопросам и прогресс */}
 			<section className="sticky top-4 h-fit w-48 shrink-0 space-y-4 rounded-lg border bg-white p-4">
+				{secondsLeft !== null && (
+					<div
+						className={cn(
+							'text-right font-mono text-sm font-medium',
+							secondsLeft < redThresholdSeconds ? 'text-red-600' : 'text-muted-foreground'
+						)}
+					>
+						{formatTime(secondsLeft, showHours)}
+					</div>
+				)}
 				<div className="space-y-1.5">
 					<p className="text-muted-foreground text-xs">
 						Отвечено: {answeredCount} / {orderedQuestions.length}
@@ -465,10 +728,76 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					})}
 				</div>
 
-				<Button type="button" onClick={handleSubmit} disabled={submitting} className="w-full">
+				<Button type="button" onClick={handleSubmit} disabled={submitting || frozen} className="w-full">
 					{submitting ? 'Отправка...' : 'Завершить'}
 				</Button>
 			</section>
+
+			<AlertDialog open={awaitingStart}>
+				<AlertDialogContent overlayClassName="bg-black/60 backdrop-blur-xl">
+					<AlertDialogHeader>
+						<AlertDialogTitle>Начать тест?</AlertDialogTitle>
+						<AlertDialogDescription>
+							После подтверждения запустится таймер на {test.timeLimitMinutes} мин. Таймер не останавливается при
+							перезагрузке страницы.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel onClick={() => window.history.back()}>Назад</AlertDialogCancel>
+						<AlertDialogAction onClick={() => void handleConfirmStart()}>Начать</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog open={showUnansweredDialog} onOpenChange={setShowUnansweredDialog}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Есть неотвеченные вопросы</AlertDialogTitle>
+						<AlertDialogDescription>
+							{orderedQuestions.length - answeredCount} вопр.{' '}
+							{orderedQuestions.length - answeredCount === 1 ? 'остался' : 'осталось'} без ответа. Всё равно завершить?
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Вернуться</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={() => {
+								setShowUnansweredDialog(false)
+								void doSubmit()
+							}}
+						>
+							Всё равно завершить
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<Dialog open={showTimeExpiredDialog} onOpenChange={setShowTimeExpiredDialog}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Время для сдачи истекло</DialogTitle>
+						<DialogDescription>
+							Тест уже был отправлен автоматически. Вы можете просмотреть результаты.
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						{expiredAttemptId ? (
+							<Button
+								onClick={() => {
+									setShowTimeExpiredDialog(false)
+									// Navigate to results — fetch the attempt and display it
+									// Reload to refetch attempt history from server (initialAttempts is a server prop)
+									window.location.reload()
+								}}
+							>
+								К результатам
+							</Button>
+						) : (
+							<Button onClick={() => setShowTimeExpiredDialog(false)}>Закрыть</Button>
+						)}
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	)
 }

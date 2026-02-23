@@ -176,6 +176,8 @@ export interface Test {
 	showCorrectAnswer: boolean
 	scoringRules?: TestScoringRules
 	timeLimitMinutes: number | null
+	redThresholdMinutes: number | null
+	warningThresholdMinutes: number | null
 	passingScore: number | null
 	order: number
 	createdAt: string
@@ -221,6 +223,8 @@ export interface TestFormData {
 	showCorrectAnswer: boolean
 	scoringRules?: TestScoringRules
 	timeLimitMinutes: number | null
+	redThresholdMinutes: number | null
+	warningThresholdMinutes: number | null
 	passingScore: number | null
 	order: number
 	questions: Question[]

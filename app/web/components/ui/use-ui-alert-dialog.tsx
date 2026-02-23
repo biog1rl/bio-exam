@@ -90,7 +90,9 @@ export function useUiAlertDialog() {
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>{dialogState?.title}</AlertDialogTitle>
-						{dialogState?.description ? <AlertDialogDescription>{dialogState.description}</AlertDialogDescription> : null}
+						{dialogState?.description ? (
+							<AlertDialogDescription>{dialogState.description}</AlertDialogDescription>
+						) : null}
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						{dialogState?.mode === 'confirm' ? (
@@ -98,7 +100,9 @@ export function useUiAlertDialog() {
 						) : null}
 						<AlertDialogAction
 							className={
-								dialogState?.destructive ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined
+								dialogState?.destructive
+									? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+									: undefined
 							}
 							onClick={() => closeDialog(true)}
 						>

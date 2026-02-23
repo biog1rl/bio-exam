@@ -213,6 +213,8 @@ export const tests = pgTable(
 		showCorrectAnswer: boolean('show_correct_answer').notNull().default(true),
 		scoringRules: jsonb('scoring_rules').$type<TestScoringRules>(),
 		timeLimitMinutes: integer('time_limit_minutes'),
+		redThresholdMinutes: integer('red_threshold_minutes'),
+		warningThresholdMinutes: integer('warning_threshold_minutes'),
 		passingScore: real('passing_score'),
 		order: integer('order').notNull().default(0),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -378,6 +380,31 @@ export const testAttempts = pgTable(
 	})
 )
 
+/** Тестовые сессии (для отслеживания времени прохождения) */
+export const testSessions = pgTable(
+	'test_sessions',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		testId: uuid('test_id').notNull().references(() => tests.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+		startedAt: timestamp('started_at').notNull().defaultNow(),
+		submittedAt: timestamp('submitted_at'),
+		attemptId: uuid('attempt_id').references(() => testAttempts.id, { onDelete: 'set null' }),
+	},
+	(t) => ({
+		testUserIdx: index('test_sessions_test_user_idx').on(t.testId, t.userId),
+	})
+)
+
+/** Глобальные настройки таймера тестов */
+export const testTimerSettings = pgTable('test_timer_settings', {
+	id: text('id').primaryKey().default('global'),
+	redThresholdMinutes: integer('red_threshold_minutes').notNull().default(5),
+	warningThresholdMinutes: integer('warning_threshold_minutes').notNull().default(1),
+	updatedAt: timestamp('updated_at').notNull().defaultNow(),
+	updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+})
+
 /** Refresh tokens for session management */
 export const refreshTokens = pgTable(
 	'refresh_tokens',
@@ -487,5 +514,20 @@ export const testAttemptsRelations = relations(testAttempts, ({ one }) => ({
 	user: one(users, {
 		fields: [testAttempts.userId],
 		references: [users.id],
+	}),
+}))
+
+export const testSessionsRelations = relations(testSessions, ({ one }) => ({
+	test: one(tests, {
+		fields: [testSessions.testId],
+		references: [tests.id],
+	}),
+	user: one(users, {
+		fields: [testSessions.userId],
+		references: [users.id],
+	}),
+	attempt: one(testAttempts, {
+		fields: [testSessions.attemptId],
+		references: [testAttempts.id],
 	}),
 }))

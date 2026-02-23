@@ -49,7 +49,6 @@ function safeDecode(s: string) {
 export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<string, string> }) {
 	const tree = null
 	const { labels: contextLabels } = useBreadcrumbs()
-	const allLabels = { ...initialLabels, ...contextLabels }
 
 	const pathname = usePathname() || '/'
 	const parts = pathname.split('?')[0].split('#')[0].split('/').filter(Boolean)
@@ -109,6 +108,8 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 	}, [pathname])
 
 	const displayItems = useMemo(() => {
+		const allLabels = { ...initialLabels, ...contextLabels }
+
 		return filteredItems.map((item) => {
 			const raw = item.label
 			const prettyFromTree =
@@ -125,7 +126,17 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 				shouldShowLoader: shouldWaitForAsyncLabel && !allowFallback,
 			}
 		})
-	}, [allLabels, allowFallback, asyncLabelOn, filteredItems, labelOverrides, root, treeHrefToLabel, treeRoots])
+	}, [
+		contextLabels,
+		initialLabels,
+		allowFallback,
+		asyncLabelOn,
+		filteredItems,
+		labelOverrides,
+		root,
+		treeHrefToLabel,
+		treeRoots,
+	])
 
 	const hasPendingAsyncLabels = displayItems.some((item) => item.shouldShowLoader)
 

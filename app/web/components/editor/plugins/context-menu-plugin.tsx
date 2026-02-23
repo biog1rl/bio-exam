@@ -140,7 +140,7 @@ export function ContextMenuPlugin(): JSX.Element {
 				icon: <Trash2 className="h-4 w-4" />,
 			}),
 		]
-	}, [editor])
+	}, [editor, showAlert])
 
 	return (
 		<>

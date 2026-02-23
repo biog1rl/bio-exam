@@ -51,7 +51,7 @@ export default async function AppLayout({
 
 								<ScrollArea className="flex flex-1">
 									<AuthGuard redirectTo="/login" skipPaths={['/login']}>
-										<div className="p-unit-mob tab:p-unit flex flex-col gap-4">{children}</div>
+										<div className="p-unit-mob tab:p-unit flex min-h-screen flex-col gap-4">{children}</div>
 									</AuthGuard>
 								</ScrollArea>
 							</SidebarInset>

@@ -823,7 +823,7 @@
 	}
 
 	::view-transition-new(root) {
-		mask: url('../public/img/logo.jpg') center / 0 no-repeat;
+		mask: url('/img/logo.jpg') center / 0 no-repeat;
 		animation: scale 1.3s both;
 	}
 }

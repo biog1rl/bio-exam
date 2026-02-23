@@ -277,7 +277,16 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		}
 
 		return labels
-	}, [isDraftMode, isEditingExistingQuestion, questionDraftId, questionId, testData?.test?.title, testData?.test?.topicTitle, testSlug, topicSlug])
+	}, [
+		isDraftMode,
+		isEditingExistingQuestion,
+		questionDraftId,
+		questionId,
+		testData?.test?.title,
+		testData?.test?.topicTitle,
+		testSlug,
+		topicSlug,
+	])
 
 	const backToTestEditor = useCallback(() => {
 		router.push(`/admin/tests/${topicSlug}/${testSlug}`)
@@ -521,7 +530,6 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 					) : undefined
 				}
 				isSaving={isSaving}
-
 			/>
 
 			<Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>

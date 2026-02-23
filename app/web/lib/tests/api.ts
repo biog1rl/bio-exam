@@ -1,14 +1,13 @@
-import { apiFetch, AuthExpiredError } from '../api-fetch'
+import { apiFetch } from '../api-fetch'
 import type {
 	PublicTestDetail,
 	PublicTestListItem,
 	PublicTestQuestion,
+	SessionInfo,
 	SubmitResult,
 	TestAnswerValue,
 	TestAttemptSummary,
 } from './types'
-
-export { AuthExpiredError } from '../api-fetch'
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await apiFetch(url, {
@@ -44,6 +43,25 @@ export async function fetchPublicTestById(testId: string) {
 
 export async function fetchMyTestAttempts(testId: string) {
 	return fetchJson<{ attempts: TestAttemptSummary[] }>(`/api/tests/public/tests/${testId}/attempts/me`)
+}
+
+export async function startTestSession(testId: string): Promise<SessionInfo> {
+	return fetchJson<SessionInfo>(`/api/tests/public/tests/${testId}/start`, { method: 'POST' })
+}
+
+export async function saveAnswer(
+	testId: string,
+	sessionId: string,
+	questionId: string,
+	value: TestAnswerValue
+): Promise<void> {
+	// Endpoint available after 03-01 migration; errors silently ignored (localStorage WAL in TestRunner)
+	// Fire-and-forget with apiFetch; errors are caught silently (localStorage is WAL backup)
+	await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ questionId, value }),
+	})
 }
 
 export async function submitPublicTestAnswers(testId: string, answers: Record<string, TestAnswerValue>) {

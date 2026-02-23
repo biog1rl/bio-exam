@@ -1601,6 +1601,8 @@ router.patch(
 						showCorrectAnswer: data.showCorrectAnswer,
 						scoringRules: nextScoringOverride ?? null,
 						timeLimitMinutes: data.timeLimitMinutes,
+						redThresholdMinutes: data.redThresholdMinutes ?? null,
+						warningThresholdMinutes: data.warningThresholdMinutes ?? null,
 						passingScore: data.passingScore,
 						order: data.order,
 						version: shouldIncrementVersion ? existingTest.version + 1 : existingTest.version,

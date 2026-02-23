@@ -83,3 +83,8 @@ export type TestAttemptSummary = {
 	passed: boolean
 	submittedAt: string
 }
+
+export type SessionInfo = {
+	sessionId: string
+	startedAt: string // ISO 8601 timestamp
+}

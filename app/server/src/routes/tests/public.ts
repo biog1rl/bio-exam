@@ -1,12 +1,12 @@
 /**
  * Публичные API роуты для прохождения тестов (для студентов)
  */
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import { answerKeys, questions, testAttempts, tests, topics } from '../../db/schema.js'
+import { answerKeys, questions, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { scoreQuestionByType } from '../../lib/tests/scoring.js'
@@ -29,6 +29,8 @@ const SubmitAnswersSchema = z.object({
 })
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const GRACE_PERIOD_MINUTES = 2
 
 // =============================================================================
 // Helpers
@@ -384,6 +386,44 @@ router.get('/tests/:id/attempts/me', validateUUID('id'), sessionRequired(), asyn
 	}
 })
 
+// POST /api/tests/public/tests/:id/start - начать тестовую сессию (записать startedAt)
+router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		const userId = req.authUser!.id
+
+		const [test] = await db
+			.select({ id: tests.id, timeLimitMinutes: tests.timeLimitMinutes })
+			.from(tests)
+			.where(and(eq(tests.id, testId), eq(tests.isPublished, true)))
+			.limit(1)
+		if (!test) return res.status(404).json({ error: 'Test not found' })
+
+		// Return existing open session or create new one
+		const existing = await db.query.testSessions.findFirst({
+			where: and(
+				eq(testSessions.testId, testId),
+				eq(testSessions.userId, userId),
+				isNull(testSessions.submittedAt)
+			),
+			orderBy: [desc(testSessions.startedAt)],
+		})
+
+		if (existing) {
+			return res.json({ startedAt: existing.startedAt.toISOString(), sessionId: existing.id })
+		}
+
+		const [session] = await db
+			.insert(testSessions)
+			.values({ testId, userId })
+			.returning({ id: testSessions.id, startedAt: testSessions.startedAt })
+
+		res.json({ startedAt: session.startedAt.toISOString(), sessionId: session.id })
+	} catch (e) {
+		next(e)
+	}
+})
+
 // POST /api/tests/public/tests/:id/submit - проверить ответы, сохранить попытку, вернуть результат
 router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
@@ -405,6 +445,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 				topicSlug: topics.slug,
 				passingScore: tests.passingScore,
 				showCorrectAnswer: tests.showCorrectAnswer,
+				timeLimitMinutes: tests.timeLimitMinutes,
 			})
 			.from(tests)
 			.innerJoin(topics, eq(tests.topicId, topics.id))
@@ -415,6 +456,33 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		if (!test) {
 			return res.status(404).json({ error: 'Test not found' })
 		}
+
+		// --- Time limit enforcement ---
+		if (test.timeLimitMinutes != null) {
+			const session = await db.query.testSessions.findFirst({
+				where: and(eq(testSessions.testId, testId), eq(testSessions.userId, userId)),
+				orderBy: [desc(testSessions.startedAt)],
+			})
+
+			if (session?.submittedAt) {
+				// Attempt already submitted via auto-submit — reject duplicate manual submit
+				return res.status(409).json({
+					error: 'TIME_EXPIRED_ALREADY_SUBMITTED',
+					attemptId: session.attemptId,
+				})
+			}
+
+			if (session) {
+				const elapsedMinutes = (Date.now() - session.startedAt.getTime()) / 1000 / 60
+				if (elapsedMinutes > test.timeLimitMinutes + GRACE_PERIOD_MINUTES) {
+					// Auto-submit missed AND grace period expired — hard reject
+					return res.status(422).json({ error: 'TIME_EXPIRED' })
+				}
+				// else: within grace period — accept (covers honest students with bad network)
+			}
+			// No session: test has time limit but student bypassed /start — accept (no session = no enforcement)
+		}
+
 		const questionTypesMap = await getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
 
 		const questionRows = await db.select().from(questions).where(eq(questions.testId, test.id))
@@ -538,6 +606,20 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 				passed: existing.passed,
 				results: existing.results,
 			}))
+		}
+
+		// Mark session as submitted (for tests with time limit)
+		if (test.timeLimitMinutes != null) {
+			await db
+				.update(testSessions)
+				.set({ submittedAt: new Date(), attemptId: attempt?.id ?? null })
+				.where(
+					and(
+						eq(testSessions.testId, testId),
+						eq(testSessions.userId, userId),
+						isNull(testSessions.submittedAt)
+					)
+				)
 		}
 
 		const responsePayload = SubmitResultSchema.parse({
