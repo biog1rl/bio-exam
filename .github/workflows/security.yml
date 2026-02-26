@@ -5,9 +5,7 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches: [master]
-  workflow_dispatch:
+  pull_request:
 
 jobs:
   security:
@@ -20,5 +18,5 @@ jobs:
 
       - uses: anthropics/claude-code-security-review@main
         with:
-          comment-pr: false
+          comment-pr: true
           claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
