@@ -202,7 +202,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		mutate: mutateQuestionDraft,
 	} = useSWR<QuestionDraftDetailResponse>(
 		isDraftMode && testData?.test?.id ? `/api/tests/${testData.test.id}/question-drafts/${questionDraftId}` : null,
-		fetcher
+		fetcher,
+		{ revalidateOnFocus: false }
 	)
 
 	useEffect(() => {
@@ -213,6 +214,14 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		if (!isDraftMode) return
 		if (questionDraftData === undefined) return
 
+		const nextLockVersion = questionDraftData?.draft?.lockVersion ?? 0
+		setDraftLockVersion(nextLockVersion)
+		lockVersionRef.current = nextLockVersion
+
+		// Гидратируем локальную форму только один раз, иначе revalidate может
+		// перезаписать несохранённые изменения после возврата во вкладку.
+		if (isDraftHydratedRef.current) return
+
 		const order = testData?.questions.length ?? 0
 		const parsed = extractQuestionFromDraftPayload(questionDraftData?.draft?.payload, order)
 		if (parsed) {
@@ -222,10 +231,6 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			setDraftQuestion(createDefaultQuestion(order))
 			latestDraftQuestionRef.current = createDefaultQuestion(order)
 		}
-
-		const nextLockVersion = questionDraftData?.draft?.lockVersion ?? 0
-		setDraftLockVersion(nextLockVersion)
-		lockVersionRef.current = nextLockVersion
 		isDraftHydratedRef.current = true
 	}, [isDraftMode, questionDraftData, testData?.questions.length])
 
