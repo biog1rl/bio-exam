@@ -627,7 +627,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 							<p className="text-lg font-medium">{currentIndex + 1}.</p>
 							<div className="bg-secondary flex-1 space-y-4 rounded-lg border p-4">
 								<div className="space-y-2">
-									<MdxRenderer source={question.promptText} className="prose max-w-none text-sm" />
+									<MdxRenderer source={question.promptText} className="prose max-w-none select-none text-sm" />
 								</div>
 
 								{template === 'single_choice' && Array.isArray(question.options) ? (
