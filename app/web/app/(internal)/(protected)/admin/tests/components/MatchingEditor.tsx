@@ -1,5 +1,7 @@
 'use client'
 
+import { useRef } from 'react'
+
 import { Plus, Trash2, ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -17,6 +19,9 @@ interface Props {
 }
 
 export default function MatchingEditor({ pairs, correct, onChange }: Props) {
+	const leftRefs = useRef<(HTMLInputElement | null)[]>([])
+	const rightRefs = useRef<(HTMLInputElement | null)[]>([])
+
 	const handleAddPair = () => {
 		const newLeft = { id: generateId(), text: '' }
 		const newRight = { id: generateId(), text: '' }
@@ -65,6 +70,34 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 		onChange(pairs, newCorrect)
 	}
 
+	const handleLeftKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+		if (e.key !== 'Enter') return
+		e.preventDefault()
+		if (index < pairs.left.length - 1) {
+			leftRefs.current[index + 1]?.focus()
+		} else {
+			const newIndex = pairs.left.length
+			handleAddPair()
+			queueMicrotask(() => {
+				leftRefs.current[newIndex]?.focus()
+			})
+		}
+	}
+
+	const handleRightKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+		if (e.key !== 'Enter') return
+		e.preventDefault()
+		if (index < pairs.right.length - 1) {
+			rightRefs.current[index + 1]?.focus()
+		} else {
+			const newIndex = pairs.right.length
+			handleAddPair()
+			queueMicrotask(() => {
+				rightRefs.current[newIndex]?.focus()
+			})
+		}
+	}
+
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center justify-between">
@@ -83,8 +116,10 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 						<div key={item.id} className="flex items-center gap-2">
 							<span className="text-muted-foreground w-6 text-sm">{index + 1}.</span>
 							<Input
+								ref={(el) => { leftRefs.current[index] = el }}
 								value={item.text}
 								onChange={(e) => handleLeftTextChange(item.id, e.target.value)}
+								onKeyDown={(e) => handleLeftKeyDown(e, index)}
 								placeholder={`Элемент ${index + 1}`}
 								className="flex-1"
 							/>
@@ -108,8 +143,10 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 						<div key={item.id} className="flex items-center gap-2">
 							<span className="text-muted-foreground w-6 text-sm">{String.fromCharCode(65 + index)}.</span>
 							<Input
+								ref={(el) => { rightRefs.current[index] = el }}
 								value={item.text}
 								onChange={(e) => handleRightTextChange(item.id, e.target.value)}
+								onKeyDown={(e) => handleRightKeyDown(e, index)}
 								placeholder={`Соответствие ${String.fromCharCode(65 + index)}`}
 								className="flex-1"
 							/>

@@ -1,5 +1,7 @@
 'use client'
 
+import { useRef } from 'react'
+
 import { Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -21,6 +23,8 @@ interface Props {
 export default function OptionsEditor({ mode, options, correct, onChange }: Props) {
 	const isRadio = mode === 'single'
 	const selectedIds = isRadio ? [correct as string] : Array.isArray(correct) ? correct : []
+
+	const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
 	const handleAddOption = () => {
 		const newOption: Option = { id: generateId(), text: '' }
@@ -59,6 +63,20 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 		}
 	}
 
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+		if (e.key !== 'Enter') return
+		e.preventDefault()
+		if (index < options.length - 1) {
+			inputRefs.current[index + 1]?.focus()
+		} else {
+			const newIndex = options.length
+			handleAddOption()
+			queueMicrotask(() => {
+				inputRefs.current[newIndex]?.focus()
+			})
+		}
+	}
+
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex items-center justify-between">
@@ -76,8 +94,10 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 							<div key={option.id} className="flex items-center gap-2">
 								<RadioGroupItem value={option.id} id={option.id} />
 								<Input
+									ref={(el) => { inputRefs.current[index] = el }}
 									value={option.text}
 									onChange={(e) => handleTextChange(option.id, e.target.value)}
+									onKeyDown={(e) => handleKeyDown(e, index)}
 									placeholder={`Вариант ${index + 1}`}
 									className="flex-1"
 								/>
@@ -102,8 +122,10 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 								onCheckedChange={() => handleSelectOption(option.id)}
 							/>
 							<Input
+								ref={(el) => { inputRefs.current[index] = el }}
 								value={option.text}
 								onChange={(e) => handleTextChange(option.id, e.target.value)}
+								onKeyDown={(e) => handleKeyDown(e, index)}
 								placeholder={`Вариант ${index + 1}`}
 								className="flex-1"
 							/>
