@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 
 import type { ThemeProviderProps } from 'next-themes'
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
+import { NuqsAdapter } from 'nuqs/adapters/next/app'
 
 import { SearchProvider } from '@/components/Search/SearchProvider'
 import { AuthProvider } from '@/components/providers/AuthProvider'
@@ -23,10 +24,12 @@ export function Providers({ children, themeProps }: ProvidersProps) {
 	}, [setTheme])
 
 	return (
-		<NextThemesProvider defaultTheme="light" enableSystem={false} {...themeProps}>
-			<AuthProvider>
-				<SearchProvider>{children}</SearchProvider>
-			</AuthProvider>
-		</NextThemesProvider>
+		<NuqsAdapter>
+			<NextThemesProvider defaultTheme="light" enableSystem={false} {...themeProps}>
+				<AuthProvider>
+					<SearchProvider>{children}</SearchProvider>
+				</AuthProvider>
+			</NextThemesProvider>
+		</NuqsAdapter>
 	)
 }

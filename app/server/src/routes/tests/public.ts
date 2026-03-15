@@ -1,12 +1,12 @@
 /**
  * Публичные API роуты для прохождения тестов (для студентов)
  */
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import { answerKeys, questions, testAssignments, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
+import { answerKeys, appSettings, questions, testAssignments, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { scoreQuestionByType } from '../../lib/tests/scoring.js'
@@ -390,28 +390,98 @@ router.get('/tests/:id', validateUUID('id'), async (req, res, next) => {
 	}
 })
 
-// GET /api/tests/public/tests/:id/attempts/me - история попыток текущего пользователя
+// GET /api/tests/public/tests/:id/attempts/me - история попыток текущего пользователя (с пагинацией)
 router.get('/tests/:id/attempts/me', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
 		const testId = req.params.id as string
 		const userId = req.authUser?.id
 		if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
-		const attempts = await db
+		const offsetRaw = parseInt((req.query.offset as string) ?? '0', 10)
+		const limitRaw = parseInt((req.query.limit as string) ?? '5', 10)
+		const offset = isNaN(offsetRaw) || offsetRaw < 0 ? 0 : offsetRaw
+		const limit = isNaN(limitRaw) || limitRaw < 1 ? 5 : Math.min(limitRaw, 100)
+
+		const whereClause = and(eq(testAttempts.testId, testId), eq(testAttempts.userId, userId))
+
+		const [totalResult, rows] = await Promise.all([
+			db
+				.select({ total: count() })
+				.from(testAttempts)
+				.where(whereClause),
+			db
+				.select({
+					id: testAttempts.id,
+					earnedPoints: testAttempts.earnedPoints,
+					totalPoints: testAttempts.totalPoints,
+					scorePercentage: testAttempts.scorePercentage,
+					passed: testAttempts.passed,
+					submittedAt: testAttempts.submittedAt,
+				})
+				.from(testAttempts)
+				.where(whereClause)
+				.orderBy(desc(testAttempts.submittedAt))
+				.limit(limit)
+				.offset(offset),
+		])
+
+		const total = totalResult[0]?.total ?? 0
+		res.json({ rows, total })
+	} catch (e) {
+		next(e)
+	}
+})
+
+// GET /api/tests/public/tests/:id/chart-data - данные для графика (все попытки в диапазоне дат)
+router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		const userId = req.authUser?.id
+		if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+		const fromParam = req.query.from as string | undefined
+		const toParam = req.query.to as string | undefined
+
+		const conditions = [eq(testAttempts.testId, testId), eq(testAttempts.userId, userId)]
+		if (fromParam) {
+			const fromDate = new Date(fromParam)
+			if (!isNaN(fromDate.getTime())) {
+				conditions.push(gte(testAttempts.submittedAt, fromDate))
+			}
+		}
+		if (toParam) {
+			const toDate = new Date(toParam)
+			if (!isNaN(toDate.getTime())) {
+				conditions.push(lte(testAttempts.submittedAt, toDate))
+			}
+		}
+
+		// Fetch all attempts in range ordered ASC
+		const allAttempts = await db
 			.select({
-				id: testAttempts.id,
-				earnedPoints: testAttempts.earnedPoints,
-				totalPoints: testAttempts.totalPoints,
 				scorePercentage: testAttempts.scorePercentage,
-				passed: testAttempts.passed,
 				submittedAt: testAttempts.submittedAt,
 			})
 			.from(testAttempts)
-			.where(and(eq(testAttempts.testId, testId), eq(testAttempts.userId, userId)))
-			.orderBy(desc(testAttempts.submittedAt))
-			.limit(20)
+			.where(and(...conditions))
+			.orderBy(asc(testAttempts.submittedAt))
 
-		res.json({ attempts })
+		// Group by date (YYYY-MM-DD), keep max/min/count per day
+		const byDate = new Map<string, { scores: number[] }>()
+		for (const a of allAttempts) {
+			const dateKey = a.submittedAt.toISOString().slice(0, 10)
+			if (!byDate.has(dateKey)) byDate.set(dateKey, { scores: [] })
+			byDate.get(dateKey)!.scores.push(Math.round((a.scorePercentage ?? 0) * 10) / 10)
+		}
+
+		const data = [...byDate.entries()].map(([date, { scores }]) => ({
+			date,
+			maxScore: Math.max(...scores),
+			minScore: Math.min(...scores),
+			count: scores.length,
+		}))
+
+		res.json({ data })
 	} catch (e) {
 		next(e)
 	}

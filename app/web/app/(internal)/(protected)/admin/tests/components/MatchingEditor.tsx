@@ -116,7 +116,9 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 						<div key={item.id} className="flex items-center gap-2">
 							<span className="text-muted-foreground w-6 text-sm">{index + 1}.</span>
 							<Input
-								ref={(el) => { leftRefs.current[index] = el }}
+								ref={(el) => {
+									leftRefs.current[index] = el
+								}}
 								value={item.text}
 								onChange={(e) => handleLeftTextChange(item.id, e.target.value)}
 								onKeyDown={(e) => handleLeftKeyDown(e, index)}
@@ -143,7 +145,9 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 						<div key={item.id} className="flex items-center gap-2">
 							<span className="text-muted-foreground w-6 text-sm">{String.fromCharCode(65 + index)}.</span>
 							<Input
-								ref={(el) => { rightRefs.current[index] = el }}
+								ref={(el) => {
+									rightRefs.current[index] = el
+								}}
 								value={item.text}
 								onChange={(e) => handleRightTextChange(item.id, e.target.value)}
 								onKeyDown={(e) => handleRightKeyDown(e, index)}

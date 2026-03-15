@@ -427,6 +427,12 @@ export const testTimerSettings = pgTable('test_timer_settings', {
 	updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
 })
 
+/** Глобальные настройки приложения (key-value) */
+export const appSettings = pgTable('app_settings', {
+	key: text('key').primaryKey(),
+	value: text('value').notNull(),
+})
+
 /** Refresh tokens for session management */
 export const refreshTokens = pgTable(
 	'refresh_tokens',

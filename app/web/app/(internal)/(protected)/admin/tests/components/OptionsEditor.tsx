@@ -94,7 +94,9 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 							<div key={option.id} className="flex items-center gap-2">
 								<RadioGroupItem value={option.id} id={option.id} />
 								<Input
-									ref={(el) => { inputRefs.current[index] = el }}
+									ref={(el) => {
+										inputRefs.current[index] = el
+									}}
 									value={option.text}
 									onChange={(e) => handleTextChange(option.id, e.target.value)}
 									onKeyDown={(e) => handleKeyDown(e, index)}
@@ -122,7 +124,9 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 								onCheckedChange={() => handleSelectOption(option.id)}
 							/>
 							<Input
-								ref={(el) => { inputRefs.current[index] = el }}
+								ref={(el) => {
+									inputRefs.current[index] = el
+								}}
 								value={option.text}
 								onChange={(e) => handleTextChange(option.id, e.target.value)}
 								onKeyDown={(e) => handleKeyDown(e, index)}

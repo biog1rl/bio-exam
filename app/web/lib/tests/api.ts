@@ -42,8 +42,43 @@ export async function fetchPublicTestById(testId: string) {
 	return fetchJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(`/api/tests/public/tests/${testId}`)
 }
 
-export async function fetchMyTestAttempts(testId: string) {
-	return fetchJson<{ attempts: TestAttemptSummary[] }>(`/api/tests/public/tests/${testId}/attempts/me`)
+export async function fetchMyTestAttempts(testId: string, options?: { offset?: number; limit?: number }) {
+	const params = new URLSearchParams()
+	if (options?.offset !== undefined) params.set('offset', String(options.offset))
+	if (options?.limit !== undefined) params.set('limit', String(options.limit))
+	const qs = params.toString()
+	return fetchJson<{ rows: TestAttemptSummary[]; total: number }>(
+		`/api/tests/public/tests/${testId}/attempts/me${qs ? `?${qs}` : ''}`
+	)
+}
+
+export type ChartDataPoint = {
+	date: string
+	maxScore: number
+	minScore: number
+	count: number
+}
+
+export async function fetchChartData(testId: string, params: { from?: string; to?: string }) {
+	const qs = new URLSearchParams()
+	if (params.from) qs.set('from', params.from)
+	if (params.to) qs.set('to', params.to)
+	const query = qs.toString()
+	return fetchJson<{ data: ChartDataPoint[] }>(
+		`/api/tests/public/tests/${testId}/chart-data${query ? `?${query}` : ''}`
+	)
+}
+
+export async function fetchChartDefaultRange(): Promise<{ value: string }> {
+	try {
+		return await fetchJson<{ value: string }>('/api/settings/chart-default-range')
+	} catch {
+		return { value: 'month' }
+	}
+}
+
+export async function fetchTopicTests(topicSlug: string) {
+	return fetchJson<{ tests: PublicTestListItem[] }>(`/api/tests/public/topics/${topicSlug}/tests`)
 }
 
 export async function startTestSession(testId: string): Promise<SessionInfo> {

@@ -1,10 +1,10 @@
-import TestPageClient from './TestPageClient'
+import { TestLandingPageClient } from './TestLandingPageClient'
 
 interface Props {
 	params: Promise<{ topicSlug: string; testSlug: string }>
 }
 
-export default async function TestPage({ params }: Props) {
+export default async function TestLandingPage({ params }: Props) {
 	const { topicSlug, testSlug } = await params
-	return <TestPageClient topicSlug={topicSlug} testSlug={testSlug} />
+	return <TestLandingPageClient topicSlug={topicSlug} testSlug={testSlug} />
 }
