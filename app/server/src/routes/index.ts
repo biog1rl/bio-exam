@@ -5,6 +5,7 @@ import { Router } from 'express'
 
 import authRouter from './auth/index.js'
 import refreshRouter from './auth/refresh.js'
+import groupsRouter from './groups/index.js'
 import rbacRouter from './rbac/index.js'
 import settingsRouter from './settings.js'
 import sidebarRouter from './sidebar/index.js'
@@ -22,5 +23,6 @@ router.use('/sidebar', sidebarRouter)
 router.use('/tests', testsRouter)
 router.use('/tests/public', publicTestsRouter)
 router.use('/settings', settingsRouter)
+router.use('/groups', groupsRouter)
 
 export default router

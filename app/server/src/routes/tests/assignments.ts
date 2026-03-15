@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { Router } from 'express'
 
 import { db } from '../../db/index.js'
-import { testAssignments, users } from '../../db/schema.js'
+import { testAssignments, userGroups, users } from '../../db/schema.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -57,6 +57,41 @@ assignmentsRouter.post(
 				.values({ testId, userId, assignedBy: adminId })
 				.onConflictDoNothing()
 			res.json({ ok: true })
+		} catch (err) {
+			next(err)
+		}
+	}
+)
+
+// POST /api/tests/:testId/assignments/group/:groupId — bulk assignment для всей группы
+assignmentsRouter.post(
+	'/group/:groupId',
+	validateUUID('testId'),
+	validateUUID('groupId'),
+	sessionRequired(),
+	requirePerm('tests', 'manage_assignments'),
+	async (req, res, next) => {
+		try {
+			const { testId, groupId } = req.params as { testId: string; groupId: string }
+			const adminId = req.authUser!.id
+
+			const members = await db
+				.select({ userId: userGroups.userId })
+				.from(userGroups)
+				.where(eq(userGroups.groupId, groupId))
+
+			if (members.length === 0) {
+				res.json({ ok: true, assigned: 0 })
+				return
+			}
+
+			const inserted = await db
+				.insert(testAssignments)
+				.values(members.map(({ userId }) => ({ testId, userId, assignedBy: adminId })))
+				.onConflictDoNothing()
+				.returning({ id: testAssignments.userId })
+
+			res.json({ ok: true, assigned: inserted.length })
 		} catch (err) {
 			next(err)
 		}

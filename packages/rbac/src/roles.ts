@@ -19,7 +19,7 @@ export const ROLE_REGISTRY = {
   admin: {
     key: 'admin',
     name: 'Администратор',
-    grants: { users: ['*'], rbac: ['*'], settings: ['*'], tests: ['*'] },
+    grants: { users: ['*'], rbac: ['*'], settings: ['*'], tests: ['*'], groups: ['*'] },
     order: 0,
   },
   user: {

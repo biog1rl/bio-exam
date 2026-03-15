@@ -433,6 +433,36 @@ export const appSettings = pgTable('app_settings', {
 	value: text('value').notNull(),
 })
 
+/** Группы студентов */
+export const studentGroups = pgTable(
+	'student_groups',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		name: text('name').notNull(),
+		createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+	}
+)
+
+/** Связка пользователь—группа (многие-ко-многим) */
+export const userGroups = pgTable(
+	'user_groups',
+	{
+		groupId: uuid('group_id')
+			.notNull()
+			.references(() => studentGroups.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+	},
+	(t) => ({
+		pk: primaryKey({ columns: [t.groupId, t.userId] }),
+		groupIdx: index('user_groups_group_idx').on(t.groupId),
+		userIdx: index('user_groups_user_idx').on(t.userId),
+	})
+)
+
 /** Refresh tokens for session management */
 export const refreshTokens = pgTable(
 	'refresh_tokens',
@@ -557,5 +587,24 @@ export const testSessionsRelations = relations(testSessions, ({ one }) => ({
 	attempt: one(testAttempts, {
 		fields: [testSessions.attemptId],
 		references: [testAttempts.id],
+	}),
+}))
+
+export const studentGroupsRelations = relations(studentGroups, ({ one, many }) => ({
+	createdByUser: one(users, {
+		fields: [studentGroups.createdBy],
+		references: [users.id],
+	}),
+	userGroups: many(userGroups),
+}))
+
+export const userGroupsRelations = relations(userGroups, ({ one }) => ({
+	group: one(studentGroups, {
+		fields: [userGroups.groupId],
+		references: [studentGroups.id],
+	}),
+	user: one(users, {
+		fields: [userGroups.userId],
+		references: [users.id],
 	}),
 }))
