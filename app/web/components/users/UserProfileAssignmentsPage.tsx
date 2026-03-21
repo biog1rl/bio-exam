@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react'
 
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { Loader2, Search, Trash2, UserPlus } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Search, Trash2, UserPlus } from 'lucide-react'
 import Link from 'next/link'
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, Legend, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
@@ -14,7 +14,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiFetch } from '@/lib/api-fetch'
 import type { UserRow } from '@/types/users'
@@ -48,30 +50,13 @@ type UserAttempt = {
 	passed: boolean
 }
 
-type ChartPoint = {
-	date: string
-	maxScore: number
-	minScore: number
-	count: number
-}
-
-const chartConfig = {
-	maxScore: { label: 'Лучший результат', color: 'hsl(var(--chart-1))' },
-}
-
-function ChartTooltipCustom({ active, payload }: { active?: boolean; payload?: { payload: ChartPoint }[] }) {
-	if (!active || !payload?.length) return null
-	const d = payload[0].payload
-	const dateLabel = format(new Date(d.date), 'd MMMM yyyy', { locale: ru })
-	return (
-		<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
-			<p className="font-medium">{dateLabel}</p>
-			<p className="text-muted-foreground">Попыток: {d.count}</p>
-			<p className="text-green-600 dark:text-green-400">Лучший: {d.maxScore}%</p>
-			{d.count > 1 && <p className="text-red-500 dark:text-red-400">Худший: {d.minScore}%</p>}
-		</div>
-	)
-}
+const CHART_COLORS = [
+	'hsl(var(--chart-1))',
+	'hsl(var(--chart-2))',
+	'hsl(var(--chart-3))',
+	'hsl(var(--chart-4))',
+	'hsl(var(--chart-5))',
+]
 
 type Props = {
 	login: string
@@ -106,6 +91,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const [removingTestId, setRemovingTestId] = useState<string | null>(null)
 	const [search, setSearch] = useState('')
 	const [topicFilter, setTopicFilter] = useState('all')
+	const [selectedTestIds, setSelectedTestIds] = useState<Set<string>>(new Set())
 	const [visibleCount, setVisibleCount] = useState(5)
 
 	const assignments = useMemo(() => assignmentsData?.assignments ?? [], [assignmentsData])
@@ -120,30 +106,64 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		return Array.from(seen.entries()).map(([slug, title]) => ({ slug, title }))
 	}, [attempts, assignedTestIds])
 
+	const testOptions = useMemo(() => {
+		const seen = new Map<string, string>()
+		for (const a of attempts) {
+			if (!assignedTestIds.has(a.testId)) continue
+			if (topicFilter !== 'all' && a.topicSlug !== topicFilter) continue
+			seen.set(a.testId, a.testTitle)
+		}
+		return Array.from(seen.entries()).map(([id, title]) => ({ id, title }))
+	}, [attempts, assignedTestIds, topicFilter])
+
+	// Active tests for chart/filter: selected ones, or all in topic if none selected
+	const activeTestIds = useMemo(
+		() => (selectedTestIds.size > 0 ? selectedTestIds : new Set(testOptions.map((t) => t.id))),
+		[selectedTestIds, testOptions]
+	)
+
 	const filteredAttempts = useMemo(() => {
 		const q = search.toLowerCase()
 		return attempts.filter(
-			(a) => (topicFilter === 'all' || a.topicSlug === topicFilter) && (!q || a.testTitle.toLowerCase().includes(q))
+			(a) =>
+				(topicFilter === 'all' || a.topicSlug === topicFilter) &&
+				activeTestIds.has(a.testId) &&
+				(!q || a.testTitle.toLowerCase().includes(q))
 		)
-	}, [attempts, search, topicFilter])
+	}, [attempts, search, topicFilter, activeTestIds])
 
 	const visibleAttempts = useMemo(() => filteredAttempts.slice(0, visibleCount), [filteredAttempts, visibleCount])
 
-	const chartPoints = useMemo((): ChartPoint[] => {
-		const byDate = new Map<string, number[]>()
+	// Chart: one dataKey per active test, data is { date, [testId]: maxScore }
+	const activeTestList = useMemo(() => testOptions.filter((t) => activeTestIds.has(t.id)), [testOptions, activeTestIds])
+
+	const chartConfig = useMemo(() => {
+		const cfg: Record<string, { label: string; color: string }> = {}
+		activeTestList.forEach((t, i) => {
+			cfg[t.id] = { label: t.title, color: CHART_COLORS[i % CHART_COLORS.length] }
+		})
+		return cfg
+	}, [activeTestList])
+
+	const chartData = useMemo(() => {
+		// Collect all dates
+		const byDateTest = new Map<string, Map<string, number[]>>()
 		for (const a of filteredAttempts) {
 			const date = a.submittedAt.slice(0, 10)
-			if (!byDate.has(date)) byDate.set(date, [])
-			byDate.get(date)!.push(a.scorePercentage)
+			if (!byDateTest.has(date)) byDateTest.set(date, new Map())
+			const testMap = byDateTest.get(date)!
+			if (!testMap.has(a.testId)) testMap.set(a.testId, [])
+			testMap.get(a.testId)!.push(a.scorePercentage)
 		}
-		return Array.from(byDate.entries())
-			.map(([date, scores]) => ({
-				date,
-				maxScore: Math.max(...scores),
-				minScore: Math.min(...scores),
-				count: scores.length,
-			}))
-			.sort((a, b) => a.date.localeCompare(b.date))
+		return Array.from(byDateTest.entries())
+			.map(([date, testMap]) => {
+				const point: Record<string, number | string> = { date }
+				for (const [testId, scores] of testMap) {
+					point[testId] = Math.max(...scores)
+				}
+				return point
+			})
+			.sort((a, b) => (a.date as string).localeCompare(b.date as string))
 	}, [filteredAttempts])
 
 	const availableTests = useMemo(
@@ -193,6 +213,16 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		}
 	}
 
+	const toggleTest = (testId: string) => {
+		setSelectedTestIds((prev) => {
+			const next = new Set(prev)
+			if (next.has(testId)) next.delete(testId)
+			else next.add(testId)
+			setVisibleCount(5)
+			return next
+		})
+	}
+
 	if (usersLoading || (Boolean(userId) && (assignmentsLoading || attemptsLoading))) {
 		return (
 			<div className="flex items-center justify-center p-12">
@@ -206,6 +236,13 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}
 
 	const displayName = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.login
+
+	const testPickerLabel =
+		selectedTestIds.size === 0
+			? 'Все тесты'
+			: selectedTestIds.size === 1
+				? (testOptions.find((t) => selectedTestIds.has(t.id))?.title ?? '1 тест')
+				: `${selectedTestIds.size} теста выбрано`
 
 	return (
 		<div className="space-y-6">
@@ -234,10 +271,13 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									className="h-8 pl-8 text-sm"
 								/>
 							</div>
+
+							{/* Topic select */}
 							<Select
 								value={topicFilter}
 								onValueChange={(v) => {
 									setTopicFilter(v)
+									setSelectedTestIds(new Set())
 									setVisibleCount(5)
 								}}
 							>
@@ -253,13 +293,55 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									))}
 								</SelectContent>
 							</Select>
+
+							{/* Multi-select tests */}
+							{testOptions.length > 0 && (
+								<Popover>
+									<PopoverTrigger asChild>
+										<Button variant="outline" size="sm" className="h-8 gap-1.5 text-sm font-normal">
+											{testPickerLabel}
+											<ChevronDown className="h-3.5 w-3.5 opacity-60" />
+										</Button>
+									</PopoverTrigger>
+									<PopoverContent className="w-64 p-2" align="start">
+										<div className="max-h-60 space-y-1 overflow-y-auto">
+											{/* "All" option */}
+											<button
+												className="hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+												onClick={() => {
+													setSelectedTestIds(new Set())
+													setVisibleCount(5)
+												}}
+											>
+												<div className="flex h-4 w-4 items-center justify-center">
+													{selectedTestIds.size === 0 && <Check className="h-3.5 w-3.5" />}
+												</div>
+												Все тесты
+											</button>
+											{testOptions.map((t, i) => (
+												<label
+													key={t.id}
+													className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
+												>
+													<Checkbox checked={selectedTestIds.has(t.id)} onCheckedChange={() => toggleTest(t.id)} />
+													<span
+														className="mr-1 inline-block h-2 w-2 shrink-0 rounded-full"
+														style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+													/>
+													<span className="line-clamp-2">{t.title}</span>
+												</label>
+											))}
+										</div>
+									</PopoverContent>
+								</Popover>
+							)}
 						</div>
 					)}
 
 					{/* Chart */}
-					{chartPoints.length > 0 && (
-						<ChartContainer config={chartConfig} className="h-[180px] w-full">
-							<AreaChart data={chartPoints}>
+					{chartData.length > 0 && activeTestList.length > 0 && (
+						<ChartContainer config={chartConfig} className="h-[200px] w-full">
+							<AreaChart data={chartData}>
 								<CartesianGrid vertical={false} />
 								<XAxis
 									dataKey="date"
@@ -267,14 +349,39 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									tick={{ fontSize: 11 }}
 								/>
 								<YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
-								<ChartTooltip content={<ChartTooltipCustom />} />
-								<Area
-									dataKey="maxScore"
-									type="monotone"
-									fill="var(--color-maxScore)"
-									stroke="var(--color-maxScore)"
-									fillOpacity={0.3}
+								<ChartTooltip
+									content={({ active, payload, label }) => {
+										if (!active || !payload?.length) return null
+										const dateLabel = format(new Date(label as string), 'd MMMM yyyy', { locale: ru })
+										return (
+											<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
+												<p className="font-medium">{dateLabel}</p>
+												{payload.map((entry) => (
+													<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
+														{chartConfig[entry.dataKey as string]?.label}: {entry.value}%
+													</p>
+												))}
+											</div>
+										)
+									}}
 								/>
+								{activeTestList.length > 1 && (
+									<Legend formatter={(value) => chartConfig[value]?.label ?? value} wrapperStyle={{ fontSize: 11 }} />
+								)}
+								{activeTestList.map((t, i) => {
+									const color = CHART_COLORS[i % CHART_COLORS.length]
+									return (
+										<Area
+											key={t.id}
+											dataKey={t.id}
+											type="monotone"
+											stroke={color}
+											fill={color}
+											fillOpacity={0.2}
+											connectNulls
+										/>
+									)
+								})}
 							</AreaChart>
 						</ChartContainer>
 					)}
@@ -286,26 +393,38 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						<p className="text-muted-foreground text-sm">Ничего не найдено</p>
 					) : (
 						<div className="space-y-2">
-							{visibleAttempts.map((attempt) => (
-								<Link
-									href={`/admin/attempts/${attempt.attemptId}`}
-									key={attempt.attemptId}
-									className="hover:bg-secondary flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition hover:border-black/40"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-medium">{attempt.testTitle}</p>
-										<p className="text-muted-foreground text-xs">
-											{new Date(attempt.submittedAt).toLocaleString('ru-RU')} · {attempt.earnedPoints}/
-											{attempt.totalPoints} · {attempt.scorePercentage}%
-										</p>
-									</div>
-									<div className="flex items-center gap-2">
-										<Badge variant={attempt.passed ? 'default' : 'secondary'}>
-											{attempt.passed ? 'Пройден' : 'Не пройден'}
-										</Badge>
-									</div>
-								</Link>
-							))}
+							{visibleAttempts.map((attempt) => {
+								const testIdx = activeTestList.findIndex((t) => t.id === attempt.testId)
+								const dotColor = testIdx >= 0 ? CHART_COLORS[testIdx % CHART_COLORS.length] : undefined
+								return (
+									<Link
+										href={`/admin/attempts/${attempt.attemptId}`}
+										key={attempt.attemptId}
+										className="hover:bg-secondary flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition hover:border-black/40"
+									>
+										<div className="min-w-0 flex-1">
+											<div className="flex items-center gap-1.5">
+												{dotColor && (
+													<span
+														className="inline-block h-2 w-2 shrink-0 rounded-full"
+														style={{ background: dotColor }}
+													/>
+												)}
+												<p className="truncate text-sm font-medium">{attempt.testTitle}</p>
+											</div>
+											<p className="text-muted-foreground text-xs">
+												{new Date(attempt.submittedAt).toLocaleString('ru-RU')} · {attempt.earnedPoints}/
+												{attempt.totalPoints} · {attempt.scorePercentage}%
+											</p>
+										</div>
+										<div className="flex items-center gap-2">
+											<Badge variant={attempt.passed ? 'default' : 'secondary'}>
+												{attempt.passed ? 'Пройден' : 'Не пройден'}
+											</Badge>
+										</div>
+									</Link>
+								)
+							})}
 							{visibleCount < filteredAttempts.length && (
 								<Button variant="outline" size="sm" onClick={() => setVisibleCount((c) => c + 5)}>
 									Загрузить ещё
