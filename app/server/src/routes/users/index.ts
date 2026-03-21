@@ -198,6 +198,7 @@ router.get(
 					testTitle: tests.title,
 					testSlug: tests.slug,
 					topicSlug: topics.slug,
+				topicTitle: topics.title,
 					submittedAt: testAttempts.submittedAt,
 					earnedPoints: testAttempts.earnedPoints,
 					totalPoints: testAttempts.totalPoints,
