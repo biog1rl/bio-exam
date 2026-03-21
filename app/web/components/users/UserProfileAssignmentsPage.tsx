@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { Check, ChevronDown, Loader2, Search, Trash2, UserPlus } from 'lucide-react'
 import Link from 'next/link'
+import { useQueryState } from 'nuqs'
 import { Area, AreaChart, CartesianGrid, Legend, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
 import useSWR from 'swr'
@@ -89,10 +90,12 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	const [assigningTestId, setAssigningTestId] = useState<string | null>(null)
 	const [removingTestId, setRemovingTestId] = useState<string | null>(null)
-	const [search, setSearch] = useState('')
-	const [topicFilter, setTopicFilter] = useState('all')
-	const [selectedTestIds, setSelectedTestIds] = useState<Set<string>>(new Set())
+	const [search, setSearch] = useQueryState('q', { defaultValue: '' })
+	const [topicFilter, setTopicFilter] = useQueryState('topic', { defaultValue: 'all' })
+	const [testsParam, setTestsParam] = useQueryState('tests', { defaultValue: '' })
 	const [visibleCount, setVisibleCount] = useState(5)
+
+	const selectedTestIds = useMemo(() => new Set(testsParam ? testsParam.split(',').filter(Boolean) : []), [testsParam])
 
 	const assignments = useMemo(() => assignmentsData?.assignments ?? [], [assignmentsData])
 	const attempts = useMemo(() => attemptsData?.attempts ?? [], [attemptsData])
@@ -214,13 +217,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}
 
 	const toggleTest = (testId: string) => {
-		setSelectedTestIds((prev) => {
-			const next = new Set(prev)
-			if (next.has(testId)) next.delete(testId)
-			else next.add(testId)
-			setVisibleCount(5)
-			return next
-		})
+		const next = new Set(selectedTestIds)
+		if (next.has(testId)) next.delete(testId)
+		else next.add(testId)
+		void setTestsParam(next.size > 0 ? Array.from(next).join(',') : null)
+		setVisibleCount(5)
 	}
 
 	if (usersLoading || (Boolean(userId) && (assignmentsLoading || attemptsLoading))) {
@@ -259,13 +260,13 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					{/* Filters */}
 					{attempts.length > 0 && (
 						<div className="flex flex-wrap gap-2">
-							<div className="relative min-w-[180px] flex-1">
+							<div className="min-w-45 relative flex-1">
 								<Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
 								<Input
 									placeholder="Поиск по тесту..."
 									value={search}
 									onChange={(e) => {
-										setSearch(e.target.value)
+										void setSearch(e.target.value)
 										setVisibleCount(5)
 									}}
 									className="h-8 pl-8 text-sm"
@@ -276,12 +277,12 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<Select
 								value={topicFilter}
 								onValueChange={(v) => {
-									setTopicFilter(v)
-									setSelectedTestIds(new Set())
+									void setTopicFilter(v)
+									void setTestsParam(null)
 									setVisibleCount(5)
 								}}
 							>
-								<SelectTrigger className="h-8 w-[180px] text-sm">
+								<SelectTrigger className="w-45 h-8 text-sm">
 									<SelectValue placeholder="Все темы" />
 								</SelectTrigger>
 								<SelectContent>
@@ -309,7 +310,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											<button
 												className="hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
 												onClick={() => {
-													setSelectedTestIds(new Set())
+													void setTestsParam(null)
 													setVisibleCount(5)
 												}}
 											>
@@ -340,7 +341,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 					{/* Chart */}
 					{chartData.length > 0 && activeTestList.length > 0 && (
-						<ChartContainer config={chartConfig} className="h-[200px] w-full">
+						<ChartContainer config={chartConfig} className="h-50 w-full">
 							<AreaChart data={chartData}>
 								<CartesianGrid vertical={false} />
 								<XAxis
@@ -354,7 +355,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										if (!active || !payload?.length) return null
 										const dateLabel = format(new Date(label as string), 'd MMMM yyyy', { locale: ru })
 										return (
-											<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
+											<div className="bg-background min-w-40 space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
 												<p className="font-medium">{dateLabel}</p>
 												{payload.map((entry) => (
 													<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
