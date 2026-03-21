@@ -114,9 +114,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	const topicOptions = useMemo(() => {
 		const seen = new Map<string, string>()
-		for (const a of attempts) seen.set(a.topicSlug, a.topicTitle ?? a.topicSlug)
+		for (const a of attempts) {
+			if (assignedTestIds.has(a.testId)) seen.set(a.topicSlug, a.topicTitle ?? a.topicSlug)
+		}
 		return Array.from(seen.entries()).map(([slug, title]) => ({ slug, title }))
-	}, [attempts])
+	}, [attempts, assignedTestIds])
 
 	const filteredAttempts = useMemo(() => {
 		const q = search.toLowerCase()
