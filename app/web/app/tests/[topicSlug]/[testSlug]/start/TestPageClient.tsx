@@ -40,7 +40,7 @@ export default function TestPageClient({ topicSlug, testSlug }: Props) {
 	return (
 		<>
 			<SetBreadcrumbsLabels labels={labels} />
-			<TestRunner test={testData.test} questions={testData.questions} initialAttempts={attemptsData?.attempts ?? []} />
+			<TestRunner test={testData.test} questions={testData.questions} initialAttempts={attemptsData?.rows ?? []} />
 		</>
 	)
 }
