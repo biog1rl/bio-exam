@@ -1,10 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import type { DateRange } from 'react-day-picker'
 
-import { format } from 'date-fns'
+import { format, subMonths, subWeeks } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { Check, ChevronDown, Loader2, Search, Trash2, UserPlus } from 'lucide-react'
+import { CalendarIcon, Check, ChevronDown, Loader2, Search, Trash2, UserPlus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { Area, AreaChart, CartesianGrid, Legend, XAxis, YAxis } from 'recharts'
@@ -13,12 +14,14 @@ import useSWR from 'swr'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { apiFetch } from '@/lib/api-fetch'
 import type { UserRow } from '@/types/users'
 
@@ -51,13 +54,7 @@ type UserAttempt = {
 	passed: boolean
 }
 
-const CHART_COLORS = [
-	'hsl(var(--chart-1))',
-	'hsl(var(--chart-2))',
-	'hsl(var(--chart-3))',
-	'hsl(var(--chart-4))',
-	'hsl(var(--chart-5))',
-]
+const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
 
 type Props = {
 	login: string
@@ -94,6 +91,17 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const [topicFilter, setTopicFilter] = useQueryState('topic', { defaultValue: 'all' })
 	const [testsParam, setTestsParam] = useQueryState('tests', { defaultValue: '' })
 	const [visibleCount, setVisibleCount] = useState(5)
+
+	// Date range filter state
+	const [range, setRange] = useQueryState('range', { defaultValue: 'all' })
+	const [customFrom, setCustomFrom] = useQueryState('from', { defaultValue: '' })
+	const [customTo, setCustomTo] = useQueryState('to', { defaultValue: '' })
+	const [calendarOpen, setCalendarOpen] = useState(false)
+	const [calendarRange, setCalendarRange] = useState<DateRange>({ from: undefined, to: undefined })
+
+	// Single day state
+	const [selectedDay, setSelectedDay] = useQueryState('day', { defaultValue: '' })
+	const [dayCalendarOpen, setDayCalendarOpen] = useState(false)
 
 	const selectedTestIds = useMemo(() => new Set(testsParam ? testsParam.split(',').filter(Boolean) : []), [testsParam])
 
@@ -135,6 +143,35 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		)
 	}, [attempts, search, topicFilter, activeTestIds])
 
+	// Apply date range filter to attempts for the area chart
+	const dateRangeFilteredAttempts = useMemo(() => {
+		const now = new Date()
+		let from: Date | null = null
+		let to: Date | null = null
+
+		if (range === 'week') {
+			from = subWeeks(now, 1)
+		} else if (range === 'month') {
+			from = subMonths(now, 1)
+		} else if (range === 'custom') {
+			from = customFrom ? new Date(customFrom) : null
+			to = customTo ? new Date(customTo) : null
+		}
+
+		if (!from && !to) return filteredAttempts
+
+		return filteredAttempts.filter((a) => {
+			const date = new Date(a.submittedAt)
+			if (from && date < from) return false
+			if (to) {
+				const endOfDay = new Date(to)
+				endOfDay.setHours(23, 59, 59, 999)
+				if (date > endOfDay) return false
+			}
+			return true
+		})
+	}, [filteredAttempts, range, customFrom, customTo])
+
 	const visibleAttempts = useMemo(() => filteredAttempts.slice(0, visibleCount), [filteredAttempts, visibleCount])
 
 	// Chart: one dataKey per active test, data is { date, [testId]: maxScore }
@@ -149,9 +186,8 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}, [activeTestList])
 
 	const chartData = useMemo(() => {
-		// Collect all dates
 		const byDateTest = new Map<string, Map<string, number[]>>()
-		for (const a of filteredAttempts) {
+		for (const a of dateRangeFilteredAttempts) {
 			const date = a.submittedAt.slice(0, 10)
 			if (!byDateTest.has(date)) byDateTest.set(date, new Map())
 			const testMap = byDateTest.get(date)!
@@ -167,7 +203,32 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				return point
 			})
 			.sort((a, b) => (a.date as string).localeCompare(b.date as string))
-	}, [filteredAttempts])
+	}, [dateRangeFilteredAttempts])
+
+	// Single day chart: X = attempt number per test, Y = score %
+	const dayChartData = useMemo(() => {
+		if (!selectedDay) return []
+		const dayAttempts = filteredAttempts
+			.filter((a) => a.submittedAt.slice(0, 10) === selectedDay)
+			.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+
+		const testAttemptScores = new Map<string, number[]>()
+		for (const a of dayAttempts) {
+			if (!testAttemptScores.has(a.testId)) testAttemptScores.set(a.testId, [])
+			testAttemptScores.get(a.testId)!.push(a.scorePercentage)
+		}
+
+		const maxLen = Math.max(0, ...Array.from(testAttemptScores.values()).map((v) => v.length))
+		if (maxLen === 0) return []
+
+		return Array.from({ length: maxLen }, (_, i) => {
+			const point: Record<string, number | string> = { attempt: i + 1 }
+			for (const [testId, scores] of testAttemptScores) {
+				if (i < scores.length) point[testId] = scores[i]
+			}
+			return point
+		})
+	}, [filteredAttempts, selectedDay])
 
 	const availableTests = useMemo(
 		() => (testsData?.tests ?? []).filter((t) => !assignedTestIds.has(t.id)),
@@ -224,6 +285,38 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		setVisibleCount(5)
 	}
 
+	const handlePresetChange = (value: string) => {
+		if (!value) return
+		void setRange(value)
+		void setCustomFrom('')
+		void setCustomTo('')
+		void setSelectedDay(null)
+	}
+
+	const handleCalendarSelect = (selected: DateRange | undefined) => {
+		if (!selected) return
+		setCalendarRange(selected)
+		if (selected.from && selected.to) {
+			void setCustomFrom(selected.from.toISOString())
+			void setCustomTo(selected.to.toISOString())
+			void setSelectedDay(null)
+			setCalendarOpen(false)
+		}
+	}
+
+	const handleDaySelect = (date: Date | undefined) => {
+		if (!date) return
+		void setSelectedDay(format(date, 'yyyy-MM-dd'))
+		void setRange('all')
+		void setCustomFrom('')
+		void setCustomTo('')
+		setDayCalendarOpen(false)
+	}
+
+	const clearDay = () => {
+		void setSelectedDay(null)
+	}
+
 	if (usersLoading || (Boolean(userId) && (assignmentsLoading || attemptsLoading))) {
 		return (
 			<div className="flex items-center justify-center p-12">
@@ -244,6 +337,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			: selectedTestIds.size === 1
 				? (testOptions.find((t) => selectedTestIds.has(t.id))?.title ?? '1 тест')
 				: `${selectedTestIds.size} теста выбрано`
+
+	const effectiveRange = range || 'all'
+	const isCustomRange = effectiveRange === 'custom' && customFrom && customTo
 
 	return (
 		<div className="space-y-6">
@@ -339,8 +435,83 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						</div>
 					)}
 
-					{/* Chart */}
-					{chartData.length > 0 && activeTestList.length > 0 && (
+					{/* Date range controls */}
+					{attempts.length > 0 && (
+						<div className="flex flex-wrap items-center gap-2">
+							<ToggleGroup
+								type="single"
+								value={['week', 'month', 'all'].includes(effectiveRange) ? effectiveRange : ''}
+								onValueChange={handlePresetChange}
+							>
+								<ToggleGroupItem value="week" className="h-8 text-xs">
+									Неделя
+								</ToggleGroupItem>
+								<ToggleGroupItem value="month" className="h-8 text-xs">
+									Месяц
+								</ToggleGroupItem>
+								<ToggleGroupItem value="all" className="h-8 text-xs">
+									Всё время
+								</ToggleGroupItem>
+							</ToggleGroup>
+
+							{/* Custom date range */}
+							<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+								<PopoverTrigger asChild>
+									<Button
+										variant={effectiveRange === 'custom' ? 'default' : 'outline'}
+										size="sm"
+										className="h-8 text-xs"
+										onClick={() => void setRange('custom')}
+									>
+										{isCustomRange
+											? `${format(new Date(customFrom), 'dd.MM.yy', { locale: ru })} — ${format(new Date(customTo), 'dd.MM.yy', { locale: ru })}`
+											: 'Свой диапазон'}
+									</Button>
+								</PopoverTrigger>
+								<PopoverContent className="w-auto p-0" align="start">
+									<Calendar
+										mode="range"
+										selected={calendarRange}
+										onSelect={handleCalendarSelect}
+										locale={ru}
+										numberOfMonths={2}
+									/>
+								</PopoverContent>
+							</Popover>
+
+							<div className="bg-border h-5 w-px" />
+
+							{/* Single day picker */}
+							<Popover open={dayCalendarOpen} onOpenChange={setDayCalendarOpen}>
+								<PopoverTrigger asChild>
+									<Button variant={selectedDay ? 'default' : 'outline'} size="sm" className="h-8 gap-1.5 text-xs">
+										<CalendarIcon className="h-3.5 w-3.5" />
+										{selectedDay ? format(new Date(selectedDay), 'd MMMM yyyy', { locale: ru }) : 'Один день'}
+									</Button>
+								</PopoverTrigger>
+								<PopoverContent className="w-auto p-0" align="start">
+									<Calendar
+										mode="single"
+										selected={selectedDay ? new Date(selectedDay) : undefined}
+										onSelect={handleDaySelect}
+										locale={ru}
+										captionLayout="dropdown"
+										fromYear={2020}
+										toYear={2030}
+									/>
+								</PopoverContent>
+							</Popover>
+
+							{selectedDay && (
+								<Button variant="ghost" size="sm" className="h-8 px-2" onClick={clearDay}>
+									<X className="h-3.5 w-3.5" />
+								</Button>
+							)}
+						</div>
+					)}
+
+					{/* Area chart (date range mode) */}
+					{!selectedDay && chartData.length > 0 && activeTestList.length > 0 && (
 						<ChartContainer config={chartConfig} className="h-50 w-full">
 							<AreaChart data={chartData}>
 								<CartesianGrid vertical={false} />
@@ -359,7 +530,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 												<p className="font-medium">{dateLabel}</p>
 												{payload.map((entry) => (
 													<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
-														{chartConfig[entry.dataKey as string]?.label}: {entry.value}%
+														{chartConfig[entry.dataKey as string]?.label}: {Math.round(entry.value as number)}%
 													</p>
 												))}
 											</div>
@@ -385,6 +556,70 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 								})}
 							</AreaChart>
 						</ChartContainer>
+					)}
+
+					{/* No data message for date range mode */}
+					{!selectedDay && chartData.length === 0 && filteredAttempts.length > 0 && (
+						<div className="text-muted-foreground flex h-32 items-center justify-center rounded-md border text-sm">
+							Нет данных за выбранный период
+						</div>
+					)}
+
+					{/* Day chart (single day mode) */}
+					{selectedDay && (
+						<div className="space-y-2">
+							<p className="text-muted-foreground text-xs">
+								Попытки за {format(new Date(selectedDay), 'd MMMM yyyy', { locale: ru })}
+							</p>
+							{dayChartData.length === 0 ? (
+								<div className="text-muted-foreground flex h-32 items-center justify-center rounded-md border text-sm">
+									Нет попыток за выбранный день
+								</div>
+							) : (
+								<ChartContainer config={chartConfig} className="h-50 w-full">
+									<AreaChart data={dayChartData}>
+										<CartesianGrid vertical={false} />
+										<XAxis dataKey="attempt" tickFormatter={(v: number) => `Попытка ${v}`} tick={{ fontSize: 11 }} />
+										<YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+										<ChartTooltip
+											content={({ active, payload, label }) => {
+												if (!active || !payload?.length) return null
+												return (
+													<div className="bg-background min-w-40 space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
+														<p className="font-medium">Попытка {label}</p>
+														{payload.map((entry) => (
+															<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
+																{chartConfig[entry.dataKey as string]?.label}: {Math.round(entry.value as number)}%
+															</p>
+														))}
+													</div>
+												)
+											}}
+										/>
+										{activeTestList.length > 1 && (
+											<Legend
+												formatter={(value) => chartConfig[value]?.label ?? value}
+												wrapperStyle={{ fontSize: 11 }}
+											/>
+										)}
+										{activeTestList.map((t, i) => {
+											const color = CHART_COLORS[i % CHART_COLORS.length]
+											return (
+												<Area
+													key={t.id}
+													dataKey={t.id}
+													type="monotone"
+													stroke={color}
+													fill={color}
+													fillOpacity={0.2}
+													connectNulls
+												/>
+											)
+										})}
+									</AreaChart>
+								</ChartContainer>
+							)}
+						</div>
 					)}
 
 					{/* List */}
@@ -415,7 +650,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											</div>
 											<p className="text-muted-foreground text-xs">
 												{new Date(attempt.submittedAt).toLocaleString('ru-RU')} · {attempt.earnedPoints}/
-												{attempt.totalPoints} · {attempt.scorePercentage}%
+												{attempt.totalPoints} · {Math.round(attempt.scorePercentage)}%
 											</p>
 										</div>
 										<div className="flex items-center gap-2">

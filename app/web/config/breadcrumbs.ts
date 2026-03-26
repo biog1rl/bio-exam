@@ -28,6 +28,8 @@ export const breadcrumbConfig = {
 		tests: 'Тесты',
 		scoring: 'Настройка баллов',
 		'question-types': 'Типы вопросов',
+		attempts: 'Попытки',
+		profile: 'Профиль',
 	} as Record<string, string>,
 
 	/** скрыть технические сегменты в конкретных ветках */

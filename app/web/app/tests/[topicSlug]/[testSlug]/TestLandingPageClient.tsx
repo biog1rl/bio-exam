@@ -26,7 +26,7 @@ import type { TestAttemptSummary } from '@/lib/tests/types'
 const chartConfig = {
 	maxScore: {
 		label: 'Лучший результат',
-		color: 'hsl(var(--chart-1))',
+		color: 'var(--chart-1)',
 	},
 }
 

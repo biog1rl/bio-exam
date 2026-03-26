@@ -23,7 +23,6 @@ import {
 	topics,
 } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { TestScoringRulesSchema, createDefaultTestScoringRules, resolveEffectiveScoringRules } from '../../lib/tests/scoring.js'
 import {
 	getEffectiveQuestionTypesForTest,
 	getGlobalQuestionTypes,
@@ -37,6 +36,11 @@ import {
 	QuestionTypeValidationSchema,
 	isMistakeMetricAllowedForTemplate,
 } from '../../lib/tests/question-types.js'
+import {
+	TestScoringRulesSchema,
+	createDefaultTestScoringRules,
+	resolveEffectiveScoringRules,
+} from '../../lib/tests/scoring.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -492,7 +496,7 @@ router.get('/question-types', sessionRequired(), requirePerm('tests', 'read'), a
 									titleOverride: override.titleOverride,
 									scoringRuleOverride: override.scoringRuleOverride,
 									isDisabled: override.isDisabled,
-							  }
+								}
 							: null,
 					}
 				}),
@@ -617,7 +621,8 @@ router.patch('/question-types/:key', sessionRequired(), requirePerm('tests', 'wr
 			title: parsed.data.title ?? existing.title,
 			description: parsed.data.description === undefined ? existing.description : parsed.data.description,
 			uiTemplate: nextUiTemplate,
-			validationSchema: parsed.data.validationSchema === undefined ? existing.validationSchema : parsed.data.validationSchema,
+			validationSchema:
+				parsed.data.validationSchema === undefined ? existing.validationSchema : parsed.data.validationSchema,
 			scoringRule: parsedNextRule.data,
 			isSystem: existing.isSystem,
 			isActive: parsed.data.isActive ?? existing.isActive,
@@ -1148,11 +1153,7 @@ router.get(
 				.select(questionDraftSelect)
 				.from(questionDrafts)
 				.where(
-					and(
-						eq(questionDrafts.id, draftId),
-						eq(questionDrafts.testId, testId),
-						eq(questionDrafts.ownerId, ownerId)
-					)
+					and(eq(questionDrafts.id, draftId), eq(questionDrafts.testId, testId), eq(questionDrafts.ownerId, ownerId))
 				)
 				.limit(1)
 
@@ -1233,11 +1234,7 @@ router.patch(
 					.update(questionDrafts)
 					.set(updateSet)
 					.where(
-						and(
-							eq(questionDrafts.id, draftId),
-							eq(questionDrafts.testId, testId),
-							eq(questionDrafts.ownerId, ownerId)
-						)
+						and(eq(questionDrafts.id, draftId), eq(questionDrafts.testId, testId), eq(questionDrafts.ownerId, ownerId))
 					)
 					.returning(questionDraftSelect)
 
@@ -1272,11 +1269,7 @@ router.delete(
 			const [removed] = await db
 				.delete(questionDrafts)
 				.where(
-					and(
-						eq(questionDrafts.id, draftId),
-						eq(questionDrafts.testId, testId),
-						eq(questionDrafts.ownerId, ownerId)
-					)
+					and(eq(questionDrafts.id, draftId), eq(questionDrafts.testId, testId), eq(questionDrafts.ownerId, ownerId))
 				)
 				.returning({ id: questionDrafts.id })
 
@@ -2020,7 +2013,9 @@ router.post(
 				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
 			}
 
-			let resolvedTargetTest = targetTestId ? await db.query.tests.findFirst({ where: eq(tests.id, targetTestId) }) : null
+			let resolvedTargetTest = targetTestId
+				? await db.query.tests.findFirst({ where: eq(tests.id, targetTestId) })
+				: null
 			let targetTopic =
 				resolvedTargetTest && resolvedTargetTest.topicId
 					? await db.query.topics.findFirst({ where: eq(topics.id, resolvedTargetTest.topicId) })
@@ -2512,20 +2507,36 @@ router.get(
 				})
 			)
 
+			// For admin review always include correct answers regardless of showCorrectAnswer setting
+			const questionIds = questionRows.map((q) => q.id)
+			const answerKeyRows =
+				questionIds.length > 0
+					? await db
+							.select({ questionId: answerKeys.questionId, correctAnswer: answerKeys.correctAnswer })
+							.from(answerKeys)
+							.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
+					: []
+			const answerKeysMap = new Map(answerKeyRows.map((ak) => [ak.questionId, ak.correctAnswer]))
+
+			const resultsWithCorrectAnswers = Array.isArray(attempt.results)
+				? (attempt.results as Array<Record<string, unknown>>).map((r) => ({
+						...r,
+						correctAnswer: r.correctAnswer ?? answerKeysMap.get(r.questionId as string) ?? null,
+					}))
+				: attempt.results
+
 			res.json({
 				attempt: {
 					id: attempt.id,
 					testId: attempt.testId,
 					userId: attempt.userId,
 					answers: attempt.answers,
-					results: attempt.results,
+					results: resultsWithCorrectAnswers,
 					earnedPoints: attempt.earnedPoints,
 					totalPoints: attempt.totalPoints,
 					scorePercentage: attempt.scorePercentage,
 					passed: attempt.passed,
-					submittedAt: attempt.submittedAt instanceof Date
-						? attempt.submittedAt.toISOString()
-						: attempt.submittedAt,
+					submittedAt: attempt.submittedAt instanceof Date ? attempt.submittedAt.toISOString() : attempt.submittedAt,
 					telemetry: attempt.telemetry ?? null,
 				},
 				questions: questionsWithTexts,
