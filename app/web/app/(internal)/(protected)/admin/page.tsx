@@ -19,6 +19,10 @@ export default function AdminPage() {
 			href: '/admin/settings',
 			name: 'Настройки',
 		},
+		{
+			href: '/admin/groups',
+			name: 'Группы',
+		},
 	]
 
 	return <Tiles items={adminItems} />
