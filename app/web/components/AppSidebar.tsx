@@ -6,9 +6,10 @@ import * as Icons from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import { NavLinks } from '@/components/nav-links'
-import { Sidebar, SidebarContent, SidebarHeader } from '@/components/ui/sidebar'
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from '@/components/ui/sidebar'
 
 import LogoSidebar from './LogoSidebar'
+import { NavUser } from './nav-user'
 
 interface SidebarItem {
 	id: string
@@ -71,9 +72,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 			<SidebarContent className="mt-16">
 				<NavLinks links={links} />
 			</SidebarContent>
-			{/* <SidebarFooter>
+			<SidebarFooter>
 				<NavUser />
-			</SidebarFooter> */}
+			</SidebarFooter>
 		</Sidebar>
 	)
 }

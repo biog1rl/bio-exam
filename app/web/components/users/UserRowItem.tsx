@@ -1,93 +1,101 @@
-'use client'
+"use client";
 
-import { roleDisplayName } from '@bio-exam/rbac'
+import { roleDisplayName } from "@bio-exam/rbac";
 
-import { Pencil, Link as LinkIcon } from 'lucide-react'
-import Link from 'next/link'
+import { Pencil, Link as LinkIcon } from "lucide-react";
+import Link from "next/link";
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { TableRow, TableCell } from '@/components/ui/table'
-import { highlightText } from '@/lib/search/highlight'
-import type { UserRow } from '@/types/users'
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TableRow, TableCell } from "@/components/ui/table";
+import { highlightText } from "@/lib/search/highlight";
+import type { UserRow } from "@/types/users";
 
 type Props = {
-	user: UserRow
-	searchQuery?: string
-	canEditRow: boolean
-	canInvite: boolean
-	onEditClick: (u: UserRow) => void
-	onReinviteClick: (u: UserRow) => void
-}
+  user: UserRow;
+  searchQuery?: string;
+  canEditRow: boolean;
+  canInvite: boolean;
+  onEditClick: (u: UserRow) => void;
+  onReinviteClick: (u: UserRow) => void;
+};
 
 export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditClick, onReinviteClick }: Props) {
-	const active = Boolean(user.isActive)
-	const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-	const allowReinvite = !active && canInvite
-	const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
+  const active = Boolean(user.isActive);
+  const fullName = [user.firstName ?? "", user.lastName ?? ""].join(" ").trim();
+  const allowReinvite = !active && canInvite;
+  const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`;
 
-	const loginDisplay = user.login ?? '—'
-	const nameDisplay = fullName || user.name || '—'
+  const loginDisplay = user.login ?? "—";
+  const nameDisplay = fullName || user.name || "—";
 
-	const highlightedLogin = searchQuery ? highlightText(loginDisplay, searchQuery) : loginDisplay
-	const highlightedName = searchQuery ? highlightText(nameDisplay, searchQuery) : nameDisplay
+  const highlightedLogin = searchQuery ? highlightText(loginDisplay, searchQuery) : loginDisplay;
+  const highlightedName = searchQuery ? highlightText(nameDisplay, searchQuery) : nameDisplay;
 
-	return (
-		<TableRow>
-			<TableCell className="font-medium">
-				<div className="flex flex-col">
-					<Link href={profileHref} className="hover:underline" dangerouslySetInnerHTML={{ __html: highlightedLogin }} />
-				</div>
-			</TableCell>
+  return (
+    <TableRow>
+      <TableCell className="font-medium">
+        <div className="flex flex-col">
+          <Link href={profileHref} className="hover:underline" dangerouslySetInnerHTML={{ __html: highlightedLogin }} />
+        </div>
+      </TableCell>
 
-			<TableCell>
-				<span dangerouslySetInnerHTML={{ __html: highlightedName }} />
-			</TableCell>
+      <TableCell>
+        <span dangerouslySetInnerHTML={{ __html: highlightedName }} />
+      </TableCell>
 
-			<TableCell>
-				{user.roles.length > 0 ? (
-					<div className="flex flex-wrap gap-1.5">
-						{user.roles.map((r) => (
-							<Badge key={r} variant="secondary" className="capitalize">
-								{roleDisplayName(r)}
-							</Badge>
-						))}
-					</div>
-				) : (
-					<span className="text-muted-foreground">—</span>
-				)}
-			</TableCell>
+      <TableCell>
+        {user.roles.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {user.roles.map((r) => (
+              <Badge key={r} variant="secondary" className="capitalize">
+                {roleDisplayName(r)}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
 
-			<TableCell>
-				{active ? <Badge variant="default">Активен</Badge> : <Badge variant="outline">Ожидает</Badge>}
-			</TableCell>
+      <TableCell>
+        {active ? <Badge variant="default">Активен</Badge> : <Badge variant="outline">Ожидает</Badge>}
+      </TableCell>
 
-			<TableCell>{formatDateTime(user.createdAt)}</TableCell>
-			<TableCell>{user.createdByName ?? '—'}</TableCell>
+      <TableCell>
+        {user.groupName ? (
+          <span className="text-sm">{user.groupName}</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">—</span>
+        )}
+      </TableCell>
 
-			{canEditRow && (
-				<TableCell className="space-x-2 text-right">
-					<div className="flex justify-end gap-2">
-						<Button size="icon" variant="outline" onClick={() => onEditClick(user)}>
-							<Pencil />
-						</Button>
+      <TableCell>{formatDateTime(user.createdAt)}</TableCell>
+      <TableCell>{user.createdByName ?? "—"}</TableCell>
 
-						{allowReinvite && (
-							<Button size="icon" variant="outline" onClick={() => onReinviteClick(user)}>
-								<LinkIcon />
-							</Button>
-						)}
-					</div>
-				</TableCell>
-			)}
-		</TableRow>
-	)
+      {canEditRow && (
+        <TableCell className="space-x-2 text-right">
+          <div className="flex justify-end gap-2">
+            <Button size="icon" variant="outline" onClick={() => onEditClick(user)}>
+              <Pencil />
+            </Button>
+
+            {allowReinvite && (
+              <Button size="icon" variant="outline" onClick={() => onReinviteClick(user)}>
+                <LinkIcon />
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      )}
+    </TableRow>
+  );
 }
 
 function formatDateTime(iso: string) {
-	try {
-		return new Date(iso).toLocaleString()
-	} catch {
-		return iso
-	}
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
 }

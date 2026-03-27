@@ -5,7 +5,16 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { Router } from 'express'
 
 import { db } from '../../db/index.js'
-import { testAssignments, testAttempts, tests, topics, users, userRoles } from '../../db/schema.js'
+import {
+	studentGroups,
+	testAssignments,
+	testAttempts,
+	tests,
+	topics,
+	userGroups,
+	users,
+	userRoles,
+} from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
@@ -59,6 +68,12 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 				telegram: users.telegram,
 				phone: users.phone,
 				email: users.email,
+				groupName: sql<string | null>`
+          (select sg.name from user_groups ug
+           inner join student_groups sg on sg.id = ug.group_id
+           where ug.user_id = ${users.id}
+           limit 1)
+        `.as('groupName'),
 			})
 			.from(users)
 			.leftJoin(userRoles, eq(userRoles.userId, users.id))
@@ -104,6 +119,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 			telegram: r.telegram,
 			phone: r.phone,
 			email: r.email,
+			groupName: r.groupName ?? null,
 		}))
 
 		res.json({ users: result })
@@ -162,6 +178,34 @@ router.patch('/:id', validateUUID('id'), sessionRequired(), requirePerm('users',
 	}
 })
 
+// PATCH /api/users/:id/group — смена группы пользователя (null = убрать из группы)
+router.patch(
+	'/:id/group',
+	validateUUID('id'),
+	sessionRequired(),
+	requirePerm('users', 'edit'),
+	async (req, res, next) => {
+		try {
+			const id = req.params.id as string
+			const { groupId } = req.body as { groupId: string | null }
+
+			const existing = await db.query.users.findFirst({ where: eq(users.id, id) })
+			if (!existing) return res.status(404).json({ error: ERROR_MESSAGES.USER_NOT_FOUND })
+
+			await db.transaction(async (tx) => {
+				await tx.delete(userGroups).where(eq(userGroups.userId, id))
+				if (groupId) {
+					await tx.insert(userGroups).values({ groupId, userId: id }).onConflictDoNothing()
+				}
+			})
+
+			return res.json({ ok: true })
+		} catch (e) {
+			next(e)
+		}
+	}
+)
+
 // DELETE /api/users/:id — удаление пользователя
 router.delete('/:id', validateUUID('id'), sessionRequired(), requirePerm('users', 'edit'), async (req, res, next) => {
 	try {
@@ -198,7 +242,7 @@ router.get(
 					testTitle: tests.title,
 					testSlug: tests.slug,
 					topicSlug: topics.slug,
-				topicTitle: topics.title,
+					topicTitle: topics.title,
 					submittedAt: testAttempts.submittedAt,
 					earnedPoints: testAttempts.earnedPoints,
 					totalPoints: testAttempts.totalPoints,
@@ -265,10 +309,7 @@ router.post(
 			}
 			const { testId } = parsed.data
 			const adminId = req.authUser!.id
-			await db
-				.insert(testAssignments)
-				.values({ testId, userId, assignedBy: adminId })
-				.onConflictDoNothing()
+			await db.insert(testAssignments).values({ testId, userId, assignedBy: adminId }).onConflictDoNothing()
 			res.json({ ok: true })
 		} catch (err) {
 			next(err)
