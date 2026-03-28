@@ -11,11 +11,13 @@ import { buildPermissionSetForUser } from '../../services/rbac/rbac.js'
 const router = Router()
 
 router.get('/', sessionOptional(), async (req, res) => {
+	res.setHeader('Cache-Control', 'no-store')
+
 	const u = req.authUser
-	if (!u?.id) return res.status(200).json({ ok: false })
+	if (!u?.id) return res.status(401).json({ ok: false })
 
 	const row = await db.query.users.findFirst({ where: eq(users.id, u.id) })
-	if (!row) return res.status(200).json({ ok: false })
+	if (!row) return res.status(401).json({ ok: false })
 
 	const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, u.id))
 	const roles = rs.map((r) => r.role)

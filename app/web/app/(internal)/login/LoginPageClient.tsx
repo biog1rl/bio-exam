@@ -10,6 +10,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { fetchAuthMe } from '@/lib/auth/fetchMe'
 import { normalizeLogin } from '@/lib/auth/validators'
 
 function safeRedirect(url?: string | null) {
@@ -36,21 +37,7 @@ function safeRedirect(url?: string | null) {
 
 async function fetchMe(): Promise<boolean> {
 	try {
-		let r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
-		if (r.status === 401) {
-			const rf = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-			if (rf.ok) {
-				r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
-			}
-		}
-		if (!r.ok) return false
-		const j: unknown = await r.json()
-		const obj = typeof j === 'object' && j !== null ? (j as Record<string, unknown>) : null
-		const ok = obj && obj['ok'] === true
-		const user =
-			obj && typeof obj['user'] === 'object' && obj['user'] !== null ? (obj['user'] as Record<string, unknown>) : null
-		const id = user && typeof user['id'] === 'string' ? user['id'] : null
-		return Boolean(ok && id)
+		return Boolean(await fetchAuthMe())
 	} catch {
 		return false
 	}

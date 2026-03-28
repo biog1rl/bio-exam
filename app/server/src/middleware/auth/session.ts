@@ -76,17 +76,20 @@ export function sessionOptional() {
 				return next()
 			}
 
-			const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
+			const [u, rs] = await Promise.all([
+				db.query.users.findFirst({ where: eq(users.id, userId) }),
+				db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId)),
+			])
 			if (!u || !u.isActive) {
 				req.authUser = null
 				return next()
 			}
 
 			// Роли из БД -> нормализуем в RoleKey[]
-			const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
 			const dbRoles = normaliseRoleKeys(rs.map((r) => r.role as string))
-
-			const roles: RoleKey[] = dbRoles
+			const jwtRoles = payload.roles ? normaliseRoleKeys(payload.roles) : []
+			const rolesSet = new Set<RoleKey>([...dbRoles, ...jwtRoles])
+			const roles: RoleKey[] = Array.from(rolesSet)
 
 			req.authUser = { id: userId, roles, login: u.login }
 			next()
@@ -100,6 +103,11 @@ export function sessionOptional() {
 export function sessionRequired() {
 	const opt = sessionOptional()
 	return async (req: Request, res: Response, next: NextFunction) => {
+		if (req.authUser !== undefined) {
+			if (!req.authUser) return res.status(401).json({ error: 'Unauthorized' })
+			return next()
+		}
+
 		await opt(req, res, () => {})
 		if (!req.authUser) return res.status(401).json({ error: 'Unauthorized' })
 		next()

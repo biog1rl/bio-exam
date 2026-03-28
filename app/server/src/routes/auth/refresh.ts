@@ -47,13 +47,13 @@ router.post('/', rateLimiter({ maxAttempts: 10, windowMs: 60 * 1000, keyPrefix: 
 		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, row.userId))
 		const roles = rs.map((r) => r.role)
 
-		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? 60 * 60)
+		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? AUTH_CONFIG.sessionMaxAgeSec)
 		const token = jwt.sign({ sub: row.userId, roles }, AUTH_CONFIG.jwtSecret, { expiresIn: `${ACCESS_EXPIRES_SEC}s` })
 
 		setSessionCookie(res, token, ACCESS_EXPIRES_SEC)
 
 		// Optionally rotate refresh token: create new and revoke old
-		const REFRESH_EXPIRES_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? 30)
+		const REFRESH_EXPIRES_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? AUTH_CONFIG.sessionMaxAgeDays)
 		const newRefresh = crypto.randomBytes(64).toString('hex')
 		const newHash = crypto.createHash('sha256').update(newRefresh).digest('hex')
 		const newExpires = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000)

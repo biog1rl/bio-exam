@@ -5,24 +5,9 @@ import { can as canRbac } from '@bio-exam/rbac'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
-type Me = {
-	id: string
-	login: string | null
-	firstName: string | null
-	lastName: string | null
-	avatar: string | null
-	avatarCropped: string | null
-	avatarColor: string | null
-	initials: string | null
-	avatarCropX: number | null
-	avatarCropY: number | null
-	avatarCropZoom: number | null
-	avatarCropRotation: number | null
-	avatarCropViewX: number | null
-	avatarCropViewY: number | null
-	roles: RoleKey[]
-	perms: PermissionKey[]
-}
+import { fetchAuthMe, type AuthMe } from '@/lib/auth/fetchMe'
+
+type Me = AuthMe
 
 type AuthContextValue = {
 	me: Me | null
@@ -41,24 +26,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 async function fetchMeOnce(): Promise<Me | null> {
 	try {
-		let r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
-		// Если access token истёк — попробуем обменять refresh token
-		if (r.status === 401) {
-			try {
-				const rf = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-				if (rf.ok) {
-					// повторяем запрос к /me после успешного refresh
-					r = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' })
-				}
-			} catch {
-				// ignore
-			}
-		}
-
-		if (!r.ok) return null
-		const j = await r.json()
-		if (!j?.ok || !j?.user?.id) return null
-		return j.user as Me
+		return await fetchAuthMe()
 	} catch {
 		return null
 	}
