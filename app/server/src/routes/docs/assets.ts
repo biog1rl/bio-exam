@@ -43,6 +43,87 @@ const upload = multer({
 	},
 })
 
+// GET /api/docs/assets?limit=20&offset=0 — list uploaded images with signed URLs
+router.get('/', sessionRequired(), async (req, res) => {
+	try {
+		const limit = Math.min(Math.max(parseInt(String(req.query.limit)) || 20, 1), 100)
+		const offset = Math.max(parseInt(String(req.query.offset)) || 0, 0)
+
+		if (!storageService.isConfigured()) {
+			// Local fallback: read from disk
+			const dir = LOCAL_UPLOAD_DIR
+			if (!fs.existsSync(dir)) {
+				return res.json({ assets: [], total: 0 })
+			}
+			const allFiles = fs
+				.readdirSync(dir)
+				.filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+				.sort()
+			const total = allFiles.length
+			const pageFiles = allFiles.slice(offset, offset + limit)
+			const assets = pageFiles.map((f) => ({
+				filename: f,
+				path: 'images/' + f,
+				signedUrl: '/uploads/images/' + f,
+				size: fs.statSync(path.join(dir, f)).size,
+				createdAt: fs.statSync(path.join(dir, f)).mtime.toISOString(),
+			}))
+			return res.json({ assets, total })
+		}
+
+		const { files, total } = await storageService.listFilesWithMeta('images', { limit, offset })
+
+		const assets = await Promise.all(
+			files.map(async (f) => {
+				const storagePath = 'images/' + f.name
+				const signedUrl = await storageService.createSignedUrl(storagePath, 3600)
+				return {
+					filename: f.name,
+					path: storagePath,
+					signedUrl,
+					size: (f.metadata?.size as number) ?? 0,
+					createdAt: f.created_at ?? '',
+				}
+			})
+		)
+
+		return res.json({ assets, total })
+	} catch (error) {
+		console.error('[docs/assets] Error listing assets:', error)
+		return res.status(500).json({ error: 'Не удалось получить список изображений' })
+	}
+})
+
+// DELETE /api/docs/assets — delete image by path (passed in request body)
+router.delete('/', sessionRequired(), async (req, res) => {
+	try {
+		const filePath = req.body?.path
+		if (!filePath || typeof filePath !== 'string') {
+			return res.status(400).json({ error: 'path is required' })
+		}
+
+		// Validate path starts with "images/" to prevent arbitrary deletion
+		if (!filePath.startsWith('images/')) {
+			return res.status(400).json({ error: 'Invalid path' })
+		}
+
+		if (!storageService.isConfigured()) {
+			// Local fallback: delete from disk
+			const localPath = path.join(process.cwd(), '../web/public/uploads', filePath)
+			if (fs.existsSync(localPath)) {
+				fs.unlinkSync(localPath)
+			}
+			return res.json({ success: true })
+		}
+
+		await storageService.deleteFiles([filePath])
+		return res.json({ success: true })
+	} catch (error) {
+		console.error('[docs/assets] Error deleting asset:', error)
+		return res.status(500).json({ error: 'Не удалось удалить изображение' })
+	}
+})
+
 // POST /api/docs/assets — upload image, compress to WebP, store
 router.post('/', sessionRequired(), upload.single('file') as any, async (req, res) => {
 	try {

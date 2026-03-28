@@ -80,6 +80,7 @@ import { InsertColumnsLayout } from '@/components/editor/plugins/toolbar/block-i
 import { InsertEmbeds } from '@/components/editor/plugins/toolbar/block-insert/insert-embeds'
 import { InsertHorizontalRule } from '@/components/editor/plugins/toolbar/block-insert/insert-horizontal-rule'
 import { InsertImage } from '@/components/editor/plugins/toolbar/block-insert/insert-image'
+import { InsertMediaLibrary } from '@/components/editor/plugins/toolbar/block-insert/insert-media-library'
 import { InsertTable } from '@/components/editor/plugins/toolbar/block-insert/insert-table'
 import { ClearFormattingToolbarPlugin } from '@/components/editor/plugins/toolbar/clear-formatting-toolbar-plugin'
 import { CodeLanguageToolbarPlugin } from '@/components/editor/plugins/toolbar/code-language-toolbar-plugin'
@@ -205,6 +206,9 @@ export function Plugins({
 												<InsertEmbeds />
 											</BlockInsertPlugin>
 										)}
+
+										{/* Media Library standalone button */}
+										{p('Images') && <InsertMediaLibrary />}
 									</>
 								)}
 							</div>

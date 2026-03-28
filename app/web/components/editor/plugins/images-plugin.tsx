@@ -42,8 +42,6 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { UploadAssetResponse } from '@/types/assets'
 
-import { MediaLibrary } from './images-plugin/MediaLibrary'
-
 export type InsertImagePayload = Readonly<ImagePayload>
 
 const getDOMSelection = (targetWindow: Window | null): Selection | null =>
@@ -168,11 +166,9 @@ export function InsertImageUploadedDialogBody({ onClick }: { onClick: (payload: 
 export function InsertImageDialog({
 	activeEditor,
 	onClose,
-	docPath,
 }: {
 	activeEditor: LexicalEditor
 	onClose: () => void
-	docPath?: string
 }): JSX.Element {
 	const hasModifier = useRef(false)
 
@@ -192,16 +188,6 @@ export function InsertImageDialog({
 		onClose()
 	}
 
-	const onSelect = (src: string, altText: string) => {
-		onClick({ src, altText })
-	}
-
-	// Если есть docPath, используем MediaLibrary
-	if (docPath) {
-		return <MediaLibrary docPath={docPath} onSelect={onSelect} />
-	}
-
-	// Fallback к старому интерфейсу
 	return (
 		<Tabs defaultValue="url">
 			<TabsList className="w-full">

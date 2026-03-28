@@ -1,6 +1,7 @@
 export type AssetFile = {
 	filename: string
 	path: string
+	signedUrl: string
 	size: number
 	createdAt: string
 }
@@ -13,4 +14,5 @@ export type UploadAssetResponse = {
 
 export type AssetsListResponse = {
 	assets: AssetFile[]
+	total: number
 }

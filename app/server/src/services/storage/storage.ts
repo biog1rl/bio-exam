@@ -484,6 +484,49 @@ export class StorageService {
 	getTestPath(topicSlug: string, testSlug: string): string {
 		return `topics/${topicSlug}/${testSlug}`
 	}
+
+	/**
+	 * Список файлов с метаданными (size, created_at) и поддержкой пагинации
+	 * @param prefix Директория в bucket
+	 * @param options Параметры пагинации и сортировки
+	 * @returns Массив файлов с метаданными и общее количество
+	 */
+	async listFilesWithMeta(
+		prefix: string,
+		options: { limit?: number; offset?: number; sortBy?: { column: string; order: string } } = {}
+	): Promise<{
+		files: Array<{ name: string; id: string | null; metadata: Record<string, unknown>; created_at: string }>
+		total: number
+	}> {
+		const client = getClient()
+		if (!client) return { files: [], total: 0 }
+
+		const { limit = 20, offset = 0, sortBy = { column: 'created_at', order: 'desc' } } = options
+
+		const { data, error } = await client.storage
+			.from(BUCKET)
+			.list(prefix, { limit, offset, sortBy: sortBy as { column: string; order: 'asc' | 'desc' } })
+
+		if (error) {
+			console.error(`[StorageService] Error listing files in ${prefix}:`, error)
+			return { files: [], total: 0 }
+		}
+
+		const files = (data || []).filter((f) => f.id !== null) as Array<{
+			name: string
+			id: string | null
+			metadata: Record<string, unknown>
+			created_at: string
+		}>
+
+		// Отдельный запрос для подсчёта общего числа файлов (Supabase не предоставляет count API для storage)
+		const { data: allData } = await client.storage
+			.from(BUCKET)
+			.list(prefix, { limit: 10000, sortBy: sortBy as { column: string; order: 'asc' | 'desc' } })
+		const total = (allData || []).filter((f) => f.id !== null).length
+
+		return { files, total }
+	}
 }
 
 // Singleton экземпляр

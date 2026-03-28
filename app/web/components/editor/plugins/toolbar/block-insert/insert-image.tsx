@@ -2,22 +2,18 @@
 
 import { ImageIcon } from 'lucide-react'
 
-import { useDocPath } from '@/components/editor/context/doc-path-context'
 import { useToolbarContext } from '@/components/editor/context/toolbar-context'
 import { InsertImageDialog } from '@/components/editor/plugins/images-plugin'
 import { SelectItem } from '@/components/ui/select'
 
 export function InsertImage() {
 	const { activeEditor, showModal } = useToolbarContext()
-	const { docPath } = useDocPath()
 
 	return (
 		<SelectItem
 			value="image"
 			onPointerUp={() => {
-				showModal('Insert Image', (onClose) => (
-					<InsertImageDialog activeEditor={activeEditor} onClose={onClose} docPath={docPath} />
-				))
+				showModal('Insert Image', (onClose) => <InsertImageDialog activeEditor={activeEditor} onClose={onClose} />)
 			}}
 			className=""
 		>
