@@ -1,12 +1,7 @@
-import Tiles from '@/components/Tiles'
-
-type AdminItem = {
-	href: string
-	name: string
-}
+import Tiles, { TilesItem } from '@/components/Tiles'
 
 export default function AdminPage() {
-	const adminItems: AdminItem[] = [
+	const adminItems: TilesItem[] = [
 		{
 			href: '/admin/tests',
 			name: 'Тесты',

@@ -4,6 +4,7 @@ import path from 'path'
 
 import { eq } from 'drizzle-orm'
 import { Router } from 'express'
+import { fileTypeFromBuffer } from 'file-type'
 import multer from 'multer'
 import sharp from 'sharp'
 
@@ -157,6 +158,14 @@ router.post('/', sessionRequired(), upload.single('avatar') as any, async (req, 
 			if (supabaseEnabled && (req.file as any).buffer) {
 				// Upload to Supabase storage
 				const originalBuffer: Buffer = (req.file as any).buffer
+				// Magic-byte validation
+				const detected = await fileTypeFromBuffer(originalBuffer)
+				const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+				if (!detected || !ALLOWED_MIMES.has(detected.mime)) {
+					return res.status(400).json({
+						error: 'Недопустимый тип файла. Файл не является допустимым изображением (JPEG, PNG, GIF, WebP)',
+					})
+				}
 				const ext = path.extname((req.file as any).originalname) || '.png'
 				const baseName = `${userId}/${crypto.randomBytes(12).toString('hex')}${ext}`
 				const originalPath = `avatars/${baseName}`
@@ -168,7 +177,20 @@ router.post('/', sessionRequired(), upload.single('avatar') as any, async (req, 
 					.where(eq(users.id, userId))
 					.limit(1)
 				if (user.length > 0) {
-					// TODO: optionally delete previous files in Supabase if stored with known paths
+					const oldPaths: string[] = []
+					for (const url of [user[0].avatar, user[0].avatarCropped]) {
+						if (!url) continue
+						// Extract Supabase storage path from public URL
+						// URL format: https://<host>/storage/v1/object/public/<bucket>/<path>
+						const match = url.match(/\/storage\/v1\/object\/public\/[^/]+\/(.+)$/)
+						if (match?.[1]) {
+							oldPaths.push(decodeURIComponent(match[1]))
+						}
+					}
+					if (oldPaths.length > 0) {
+						// Best-effort deletion — don't block upload on cleanup failure
+						storageService.deleteFiles(oldPaths).catch(() => {})
+					}
 				}
 
 				// Upload original
@@ -223,6 +245,17 @@ router.post('/', sessionRequired(), upload.single('avatar') as any, async (req, 
 			} else {
 				// Local disk path flow (unchanged)
 				avatarUrl = `/uploads/avatars/${req.file.filename}`
+
+				// Magic-byte validation for disk storage
+				const diskBuffer = fs.readFileSync(path.join(UPLOAD_DIR, req.file.filename))
+				const detectedDisk = await fileTypeFromBuffer(diskBuffer)
+				const ALLOWED_MIMES_DISK = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+				if (!detectedDisk || !ALLOWED_MIMES_DISK.has(detectedDisk.mime)) {
+					fs.unlinkSync(path.join(UPLOAD_DIR, req.file.filename))
+					return res.status(400).json({
+						error: 'Недопустимый тип файла. Файл не является допустимым изображением (JPEG, PNG, GIF, WebP)',
+					})
+				}
 
 				// Получаем старый аватар пользователя
 				const user = await db

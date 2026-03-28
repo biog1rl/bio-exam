@@ -86,11 +86,7 @@ export function sessionOptional() {
 			const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
 			const dbRoles = normaliseRoleKeys(rs.map((r) => r.role as string))
 
-			// При желании можно объединять с ролями из JWT (если они там есть)
-			const jwtRoles = payload.roles ? normaliseRoleKeys(payload.roles) : []
-			// Убираем дубли:
-			const rolesSet = new Set<RoleKey>([...dbRoles, ...jwtRoles])
-			const roles: RoleKey[] = Array.from(rolesSet)
+			const roles: RoleKey[] = dbRoles
 
 			req.authUser = { id: userId, roles, login: u.login }
 			next()

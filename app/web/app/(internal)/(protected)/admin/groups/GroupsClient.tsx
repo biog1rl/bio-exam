@@ -2,15 +2,15 @@
 
 import { useState, useMemo } from 'react'
 
-import { PlusIcon } from 'lucide-react'
+import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import useSWR from 'swr'
 
+import { DeleteGroupDialog } from '@/components/groups/DeleteGroupDialog'
+import { GroupSheet } from '@/components/groups/GroupSheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { GroupSheet } from '@/components/groups/GroupSheet'
-import { DeleteGroupDialog } from '@/components/groups/DeleteGroupDialog'
 
 type Group = { id: string; name: string; memberCount: number; createdAt: string }
 
@@ -56,7 +56,7 @@ export default function GroupsClient() {
 
 			<div className="overflow-hidden rounded-md border">
 				<div className="overflow-auto">
-					<Table className="min-w-[400px]">
+					<Table className="min-w-100">
 						<TableHeader>
 							<TableRow>
 								<TableHead>Название</TableHead>
@@ -82,7 +82,7 @@ export default function GroupsClient() {
 
 							{!isLoading && !data && (
 								<TableRow>
-									<TableCell colSpan={3} className="text-center text-muted-foreground">
+									<TableCell colSpan={3} className="text-muted-foreground text-center">
 										Не удалось загрузить группы. Обновите страницу.
 									</TableCell>
 								</TableRow>
@@ -90,7 +90,7 @@ export default function GroupsClient() {
 
 							{!isLoading && data && filtered.length === 0 && (
 								<TableRow>
-									<TableCell colSpan={3} className="text-center text-muted-foreground">
+									<TableCell colSpan={3} className="text-muted-foreground text-center">
 										{search ? 'Группы не найдены. Попробуйте изменить запрос.' : 'Групп пока нет'}
 									</TableCell>
 								</TableRow>
@@ -103,24 +103,18 @@ export default function GroupsClient() {
 										<TableCell>{g.name}</TableCell>
 										<TableCell>{g.memberCount}</TableCell>
 										<TableCell>
-											<div className="flex gap-2">
+											<div className="flex justify-end gap-2">
 												<Button
-													size="sm"
-													variant="ghost"
+													size="icon"
 													onClick={() => {
 														setEditTarget(g)
 														setSheetOpen(true)
 													}}
 												>
-													Изменить
+													<PencilIcon />
 												</Button>
-												<Button
-													size="sm"
-													variant="ghost"
-													className="text-destructive hover:text-destructive"
-													onClick={() => setDeleteTarget(g)}
-												>
-													Удалить
+												<Button size="icon" variant="destructive" onClick={() => setDeleteTarget(g)}>
+													<Trash2Icon />
 												</Button>
 											</div>
 										</TableCell>
@@ -131,12 +125,7 @@ export default function GroupsClient() {
 				</div>
 			</div>
 
-			<GroupSheet
-				open={sheetOpen}
-				onOpenChange={setSheetOpen}
-				group={editTarget}
-				onSaved={() => mutate()}
-			/>
+			<GroupSheet open={sheetOpen} onOpenChange={setSheetOpen} group={editTarget} onSaved={() => mutate()} />
 			<DeleteGroupDialog
 				group={deleteTarget}
 				onOpenChange={(open) => {

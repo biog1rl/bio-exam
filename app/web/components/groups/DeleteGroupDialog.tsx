@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 
-import { apiFetch } from '@/lib/api-fetch'
 import { toast } from 'sonner'
+
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -14,6 +14,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { apiFetch } from '@/lib/api-fetch'
 
 interface Group {
 	id: string

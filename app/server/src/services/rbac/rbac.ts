@@ -12,9 +12,16 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../../db/index.js'
 import { rbacRoleGrants, rbacUserGrants, userRoles } from '../../db/schema.js'
 
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+interface CacheEntry<T> {
+	value: T
+	expiresAt: number
+}
+
 /** Кэш для ролей и пользователей */
-let rolesCache = new Map<string, Set<PermissionKey>>()
-let userCache = new Map<string, Set<PermissionKey>>()
+let rolesCache = new Map<string, CacheEntry<Set<PermissionKey>>>()
+let userCache = new Map<string, CacheEntry<Set<PermissionKey>>>()
 
 export function invalidateRBACCache(): void {
 	rolesCache.clear()
@@ -43,7 +50,7 @@ export async function buildPermissionSet(roles: ReadonlyArray<RoleKey>): Promise
 	// ключ кэша — отсортированный список ролей
 	const cacheKey = roles.slice().sort().join(',')
 	const cached = rolesCache.get(cacheKey)
-	if (cached) return new Set(cached)
+	if (cached && cached.expiresAt > Date.now()) return new Set(cached.value)
 
 	// 1) дефолтные права из ROLE_REGISTRY
 	const base = new Set<PermissionKey>()
@@ -80,14 +87,14 @@ export async function buildPermissionSet(roles: ReadonlyArray<RoleKey>): Promise
 
 	// кешируем итог
 	const snapshot = new Set(base)
-	rolesCache.set(cacheKey, snapshot)
+	rolesCache.set(cacheKey, { value: snapshot, expiresAt: Date.now() + CACHE_TTL_MS })
 	return base
 }
 
 /** Эффективные права пользователя: роли (+role overrides) + персональные overrides (allow/deny, приоритетнее ролей) */
 export async function buildPermissionSetForUser(userId: string): Promise<Set<PermissionKey>> {
 	const cached = userCache.get(userId)
-	if (cached) return new Set(cached)
+	if (cached && cached.expiresAt > Date.now()) return new Set(cached.value)
 
 	// роли пользователя
 	const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
@@ -106,6 +113,6 @@ export async function buildPermissionSetForUser(userId: string): Promise<Set<Per
 	}
 
 	const effective = new Set(base)
-	userCache.set(userId, effective)
+	userCache.set(userId, { value: effective, expiresAt: Date.now() + CACHE_TTL_MS })
 	return effective
 }

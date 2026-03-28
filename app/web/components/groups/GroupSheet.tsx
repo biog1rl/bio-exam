@@ -3,26 +3,19 @@
 import { useState, useEffect, useMemo } from 'react'
 
 import { Check, ChevronsUpDown, X } from 'lucide-react'
+import { toast } from 'sonner'
 import useSWR from 'swr'
 
-import { cn } from '@/lib/utils'
-import { apiFetch } from '@/lib/api-fetch'
-import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-	Command,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandItem,
-	CommandList,
-} from '@/components/ui/command'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { apiFetch } from '@/lib/api-fetch'
+import { cn } from '@/lib/utils'
 import type { UserRow } from '@/types/users'
 
 interface Group {
@@ -77,10 +70,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		}
 	}, [groupData])
 
-	const selectedUsers = useMemo(
-		() => allUsers.filter((u) => selectedIds.includes(u.id)),
-		[allUsers, selectedIds]
-	)
+	const selectedUsers = useMemo(() => allUsers.filter((u) => selectedIds.includes(u.id)), [allUsers, selectedIds])
 
 	const displayName = (u: UserRow) => {
 		const full = [u.firstName, u.lastName].filter(Boolean).join(' ')
@@ -132,7 +122,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 				<div className="space-y-4 px-4 py-4">
 					{/* Group name */}
 					<div className="space-y-1">
-						<Label htmlFor="group-name" className="text-sm text-muted-foreground">
+						<Label htmlFor="group-name" className="text-muted-foreground text-sm">
 							Название группы
 						</Label>
 						<Input
@@ -155,7 +145,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 					{/* Combobox user picker */}
 					{(!group || !membersLoading) && (
 						<div className="space-y-2">
-							<Label className="text-sm text-muted-foreground">Участники</Label>
+							<Label className="text-muted-foreground text-sm">Участники</Label>
 							<Popover open={comboOpen} onOpenChange={setComboOpen}>
 								<PopoverTrigger asChild>
 									<Button variant="outline" role="combobox" className="w-full justify-between">
@@ -176,15 +166,10 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 														onSelect={() => toggleUser(u.id)}
 													>
 														<Check
-															className={cn(
-																'mr-2 h-4 w-4',
-																selectedIds.includes(u.id) ? 'opacity-100' : 'opacity-0'
-															)}
+															className={cn('mr-2 h-4 w-4', selectedIds.includes(u.id) ? 'opacity-100' : 'opacity-0')}
 														/>
 														{displayName(u)}
-														{u.login && (
-															<span className="ml-1 text-xs text-muted-foreground">@{u.login}</span>
-														)}
+														{u.login && <span className="text-muted-foreground ml-1 text-xs">@{u.login}</span>}
 													</CommandItem>
 												))}
 											</CommandGroup>
@@ -195,7 +180,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 
 							{/* Member chips */}
 							{selectedUsers.length > 0 && (
-								<div className="flex flex-wrap gap-2 mt-2">
+								<div className="mt-2 flex flex-wrap gap-2">
 									{selectedUsers.map((u) => (
 										<Badge
 											key={u.id}
@@ -213,12 +198,12 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 					)}
 				</div>
 
-				<SheetFooter className="flex-col px-4 gap-2">
+				<SheetFooter className="flex-col gap-2 px-4">
 					<Button className="w-full" onClick={handleSave} disabled={saving}>
 						{saving ? 'Сохранение...' : 'Сохранить'}
 					</Button>
 					<span
-						className="cursor-pointer text-sm text-muted-foreground text-center"
+						className="text-muted-foreground cursor-pointer text-center text-sm"
 						onClick={() => onOpenChange(false)}
 					>
 						Отмена

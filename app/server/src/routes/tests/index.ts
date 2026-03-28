@@ -141,23 +141,6 @@ async function ensureGlobalScoringRules(updatedBy?: string | null) {
 	return defaults
 }
 
-async function syncQuestionPointsForTest(testId: string, rules: z.infer<typeof TestScoringRulesSchema>) {
-	await db.execute(sql`
-		UPDATE ${questions}
-		SET
-			${questions.points} = CASE ${questions.type}
-				WHEN 'radio' THEN ${rules.radio.correctPoints}
-				WHEN 'checkbox' THEN ${rules.checkbox.correctPoints}
-				WHEN 'matching' THEN ${rules.matching.correctPoints}
-				WHEN 'short_answer' THEN ${rules.short_answer.correctPoints}
-				WHEN 'sequence' THEN ${rules.sequence.correctPoints}
-				ELSE ${questions.points}
-			END,
-			${questions.updatedAt} = now()
-		WHERE ${questions.testId} = ${testId}
-	`)
-}
-
 function resolveQuestionPoints(params: {
 	type: string
 	fallbackPoints: number
@@ -883,7 +866,7 @@ router.put('/scoring-rules/global', sessionRequired(), requirePerm('tests', 'wri
 
 		const testsUsingGlobal = await db.select({ id: tests.id }).from(tests).where(isNull(tests.scoringRules))
 		for (const testRow of testsUsingGlobal) {
-			await syncQuestionPointsForTest(testRow.id, parsed.data.rules)
+			await syncQuestionPointsForTestByTypeConfig(testRow.id)
 		}
 
 		res.json({ ok: true })
@@ -958,7 +941,7 @@ router.put(
 				})
 				.where(eq(tests.id, testId))
 
-			await syncQuestionPointsForTest(testId, effectiveRules)
+			await syncQuestionPointsForTestByTypeConfig(testId)
 
 			res.json({
 				ok: true,

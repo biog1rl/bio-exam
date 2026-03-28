@@ -30,6 +30,8 @@ export const breadcrumbConfig = {
 		'question-types': 'Типы вопросов',
 		attempts: 'Попытки',
 		profile: 'Профиль',
+		settings: 'Настройки',
+		groups: 'Группы',
 	} as Record<string, string>,
 
 	/** скрыть технические сегменты в конкретных ветках */

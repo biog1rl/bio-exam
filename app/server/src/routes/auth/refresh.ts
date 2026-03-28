@@ -9,6 +9,7 @@ import { db } from '../../db/index.js'
 import { refreshTokens, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { setSessionCookie } from '../../middleware/auth/session.js'
+import { rateLimiter } from '../../middleware/rateLimiter.js'
 
 const router = Router()
 
@@ -27,7 +28,7 @@ function readCookie(req: any, name: string): string | null {
 	}
 }
 
-router.post('/', async (req, res) => {
+router.post('/', rateLimiter({ maxAttempts: 10, windowMs: 60 * 1000, keyPrefix: 'refresh' }), async (req, res) => {
 	try {
 		const raw = readCookie(req, 'refresh_token')
 		if (!raw) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
@@ -35,11 +36,7 @@ router.post('/', async (req, res) => {
 		const tokenHash = crypto.createHash('sha256').update(raw).digest('hex')
 
 		// find token
-		const rows = await db
-			.select()
-			.from(refreshTokens)
-			.where(eq(refreshTokens.tokenHash, tokenHash))
-			.limit(1)
+		const rows = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash)).limit(1)
 		const row = rows[0]
 		if (!row) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 
@@ -61,20 +58,18 @@ router.post('/', async (req, res) => {
 		const newHash = crypto.createHash('sha256').update(newRefresh).digest('hex')
 		const newExpires = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000)
 
-		await db
-			.update(refreshTokens)
-			.set({ revokedAt: new Date() } as any)
-			.where(eq(refreshTokens.id, row.id))
-		await db
-			.insert(refreshTokens)
-			.values({
+		await db.transaction(async (tx) => {
+			await tx
+				.update(refreshTokens)
+				.set({ revokedAt: new Date() } as any)
+				.where(eq(refreshTokens.id, row.id))
+			await tx.insert(refreshTokens).values({
 				userId: row.userId,
 				tokenHash: newHash,
 				expiresAt: newExpires,
-				createdByIp: req.headers['x-forwarded-for']
-					? String(req.headers['x-forwarded-for']).split(',')[0].trim()
-					: req.socket.remoteAddress || null,
+				createdByIp: req.ip || req.socket.remoteAddress || null,
 			} as any)
+		})
 
 		const secure = process.env.NODE_ENV === 'production'
 		const refreshParts = [

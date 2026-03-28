@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto'
+
 import bcrypt from 'bcryptjs'
 import type { Request, Response, NextFunction } from 'express'
 
@@ -15,6 +17,12 @@ export async function requireAdminBasic(req: Request, res: Response, next: NextF
 	const login = process.env.ADMIN_LOGIN
 	const pwdHash = process.env.ADMIN_PASSWORD_HASH
 	const plain = process.env.ADMIN_PASSWORD // fallback только для DEV
+
+	// В production без явного ADMIN_PASSWORD — запретить доступ через plain
+	if (process.env.NODE_ENV === 'production' && !pwdHash && !plain) {
+		res.status(403).json({ error: 'Admin access not configured' })
+		return
+	}
 
 	if (!login || (!pwdHash && !plain)) {
 		res.status(500).json({
@@ -41,8 +49,13 @@ export async function requireAdminBasic(req: Request, res: Response, next: NextF
 	}
 
 	let ok = false
-	if (pwdHash) ok = await bcrypt.compare(p, pwdHash)
-	else ok = p === (plain as string)
+	if (pwdHash) {
+		ok = await bcrypt.compare(p, pwdHash)
+	} else {
+		const provided = Buffer.from(p)
+		const expected = Buffer.from(plain as string)
+		ok = provided.length === expected.length && timingSafeEqual(provided, expected)
+	}
 
 	if (!ok) {
 		res.status(403).json({ error: 'Invalid credentials' })

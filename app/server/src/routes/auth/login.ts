@@ -19,34 +19,6 @@ const router = Router()
 // Заранее вычисленный bcrypt хэш случайной строки для использования когда пользователь не существует
 const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
 
-const usersColumns = (
-	users as unknown as {
-		_?: {
-			columns?: Record<string, unknown>
-		}
-	}
-)._?.columns
-
-const hasFailedLoginAttemptsColumn = Boolean(usersColumns && 'failedLoginAttempts' in usersColumns)
-const hasLockedUntilColumn = Boolean(usersColumns && 'lockedUntil' in usersColumns)
-
-function getLoginGuardUpdates(payload: {
-	failedLoginAttempts?: number
-	lockedUntil?: Date | null
-}): Record<string, unknown> {
-	const updates: Record<string, unknown> = {}
-
-	// Keep login working even if these columns are absent in current schema/migrations.
-	if (hasFailedLoginAttemptsColumn && payload.failedLoginAttempts !== undefined) {
-		updates.failedLoginAttempts = payload.failedLoginAttempts
-	}
-	if (hasLockedUntilColumn && payload.lockedUntil !== undefined) {
-		updates.lockedUntil = payload.lockedUntil
-	}
-
-	return updates
-}
-
 async function updateLoginGuardFields(
 	userId: string,
 	payload: {
@@ -54,13 +26,15 @@ async function updateLoginGuardFields(
 		lockedUntil?: Date | null
 	}
 ): Promise<void> {
-	const updates = getLoginGuardUpdates(payload)
+	const updates: Partial<typeof users.$inferInsert> = {}
+	if (payload.failedLoginAttempts !== undefined) {
+		updates.failedLoginAttempts = payload.failedLoginAttempts
+	}
+	if (payload.lockedUntil !== undefined) {
+		updates.lockedUntil = payload.lockedUntil
+	}
 	if (Object.keys(updates).length === 0) return
-
-	await db
-		.update(users)
-		.set(updates as any)
-		.where(eq(users.id, userId))
+	await db.update(users).set(updates).where(eq(users.id, userId))
 }
 
 /**
@@ -98,7 +72,7 @@ router.post('/', async (req, res, next) => {
 		const u = await db.query.users.findFirst({ where: eq(users.login, login) })
 
 		// Проверка блокировки аккаунта
-		if (u && (u as any).lockedUntil && new Date((u as any).lockedUntil) > new Date()) {
+		if (u && u.lockedUntil && new Date(u.lockedUntil) > new Date()) {
 			return res.status(403).json({ error: ERROR_MESSAGES.ACCOUNT_LOCKED })
 		}
 
@@ -109,7 +83,7 @@ router.post('/', async (req, res, next) => {
 		// Обработка неуспешного входа: увеличиваем счётчик и блокируем при достижении порога
 		if (!u || !passwordMatches) {
 			if (u) {
-				const current = Number((u as any).failedLoginAttempts ?? (u as any).failed_login_attempts ?? 0) + 1
+				const current = (u.failedLoginAttempts ?? 0) + 1
 				const THRESHOLD = 5
 				const LOCK_MINUTES = 30
 				if (current >= THRESHOLD) {
@@ -153,10 +127,8 @@ router.post('/', async (req, res, next) => {
 			userId: u.id,
 			tokenHash: tokenHash,
 			expiresAt,
-			createdByIp: req.headers['x-forwarded-for']
-				? String(req.headers['x-forwarded-for']).split(',')[0].trim()
-				: req.socket.remoteAddress || null,
-		} as any)
+			createdByIp: req.ip || req.socket.remoteAddress || null,
+		})
 
 		// Set cookies: access token (short-lived) + refresh token (long-lived)
 		setSessionCookie(res, token, ACCESS_EXPIRES_SEC)

@@ -29,6 +29,7 @@
 		"dotenv": "^16.4.5",
 		"drizzle-orm": "^0.45.1",
 		"express": "^4.19.2",
+		"file-type": "^22.0.0",
 		"helmet": "^8.1.0",
 		"jsonwebtoken": "^9.0.2",
 		"minisearch": "^7.2.0",

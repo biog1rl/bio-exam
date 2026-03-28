@@ -29,18 +29,6 @@ setInterval(() => {
 
 // No external store — in-memory Map is used (sufficient for single-instance personal deployment)
 
-/**
- * Извлекает IP клиента из запроса
- * Обрабатывает заголовок X-Forwarded-For для проксированных запросов
- */
-function getClientIp(req: Request): string {
-	const forwarded = req.headers['x-forwarded-for']
-	if (typeof forwarded === 'string') {
-		return forwarded.split(',')[0].trim()
-	}
-	return req.socket.remoteAddress || 'unknown'
-}
-
 export interface RateLimiterOptions {
 	/**
 	 * Максимальное количество запросов в окне
@@ -70,7 +58,7 @@ export function rateLimiter(options: RateLimiterOptions = {}) {
 	const { maxAttempts = 5, windowMs = 60 * 1000, keyPrefix = '' } = options
 
 	return (req: Request, res: Response, next: NextFunction) => {
-		const ip = getClientIp(req)
+		const ip = req.ip || req.socket.remoteAddress || 'unknown'
 		const key = keyPrefix ? `${keyPrefix}:${ip}` : ip
 		const now = Date.now()
 		// Memory-only implementation (suitable for single-instance personal deployment)

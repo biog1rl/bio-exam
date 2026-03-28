@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { rateLimiter } from '../../middleware/rateLimiter.js'
 
 const router = Router()
 
@@ -113,42 +114,51 @@ router.patch('/', sessionRequired(), async (req, res) => {
 })
 
 // POST /api/users/profile/password - смена пароля
-router.post('/password', sessionRequired(), async (req, res) => {
-	try {
-		const userId = req.authUser?.id
-		if (!userId) {
-			return res.status(401).json({ error: 'Не авторизован' })
+router.post(
+	'/password',
+	rateLimiter({ maxAttempts: 5, windowMs: 60 * 1000, keyPrefix: 'password-change' }),
+	sessionRequired(),
+	async (req, res) => {
+		try {
+			const userId = req.authUser?.id
+			if (!userId) {
+				return res.status(401).json({ error: 'Не авторизован' })
+			}
+
+			const { oldPassword, newPassword } = changePasswordSchema.parse(req.body)
+
+			// Получаем текущий хеш пароля
+			const user = await db
+				.select({ passwordHash: users.passwordHash })
+				.from(users)
+				.where(eq(users.id, userId))
+				.limit(1)
+
+			if (user.length === 0) {
+				return res.status(404).json({ error: 'Пользователь не найден' })
+			}
+
+			// Проверяем старый пароль
+			const isOldPasswordValid = await bcrypt.compare(oldPassword, user[0].passwordHash || '')
+			if (!isOldPasswordValid) {
+				return res.status(400).json({ error: 'Неверный старый пароль' })
+			}
+
+			// Хешируем новый пароль
+			const newPasswordHash = await bcrypt.hash(newPassword, 10)
+
+			// Обновляем пароль
+			await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, userId))
+
+			res.json({ message: 'Пароль успешно изменен' })
+		} catch (error: unknown) {
+			if (error instanceof z.ZodError) {
+				return res.status(400).json({ error: 'Ошибка валидации', details: error.issues })
+			}
+			console.error('Error changing password:', error)
+			res.status(500).json({ error: 'Внутренняя ошибка сервера' })
 		}
-
-		const { oldPassword, newPassword } = changePasswordSchema.parse(req.body)
-
-		// Получаем текущий хеш пароля
-		const user = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId)).limit(1)
-
-		if (user.length === 0) {
-			return res.status(404).json({ error: 'Пользователь не найден' })
-		}
-
-		// Проверяем старый пароль
-		const isOldPasswordValid = await bcrypt.compare(oldPassword, user[0].passwordHash || '')
-		if (!isOldPasswordValid) {
-			return res.status(400).json({ error: 'Неверный старый пароль' })
-		}
-
-		// Хешируем новый пароль
-		const newPasswordHash = await bcrypt.hash(newPassword, 10)
-
-		// Обновляем пароль
-		await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, userId))
-
-		res.json({ message: 'Пароль успешно изменен' })
-	} catch (error: unknown) {
-		if (error instanceof z.ZodError) {
-			return res.status(400).json({ error: 'Ошибка валидации', details: error.issues })
-		}
-		console.error('Error changing password:', error)
-		res.status(500).json({ error: 'Внутренняя ошибка сервера' })
 	}
-})
+)
 
 export default router

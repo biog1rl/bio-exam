@@ -6,11 +6,13 @@ import Link from 'next/link'
 
 import { Button } from '../ui/button'
 
+export type TilesItem = {
+	href: string
+	name: string
+}
+
 type TilesProps = {
-	items: Array<{
-		name: string
-		href: string
-	}>
+	items: Array<TilesItem>
 }
 
 const Tiles: FC<TilesProps> = ({ items }) => {

@@ -19,12 +19,24 @@ import healthRouter from './routes/db/health.js'
 import apiRouter from './routes/index.js'
 
 const app = express()
+app.set('trust proxy', 1)
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT ?? '10mb'
 
 // --- Безопасность/заголовки
 app.use(
 	helmet({
-		contentSecurityPolicy: false,
+		contentSecurityPolicy: {
+			directives: {
+				defaultSrc: ["'self'"],
+				scriptSrc: ["'self'"],
+				styleSrc: ["'self'", "'unsafe-inline'"],
+				imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+				connectSrc: ["'self'"],
+				fontSrc: ["'self'"],
+				objectSrc: ["'none'"],
+				upgradeInsecureRequests: [],
+			},
+		},
 		crossOriginResourcePolicy: { policy: 'cross-origin' },
 	})
 )

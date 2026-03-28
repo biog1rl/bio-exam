@@ -15,13 +15,14 @@ import {
 	real,
 	jsonb,
 } from 'drizzle-orm/pg-core'
-import type { TestScoringRules } from '../lib/tests/scoring.js'
+
 import type { QuestionTypeScoringRule, QuestionUiTemplate } from '../lib/tests/question-types.js'
+import type { TestScoringRules } from '../lib/tests/scoring.js'
 
 export type QuestionTelemetry = {
-  timeSpentMs: number
-  focusLossCount: number
-  visitCount: number
+	timeSpentMs: number
+	focusLossCount: number
+	visitCount: number
 }
 export type TelemetryMap = Record<string, QuestionTelemetry>
 
@@ -59,6 +60,9 @@ export const users = pgTable(
 		// Координаты view (для восстановления состояния кроппера)
 		avatarCropViewX: real('avatar_crop_view_x'),
 		avatarCropViewY: real('avatar_crop_view_y'),
+		// Login guard (brute-force protection)
+		failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+		lockedUntil: timestamp('locked_until'),
 	},
 	(t) => ({
 		loginUniq: uniqueIndex('users_login_uniq').on(t.login),
@@ -244,7 +248,10 @@ export const questionDrafts = pgTable(
 		ownerId: uuid('owner_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+		payload: jsonb('payload')
+			.$type<Record<string, unknown>>()
+			.notNull()
+			.default(sql`'{}'::jsonb`),
 		lockVersion: integer('lock_version').notNull().default(0),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -391,8 +398,12 @@ export const testSessions = pgTable(
 	'test_sessions',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		testId: uuid('test_id').notNull().references(() => tests.id, { onDelete: 'cascade' }),
-		userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+		testId: uuid('test_id')
+			.notNull()
+			.references(() => tests.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		submittedAt: timestamp('submitted_at'),
 		attemptId: uuid('attempt_id').references(() => testAttempts.id, { onDelete: 'set null' }),
@@ -406,8 +417,12 @@ export const testSessions = pgTable(
 export const testAssignments = pgTable(
 	'test_assignments',
 	{
-		testId: uuid('test_id').notNull().references(() => tests.id, { onDelete: 'cascade' }),
-		userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+		testId: uuid('test_id')
+			.notNull()
+			.references(() => tests.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
 		assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
 		assignedAt: timestamp('assigned_at').notNull().defaultNow(),
 	},
@@ -434,16 +449,13 @@ export const appSettings = pgTable('app_settings', {
 })
 
 /** Группы студентов */
-export const studentGroups = pgTable(
-	'student_groups',
-	{
-		id: uuid('id').primaryKey().defaultRandom(),
-		name: text('name').notNull(),
-		createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
-		createdAt: timestamp('created_at').notNull().defaultNow(),
-		updatedAt: timestamp('updated_at').notNull().defaultNow(),
-	}
-)
+export const studentGroups = pgTable('student_groups', {
+	id: uuid('id').primaryKey().defaultRandom(),
+	name: text('name').notNull(),
+	createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+	createdAt: timestamp('created_at').notNull().defaultNow(),
+	updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
 
 /** Связка пользователь—группа (многие-ко-многим) */
 export const userGroups = pgTable(

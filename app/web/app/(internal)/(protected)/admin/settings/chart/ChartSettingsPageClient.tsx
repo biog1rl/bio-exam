@@ -51,37 +51,35 @@ export function ChartSettingsPageClient() {
 	}
 
 	return (
-		<div className="p-6">
-			<Card>
-				<CardHeader>
-					<CardTitle>Диапазон графика по умолчанию</CardTitle>
-					<CardDescription>Применяется на всех страницах теста, если студент не выбрал свой диапазон</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					{isLoading && <div>Загрузка…</div>}
+		<Card>
+			<CardHeader>
+				<CardTitle>Диапазон графика по умолчанию</CardTitle>
+				<CardDescription>Применяется на всех страницах теста, если студент не выбрал свой диапазон</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-4">
+				{isLoading && <div>Загрузка…</div>}
 
-					{!isLoading && (
-						<>
-							<Select value={selected} onValueChange={(v) => setSelected(v as ChartRange)}>
-								<SelectTrigger className="w-48">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{RANGE_OPTIONS.map((opt) => (
-										<SelectItem key={opt.value} value={opt.value}>
-											{opt.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
+				{!isLoading && (
+					<>
+						<Select value={selected} onValueChange={(v) => setSelected(v as ChartRange)}>
+							<SelectTrigger className="w-48">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{RANGE_OPTIONS.map((opt) => (
+									<SelectItem key={opt.value} value={opt.value}>
+										{opt.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 
-							<Button onClick={handleSave} disabled={saving || selected === currentValue}>
-								Сохранить
-							</Button>
-						</>
-					)}
-				</CardContent>
-			</Card>
-		</div>
+						<Button onClick={handleSave} disabled={saving || selected === currentValue}>
+							Сохранить
+						</Button>
+					</>
+				)}
+			</CardContent>
+		</Card>
 	)
 }

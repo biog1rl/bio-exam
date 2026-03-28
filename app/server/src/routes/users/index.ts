@@ -1,8 +1,10 @@
 import type { RoleKey } from '@bio-exam/rbac'
 import { ROLE_KEYS } from '@bio-exam/rbac'
 
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import { Router } from 'express'
+import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import {
@@ -33,8 +35,15 @@ router.use('/profile', profileRouter)
 router.use('/avatar', avatarRouter)
 
 // GET /api/users — JWT + RBAC ('users.read')
-router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, res, next) => {
+router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res, next) => {
 	try {
+		const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500)
+		const offset = Math.max(Number(req.query.offset) || 0, 0)
+
+		const [{ total }] = await db.select({ total: count() }).from(users)
+
+		const createdByUser = alias(users, 'createdByUser')
+
 		const rows = await db
 			.select({
 				id: users.id,
@@ -50,17 +59,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 				invitedAt: users.invitedAt,
 				activatedAt: users.activatedAt,
 				createdAt: users.createdAt,
-				createdByName: sql<string | null>`
-          coalesce(
-            (select coalesce(cb.name, cb.login) from users cb where cb.id = ${users.createdBy}),
-            (select coalesce(ub.name, ub.login)
-               from invites i
-               left join users ub on ub.id = i.created_by
-              where i.user_id = ${users.id}
-              order by i.created_at desc
-              limit 1)
-          )
-        `.as('createdByName'),
+				createdByName: sql<string | null>`coalesce(${createdByUser.name}, ${createdByUser.login})`.as('createdByName'),
 				roles: sql<string[]>`
           coalesce(array_agg(${userRoles.roleKey}) filter (where ${userRoles.roleKey} is not null), '{}')
         `.as('roles'),
@@ -77,6 +76,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 			})
 			.from(users)
 			.leftJoin(userRoles, eq(userRoles.userId, users.id))
+			.leftJoin(createdByUser, eq(users.createdBy, createdByUser.id))
 			.groupBy(
 				users.id,
 				users.login,
@@ -95,9 +95,13 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 				users.birthdate,
 				users.telegram,
 				users.phone,
-				users.email
+				users.email,
+				createdByUser.name,
+				createdByUser.login
 			)
 			.orderBy(desc(users.createdAt))
+			.limit(limit)
+			.offset(offset)
 
 		const result: UserRow[] = rows.map((r) => ({
 			id: r.id,
@@ -122,7 +126,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (_req, re
 			groupName: r.groupName ?? null,
 		}))
 
-		res.json({ users: result })
+		res.json({ rows: result, total })
 	} catch (e) {
 		next(e)
 	}
@@ -178,6 +182,10 @@ router.patch('/:id', validateUUID('id'), sessionRequired(), requirePerm('users',
 	}
 })
 
+const patchGroupBodySchema = z.object({
+	groupId: z.string().uuid().nullable(),
+})
+
 // PATCH /api/users/:id/group — смена группы пользователя (null = убрать из группы)
 router.patch(
 	'/:id/group',
@@ -187,10 +195,27 @@ router.patch(
 	async (req, res, next) => {
 		try {
 			const id = req.params.id as string
-			const { groupId } = req.body as { groupId: string | null }
+
+			const parsed = patchGroupBodySchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: 'Invalid groupId', details: parsed.error.flatten() })
+			}
+			const { groupId } = parsed.data
 
 			const existing = await db.query.users.findFirst({ where: eq(users.id, id) })
 			if (!existing) return res.status(404).json({ error: ERROR_MESSAGES.USER_NOT_FOUND })
+
+			// Проверить существование группы если groupId указан
+			if (groupId !== null) {
+				const group = await db
+					.select({ id: studentGroups.id })
+					.from(studentGroups)
+					.where(eq(studentGroups.id, groupId))
+					.limit(1)
+				if (group.length === 0) {
+					return res.status(404).json({ error: 'Группа не найдена' })
+				}
+			}
 
 			await db.transaction(async (tx) => {
 				await tx.delete(userGroups).where(eq(userGroups.userId, id))

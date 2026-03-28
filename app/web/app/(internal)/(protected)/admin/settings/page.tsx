@@ -1,10 +1,16 @@
-import Link from 'next/link'
+import Tiles, { TilesItem } from '@/components/Tiles'
 
 export default async function AdminSettingsPage() {
-	return (
-		<div>
-			<Link href="/admin/settings/rbac">RBAC</Link>
-			<Link href="/admin/settings/chart">Настройки графика</Link>
-		</div>
-	)
+	const adminItems: TilesItem[] = [
+		{
+			href: '/admin/settings/rbac',
+			name: 'RBAC',
+		},
+		{
+			href: '/admin/settings/chart',
+			name: 'Настройки графика',
+		},
+	]
+
+	return <Tiles items={adminItems} />
 }

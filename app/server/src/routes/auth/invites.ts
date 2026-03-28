@@ -8,6 +8,7 @@ import { db } from '../../db/index.js'
 import { invites, users, userRoles } from '../../db/schema.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { rateLimiter } from '../../middleware/rateLimiter.js'
 
 const router = Router()
 
@@ -65,15 +66,15 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 		}
 		const body = parsed.data
-	
+
 		let userId: string | undefined
-	
+
 		if (!body.userId) {
 			const login = body.login || null
 			if (login && !LOGIN_RE.test(login)) {
 				return res.status(400).json({ error: 'Login is invalid' })
 			}
-	
+
 			await db.transaction(async (tx) => {
 				const [u] = await tx
 					.insert(users)
@@ -86,7 +87,7 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 					})
 					.returning({ id: users.id })
 				userId = u.id
-	
+
 				// Назначаем роль пользователю
 				if (body.roleKey) {
 					await tx
@@ -117,7 +118,7 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 				}
 			}
 		}
-	
+
 		if (!userId) {
 			return res.status(500).json({ error: 'Failed to create or find user' })
 		}
@@ -126,13 +127,13 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 		if (!body.roleKey) {
 			return res.status(400).json({ error: 'Role is required' })
 		}
-	
+
 		await db.delete(invites).where(eq(invites.userId, userId))
-	
+
 		const token = randomBytes(24).toString('hex')
 		const tokenHash = sha256Hex(token)
 		const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7) // 7 days
-	
+
 		await db.insert(invites).values({
 			userId,
 			tokenHash,
@@ -140,7 +141,7 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			consumedAt: null,
 			createdBy: req.authUser?.id ?? null,
 		})
-	
+
 		return res.json({ inviteLink: buildInviteLink(token, req), userId })
 	} catch (e) {
 		next(e)
@@ -177,51 +178,55 @@ router.get('/validate/:token', async (req, res, next) => {
 
 // ---------- accept (public)
 
-router.post('/accept', async (req, res, next) => {
-	try {
-		const parsed = AcceptSchema.safeParse(req.body)
-		if (!parsed.success) {
-			console.error('INVITES/ACCEPT bad body:', parsed.error.flatten())
-			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
+router.post(
+	'/accept',
+	rateLimiter({ maxAttempts: 5, windowMs: 60 * 1000, keyPrefix: 'invite-accept' }),
+	async (req, res, next) => {
+		try {
+			const parsed = AcceptSchema.safeParse(req.body)
+			if (!parsed.success) {
+				console.error('INVITES/ACCEPT bad body:', parsed.error.flatten())
+				return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
+			}
+
+			const { token, login, firstName, lastName, password } = parsed.data
+
+			const tokenHash = sha256Hex(token)
+			const inv = await db.query.invites.findFirst({ where: eq(invites.tokenHash, tokenHash) })
+			if (!inv || inv.consumedAt || inv.expiresAt < new Date()) {
+				return res.status(404).json({ error: 'Invalid token' })
+			}
+
+			// логин не должен быть занят другим пользователем
+			const existingLogin = await db.query.users.findFirst({ where: eq(users.login, login) })
+			if (existingLogin && existingLogin.id !== inv.userId) {
+				return res.status(409).json({ error: 'Login already taken' })
+			}
+
+			const { default: bcrypt } = await import('bcryptjs')
+			const passwordHash = await bcrypt.hash(password, 12)
+
+			await db.transaction(async (tx) => {
+				await tx
+					.update(users)
+					.set({
+						login,
+						firstName: firstName ?? null,
+						lastName: lastName ?? null,
+						passwordHash,
+						isActive: true,
+						activatedAt: new Date(),
+					})
+					.where(eq(users.id, inv.userId))
+
+				await tx.update(invites).set({ consumedAt: new Date() }).where(eq(invites.id, inv.id))
+			})
+
+			return res.json({ ok: true })
+		} catch (e) {
+			next(e)
 		}
-
-		const { token, login, firstName, lastName, password } = parsed.data
-
-		const tokenHash = sha256Hex(token)
-		const inv = await db.query.invites.findFirst({ where: eq(invites.tokenHash, tokenHash) })
-		if (!inv || inv.consumedAt || inv.expiresAt < new Date()) {
-			return res.status(404).json({ error: 'Invalid token' })
-		}
-
-		// логин не должен быть занят другим пользователем
-		const existingLogin = await db.query.users.findFirst({ where: eq(users.login, login) })
-		if (existingLogin && existingLogin.id !== inv.userId) {
-			return res.status(409).json({ error: 'Login already taken' })
-		}
-
-		const { default: bcrypt } = await import('bcryptjs')
-		const passwordHash = await bcrypt.hash(password, 12)
-
-		await db.transaction(async (tx) => {
-			await tx
-				.update(users)
-				.set({
-					login,
-					firstName: firstName ?? null,
-					lastName: lastName ?? null,
-					passwordHash,
-					isActive: true,
-					activatedAt: new Date(),
-				})
-				.where(eq(users.id, inv.userId))
-
-			await tx.update(invites).set({ consumedAt: new Date() }).where(eq(invites.id, inv.id))
-		})
-
-		return res.json({ ok: true })
-	} catch (e) {
-		next(e)
 	}
-})
+)
 
 export default router
