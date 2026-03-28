@@ -15,13 +15,7 @@ const serverSchema = z.object({
 	NEXTAUTH_URL_IP: z.string().optional(),
 
 	// App origin
-	APP_ORIGIN: z.string().optional(),
-
-	// GitLab
-	GITLAB_TOKEN: z.string(),
-	GITLAB_REPO: z.string(),
-	GITLAB_BRANCH_MASTER: z.string(),
-	GITLAB_BRANCH_FALLBACK: z.string(),
+	APP_ORIGIN: z.string().optional()
 })
 
 const parsed = serverSchema.safeParse(process.env)
