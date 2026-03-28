@@ -4,6 +4,8 @@ import { z } from 'zod'
 const serverSchema = z.object({
 	// База/Prisma
 	DATABASE_URL: z.string(),
+	AUTH_JWT_SECRET: z.string(),
+	SESSION_COOKIE_NAME: z.string().optional(),
 
 	// Legacy NextAuth (optional, kept for backwards compatibility)
 	NEXTAUTH_SECRET: z.string().optional(),

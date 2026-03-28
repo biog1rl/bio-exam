@@ -111,14 +111,14 @@ router.post('/', async (req, res, next) => {
 		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, u.id))
 		const roles = rs.map((r) => r.role)
 
-		// Create short-lived access token (1 hour default)
-		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? 60 * 60)
+		// По умолчанию держим access cookie столько же, сколько живёт сессия в its-doc.
+		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? AUTH_CONFIG.sessionMaxAgeSec)
 		const token = jwt.sign({ sub: u.id, login: u.login ?? null, roles }, AUTH_CONFIG.jwtSecret, {
 			expiresIn: `${ACCESS_EXPIRES_SEC}s`,
 		})
 
 		// Create refresh token and store hash in DB
-		const REFRESH_EXPIRES_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? 30)
+		const REFRESH_EXPIRES_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? AUTH_CONFIG.sessionMaxAgeDays)
 		const refreshToken = crypto.randomBytes(64).toString('hex')
 		const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
 		const expiresAt = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000)
