@@ -61,6 +61,11 @@ export function MediaLibrary({ docPath, onSelect }: MediaLibraryProps) {
 	const handleUpload = async () => {
 		if (!selectedFile) return
 
+		if (selectedFile.size > 5 * 1024 * 1024) {
+			toast.error('Файл слишком большой. Максимум 5 MB')
+			return
+		}
+
 		setIsUploading(true)
 		try {
 			const formData = new FormData()
@@ -121,12 +126,13 @@ export function MediaLibrary({ docPath, onSelect }: MediaLibraryProps) {
 		e.stopPropagation()
 		setIsDragging(false)
 
+		const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
 		const file = e.dataTransfer.files[0]
-		if (file && file.type.startsWith('image/')) {
+		if (file && ALLOWED.includes(file.type)) {
 			setSelectedFile(file)
 			setAltText(file.name.replace(/\.[^.]+$/, ''))
 		} else {
-			toast.error('Пожалуйста, загрузите изображение')
+			toast.error('Поддерживаются только JPEG, PNG и WebP')
 		}
 	}
 
@@ -196,7 +202,13 @@ export function MediaLibrary({ docPath, onSelect }: MediaLibraryProps) {
 					</div>
 
 					{/* Hidden file input */}
-					<Input id="file-input" type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+					<Input
+						id="file-input"
+						type="file"
+						accept="image/jpeg,image/png,image/webp"
+						onChange={handleFileSelect}
+						className="hidden"
+					/>
 
 					{/* Preview */}
 					{selectedFile && (

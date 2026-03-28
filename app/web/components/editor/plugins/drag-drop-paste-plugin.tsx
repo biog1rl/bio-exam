@@ -9,7 +9,7 @@
  */
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { DRAG_DROP_PASTE } from '@lexical/rich-text'
-import { isMimeType, mediaFileReader } from '@lexical/utils'
+import { isMimeType } from '@lexical/utils'
 
 import { useEffect } from 'react'
 
@@ -20,26 +20,28 @@ import { useDocPath } from '@/components/editor/context/doc-path-context'
 import { INSERT_IMAGE_COMMAND } from '@/components/editor/plugins/images-plugin'
 import type { UploadAssetResponse } from '@/types/assets'
 
-const ACCEPTABLE_IMAGE_TYPES = ['image/', 'image/heic', 'image/heif', 'image/gif', 'image/webp']
+const ACCEPTABLE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 async function uploadImageToAPI(file: File, docPath?: string): Promise<string | null> {
 	try {
+		if (file.size > 5 * 1024 * 1024) {
+			toast.error('Файл слишком большой. Максимум 5 MB')
+			return null
+		}
 		const formData = new FormData()
 		formData.append('file', file)
-		// docPath опционально для обратной совместимости
 		if (docPath) {
 			formData.append('docPath', docPath)
 		}
-
 		const response = await fetch('/api/docs/assets', {
 			method: 'POST',
 			body: formData,
 		})
-
 		if (!response.ok) {
-			throw new Error('Upload failed')
+			const data = await response.json().catch(() => ({ error: 'Upload failed' }))
+			toast.error(data.error || 'Не удалось загрузить изображение')
+			return null
 		}
-
 		const data: UploadAssetResponse = await response.json()
 		return data.path
 	} catch (error) {
@@ -58,7 +60,6 @@ export function DragDropPastePlugin(): null {
 			DRAG_DROP_PASTE,
 			(files) => {
 				;(async () => {
-					// Всегда пытаемся загрузить через API (docPath опционально)
 					for (const file of files) {
 						if (isMimeType(file, ACCEPTABLE_IMAGE_TYPES)) {
 							const src = await uploadImageToAPI(file, docPath)
@@ -67,25 +68,8 @@ export function DragDropPastePlugin(): null {
 									altText: file.name,
 									src,
 								})
-							} else {
-								// Fallback к base64 если загрузка не удалась
-								try {
-									const filesResult = await mediaFileReader(
-										[file],
-										[ACCEPTABLE_IMAGE_TYPES].flatMap((x) => x)
-									)
-									for (const { file: f, result } of filesResult) {
-										if (isMimeType(f, ACCEPTABLE_IMAGE_TYPES)) {
-											editor.dispatchCommand(INSERT_IMAGE_COMMAND, {
-												altText: f.name,
-												src: result,
-											})
-										}
-									}
-								} catch (e) {
-									console.error('Failed to load image as base64:', e)
-								}
 							}
+							// Если upload не удался — файл не вставляется (no base64 fallback)
 						}
 					}
 				})()

@@ -15,7 +15,7 @@ const serverSchema = z.object({
 	NEXTAUTH_URL_IP: z.string().optional(),
 
 	// App origin
-	APP_ORIGIN: z.string().optional()
+	APP_ORIGIN: z.string().optional(),
 })
 
 const parsed = serverSchema.safeParse(process.env)

@@ -30,6 +30,7 @@ import {
 	SELECTION_CHANGE_COMMAND,
 	TextNode,
 } from 'lexical'
+import { Loader2 } from 'lucide-react'
 import NextImage from 'next/image'
 
 // import brokenImage from '@/registry/new-york-v4/editor/images/image-broken.svg';
@@ -37,25 +38,26 @@ import NextImage from 'next/image'
 import { ContentEditable } from '@/components/editor/editor-ui/content-editable'
 import { ImageResizer } from '@/components/editor/editor-ui/image-resizer'
 import { $isImageNode } from '@/components/editor/nodes/image-node'
+import { getSignedUrl, isStoragePath } from '@/lib/image-signed-url-cache'
 
 const imageCache = new Set()
 
 export const RIGHT_CLICK_IMAGE_COMMAND: LexicalCommand<MouseEvent> = createCommand('RIGHT_CLICK_IMAGE_COMMAND')
 
 function useSuspenseImage(src: string) {
-	if (!imageCache.has(src)) {
-		throw new Promise((resolve) => {
-			const img = new Image()
-			img.src = src
-			img.onload = () => {
-				imageCache.add(src)
-				resolve(null)
-			}
-			img.onerror = () => {
-				imageCache.add(src)
-			}
-		})
-	}
+	if (!src || imageCache.has(src)) return
+	throw new Promise((resolve) => {
+		const img = new Image()
+		img.src = src
+		img.onload = () => {
+			imageCache.add(src)
+			resolve(null)
+		}
+		img.onerror = () => {
+			imageCache.add(src)
+			resolve(null)
+		}
+	})
 }
 
 function LazyImage({
@@ -79,8 +81,8 @@ function LazyImage({
 }): JSX.Element {
 	useSuspenseImage(src)
 
-	// Если изображение из API или data URI, используем обычный img тег
-	const useNativeImg = src.startsWith('/api/') || src.startsWith('data:')
+	// Если изображение из API, data URI или Supabase storage signed URL — используем обычный img
+	const useNativeImg = src.startsWith('/api/') || src.startsWith('data:') || src.includes('/storage/v1/')
 
 	if (useNativeImg) {
 		return (
@@ -159,6 +161,38 @@ export default function ImageComponent({
 	const activeEditorRef = useRef<LexicalEditor | null>(null)
 	const [isLoadError, setIsLoadError] = useState<boolean>(false)
 	const isEditable = useLexicalEditable()
+
+	const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
+		return isStoragePath(src) ? null : src
+	})
+	const [isLoadingSrc, setIsLoadingSrc] = useState<boolean>(() => isStoragePath(src))
+
+	useEffect(() => {
+		if (!isStoragePath(src)) {
+			setResolvedSrc(src)
+			setIsLoadingSrc(false)
+			return
+		}
+		let cancelled = false
+		setIsLoadingSrc(true)
+		getSignedUrl(src)
+			.then((url) => {
+				if (!cancelled) {
+					setResolvedSrc(url)
+					setIsLoadingSrc(false)
+				}
+			})
+			.catch(() => {
+				if (!cancelled) {
+					setResolvedSrc(null)
+					setIsLoadingSrc(false)
+					setIsLoadError(true)
+				}
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [src])
 
 	const $onDelete = useCallback(
 		(payload: KeyboardEvent) => {
@@ -350,7 +384,17 @@ export default function ImageComponent({
 		<Suspense fallback={null}>
 			<>
 				<div draggable={draggable}>
-					{isLoadError ? (
+					{isLoadingSrc ? (
+						<div
+							className="bg-muted/30 flex items-center justify-center rounded"
+							style={{
+								width: typeof width === 'number' ? width : 200,
+								height: typeof height === 'number' ? height : 150,
+							}}
+						>
+							<Loader2 className="text-muted-foreground size-6 animate-spin" />
+						</div>
+					) : isLoadError || !resolvedSrc ? (
 						<BrokenImage />
 					) : (
 						<LazyImage
@@ -359,7 +403,7 @@ export default function ImageComponent({
 									? `${$isNodeSelection(selection) ? 'draggable cursor-grab active:cursor-grabbing' : ''} focused ring-primary ring-2 ring-offset-2`
 									: null
 							}`}
-							src={src}
+							src={resolvedSrc}
 							altText={altText}
 							imageRef={imageRef}
 							width={width}

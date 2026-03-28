@@ -7,6 +7,7 @@ import { useDebouncedCallback } from 'use-debounce'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
+import { isStoragePath, prefetchSignedUrls } from '@/lib/image-signed-url-cache'
 import { saveAnswer, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import type {
 	PublicTestDetail,
@@ -147,6 +148,30 @@ function tryParseJson(text: string): Record<string, unknown> | null {
 	} catch {
 		return null
 	}
+}
+
+/**
+ * Рекурсивно извлекает все image src из Lexical JSON документа.
+ * ImageNode хранит src как storage path (e.g. "images/abc.webp").
+ */
+function extractImagePaths(lexicalJson: unknown): string[] {
+	const paths: string[] = []
+	function walk(node: Record<string, unknown> | null | undefined) {
+		if (!node) return
+		if (node.type === 'image' && typeof node.src === 'string' && isStoragePath(node.src)) {
+			paths.push(node.src)
+		}
+		if (Array.isArray(node.children)) {
+			for (const child of node.children) walk(child as Record<string, unknown>)
+		}
+	}
+	if (typeof lexicalJson === 'object' && lexicalJson !== null) {
+		walk(lexicalJson as Record<string, unknown>)
+		if ('root' in (lexicalJson as Record<string, unknown>)) {
+			walk((lexicalJson as Record<string, unknown>).root as Record<string, unknown>)
+		}
+	}
+	return paths
 }
 
 const RED_THRESHOLD_SECONDS_DEFAULT = 5 * 60 // 300 seconds = 5 minutes
@@ -522,6 +547,24 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		document.addEventListener('visibilitychange', handler)
 		return () => document.removeEventListener('visibilitychange', handler)
 	}, [currentQuestionId, flushQuestionTime, submitResult, frozen])
+
+	// Prefetch signed URLs for all images in all questions on mount
+	useEffect(() => {
+		const allPaths: string[] = []
+		for (const question of orderedQuestions) {
+			if (question.promptText) {
+				try {
+					const json = typeof question.promptText === 'string' ? JSON.parse(question.promptText) : question.promptText
+					allPaths.push(...extractImagePaths(json))
+				} catch {
+					// Not JSON — skip
+				}
+			}
+		}
+		if (allPaths.length > 0) {
+			prefetchSignedUrls(allPaths).catch(() => {})
+		}
+	}, [orderedQuestions])
 
 	// Telemetry: start timer and count first visit on initial question mount
 	useEffect(() => {

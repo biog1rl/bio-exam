@@ -31,6 +31,7 @@ import {
 	LexicalCommand,
 	LexicalEditor,
 } from 'lexical'
+import { toast } from 'sonner'
 
 import { $createImageNode, $isImageNode, ImageNode, ImagePayload } from '@/components/editor/nodes/image-node'
 import { CAN_USE_DOM } from '@/components/editor/shared/can-use-dom'
@@ -39,6 +40,7 @@ import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { UploadAssetResponse } from '@/types/assets'
 
 import { MediaLibrary } from './images-plugin/MediaLibrary'
 
@@ -92,21 +94,40 @@ export function InsertImageUriDialogBody({ onClick }: { onClick: (payload: Inser
 }
 
 export function InsertImageUploadedDialogBody({ onClick }: { onClick: (payload: InsertImagePayload) => void }) {
-	const [src, setSrc] = useState('')
 	const [altText, setAltText] = useState('')
+	const [selectedFile, setSelectedFile] = useState<File | null>(null)
+	const [isUploading, setIsUploading] = useState(false)
 
-	const isDisabled = src === ''
-
-	const loadImage = (files: FileList | null) => {
-		const reader = new FileReader()
-		reader.onload = function () {
-			if (typeof reader.result === 'string') {
-				setSrc(reader.result)
-			}
-			return ''
+	const handleFileSelect = (files: FileList | null) => {
+		const file = files?.[0]
+		if (file) {
+			setSelectedFile(file)
+			setAltText(file.name.replace(/\.[^.]+$/, ''))
 		}
-		if (files !== null) {
-			reader.readAsDataURL(files[0])
+	}
+
+	const handleUpload = async () => {
+		if (!selectedFile) return
+		if (selectedFile.size > 5 * 1024 * 1024) {
+			toast.error('Файл слишком большой. Максимум 5 MB')
+			return
+		}
+		setIsUploading(true)
+		try {
+			const formData = new FormData()
+			formData.append('file', selectedFile)
+			const response = await fetch('/api/docs/assets', { method: 'POST', body: formData })
+			if (!response.ok) {
+				const data = await response.json().catch(() => ({ error: 'Upload failed' }))
+				toast.error(data.error || 'Не удалось загрузить изображение')
+				return
+			}
+			const data: UploadAssetResponse = await response.json()
+			onClick({ altText: altText || data.filename, src: data.path })
+		} catch {
+			toast.error('Не удалось загрузить изображение')
+		} finally {
+			setIsUploading(false)
 		}
 	}
 
@@ -117,8 +138,8 @@ export function InsertImageUploadedDialogBody({ onClick }: { onClick: (payload: 
 				<Input
 					id="image-upload"
 					type="file"
-					onChange={(e) => loadImage(e.target.files)}
-					accept="image/*"
+					onChange={(e) => handleFileSelect(e.target.files)}
+					accept="image/jpeg,image/png,image/webp"
 					data-test-id="image-modal-file-upload"
 				/>
 			</div>
@@ -134,11 +155,11 @@ export function InsertImageUploadedDialogBody({ onClick }: { onClick: (payload: 
 			</div>
 			<Button
 				type="submit"
-				disabled={isDisabled}
-				onClick={() => onClick({ altText, src })}
+				disabled={isUploading || !selectedFile}
+				onClick={handleUpload}
 				data-test-id="image-modal-file-upload-btn"
 			>
-				Confirm
+				{isUploading ? 'Загрузка...' : 'Confirm'}
 			</Button>
 		</div>
 	)

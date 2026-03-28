@@ -188,6 +188,20 @@ export class StorageService {
 	}
 
 	/**
+	 * Создаёт временный signed URL для доступа к файлу
+	 * @param filePath Путь к файлу (относительно bucket)
+	 * @param expiresIn TTL в секундах (по умолчанию: 3600)
+	 * @returns Signed URL
+	 */
+	async createSignedUrl(filePath: string, expiresIn = 3600): Promise<string> {
+		const client = getClient()
+		if (!client) throw new Error('[StorageService] Cannot create signed URL: Supabase not configured')
+		const { data, error } = await client.storage.from(BUCKET).createSignedUrl(filePath, expiresIn)
+		if (error) throw new Error(`Storage error: ${error.message}`)
+		return data.signedUrl
+	}
+
+	/**
 	 * Записывает JSON файл в Storage
 	 * Включает автоматический retry с экспоненциальной задержкой
 	 * @param path Путь к файлу (относительно bucket)
