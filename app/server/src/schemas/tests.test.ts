@@ -155,3 +155,17 @@ const scoringRulesByDefault = SaveTestSchema.safeParse({
 assert.equal(scoringRulesByDefault.success, true)
 if (!scoringRulesByDefault.success) throw new Error('Payload without scoringRules should be accepted')
 assert.equal(scoringRulesByDefault.data.scoringRules, undefined)
+
+const draftWithTimerThresholds = SaveTestSchema.safeParse({
+	...basePayload,
+	timeLimitMinutes: 90,
+	redThresholdMinutes: 10,
+	warningThresholdMinutes: 3,
+	questions: [],
+})
+assert.equal(draftWithTimerThresholds.success, true)
+if (!draftWithTimerThresholds.success) {
+	throw new Error('Payload with timer thresholds should be accepted')
+}
+assert.equal(draftWithTimerThresholds.data.redThresholdMinutes, 10)
+assert.equal(draftWithTimerThresholds.data.warningThresholdMinutes, 3)

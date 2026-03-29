@@ -162,6 +162,8 @@ async function writeTestSettingsFile(params: {
 	isPublished: boolean
 	showCorrectAnswer: boolean
 	timeLimitMinutes: number | null | undefined
+	redThresholdMinutes: number | null | undefined
+	warningThresholdMinutes: number | null | undefined
 	passingScore: number | null | undefined
 	version: number
 	effectiveScoringRules: z.infer<typeof TestScoringRulesSchema>
@@ -177,6 +179,8 @@ async function writeTestSettingsFile(params: {
 		scoringRules: params.effectiveScoringRules,
 		useGlobalScoringRules: params.testOverrideRules == null,
 		timeLimitMinutes: params.timeLimitMinutes,
+		redThresholdMinutes: params.redThresholdMinutes,
+		warningThresholdMinutes: params.warningThresholdMinutes,
 		passingScore: params.passingScore,
 		version: params.version,
 		updatedAt: new Date().toISOString(),
@@ -1418,6 +1422,8 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 					showCorrectAnswer: data.showCorrectAnswer,
 					scoringRules: data.scoringRules ?? null,
 					timeLimitMinutes: data.timeLimitMinutes,
+					redThresholdMinutes: data.redThresholdMinutes ?? null,
+					warningThresholdMinutes: data.warningThresholdMinutes ?? null,
 					passingScore: data.passingScore,
 					order: data.order,
 					version: data.isPublished ? 1 : 0,
@@ -1497,6 +1503,8 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 			isPublished: data.isPublished,
 			showCorrectAnswer: data.showCorrectAnswer,
 			timeLimitMinutes: data.timeLimitMinutes,
+			redThresholdMinutes: data.redThresholdMinutes,
+			warningThresholdMinutes: data.warningThresholdMinutes,
 			passingScore: data.passingScore,
 			version: result.test.version,
 			effectiveScoringRules,
@@ -1644,6 +1652,8 @@ router.patch(
 				isPublished: data.isPublished,
 				showCorrectAnswer: data.showCorrectAnswer,
 				timeLimitMinutes: data.timeLimitMinutes,
+				redThresholdMinutes: data.redThresholdMinutes,
+				warningThresholdMinutes: data.warningThresholdMinutes,
 				passingScore: data.passingScore,
 				version: result.test.version,
 				effectiveScoringRules,
@@ -2043,6 +2053,8 @@ router.post(
 							showCorrectAnswer: sourceTest.showCorrectAnswer,
 							scoringRules: sourceTest.scoringRules,
 							timeLimitMinutes: sourceTest.timeLimitMinutes,
+							redThresholdMinutes: sourceTest.redThresholdMinutes,
+							warningThresholdMinutes: sourceTest.warningThresholdMinutes,
 							passingScore: sourceTest.passingScore,
 							order: (orderRow?.maxOrder ?? -1) + 1,
 							createdBy: userId,

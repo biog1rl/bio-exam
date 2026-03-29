@@ -39,6 +39,7 @@ import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
 import { transliterate } from '@/lib/utils/transliterate'
 
+import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import QuestionCard from '../../components/QuestionCard'
 import type {
 	QuestionDraft,
@@ -88,6 +89,13 @@ function resolveQuestionDraftLabel(draft: QuestionDraft): string {
 interface Props {
 	topicSlug?: string
 	testSlug?: string
+}
+
+interface CreateTestPersistenceResult {
+	testId: string
+	topicSlug: string
+	testSlug: string
+	forcedDraft: boolean
 }
 
 export default function TestEditorClient({ topicSlug, testSlug }: Props) {
@@ -259,6 +267,109 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		})
 	)
 
+	const getBaseValidationError = useCallback(() => {
+		if (!form.topicId) return 'Выберите тему'
+		if (!form.title) return 'Введите название теста'
+		if (!form.slug) return 'Введите slug'
+		return null
+	}, [form.topicId, form.title, form.slug])
+
+	const getCreateQuestionsValidationError = useCallback(() => {
+		for (let i = 0; i < form.questions.length; i++) {
+			const q = form.questions[i]
+			const template = resolveQuestionTemplate(q)
+			if (!template) {
+				return `Вопрос ${i + 1}: тип вопроса не настроен в БД`
+			}
+			if (!q.promptText.trim()) {
+				return `Вопрос ${i + 1}: введите текст вопроса`
+			}
+			if (template === 'single_choice' || template === 'multi_choice') {
+				if (!q.options || q.options.length < 2) {
+					return `Вопрос ${i + 1}: добавьте минимум 2 варианта ответа`
+				}
+				if (q.options.some((o) => !o.text.trim())) {
+					return `Вопрос ${i + 1}: заполните все варианты ответа`
+				}
+				if (template === 'single_choice' && !q.correct) {
+					return `Вопрос ${i + 1}: выберите правильный ответ`
+				}
+				if (template === 'multi_choice' && (!Array.isArray(q.correct) || q.correct.length === 0)) {
+					return `Вопрос ${i + 1}: выберите правильные ответы`
+				}
+			}
+			if (template === 'matching') {
+				if (!q.matchingPairs || q.matchingPairs.left.length < 2 || q.matchingPairs.right.length < 2) {
+					return `Вопрос ${i + 1}: добавьте минимум 2 пары для сопоставления`
+				}
+				if (q.matchingPairs.left.some((p) => !p.text.trim()) || q.matchingPairs.right.some((p) => !p.text.trim())) {
+					return `Вопрос ${i + 1}: заполните все элементы сопоставления`
+				}
+				if (typeof q.correct !== 'object' || Array.isArray(q.correct) || Object.keys(q.correct).length === 0) {
+					return `Вопрос ${i + 1}: укажите правильные соответствия`
+				}
+			}
+			if (template === 'short_text') {
+				const normalized = normalizeShortTextCorrectValue(q.correct)
+				if (!normalized || !normalized.trim()) {
+					return `Вопрос ${i + 1}: укажите правильный краткий ответ`
+				}
+			}
+			if (template === 'sequence_digits' && !isValidSequenceCorrectValue(q.correct)) {
+				return `Вопрос ${i + 1}: для последовательности используйте только цифры`
+			}
+		}
+		return null
+	}, [form.questions])
+
+	const persistNewTest = useCallback(async (): Promise<CreateTestPersistenceResult> => {
+		const baseValidationError = getBaseValidationError()
+		if (baseValidationError) {
+			throw new Error(baseValidationError)
+		}
+
+		const questionsValidationError = getCreateQuestionsValidationError()
+		if (questionsValidationError) {
+			throw new Error(questionsValidationError)
+		}
+
+		const { shouldForceDraft, persistedPublicationState } = resolveInitialCreateModePersistence({
+			questionCount: form.questions.length,
+			requestedPublicationState: form.isPublished,
+		})
+
+		const res = await apiFetch('/api/tests/save', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(
+				normalizeFormPayload({
+					...form,
+					isPublished: persistedPublicationState,
+				})
+			),
+		})
+
+		if (!res.ok) {
+			const data = (await res.json().catch(() => null)) as { error?: string } | null
+			throw new Error(data?.error || 'Ошибка сохранения')
+		}
+
+		const data = (await res.json().catch(() => null)) as { test?: { id?: string; topicSlug?: string; slug?: string } } | null
+		const createdTestId = data?.test?.id
+		const createdTopicSlug = data?.test?.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
+		const createdTestSlug = data?.test?.slug || form.slug
+		if (!createdTestId || !createdTopicSlug || !createdTestSlug) {
+			throw new Error('Не удалось определить путь нового теста после сохранения')
+		}
+
+		return {
+			testId: createdTestId,
+			topicSlug: createdTopicSlug,
+			testSlug: createdTestSlug,
+			forcedDraft: shouldForceDraft,
+		}
+	}, [form, getBaseValidationError, getCreateQuestionsValidationError, topics])
+
 	const handleCreateTopic = () => {
 		setTopicForm({
 			slug: '',
@@ -347,15 +458,27 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	}
 
 	const handleAddQuestion = async () => {
-		if (!isEditingExisting || !topicSlug || !testSlug || !testId) {
-			toast.error('Сначала сохраните тест, затем добавляйте вопросы')
-			return
-		}
-
 		if (creatingQuestionDraft) return
 		setCreatingQuestionDraft(true)
 		try {
-			const res = await apiFetch(`/api/tests/${testId}/question-drafts`, { method: 'POST' })
+			let resolvedTestId = testId
+			let resolvedTopicSlug = topicSlug
+			let resolvedTestSlug = testSlug
+			let forcedDraft = false
+
+			if (!isEditingExisting) {
+				const created = await persistNewTest()
+				resolvedTestId = created.testId
+				resolvedTopicSlug = created.topicSlug
+				resolvedTestSlug = created.testSlug
+				forcedDraft = created.forcedDraft
+			}
+
+			if (!resolvedTestId || !resolvedTopicSlug || !resolvedTestSlug) {
+				throw new Error('Сначала сохраните тест, затем добавляйте вопросы')
+			}
+
+			const res = await apiFetch(`/api/tests/${resolvedTestId}/question-drafts`, { method: 'POST' })
 			if (!res.ok) {
 				const data = (await res.json().catch(() => null)) as { error?: string } | null
 				throw new Error(data?.error || 'Не удалось создать черновик вопроса')
@@ -365,7 +488,10 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			if (!draftId) {
 				throw new Error('API не вернул draftId черновика вопроса')
 			}
-			router.push(`/admin/tests/${topicSlug}/${testSlug}/questions/drafts/${draftId}`)
+			if (forcedDraft) {
+				toast.success('Тест сохранен как черновик. После первого вопроса его можно будет опубликовать.')
+			}
+			router.push(`/admin/tests/${resolvedTopicSlug}/${resolvedTestSlug}/questions/drafts/${draftId}`)
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Не удалось создать черновик вопроса')
 		} finally {
@@ -449,104 +575,51 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	}
 
 	const handleSave = async () => {
-		if (!form.topicId) {
-			toast.error('Выберите тему')
+		const baseValidationError = getBaseValidationError()
+		if (baseValidationError) {
+			toast.error(baseValidationError)
 			return
 		}
-		if (!form.title) {
-			toast.error('Введите название теста')
-			return
-		}
-		if (!form.slug) {
-			toast.error('Введите slug')
-			return
-		}
-		if (form.isPublished && form.questions.length === 0) {
+		if (isEditingExisting && form.isPublished && form.questions.length === 0) {
 			toast.error('Для публикации добавьте хотя бы один вопрос')
 			return
 		}
 
 		setSaving(true)
 		try {
-			const testId = testData?.test?.id
-			if (isEditingExisting && !testId) {
+			if (!isEditingExisting) {
+				const created = await persistNewTest()
+				toast.success(
+					created.forcedDraft
+						? 'Тест сохранен как черновик. Добавьте хотя бы один вопрос для публикации.'
+						: 'Тест создан'
+				)
+				router.push(`/admin/tests/${created.topicSlug}/${created.testSlug}`)
+				return
+			}
+
+			const currentTestId = testData?.test?.id
+			if (!currentTestId) {
 				throw new Error('Не удалось определить ID теста')
 			}
-			const res = await (async () => {
-				if (isEditingExisting) {
-					return apiFetch(`/api/tests/${testId}/settings`, {
-						method: 'PATCH',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							topicId: form.topicId,
-							title: form.title,
-							slug: form.slug,
-							description: form.description,
-							isPublished: form.isPublished,
-							showCorrectAnswer: form.showCorrectAnswer,
-							scoringRules: form.scoringRules,
-							timeLimitMinutes: form.timeLimitMinutes,
-							redThresholdMinutes: form.redThresholdMinutes,
-							warningThresholdMinutes: form.warningThresholdMinutes,
-							passingScore: form.passingScore,
-							order: form.order,
-						}),
-					})
-				}
-
-				for (let i = 0; i < form.questions.length; i++) {
-					const q = form.questions[i]
-					const template = resolveQuestionTemplate(q)
-					if (!template) {
-						throw new Error(`Вопрос ${i + 1}: тип вопроса не настроен в БД`)
-					}
-					if (!q.promptText.trim()) {
-						throw new Error(`Вопрос ${i + 1}: введите текст вопроса`)
-					}
-					if (template === 'single_choice' || template === 'multi_choice') {
-						if (!q.options || q.options.length < 2) {
-							throw new Error(`Вопрос ${i + 1}: добавьте минимум 2 варианта ответа`)
-						}
-						if (q.options.some((o) => !o.text.trim())) {
-							throw new Error(`Вопрос ${i + 1}: заполните все варианты ответа`)
-						}
-						if (template === 'single_choice' && !q.correct) {
-							throw new Error(`Вопрос ${i + 1}: выберите правильный ответ`)
-						}
-						if (template === 'multi_choice' && (!Array.isArray(q.correct) || q.correct.length === 0)) {
-							throw new Error(`Вопрос ${i + 1}: выберите правильные ответы`)
-						}
-					}
-					if (template === 'matching') {
-						if (!q.matchingPairs || q.matchingPairs.left.length < 2 || q.matchingPairs.right.length < 2) {
-							throw new Error(`Вопрос ${i + 1}: добавьте минимум 2 пары для сопоставления`)
-						}
-						if (q.matchingPairs.left.some((p) => !p.text.trim()) || q.matchingPairs.right.some((p) => !p.text.trim())) {
-							throw new Error(`Вопрос ${i + 1}: заполните все элементы сопоставления`)
-						}
-						if (typeof q.correct !== 'object' || Array.isArray(q.correct) || Object.keys(q.correct).length === 0) {
-							throw new Error(`Вопрос ${i + 1}: укажите правильные соответствия`)
-						}
-					}
-					if (template === 'short_text') {
-						const normalized = normalizeShortTextCorrectValue(q.correct)
-						if (!normalized || !normalized.trim()) {
-							throw new Error(`Вопрос ${i + 1}: укажите правильный краткий ответ`)
-						}
-					}
-					if (template === 'sequence_digits') {
-						if (!isValidSequenceCorrectValue(q.correct)) {
-							throw new Error(`Вопрос ${i + 1}: для последовательности используйте только цифры`)
-						}
-					}
-				}
-
-				return apiFetch('/api/tests/save', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(normalizeFormPayload(form)),
-				})
-			})()
+			const res = await apiFetch(`/api/tests/${currentTestId}/settings`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					topicId: form.topicId,
+					title: form.title,
+					slug: form.slug,
+					description: form.description,
+					isPublished: form.isPublished,
+					showCorrectAnswer: form.showCorrectAnswer,
+					scoringRules: form.scoringRules,
+					timeLimitMinutes: form.timeLimitMinutes,
+					redThresholdMinutes: form.redThresholdMinutes,
+					warningThresholdMinutes: form.warningThresholdMinutes,
+					passingScore: form.passingScore,
+					order: form.order,
+				}),
+			})
 
 			if (!res.ok) {
 				const data = await res.json()
@@ -554,16 +627,9 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			}
 
 			const data = await res.json()
-			toast.success(isEditingExisting ? 'Настройки теста сохранены' : 'Тест создан')
+			toast.success('Настройки теста сохранены')
 
-			if (!isEditingExisting && data.test) {
-				// Redirect to slug-based URL after creation
-				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
-				const newTestSlug = data.test.slug || form.slug
-				if (newTopicSlug && newTestSlug) {
-					router.push(`/admin/tests/${newTopicSlug}/${newTestSlug}`)
-				}
-			} else if (isEditingExisting && data.test) {
+			if (data.test) {
 				// If slug or topic changed, update URL
 				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
 				if (newTopicSlug !== topicSlug || form.slug !== testSlug) {
@@ -867,6 +933,11 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 								onCheckedChange={(checked) => setForm({ ...form, isPublished: checked })}
 							/>
 						</div>
+						{isCreateMode && form.isPublished && form.questions.length === 0 ? (
+							<p className="text-muted-foreground text-xs">
+								Первое сохранение создаст черновик. Опубликовать тест можно после добавления хотя бы одного вопроса.
+							</p>
+						) : null}
 
 						<div className="flex items-center justify-between pt-2">
 							<Label>Показывать правильный ответ после проверки</Label>

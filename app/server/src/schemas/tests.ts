@@ -189,6 +189,8 @@ export const SaveTestSchema = z
 		showCorrectAnswer: z.boolean().default(true),
 		scoringRules: TestScoringRulesSchema.optional(),
 		timeLimitMinutes: z.number().int().positive().optional().nullable(),
+		redThresholdMinutes: z.number().int().positive().optional().nullable(),
+		warningThresholdMinutes: z.number().int().positive().optional().nullable(),
 		passingScore: z.number().min(0).max(100).optional().nullable(),
 		order: z.number().int().min(0).default(0),
 		questions: z.array(QuestionSchema),
