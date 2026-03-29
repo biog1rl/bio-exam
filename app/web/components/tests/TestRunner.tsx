@@ -37,13 +37,7 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-
-type QuestionTelemetry = {
-	timeSpentMs: number
-	focusLossCount: number
-	visitCount: number
-}
-type TelemetryMap = Record<string, QuestionTelemetry>
+import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit, type TelemetryMap } from './telemetry'
 
 type ResultByQuestion = Record<
 	string,
@@ -224,6 +218,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const [expiredAttemptId, setExpiredAttemptId] = useState<string | null>(null)
 	const [awaitingStart, setAwaitingStart] = useState(false)
 	const [telemetry, setTelemetry] = useState<TelemetryMap>({})
+	const telemetryRef = useRef<TelemetryMap>({})
 	const enterTimeRef = useRef<number | null>(null)
 	const warningFiredRef = useRef(false)
 	const sessionInitRef = useRef(false)
@@ -412,19 +407,22 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		[orderedQuestions, currentQuestionId]
 	)
 
-	const flushQuestionTime = useCallback((questionId: string | null) => {
-		if (!questionId || enterTimeRef.current === null) return
-		const elapsed = Date.now() - enterTimeRef.current
-		setTelemetry((prev) => ({
-			...prev,
-			[questionId]: {
-				timeSpentMs: (prev[questionId]?.timeSpentMs ?? 0) + elapsed,
-				focusLossCount: prev[questionId]?.focusLossCount ?? 0,
-				visitCount: prev[questionId]?.visitCount ?? 0,
-			},
-		}))
-		enterTimeRef.current = null
+	const applyTelemetry = useCallback((updater: (previous: TelemetryMap) => TelemetryMap) => {
+		const next = updater(telemetryRef.current)
+		telemetryRef.current = next
+		setTelemetry(next)
+		return next
 	}, [])
+
+	const flushQuestionTime = useCallback(
+		(questionId: string | null) => {
+			if (!questionId || enterTimeRef.current === null) return
+			const elapsed = Date.now() - enterTimeRef.current
+			applyTelemetry((prev) => appendQuestionTime(prev, questionId, elapsed))
+			enterTimeRef.current = null
+		},
+		[applyTelemetry]
+	)
 
 	const goToQuestion = useCallback(
 		(index: number) => {
@@ -435,16 +433,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 			setCurrentQuestionId(q.id)
 			enterTimeRef.current = Date.now()
 			// Increment visitCount for the destination question
-			setTelemetry((prev) => ({
-				...prev,
-				[q.id]: {
-					timeSpentMs: prev[q.id]?.timeSpentMs ?? 0,
-					focusLossCount: prev[q.id]?.focusLossCount ?? 0,
-					visitCount: (prev[q.id]?.visitCount ?? 0) + 1,
-				},
-			}))
+			applyTelemetry((prev) => incrementQuestionVisit(prev, q.id))
 		},
-		[orderedQuestions, currentQuestionId, flushQuestionTime]
+		[orderedQuestions, currentQuestionId, flushQuestionTime, applyTelemetry]
 	)
 
 	const goPrev = useCallback(() => goToQuestion(currentIndex - 1), [goToQuestion, currentIndex])
@@ -456,7 +447,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		// Flush any pending question time before submitting
 		flushQuestionTime(currentQuestionId)
 		try {
-			const result = await submitPublicTestAnswers(test.id, answers, telemetry)
+			const result = await submitPublicTestAnswers(test.id, answers, telemetryRef.current)
 			if (isAutoSubmit) {
 				setShowTimeUp(true)
 				// Brief delay to show "Время вышло" screen before transitioning to results
@@ -529,13 +520,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				// Tab hidden: flush time + count focus loss
 				flushQuestionTime(currentQuestionId)
 				if (currentQuestionId) {
-					setTelemetry((prev) => ({
-						...prev,
-						[currentQuestionId]: {
-							...(prev[currentQuestionId] ?? { timeSpentMs: 0, visitCount: 0 }),
-							focusLossCount: (prev[currentQuestionId]?.focusLossCount ?? 0) + 1,
-						},
-					}))
+					applyTelemetry((prev) => incrementQuestionFocusLoss(prev, currentQuestionId))
 				}
 			} else {
 				// Tab visible again: restart timer
@@ -546,7 +531,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		}
 		document.addEventListener('visibilitychange', handler)
 		return () => document.removeEventListener('visibilitychange', handler)
-	}, [currentQuestionId, flushQuestionTime, submitResult, frozen])
+	}, [currentQuestionId, flushQuestionTime, submitResult, frozen, applyTelemetry])
 
 	// Prefetch signed URLs for all images in all questions on mount
 	useEffect(() => {
@@ -569,18 +554,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	// Telemetry: start timer and count first visit on initial question mount
 	useEffect(() => {
 		enterTimeRef.current = Date.now()
-		setTelemetry((prev) => ({
-			...prev,
-			...(currentQuestionId
-				? {
-						[currentQuestionId]: {
-							timeSpentMs: prev[currentQuestionId]?.timeSpentMs ?? 0,
-							focusLossCount: prev[currentQuestionId]?.focusLossCount ?? 0,
-							visitCount: (prev[currentQuestionId]?.visitCount ?? 0) + 1,
-						},
-					}
-				: {}),
-		}))
+		if (currentQuestionId) {
+			applyTelemetry((prev) => incrementQuestionVisit(prev, currentQuestionId))
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []) // run once on mount
 
