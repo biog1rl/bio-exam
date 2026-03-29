@@ -68,11 +68,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		data: usersData,
 		isLoading: usersLoading,
 		mutate: mutateUsers,
-	} = useSWR<{ users: UserRow[] }>('/api/users', fetcher)
+	} = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
 
 	const user = useMemo(
 		() =>
-			usersData?.users?.find((u) => typeof u.login === 'string' && u.login.toLowerCase() === normalizedLogin) ?? null,
+			usersData?.rows?.find((u) => typeof u.login === 'string' && u.login.toLowerCase() === normalizedLogin) ?? null,
 		[usersData, normalizedLogin]
 	)
 

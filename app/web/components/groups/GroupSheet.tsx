@@ -40,8 +40,8 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	const [comboOpen, setComboOpen] = useState(false)
 	const [saving, setSaving] = useState(false)
 
-	const { data: usersData } = useSWR<{ users: UserRow[] }>('/api/users', fetcher)
-	const allUsers = useMemo(() => usersData?.users ?? [], [usersData])
+	const { data: usersData } = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
+	const allUsers = useMemo(() => usersData?.rows ?? [], [usersData])
 
 	const { data: groupData, isLoading: membersLoading } = useSWR(
 		open && group ? `/api/groups/${group.id}` : null,

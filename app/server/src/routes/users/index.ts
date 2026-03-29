@@ -126,7 +126,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 			groupName: r.groupName ?? null,
 		}))
 
-		res.json({ rows: result, total })
+		res.json({ rows: result, users: result, total })
 	} catch (e) {
 		next(e)
 	}

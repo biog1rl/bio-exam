@@ -133,7 +133,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	const { data: studentAssignmentsData, mutate: mutateStudentAssignments } = useSWR<{
 		assignments: StudentAssignment[]
 	}>(testId ? `/api/tests/${testId}/assignments` : null, fetcher)
-	const { data: allUsersData } = useSWR<{ users: UserItem[] }>(testId ? '/api/users' : null, fetcher)
+	const { data: allUsersData } = useSWR<{ rows: UserItem[]; total: number }>(testId ? '/api/users' : null, fetcher)
 
 	const [assigningUserId, setAssigningUserId] = useState<string | null>(null)
 	const [removingUserId, setRemovingUserId] = useState<string | null>(null)
@@ -141,7 +141,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	const studentAssignments = useMemo(() => studentAssignmentsData?.assignments ?? [], [studentAssignmentsData])
 	const assignedUserIds = useMemo(() => new Set(studentAssignments.map((a) => a.userId)), [studentAssignments])
 	const availableUsers = useMemo(
-		() => (allUsersData?.users ?? []).filter((u) => !assignedUserIds.has(u.id)),
+		() => (allUsersData?.rows ?? []).filter((u) => !assignedUserIds.has(u.id)),
 		[allUsersData, assignedUserIds]
 	)
 
