@@ -12,6 +12,7 @@ import { cookies } from 'next/headers'
 import { Pool } from 'pg'
 import 'server-only'
 
+import { readSessionCookieValue } from '@/lib/auth/sessionCookie'
 import { env } from '@/lib/env/server'
 
 type JwtPayload = { sub: string; roles?: string[] }
@@ -67,7 +68,6 @@ type MeData = {
 	perms: PermissionKey[]
 }
 
-const COOKIE_NAME = env.SESSION_COOKIE_NAME ?? 'bio_exam_session'
 const JWT_SECRET = env.AUTH_JWT_SECRET
 
 const globalForPg = globalThis as typeof globalThis & {
@@ -102,7 +102,7 @@ function applyGrant(target: Set<PermissionKey>, row: RoleGrantRow | UserGrantRow
 
 export async function getMeData(): Promise<MeData | null> {
 	const cookieStore = await cookies()
-	const token = cookieStore.get(COOKIE_NAME)?.value
+	const token = readSessionCookieValue(cookieStore, env.SESSION_COOKIE_NAME)
 	if (!token) return null
 
 	let payload: JwtPayload

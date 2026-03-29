@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const SESSION_COOKIE_CANDIDATES = Array.from(
-	new Set(
-		[
-			process.env.SESSION_COOKIE_NAME,
-			'bio_exam_session', // default from server config
-			'bio-exam_session', // value used in current server .env
-		].filter((value): value is string => typeof value === 'string' && value.length > 0)
-	)
-)
+import { getSessionCookieCandidates } from '@/lib/auth/sessionCookie'
+
+const SESSION_COOKIE_CANDIDATES = getSessionCookieCandidates(process.env.SESSION_COOKIE_NAME)
 const REFRESH_COOKIE_NAME = 'refresh_token'
 
 const PUBLIC_PATHS = new Set(['/login'])
