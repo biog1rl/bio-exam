@@ -1,14 +1,26 @@
 import { cache } from 'react'
 
+import { cookies } from 'next/headers'
 import 'server-only'
 
-import { getMeData } from './server/getMeData'
+import { absoluteUrl } from '@/lib/http/absoluteUrl'
 
-export type ServerMe = Awaited<ReturnType<typeof getMeData>>
+import { parseAuthMe, type AuthMe } from './authMePayload'
+
+export type ServerMe = AuthMe
 
 export const getServerMe = cache(async (): Promise<ServerMe | null> => {
 	try {
-		return await getMeData()
+		const cookieStore = await cookies()
+		const cookieHeader = cookieStore.toString()
+		const url = await absoluteUrl('/api/auth/me')
+		const response = await fetch(url, {
+			method: 'GET',
+			headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+			cache: 'no-store',
+		})
+		const body = await response.json().catch(() => null)
+		return parseAuthMe(body)
 	} catch {
 		return null
 	}
