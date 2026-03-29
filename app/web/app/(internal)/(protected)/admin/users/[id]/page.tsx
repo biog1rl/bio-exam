@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
 import { getServerMe } from '@/lib/auth/getServerMe'
+import { buildLoginRedirectPath } from '@/lib/auth/loginRedirect'
 import { absoluteUrl } from '@/lib/http/absoluteUrl'
 
 type UserLite = {
@@ -35,7 +36,7 @@ export default async function AdminUserPageRedirect({ params }: { params: Promis
 	const me = await getServerMe()
 
 	if (!me) {
-		redirect('/login')
+		redirect(buildLoginRedirectPath(`/admin/users/${encodeURIComponent(id)}`))
 	}
 
 	const isAdmin = me.roles?.includes('admin') ?? false
