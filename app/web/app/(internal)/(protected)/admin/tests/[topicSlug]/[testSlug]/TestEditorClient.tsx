@@ -39,8 +39,8 @@ import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
 import { transliterate } from '@/lib/utils/transliterate'
 
-import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import QuestionCard from '../../components/QuestionCard'
+import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type {
 	QuestionDraft,
 	QuestionDraftsResponse,
@@ -354,7 +354,9 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			throw new Error(data?.error || 'Ошибка сохранения')
 		}
 
-		const data = (await res.json().catch(() => null)) as { test?: { id?: string; topicSlug?: string; slug?: string } } | null
+		const data = (await res.json().catch(() => null)) as {
+			test?: { id?: string; topicSlug?: string; slug?: string }
+		} | null
 		const createdTestId = data?.test?.id
 		const createdTopicSlug = data?.test?.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
 		const createdTestSlug = data?.test?.slug || form.slug
