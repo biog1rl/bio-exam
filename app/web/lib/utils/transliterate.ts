@@ -11,9 +11,9 @@ export function transliterate(str: string): string {
 				converter
 					.transform(part)
 					.toLowerCase()
-					.replace(/\s+/g, '-') // пробелы → тире
+					.replace(/[\s_]+/g, '-') // пробелы и подчёркивания → тире
 					.replace(/-+/g, '-') // схлопнуть повторные тире
-					.replace(/[^a-z0-9-_]/g, '') // убрать всё, кроме a-z0-9-_
+					.replace(/[^a-z0-9-]/g, '') // убрать всё, кроме a-z0-9-
 					.replace(/^-+|-+$/g, '') // обрезать тире по краям
 		)
 		.join('/')

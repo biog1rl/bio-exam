@@ -40,13 +40,13 @@ import { apiFetch } from '@/lib/api-fetch'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import QuestionCard from '../../components/QuestionCard'
+import { TopicFormDialog } from '../../components/TopicFormDialog'
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type {
 	QuestionDraft,
 	QuestionDraftsResponse,
 	TestDetailResponse,
 	TestFormData,
-	TopicFormData,
 	TopicsResponse,
 } from '../../types'
 import {
@@ -193,6 +193,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		[testId, removingUserId, mutateStudentAssignments]
 	)
 
+	const [testSlugError, setTestSlugError] = useState<string | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [creatingQuestionDraft, setCreatingQuestionDraft] = useState(false)
 	const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null)
@@ -214,13 +215,6 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 	// Topic creation dialog state
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
-	const [topicForm, setTopicForm] = useState<TopicFormData>({
-		slug: '',
-		title: '',
-		description: '',
-		order: 0,
-		isActive: true,
-	})
 
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData])
 	const questionDrafts = useMemo(() => questionDraftsData?.drafts ?? [], [questionDraftsData])
@@ -271,6 +265,8 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		if (!form.topicId) return 'Выберите тему'
 		if (!form.title) return 'Введите название теста'
 		if (!form.slug) return 'Введите slug'
+		if (form.slug.length < 2 || form.slug.length > 100 || !/^[a-z0-9-]+$/.test(form.slug))
+			return 'Slug: только латинские буквы, цифры и дефисы (2–100 символов)'
 		return null
 	}, [form.topicId, form.title, form.slug])
 
@@ -372,48 +368,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		}
 	}, [form, getBaseValidationError, getCreateQuestionsValidationError, topics])
 
-	const handleCreateTopic = () => {
-		setTopicForm({
-			slug: '',
-			title: '',
-			description: '',
-			order: topics.length,
-			isActive: true,
-		})
-		setTopicDialogOpen(true)
-	}
-
-	const handleSaveTopic = async () => {
-		if (!topicForm.title || !topicForm.slug) {
-			toast.error('Заполните название и slug')
-			return
-		}
-
-		try {
-			const res = await apiFetch('/api/tests/topics', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(topicForm),
-			})
-
-			if (!res.ok) {
-				const data = await res.json()
-				throw new Error(data.error || 'Ошибка создания темы')
-			}
-
-			const data = await res.json()
-			toast.success('Тема создана')
-			setTopicDialogOpen(false)
-			mutateTopics()
-
-			// Set the new topic as selected
-			if (data.topic?.id) {
-				setForm((f) => ({ ...f, topicId: data.topic.id }))
-			}
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка создания темы')
-		}
-	}
+	const handleCreateTopic = () => setTopicDialogOpen(true)
 
 	const handleDragEnd = async (event: DragEndEvent) => {
 		const { active, over } = event
@@ -793,9 +748,23 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 							<Label>Slug (URL)</Label>
 							<Input
 								value={form.slug}
-								onChange={(e) => setForm({ ...form, slug: e.target.value })}
+								onChange={(e) => {
+									const slug = e.target.value
+									const err =
+										!slug || slug.length < 2 || slug.length > 100 || !/^[a-z0-9-]+$/.test(slug)
+											? 'Только латинские буквы, цифры и дефисы (2–100 символов)'
+											: null
+									setTestSlugError(err)
+									setForm({ ...form, slug })
+								}}
 								placeholder="test-slug"
+								className={testSlugError ? 'border-destructive focus-visible:ring-destructive' : ''}
 							/>
+							{testSlugError ? (
+								<p className="text-destructive text-xs">{testSlugError}</p>
+							) : (
+								<p className="text-muted-foreground text-xs">Только латинские буквы, цифры и дефисы</p>
+							)}
 						</div>
 
 						<div className="space-y-2">
@@ -1139,60 +1108,15 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 				</div>
 			)}
 
-			{/* Topic Creation Dialog */}
-			<Dialog open={topicDialogOpen} onOpenChange={setTopicDialogOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Новая тема</DialogTitle>
-						<DialogDescription>Темы помогают организовать тесты по категориям</DialogDescription>
-					</DialogHeader>
-
-					<div className="space-y-4">
-						<div className="space-y-2">
-							<Label>Название</Label>
-							<Input
-								value={topicForm.title}
-								onChange={(e) => {
-									const title = e.target.value
-									setTopicForm({
-										...topicForm,
-										title,
-										slug: transliterate(title),
-									})
-								}}
-								placeholder="Биология 9 класс"
-							/>
-						</div>
-
-						<div className="space-y-2">
-							<Label>Slug (URL)</Label>
-							<Input
-								value={topicForm.slug}
-								onChange={(e) => setTopicForm({ ...topicForm, slug: e.target.value })}
-								placeholder="biology-9"
-							/>
-							<p className="text-muted-foreground text-xs">Только латинские буквы, цифры и дефисы</p>
-						</div>
-
-						<div className="space-y-2">
-							<Label>Описание</Label>
-							<Textarea
-								value={topicForm.description}
-								onChange={(e) => setTopicForm({ ...topicForm, description: e.target.value })}
-								placeholder="Описание темы..."
-								rows={3}
-							/>
-						</div>
-					</div>
-
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setTopicDialogOpen(false)}>
-							Отмена
-						</Button>
-						<Button onClick={handleSaveTopic}>Создать</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<TopicFormDialog
+				open={topicDialogOpen}
+				onOpenChange={setTopicDialogOpen}
+				initialOrder={topics.length}
+				onSaved={(topic) => {
+					mutateTopics()
+					if (topic?.id) setForm((f) => ({ ...f, topicId: topic.id! }))
+				}}
+			/>
 			{alertDialog}
 		</div>
 	)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import {
 	BookOpen,
@@ -23,29 +23,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from '@/components/ui/dialog'
-import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
-import { transliterate } from '@/lib/utils/transliterate'
 
-import type { Test, Topic, TopicFormData, TopicsResponse, TestsResponse } from './types'
+import { TopicFormDialog } from './components/TopicFormDialog'
+import type { Test, Topic, TopicsResponse, TestsResponse } from './types'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
@@ -61,13 +49,6 @@ export default function TestsClient() {
 	const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
 	const [editingTopic, setEditingTopic] = useState<Topic | null>(null)
-	const [topicForm, setTopicForm] = useState<TopicFormData>({
-		slug: '',
-		title: '',
-		description: '',
-		order: 0,
-		isActive: true,
-	})
 
 	const topics = topicsData?.topics ?? []
 	const allTests = testsData?.tests ?? []
@@ -75,55 +56,12 @@ export default function TestsClient() {
 
 	const handleCreateTopic = () => {
 		setEditingTopic(null)
-		setTopicForm({
-			slug: '',
-			title: '',
-			description: '',
-			order: topics.length,
-			isActive: true,
-		})
 		setTopicDialogOpen(true)
 	}
 
 	const handleEditTopic = (topic: Topic) => {
 		setEditingTopic(topic)
-		setTopicForm({
-			slug: topic.slug,
-			title: topic.title,
-			description: topic.description || '',
-			order: topic.order,
-			isActive: topic.isActive,
-		})
 		setTopicDialogOpen(true)
-	}
-
-	const handleSaveTopic = async () => {
-		if (!topicForm.title || !topicForm.slug) {
-			toast.error('Заполните название и slug')
-			return
-		}
-
-		try {
-			const url = editingTopic ? `/api/tests/topics/${editingTopic.id}` : '/api/tests/topics'
-			const method = editingTopic ? 'PATCH' : 'POST'
-
-			const res = await apiFetch(url, {
-				method,
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(topicForm),
-			})
-
-			if (!res.ok) {
-				const data = await res.json()
-				throw new Error(data.error || 'Ошибка сохранения')
-			}
-
-			toast.success(editingTopic ? 'Тема обновлена' : 'Тема создана')
-			setTopicDialogOpen(false)
-			mutateTopics()
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка сохранения')
-		}
 	}
 
 	const handleDeleteTopic = async (topic: Topic) => {
@@ -215,30 +153,6 @@ export default function TestsClient() {
 			toast.error(err instanceof Error ? err.message : 'Ошибка экспорта')
 		}
 	}
-
-	const handleTitleChange = useCallback(
-		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const title = e.target.value
-			setTopicForm((prev) => ({
-				...prev,
-				title,
-				slug: !editingTopic ? transliterate(title) : prev.slug,
-			}))
-		},
-		[editingTopic]
-	)
-
-	const handleSlugChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-		setTopicForm((prev) => ({ ...prev, slug: e.target.value }))
-	}, [])
-
-	const handleDescriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		setTopicForm((prev) => ({ ...prev, description: e.target.value }))
-	}, [])
-
-	const handleIsActiveChange = useCallback((checked: boolean) => {
-		setTopicForm((prev) => ({ ...prev, isActive: checked }))
-	}, [])
 
 	if (topicsLoading || testsLoading) {
 		return <div className="p-6">Загрузка...</div>
@@ -402,50 +316,17 @@ export default function TestsClient() {
 				</div>
 			</div>
 
-			{/* Topic Dialog */}
-			<Dialog open={topicDialogOpen} onOpenChange={setTopicDialogOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>{editingTopic ? 'Редактировать тему' : 'Новая тема'}</DialogTitle>
-						<DialogDescription>Темы помогают организовать тесты по категориям</DialogDescription>
-					</DialogHeader>
-
-					<div className="space-y-4">
-						<div className="space-y-2">
-							<Label>Название</Label>
-							<Input value={topicForm.title} onChange={handleTitleChange} placeholder="Биология 9 класс" />
-						</div>
-
-						<div className="space-y-2">
-							<Label>Slug (URL)</Label>
-							<Input value={topicForm.slug} onChange={handleSlugChange} placeholder="biology-9" />
-							<p className="text-muted-foreground text-xs">Только латинские буквы, цифры и дефисы</p>
-						</div>
-
-						<div className="space-y-2">
-							<Label>Описание</Label>
-							<Textarea
-								value={topicForm.description}
-								onChange={handleDescriptionChange}
-								placeholder="Описание темы..."
-								rows={3}
-							/>
-						</div>
-
-						<div className="flex items-center justify-between">
-							<Label>Активна</Label>
-							<Switch checked={topicForm.isActive} onCheckedChange={handleIsActiveChange} />
-						</div>
-					</div>
-
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setTopicDialogOpen(false)}>
-							Отмена
-						</Button>
-						<Button onClick={handleSaveTopic}>{editingTopic ? 'Сохранить' : 'Создать'}</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<TopicFormDialog
+				open={topicDialogOpen}
+				onOpenChange={setTopicDialogOpen}
+				editingTopic={editingTopic}
+				initialOrder={topics.length}
+				showIsActive
+				onSaved={() => {
+					mutateTopics()
+					mutateTests()
+				}}
+			/>
 			{alertDialog}
 		</div>
 	)
