@@ -551,7 +551,7 @@ router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async
 		for (const a of allAttempts) {
 			const dateKey = a.submittedAt.toISOString().slice(0, 10)
 			if (!byDate.has(dateKey)) byDate.set(dateKey, { scores: [] })
-			byDate.get(dateKey)!.scores.push(Math.round((a.scorePercentage ?? 0) * 10) / 10)
+			byDate.get(dateKey)!.scores.push(Math.round(a.scorePercentage ?? 0))
 		}
 
 		const data = [...byDate.entries()].map(([date, { scores }]) => ({

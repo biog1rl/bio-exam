@@ -4,6 +4,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 
 import { fetchPublicTestsList } from '@/lib/tests/api'
+import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem } from '@/lib/tests/types'
 
 const fetcher = async () => fetchPublicTestsList()
@@ -56,7 +57,7 @@ export default function TestsPageClient() {
 											<p className="text-muted-foreground text-xs">
 												Вопросов: {test.questionsCount}
 												{test.timeLimitMinutes ? ` / Лимит: ${test.timeLimitMinutes} мин` : ''}
-												{test.passingScore != null ? ` / Проходной: ${test.passingScore}%` : ''}
+												{test.passingScore != null ? ` / Проходной: ${formatPercent(test.passingScore)}` : ''}
 											</p>
 										</div>
 									</Link>

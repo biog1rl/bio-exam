@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { ChartDataPoint } from '@/lib/tests/api'
 import { fetchChartData, fetchChartDefaultRange, fetchMyTestAttempts, fetchPublicTestBySlug } from '@/lib/tests/api'
+import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
 
 const chartConfig = {
@@ -38,8 +39,8 @@ function ChartTooltipCustom({ active, payload }: { active?: boolean; payload?: {
 		<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
 			<p className="font-medium">{dateLabel}</p>
 			<p className="text-muted-foreground">Попыток: {d.count}</p>
-			<p className="text-green-600 dark:text-green-400">Лучший: {d.maxScore}%</p>
-			{d.count > 1 && <p className="text-red-500 dark:text-red-400">Худший: {d.minScore}%</p>}
+			<p className="text-green-600 dark:text-green-400">Лучший: {formatPercent(d.maxScore)}</p>
+			{d.count > 1 && <p className="text-red-500 dark:text-red-400">Худший: {formatPercent(d.minScore)}</p>}
 		</div>
 	)
 }
@@ -205,7 +206,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 									<TableRow key={row.id}>
 										<TableCell>{total - idx}</TableCell>
 										<TableCell>{format(new Date(row.submittedAt), 'dd.MM.yyyy', { locale: ru })}</TableCell>
-										<TableCell>{row.scorePercentage}%</TableCell>
+										<TableCell>{formatPercent(row.scorePercentage)}</TableCell>
 									</TableRow>
 								))}
 							</TableBody>

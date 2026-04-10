@@ -9,6 +9,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import MdxRenderer from "@/components/tests/MdxRenderer";
 import { isStoragePath, prefetchSignedUrls } from "@/lib/image-signed-url-cache";
 import { saveAnswer, startTestSession, submitPublicTestAnswers } from "@/lib/tests/api";
+import { formatPercent } from "@/lib/tests/format";
 import type {
   PublicTestDetail,
   PublicTestQuestion,
@@ -622,7 +623,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span>Тема: {test.topicTitle}</span>
             {test.timeLimitMinutes ? <span>Лимит: {test.timeLimitMinutes} мин</span> : null}
-            {test.passingScore != null ? <span>Проходной балл: {test.passingScore}%</span> : null}
+            {test.passingScore != null ? <span>Проходной балл: {formatPercent(test.passingScore)}</span> : null}
           </div>
         </div>
 
@@ -632,7 +633,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
             <p>
               Баллы: {submitResult.earnedPoints} / {submitResult.totalPoints}
             </p>
-            <p>Процент: {submitResult.scorePercentage.toFixed(1)}%</p>
+            <p>Процент: {formatPercent(submitResult.scorePercentage)}</p>
             <p>{submitResult.passed ? "Статус: пройден" : "Статус: не пройден"}</p>
             <Button type="button" variant="outline" className="mt-3" onClick={handleRetake}>
               Пройти ещё раз
@@ -833,7 +834,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
                   {attempts.map((attempt) => (
                     <li key={attempt.id} className="rounded border bg-muted/30 p-2">
                       {formatDate(attempt.submittedAt)} / {attempt.earnedPoints}/{attempt.totalPoints} /{" "}
-                      {attempt.scorePercentage.toFixed(1)}% / {attempt.passed ? "пройден" : "не пройден"}
+                      {formatPercent(attempt.scorePercentage)} / {attempt.passed ? "пройден" : "не пройден"}
                     </li>
                   ))}
                 </ul>

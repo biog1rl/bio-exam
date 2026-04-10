@@ -38,6 +38,7 @@ lerna-debug.log*
 # IDE / Editor
 .cursor
 .claude
+.codex
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
