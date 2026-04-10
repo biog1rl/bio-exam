@@ -12,6 +12,7 @@ const withMdx = withMDX({
 })
 
 const nextConfig: NextConfig = withMdx({
+	allowedDevOrigins: ['172.18.0.1', '192.168.50.2', 'localhost'],
 	pageExtensions: ['ts', 'tsx', 'md', 'mdx'],
 	experimental: {
 		scrollRestoration: true,

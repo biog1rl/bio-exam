@@ -50,6 +50,7 @@ const SubmitAnswersSchema = z.object({
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const GRACE_PERIOD_MINUTES = 2
+const DB_RETRY_ENABLED = process.env.DB_QUERY_RETRY !== '0'
 
 // =============================================================================
 // Helpers
@@ -90,6 +91,39 @@ async function readFirstMarkdown(candidates: string[]): Promise<string> {
 		}
 	}
 	return ''
+}
+
+function errorText(err: unknown): string {
+	if (err instanceof Error) {
+		const parts = [err.message]
+		const cause = (err as Error & { cause?: unknown }).cause
+		if (cause instanceof Error) parts.push(cause.message)
+		return parts.join(' | ')
+	}
+	return String(err)
+}
+
+function isTransientDbError(err: unknown): boolean {
+	const message = errorText(err).toLowerCase()
+	return (
+		message.includes('connection terminated unexpectedly') ||
+		message.includes('query read timeout') ||
+		message.includes('econnreset') ||
+		message.includes('etimedout') ||
+		message.includes('eai_again')
+	)
+}
+
+async function withTransientDbRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
+	try {
+		return await task()
+	} catch (err) {
+		if (!DB_RETRY_ENABLED || !isTransientDbError(err)) throw err
+		// eslint-disable-next-line no-console
+		console.warn(`[db-retry] ${label}: retry once after transient DB error`)
+		await new Promise((resolve) => setTimeout(resolve, 120))
+		return task()
+	}
 }
 
 // =============================================================================
@@ -209,58 +243,62 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 	try {
 		const { topicSlug, testSlug } = req.params as { topicSlug: string; testSlug: string }
 
-		const testRows = await db
-			.select({
-				id: tests.id,
-				slug: tests.slug,
-				title: tests.title,
-				description: tests.description,
-				showCorrectAnswer: tests.showCorrectAnswer,
-				timeLimitMinutes: tests.timeLimitMinutes,
-				passingScore: tests.passingScore,
-				topicId: topics.id,
-				topicSlug: topics.slug,
-				topicTitle: topics.title,
-			})
-			.from(tests)
-			.innerJoin(topics, eq(tests.topicId, topics.id))
-			.where(
-				and(
-					eq(topics.slug, topicSlug),
-					eq(topics.isActive, true),
-					eq(tests.slug, testSlug),
-					eq(tests.isPublished, true)
-				)
-			)
-			.limit(1)
-		let test = testRows[0]
-		if (!test && UUID_RE.test(testSlug)) {
-			const fallbackRows = await db
-				.select({
-					id: tests.id,
-					slug: tests.slug,
-					title: tests.title,
-					description: tests.description,
-					showCorrectAnswer: tests.showCorrectAnswer,
-					timeLimitMinutes: tests.timeLimitMinutes,
-					passingScore: tests.passingScore,
-					topicId: topics.id,
-					topicSlug: topics.slug,
-					topicTitle: topics.title,
-				})
-				.from(tests)
-				.innerJoin(topics, eq(tests.topicId, topics.id))
-				.where(
-					and(
-						eq(topics.slug, topicSlug),
-						eq(topics.isActive, true),
-						eq(tests.id, testSlug),
-						eq(tests.isPublished, true)
+			const testRows = await withTransientDbRetry('public test by slug', () =>
+				db
+					.select({
+						id: tests.id,
+						slug: tests.slug,
+						title: tests.title,
+						description: tests.description,
+						showCorrectAnswer: tests.showCorrectAnswer,
+						timeLimitMinutes: tests.timeLimitMinutes,
+						passingScore: tests.passingScore,
+						topicId: topics.id,
+						topicSlug: topics.slug,
+						topicTitle: topics.title,
+					})
+					.from(tests)
+					.innerJoin(topics, eq(tests.topicId, topics.id))
+					.where(
+						and(
+							eq(topics.slug, topicSlug),
+							eq(topics.isActive, true),
+							eq(tests.slug, testSlug),
+							eq(tests.isPublished, true)
+						)
 					)
+					.limit(1)
+			)
+			let test = testRows[0]
+			if (!test && UUID_RE.test(testSlug)) {
+				const fallbackRows = await withTransientDbRetry('public test by id fallback', () =>
+					db
+						.select({
+							id: tests.id,
+							slug: tests.slug,
+							title: tests.title,
+							description: tests.description,
+							showCorrectAnswer: tests.showCorrectAnswer,
+							timeLimitMinutes: tests.timeLimitMinutes,
+							passingScore: tests.passingScore,
+							topicId: topics.id,
+							topicSlug: topics.slug,
+							topicTitle: topics.title,
+						})
+						.from(tests)
+						.innerJoin(topics, eq(tests.topicId, topics.id))
+						.where(
+							and(
+								eq(topics.slug, topicSlug),
+								eq(topics.isActive, true),
+								eq(tests.id, testSlug),
+								eq(tests.isPublished, true)
+							)
+						)
+						.limit(1)
 				)
-				.limit(1)
-			test = fallbackRows[0]
-		}
+				test = fallbackRows[0]
+			}
 		if (!test) {
 			return res.status(404).json({ error: 'Test not found' })
 		}
@@ -269,30 +307,36 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 		const userId = req.authUser!.id
 		const isAdmin = req.authUser!.roles?.some((r) => ['admin', 'teacher'].includes(r)) ?? false
 		if (!isAdmin) {
-			const assignment = await db
-				.select()
-				.from(testAssignments)
-				.where(and(eq(testAssignments.testId, test.id), eq(testAssignments.userId, userId)))
-				.limit(1)
-			if (assignment.length === 0) {
-				return res.status(403).json({ error: 'Тест не назначен' })
+				const assignment = await withTransientDbRetry('public test assignment check', () =>
+					db
+						.select()
+						.from(testAssignments)
+						.where(and(eq(testAssignments.testId, test.id), eq(testAssignments.userId, userId)))
+						.limit(1)
+				)
+				if (assignment.length === 0) {
+					return res.status(403).json({ error: 'Тест не назначен' })
+				}
 			}
-		}
 
-		const questionRows = await db
-			.select({
-				id: questions.id,
-				type: questions.type,
-				order: questions.order,
-				points: questions.points,
-				options: questions.options,
-				matchingPairs: questions.matchingPairs,
-				promptPath: questions.promptPath,
-			})
-			.from(questions)
-			.where(eq(questions.testId, test.id))
-			.orderBy(asc(questions.order))
-		const questionTypesMap = await getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
+			const questionRows = await withTransientDbRetry('public test questions list', () =>
+				db
+					.select({
+						id: questions.id,
+						type: questions.type,
+						order: questions.order,
+						points: questions.points,
+						options: questions.options,
+						matchingPairs: questions.matchingPairs,
+						promptPath: questions.promptPath,
+					})
+					.from(questions)
+					.where(eq(questions.testId, test.id))
+					.orderBy(asc(questions.order))
+			)
+			const questionTypesMap = await withTransientDbRetry('public test question types', () =>
+				getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
+			)
 
 		const questionsWithTexts = await Promise.all(
 			questionRows.map(async (q) => {
@@ -543,7 +587,12 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 		})
 
 		if (existing) {
-			return res.json({ startedAt: existing.startedAt.toISOString(), sessionId: existing.id })
+			return res.json({
+				startedAt: existing.startedAt.toISOString(),
+				sessionId: existing.id,
+				draftAnswers: existing.draftAnswers ?? null,
+				draftLastQuestionId: existing.draftLastQuestionId ?? null,
+			})
 		}
 
 		const [session] = await db
@@ -551,11 +600,75 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 			.values({ testId, userId })
 			.returning({ id: testSessions.id, startedAt: testSessions.startedAt })
 
-		res.json({ startedAt: session.startedAt.toISOString(), sessionId: session.id })
+		res.json({
+			startedAt: session.startedAt.toISOString(),
+			sessionId: session.id,
+			draftAnswers: null,
+			draftLastQuestionId: null,
+		})
 	} catch (e) {
 		next(e)
 	}
 })
+
+// PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers - промежуточное сохранение черновика ответов в БД
+const SaveDraftAnswerSchema = z.object({
+	questionId: z.string().uuid(),
+	value: SubmitAnswerValueSchema,
+})
+
+router.patch(
+	'/tests/:id/sessions/:sessionId/answers',
+	validateUUID('id'),
+	validateUUID('sessionId'),
+	sessionRequired(),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const sessionId = req.params.sessionId as string
+			const userId = req.authUser!.id
+
+			const parsed = SaveDraftAnswerSchema.safeParse(req.body)
+			if (!parsed.success) {
+				return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
+			}
+			const { questionId, value } = parsed.data
+
+			// Подтвердить что сессия принадлежит пользователю и ещё не submit-нута
+			const session = await db.query.testSessions.findFirst({
+				where: and(
+					eq(testSessions.id, sessionId),
+					eq(testSessions.testId, testId),
+					eq(testSessions.userId, userId),
+					isNull(testSessions.submittedAt)
+				),
+			})
+			if (!session) {
+				return res.status(404).json({ error: 'Session not found or already submitted' })
+			}
+
+			// Immutable merge: строим новый объект draft вместо мутации
+			const existingDraft =
+				session.draftAnswers && typeof session.draftAnswers === 'object' && !Array.isArray(session.draftAnswers)
+					? (session.draftAnswers as Record<string, unknown>)
+					: {}
+			const nextDraft = { ...existingDraft, [questionId]: value }
+
+			await db
+				.update(testSessions)
+				.set({
+					draftAnswers: nextDraft,
+					draftLastQuestionId: questionId,
+					draftUpdatedAt: new Date(),
+				})
+				.where(eq(testSessions.id, sessionId))
+
+			res.json({ ok: true })
+		} catch (e) {
+			next(e)
+		}
+	}
+)
 
 // POST /api/tests/public/tests/:id/submit - проверить ответы, сохранить попытку, вернуть результат
 router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (req, res, next) => {
@@ -739,13 +852,17 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			)
 		}
 
-		// Mark session as submitted (for tests with time limit)
-		if (test.timeLimitMinutes != null) {
-			await db
-				.update(testSessions)
-				.set({ submittedAt: new Date(), attemptId: attempt?.id ?? null })
-				.where(and(eq(testSessions.testId, testId), eq(testSessions.userId, userId), isNull(testSessions.submittedAt)))
-		}
+		// Mark session as submitted and clear draft (always, not only for timed tests)
+		await db
+			.update(testSessions)
+			.set({
+				submittedAt: new Date(),
+				attemptId: attempt?.id ?? null,
+				draftAnswers: null,
+				draftLastQuestionId: null,
+				draftUpdatedAt: null,
+			})
+			.where(and(eq(testSessions.testId, testId), eq(testSessions.userId, userId), isNull(testSessions.submittedAt)))
 
 		const responsePayload = SubmitResultSchema.parse({
 			attemptId: attempt.id,

@@ -13,6 +13,19 @@ import { db } from '../../db/index.js'
 import { rbacRoleGrants, rbacUserGrants, userRoles } from '../../db/schema.js'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const failOpenOnRbacDbError = process.env.RBAC_DB_FAIL_OPEN === '1' || process.env.NODE_ENV !== 'production'
+const useDbOverrides = process.env.NODE_ENV === 'production' || process.env.RBAC_USE_DB_OVERRIDES === '1'
+
+if (process.env.DEBUG_ENV === '1') {
+	// eslint-disable-next-line no-console
+	console.log(`[rbac] DB overrides enabled: ${useDbOverrides ? 'yes' : 'no'}`)
+}
+
+function handleRbacDbError(scope: string, error: unknown): void {
+	if (!failOpenOnRbacDbError) throw error
+	// eslint-disable-next-line no-console
+	console.error(`[rbac] ${scope} failed, using fallback permissions`, error)
+}
 
 interface CacheEntry<T> {
 	value: T
@@ -71,17 +84,21 @@ export async function buildPermissionSet(roles: ReadonlyArray<RoleKey>): Promise
 	}
 
 	// 2) role-level overrides (allow/deny) из БД только для интересующих ролей
-	if (roles.length > 0) {
-		const rows = await db
-			.select()
-			.from(rbacRoleGrants)
-			.where(inArray(rbacRoleGrants.roleKey, roles as string[]))
+	if (useDbOverrides && roles.length > 0) {
+		try {
+			const rows = await db
+				.select()
+				.from(rbacRoleGrants)
+				.where(inArray(rbacRoleGrants.roleKey, roles as string[]))
 
-		for (const r of rows) {
-			const domain = r.domain as PermissionDomain
-			const key = `${domain}.${r.action}` as PermissionKey
-			if (r.allow) base.add(key)
-			else base.delete(key) // deny снимает базовое право
+			for (const r of rows) {
+				const domain = r.domain as PermissionDomain
+				const key = `${domain}.${r.action}` as PermissionKey
+				if (r.allow) base.add(key)
+				else base.delete(key) // deny снимает базовое право
+			}
+		} catch (error) {
+			handleRbacDbError('rbac_role_grants query', error)
 		}
 	}
 
@@ -104,12 +121,18 @@ export async function buildPermissionSetForUser(userId: string): Promise<Set<Per
 	const base = await buildPermissionSet(roleKeys)
 
 	// пользовательские overrides (allow/deny)
-	const rows = await db.select().from(rbacUserGrants).where(eq(rbacUserGrants.userId, userId))
-	for (const r of rows) {
-		const domain = r.domain as PermissionDomain
-		const key = `${domain}.${r.action}` as PermissionKey
-		if (r.allow) base.add(key)
-		else base.delete(key) // deny у пользователя сильнее любых прав роли
+	if (useDbOverrides) {
+		try {
+			const rows = await db.select().from(rbacUserGrants).where(eq(rbacUserGrants.userId, userId))
+			for (const r of rows) {
+				const domain = r.domain as PermissionDomain
+				const key = `${domain}.${r.action}` as PermissionKey
+				if (r.allow) base.add(key)
+				else base.delete(key) // deny у пользователя сильнее любых прав роли
+			}
+		} catch (error) {
+			handleRbacDbError('rbac_user_grants query', error)
+		}
 	}
 
 	const effective = new Set(base)

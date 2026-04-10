@@ -407,6 +407,9 @@ export const testSessions = pgTable(
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		submittedAt: timestamp('submitted_at'),
 		attemptId: uuid('attempt_id').references(() => testAttempts.id, { onDelete: 'set null' }),
+		draftAnswers: jsonb('draft_answers'), // questionId -> user answer (промежуточное сохранение)
+		draftLastQuestionId: text('draft_last_question_id'), // последний открытый вопрос
+		draftUpdatedAt: timestamp('draft_updated_at'), // когда последний раз сохранялся черновик
 	},
 	(t) => ({
 		testUserIdx: index('test_sessions_test_user_idx').on(t.testId, t.userId),

@@ -59,6 +59,9 @@ export function clearSessionCookie(res: Response) {
 }
 
 type JwtPayload = { sub: string; roles?: string[] } // роли в токене могут быть строками
+type JwtPayloadExt = JwtPayload & { login?: string | null }
+
+const enforceDbSessionCheck = process.env.AUTH_SESSION_ENFORCE_DB === '1' || process.env.NODE_ENV === 'production'
 
 export function sessionOptional() {
 	return async (req: Request, _res: Response, next: NextFunction) => {
@@ -69,10 +72,16 @@ export function sessionOptional() {
 				return next()
 			}
 
-			const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
+			const payload = jwt.verify(token, JWT_SECRET) as JwtPayloadExt
 			const userId = payload.sub
 			if (!userId) {
 				req.authUser = null
+				return next()
+			}
+
+			const jwtRoles = payload.roles ? normaliseRoleKeys(payload.roles) : []
+			if (!enforceDbSessionCheck) {
+				req.authUser = { id: userId, roles: jwtRoles, login: payload.login ?? null }
 				return next()
 			}
 
@@ -87,7 +96,6 @@ export function sessionOptional() {
 
 			// Роли из БД -> нормализуем в RoleKey[]
 			const dbRoles = normaliseRoleKeys(rs.map((r) => r.role as string))
-			const jwtRoles = payload.roles ? normaliseRoleKeys(payload.roles) : []
 			const rolesSet = new Set<RoleKey>([...dbRoles, ...jwtRoles])
 			const roles: RoleKey[] = Array.from(rolesSet)
 

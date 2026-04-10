@@ -1,4 +1,4 @@
-import { normaliseRoleKeys } from '@bio-exam/rbac'
+import { buildPermissionSet as buildBasePermissionSet, normaliseRoleKeys } from '@bio-exam/rbac'
 
 import { eq } from 'drizzle-orm'
 import { Router } from 'express'
@@ -10,41 +10,51 @@ import { buildPermissionSetForUser } from '../../services/rbac/rbac.js'
 
 const router = Router()
 
-router.get('/', sessionOptional(), async (req, res) => {
-	res.setHeader('Cache-Control', 'no-store')
+router.get('/', sessionOptional(), async (req, res, next) => {
+	try {
+		res.setHeader('Cache-Control', 'no-store')
 
-	const u = req.authUser
-	if (!u?.id) return res.status(401).json({ ok: false })
+		const u = req.authUser
+		if (!u?.id) return res.status(401).json({ ok: false })
 
-	const row = await db.query.users.findFirst({ where: eq(users.id, u.id) })
-	if (!row) return res.status(401).json({ ok: false })
+		const row = await db.query.users.findFirst({ where: eq(users.id, u.id) })
+		if (!row) return res.status(401).json({ ok: false })
 
-	const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, u.id))
-	const roles = rs.map((r) => r.role)
+		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, u.id))
+		const roles = normaliseRoleKeys(rs.map((r) => r.role as string))
 
-	const perms = Array.from(await buildPermissionSetForUser(u.id))
+		let perms: string[]
+		try {
+			perms = Array.from(await buildPermissionSetForUser(u.id))
+		} catch (error) {
+			req.log?.error?.({ err: error, userId: u.id }, 'Failed to build user permissions, using role baseline')
+			perms = Array.from(buildBasePermissionSet(roles))
+		}
 
-	return res.json({
-		ok: true,
-		user: {
-			id: u.id,
-			login: row.login ?? null,
-			firstName: row.firstName ?? null,
-			lastName: row.lastName ?? null,
-			avatar: row.avatar ?? null,
-			avatarCropped: row.avatarCropped ?? null,
-			avatarColor: row.avatarColor ?? null,
-			initials: row.initials ?? null,
-			avatarCropX: row.avatarCropX ?? null,
-			avatarCropY: row.avatarCropY ?? null,
-			avatarCropZoom: row.avatarCropZoom ?? null,
-			avatarCropRotation: row.avatarCropRotation ?? null,
-			avatarCropViewX: row.avatarCropViewX ?? null,
-			avatarCropViewY: row.avatarCropViewY ?? null,
-			roles,
-			perms,
-		},
-	})
+		return res.json({
+			ok: true,
+			user: {
+				id: u.id,
+				login: row.login ?? null,
+				firstName: row.firstName ?? null,
+				lastName: row.lastName ?? null,
+				avatar: row.avatar ?? null,
+				avatarCropped: row.avatarCropped ?? null,
+				avatarColor: row.avatarColor ?? null,
+				initials: row.initials ?? null,
+				avatarCropX: row.avatarCropX ?? null,
+				avatarCropY: row.avatarCropY ?? null,
+				avatarCropZoom: row.avatarCropZoom ?? null,
+				avatarCropRotation: row.avatarCropRotation ?? null,
+				avatarCropViewX: row.avatarCropViewX ?? null,
+				avatarCropViewY: row.avatarCropViewY ?? null,
+				roles,
+				perms,
+			},
+		})
+	} catch (e) {
+		next(e)
+	}
 })
 
 export default router

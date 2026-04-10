@@ -25,9 +25,16 @@ router.get('/chart-default-range', sessionRequired(), async (req, res, next) => 
 		const isAdmin = req.authUser?.roles?.includes('admin') ?? false
 		if (!isAdmin) return res.status(403).json({ error: 'Forbidden' })
 
-		const row = await db.query.appSettings.findFirst({
-			where: eq(appSettings.key, CHART_RANGE_KEY),
-		})
+		let row: { value: string } | undefined
+		try {
+			row = await db.query.appSettings.findFirst({
+				where: eq(appSettings.key, CHART_RANGE_KEY),
+				columns: { value: true },
+			})
+		} catch (error) {
+			req.log?.error?.({ err: error }, 'Failed to read chart default range, using fallback')
+			return res.json({ value: 'month' })
+		}
 
 		res.json({ value: row?.value ?? 'month' })
 	} catch (e) {

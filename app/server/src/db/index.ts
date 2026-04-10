@@ -1,5 +1,5 @@
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
-import { Pool } from 'pg'
+import { Pool, type PoolConfig } from 'pg'
 
 import '../config/env.js'
 import { ENV_LOADED_FROM, safeDsn } from '../config/env.js'
@@ -10,6 +10,21 @@ if (!databaseUrl) {
 	throw new Error('DATABASE_URL is not set')
 }
 
+const isDev = process.env.NODE_ENV !== 'production'
+
+function shouldEnableSsl(connectionString: string): boolean {
+	if (process.env.PG_FORCE_SSL === '1') return true
+
+	try {
+		const u = new URL(connectionString)
+		const hasSslParam = u.searchParams.has('sslmode') || u.searchParams.has('ssl')
+		if (hasSslParam) return false
+		return u.hostname.endsWith('.supabase.com')
+	} catch {
+		return false
+	}
+}
+
 // Небольшой лог при старте (без пароля)
 if (process.env.DEBUG_ENV === '1') {
 	// eslint-disable-next-line no-console
@@ -17,12 +32,28 @@ if (process.env.DEBUG_ENV === '1') {
 }
 
 /** Общий пул подключений (экспортируем для health/raw) */
-export const pgPool = new Pool({
+const poolConfig: PoolConfig = {
 	connectionString: databaseUrl,
-	max: 20, // максимум соединений в пуле
+	max: Number(process.env.PG_POOL_MAX ?? (isDev ? 2 : 20)),
+	maxUses: Number(process.env.PG_MAX_USES ?? 200),
 	idleTimeoutMillis: 30000, // закрывать неактивные соединения через 30 сек
-	connectionTimeoutMillis: 10000, // таймаут на установку соединения
-})
+	connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS ?? 5000),
+	query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS ?? 10000),
+	statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 10000),
+	keepAlive: true,
+	keepAliveInitialDelayMillis: Number(process.env.PG_KEEPALIVE_DELAY_MS ?? 10000),
+}
+
+if (shouldEnableSsl(databaseUrl)) {
+	poolConfig.ssl = { rejectUnauthorized: false }
+}
+
+if (process.env.DEBUG_ENV === '1') {
+	// eslint-disable-next-line no-console
+	console.log(`[db] ssl enabled: ${poolConfig.ssl ? 'yes' : 'no'}`)
+}
+
+export const pgPool = new Pool(poolConfig)
 
 // Обработка ошибок пула
 pgPool.on('error', (err) => {

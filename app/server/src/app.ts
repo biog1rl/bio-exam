@@ -10,6 +10,7 @@ import express from 'express'
 import type { ErrorRequestHandler, Request } from 'express'
 import helmet from 'helmet'
 
+import './lib/patchExpressAsyncErrors.js'
 import './config/env.js'
 import { ApiError, isApiError } from './lib/errors.js'
 import { pinoHttpMiddleware } from './lib/logger.js'
