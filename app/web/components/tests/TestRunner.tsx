@@ -227,6 +227,25 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
   const walKey = `test-answers-wal-${test.id}-${userId}`;
   const sessionKey = `test-session-${test.id}-${userId}`;
 
+  const hydrateFromServerSession = useCallback(
+    (serverSession: SessionInfo) => {
+      setSession(serverSession);
+      localStorage.setItem(sessionKey, JSON.stringify(serverSession));
+
+      // Server draft has priority over stale WAL values.
+      if (serverSession.draftAnswers && Object.keys(serverSession.draftAnswers).length > 0) {
+        setAnswers((prev) => ({ ...prev, ...serverSession.draftAnswers }));
+      }
+      if (serverSession.draftLastQuestionId) {
+        const idx = orderedQuestions.findIndex((q) => q.id === serverSession.draftLastQuestionId);
+        if (idx !== -1) {
+          setCurrentQuestionId(serverSession.draftLastQuestionId);
+        }
+      }
+    },
+    [orderedQuestions, sessionKey],
+  );
+
   const secondsLeft = useCountdown(session?.startedAt ?? null, test.timeLimitMinutes ?? null);
   const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT;
   const showHours = (test.timeLimitMinutes ?? 0) > 60;
@@ -237,9 +256,6 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
     if (localStorage.getItem(frozenKey)) {
       setFrozen(true);
     }
-
-    // Only start a session for tests with a time limit
-    if (!test.timeLimitMinutes) return;
 
     // Guard against React StrictMode double-invoke
     if (sessionInitRef.current) return;
@@ -259,20 +275,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
         }
         try {
           const serverSession = await startTestSession(test.id);
-          setSession(serverSession);
-          localStorage.setItem(sessionKey, JSON.stringify(serverSession));
+          hydrateFromServerSession(serverSession);
           if (wasRestored) {
             toast.info("Сессия восстановлена");
-          }
-          // Гидрация из серверного черновика (приоритет: server > localStorage WAL)
-          if (serverSession.draftAnswers && Object.keys(serverSession.draftAnswers).length > 0) {
-            setAnswers((prev) => ({ ...prev, ...serverSession.draftAnswers }));
-            if (serverSession.draftLastQuestionId) {
-              const idx = orderedQuestions.findIndex((q) => q.id === serverSession.draftLastQuestionId);
-              if (idx !== -1) {
-                setCurrentQuestionId(serverSession.draftLastQuestionId);
-              }
-            }
           }
         } catch {
           /* graceful degradation */
@@ -280,8 +285,21 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
       }
       void restoreSession(cached);
     } else {
-      // No session yet — ask for confirmation before starting the timer
-      setAwaitingStart(true);
+      if (test.timeLimitMinutes) {
+        // Timed tests: explicit confirmation before timer starts.
+        setAwaitingStart(true);
+      } else {
+        // Untimed tests: start session silently to persist draft progress in DB.
+        async function startUntimedSession() {
+          try {
+            const serverSession = await startTestSession(test.id);
+            hydrateFromServerSession(serverSession);
+          } catch {
+            /* graceful degradation */
+          }
+        }
+        void startUntimedSession();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -582,18 +600,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
     setAwaitingStart(false);
     try {
       const serverSession = await startTestSession(test.id);
-      setSession(serverSession);
-      localStorage.setItem(sessionKey, JSON.stringify(serverSession));
-      // Гидрация из серверного черновика (приоритет: server > localStorage WAL)
-      if (serverSession.draftAnswers && Object.keys(serverSession.draftAnswers).length > 0) {
-        setAnswers((prev) => ({ ...prev, ...serverSession.draftAnswers }));
-        if (serverSession.draftLastQuestionId) {
-          const idx = orderedQuestions.findIndex((q) => q.id === serverSession.draftLastQuestionId);
-          if (idx !== -1) {
-            setCurrentQuestionId(serverSession.draftLastQuestionId);
-          }
-        }
-      }
+      hydrateFromServerSession(serverSession);
     } catch {
       toast.error("Не удалось начать тест. Попробуйте ещё раз.");
     }
