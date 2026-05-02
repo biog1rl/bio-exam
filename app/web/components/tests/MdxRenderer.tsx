@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState, type ImgHTMLAttributes } from 'react'
 
+import { Loader2 } from 'lucide-react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
 import { serialize } from 'next-mdx-remote/serialize'
 
-import { Skeleton } from '@/components/ui/skeleton'
 import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
 import { buildMdxOptions } from '@/lib/mdx/options'
 
@@ -17,6 +17,29 @@ type Props = {
 const mdxCache = new Map<string, MDXRemoteSerializeResult>()
 
 type MdxImageProps = ImgHTMLAttributes<HTMLImageElement>
+const IMAGE_SKELETON_CLASS =
+	'relative overflow-hidden rounded-md border border-border bg-muted shadow-inner before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/70 before:to-transparent dark:before:via-white/15'
+
+function ImageLoadingPlaceholder({
+	width,
+	height,
+}: {
+	width?: number
+	height?: number
+}) {
+	return (
+		<div
+			className={`my-2 flex h-48 w-full max-w-xl items-center justify-center ${IMAGE_SKELETON_CLASS}`}
+			style={{
+				width: width ?? undefined,
+				height: height ?? undefined,
+				minWidth: width ? undefined : 240,
+			}}
+		>
+			<Loader2 className="text-primary size-7 animate-spin drop-shadow-sm" />
+		</div>
+	)
+}
 
 function normalizeImageSrc(src: string): string {
 	// Support markdown with "uploads/..." paths by converting them to site-root absolute URLs.
@@ -74,20 +97,13 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	}, [normalizedSrc, storagePath])
 
 	if (!resolvedSrc) {
-		return <Skeleton className="my-2 h-48 w-full max-w-xl rounded-md" />
+		return <ImageLoadingPlaceholder width={width} height={height} />
 	}
 
 	return (
 		<span className="relative my-2 block w-fit max-w-full">
 			{!isLoaded ? (
-				<Skeleton
-					className="h-48 w-full max-w-xl rounded-md"
-					style={{
-						width: width ?? undefined,
-						height: height ?? undefined,
-						minWidth: width ? undefined : 240,
-					}}
-				/>
+				<ImageLoadingPlaceholder width={width} height={height} />
 			) : null}
 			{/* eslint-disable-next-line @next/next/no-img-element */}
 			<img

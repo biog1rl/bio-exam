@@ -30,6 +30,7 @@ import {
 	SELECTION_CHANGE_COMMAND,
 	TextNode,
 } from 'lexical'
+import { Loader2 } from 'lucide-react'
 import NextImage from 'next/image'
 
 // import brokenImage from '@/registry/new-york-v4/editor/images/image-broken.svg';
@@ -139,14 +140,17 @@ function ImageLoadingSkeleton({
 	width: 'inherit' | number
 }): JSX.Element {
 	return (
-		<Skeleton
-			className="rounded-md"
+		<div
+			className="relative flex items-center justify-center"
 			style={{
 				width: typeof width === 'number' ? width : Math.min(maxWidth, 640),
 				height: typeof height === 'number' ? height : 180,
 				maxWidth: '100%',
 			}}
-		/>
+		>
+			<Skeleton className="absolute inset-0 rounded-md border border-border bg-muted shadow-inner" />
+			<Loader2 className="text-primary relative size-7 animate-spin drop-shadow-sm" />
+		</div>
 	)
 }
 
