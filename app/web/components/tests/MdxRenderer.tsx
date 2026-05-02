@@ -20,13 +20,7 @@ type MdxImageProps = ImgHTMLAttributes<HTMLImageElement>
 const IMAGE_SKELETON_CLASS =
 	'relative overflow-hidden rounded-md border border-border bg-muted shadow-inner before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/70 before:to-transparent dark:before:via-white/15'
 
-function ImageLoadingPlaceholder({
-	width,
-	height,
-}: {
-	width?: number
-	height?: number
-}) {
+function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: number }) {
 	return (
 		<div
 			className={`my-2 flex h-48 w-full max-w-xl items-center justify-center ${IMAGE_SKELETON_CLASS}`}
@@ -102,9 +96,7 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 
 	return (
 		<span className="relative my-2 block w-fit max-w-full">
-			{!isLoaded ? (
-				<ImageLoadingPlaceholder width={width} height={height} />
-			) : null}
+			{!isLoaded ? <ImageLoadingPlaceholder width={width} height={height} /> : null}
 			{/* eslint-disable-next-line @next/next/no-img-element */}
 			<img
 				{...props}

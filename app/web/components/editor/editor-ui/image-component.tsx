@@ -148,7 +148,7 @@ function ImageLoadingSkeleton({
 				maxWidth: '100%',
 			}}
 		>
-			<Skeleton className="absolute inset-0 rounded-md border border-border bg-muted shadow-inner" />
+			<Skeleton className="border-border bg-muted absolute inset-0 rounded-md border shadow-inner" />
 			<Loader2 className="text-primary relative size-7 animate-spin drop-shadow-sm" />
 		</div>
 	)
