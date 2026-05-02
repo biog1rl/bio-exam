@@ -2280,9 +2280,11 @@ router.post(
 
 			if (storageService.isConfigured()) {
 				// Upload to Supabase (or configured storage)
-				await storageService.uploadBuffer(storagePath, file.buffer, file.mimetype)
-				const publicUrl = storageService.getPublicUrl(storagePath)
-				return res.status(201).json({ url: publicUrl || storagePath })
+				await storageService.uploadBuffer(storagePath, file.buffer, file.mimetype, {
+					cacheControl: '3600',
+					upsert: false,
+				})
+				return res.status(201).json({ url: storagePath })
 			} else {
 				// Local disk fallback: save under web/public/uploads/tests/{topicSlug}/{testSlug}/assets
 				const UPLOAD_DIR = path.join(process.cwd(), `../web/public/uploads/tests/${topic.slug}/${test.slug}/assets`)

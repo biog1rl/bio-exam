@@ -1,3 +1,3 @@
 export function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
+	return `${Math.round(value)}%`
 }

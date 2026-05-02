@@ -16,6 +16,16 @@ const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'main'
 let supabase: SupabaseClient | null = null
 let configWarningShown = false
 
+type UploadBufferOptions = {
+	cacheControl?: string
+	upsert?: boolean
+}
+
+function appendCacheNonce(url: string): string {
+	const separator = url.includes('?') ? '&' : '?'
+	return `${url}${separator}cacheNonce=${Date.now()}`
+}
+
 function isConfigured(): boolean {
 	return Boolean(SUPABASE_URL && SUPABASE_SERVICE_KEY)
 }
@@ -94,6 +104,23 @@ export class StorageService {
 		}
 	}
 
+	async downloadBuffer(path: string): Promise<{ buffer: Buffer; contentType: string }> {
+		const client = getClient()
+		if (!client) throw new Error('[StorageService] Cannot download: Supabase not configured')
+
+		return this.withRetry(async () => {
+			const { data, error } = await client.storage.from(BUCKET).download(path)
+			if (error || !data) {
+				throw error ?? new Error(`Failed to download ${path}`)
+			}
+
+			return {
+				buffer: Buffer.from(await data.arrayBuffer()),
+				contentType: data.type || 'application/octet-stream',
+			}
+		})
+	}
+
 	/**
 	 * Читает несколько файлов параллельно с ограничением concurrency
 	 * @param paths Массив путей к файлам
@@ -156,7 +183,12 @@ export class StorageService {
 	}
 
 	/** Upload a binary Buffer (image, etc.) to storage */
-	async uploadBuffer(path: string, buffer: Buffer, contentType = 'application/octet-stream'): Promise<void> {
+	async uploadBuffer(
+		path: string,
+		buffer: Buffer,
+		contentType = 'application/octet-stream',
+		options: UploadBufferOptions = {}
+	): Promise<void> {
 		const client = getClient()
 		if (!client) {
 			throw new Error('[StorageService] Cannot upload: Supabase not configured')
@@ -165,7 +197,8 @@ export class StorageService {
 		await this.withRetry(async () => {
 			const { error } = await client.storage.from(BUCKET).upload(path, buffer, {
 				contentType,
-				upsert: true,
+				upsert: options.upsert ?? true,
+				...(options.cacheControl ? { cacheControl: options.cacheControl } : {}),
 			})
 
 			if (error) {
@@ -198,7 +231,7 @@ export class StorageService {
 		if (!client) throw new Error('[StorageService] Cannot create signed URL: Supabase not configured')
 		const { data, error } = await client.storage.from(BUCKET).createSignedUrl(filePath, expiresIn)
 		if (error) throw new Error(`Storage error: ${error.message}`)
-		return data.signedUrl
+		return appendCacheNonce(data.signedUrl)
 	}
 
 	/**

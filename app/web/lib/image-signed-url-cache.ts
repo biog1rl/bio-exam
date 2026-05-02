@@ -14,6 +14,7 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>()
 
 const CACHE_TTL_MS = 50 * 60 * 1000 // 50 минут
+const SUPABASE_STORAGE_OBJECT_RE = /\/storage\/v1\/object\/(?:public|sign)\/[^/]+\/([^?]+)/
 
 /**
  * Определяет, является ли src storage path (а не URL/data URI).
@@ -27,6 +28,21 @@ export function isStoragePath(src: string): boolean {
 		!src.startsWith('blob:') &&
 		!src.startsWith('/')
 	)
+}
+
+export function getStoragePathFromSupabaseUrl(src: string): string | null {
+	const match = src.match(SUPABASE_STORAGE_OBJECT_RE)
+	if (!match?.[1]) return null
+
+	try {
+		return decodeURIComponent(match[1])
+	} catch {
+		return match[1]
+	}
+}
+
+export function getStoragePathForImageSrc(src: string): string | null {
+	return getStoragePathFromSupabaseUrl(src) ?? (isStoragePath(src) ? src : null)
 }
 
 /**

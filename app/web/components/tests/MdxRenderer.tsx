@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, type ImgHTMLAttributes } from 'react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
 import { serialize } from 'next-mdx-remote/serialize'
 
-import { getSignedUrl, isStoragePath } from '@/lib/image-signed-url-cache'
+import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
 import { buildMdxOptions } from '@/lib/mdx/options'
 
 type Props = {
@@ -26,9 +26,8 @@ function normalizeImageSrc(src: string): string {
 function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	const rawSrc = typeof src === 'string' ? src : ''
 	const normalizedSrc = normalizeImageSrc(rawSrc)
-	const [resolvedSrc, setResolvedSrc] = useState<string>(() =>
-		normalizedSrc && !isStoragePath(normalizedSrc) ? normalizedSrc : ''
-	)
+	const storagePath = getStoragePathForImageSrc(normalizedSrc)
+	const [resolvedSrc, setResolvedSrc] = useState<string>(() => (normalizedSrc && !storagePath ? normalizedSrc : ''))
 
 	useEffect(() => {
 		if (!normalizedSrc) {
@@ -36,13 +35,13 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 			return
 		}
 
-		if (!isStoragePath(normalizedSrc)) {
+		if (!storagePath) {
 			setResolvedSrc(normalizedSrc)
 			return
 		}
 
 		let cancelled = false
-		getSignedUrl(normalizedSrc)
+		getSignedUrl(storagePath)
 			.then((signedUrl) => {
 				if (!cancelled) {
 					setResolvedSrc(signedUrl)
@@ -58,7 +57,7 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 		return () => {
 			cancelled = true
 		}
-	}, [normalizedSrc])
+	}, [normalizedSrc, storagePath])
 
 	if (!resolvedSrc) {
 		return null

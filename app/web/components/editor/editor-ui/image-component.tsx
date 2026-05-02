@@ -38,7 +38,7 @@ import NextImage from 'next/image'
 import { ContentEditable } from '@/components/editor/editor-ui/content-editable'
 import { ImageResizer } from '@/components/editor/editor-ui/image-resizer'
 import { $isImageNode } from '@/components/editor/nodes/image-node'
-import { getSignedUrl, isStoragePath } from '@/lib/image-signed-url-cache'
+import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
 
 const imageCache = new Set()
 
@@ -161,21 +161,22 @@ export default function ImageComponent({
 	const activeEditorRef = useRef<LexicalEditor | null>(null)
 	const [isLoadError, setIsLoadError] = useState<boolean>(false)
 	const isEditable = useLexicalEditable()
+	const storagePath = getStoragePathForImageSrc(src)
 
 	const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
-		return isStoragePath(src) ? null : src
+		return storagePath ? null : src
 	})
-	const [isLoadingSrc, setIsLoadingSrc] = useState<boolean>(() => isStoragePath(src))
+	const [isLoadingSrc, setIsLoadingSrc] = useState<boolean>(() => Boolean(storagePath))
 
 	useEffect(() => {
-		if (!isStoragePath(src)) {
+		if (!storagePath) {
 			setResolvedSrc(src)
 			setIsLoadingSrc(false)
 			return
 		}
 		let cancelled = false
 		setIsLoadingSrc(true)
-		getSignedUrl(src)
+		getSignedUrl(storagePath)
 			.then((url) => {
 				if (!cancelled) {
 					setResolvedSrc(url)
@@ -192,7 +193,7 @@ export default function ImageComponent({
 		return () => {
 			cancelled = true
 		}
-	}, [src])
+	}, [src, storagePath])
 
 	const $onDelete = useCallback(
 		(payload: KeyboardEvent) => {

@@ -13,8 +13,17 @@ import { storageService } from '../../services/storage/storage.js'
 const router = Router()
 
 const LOCAL_UPLOAD_DIR = path.join(process.cwd(), '../web/public/uploads/images')
+const LOCAL_UPLOAD_ROOT = path.join(process.cwd(), '../web/public/uploads')
 
 const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+function isSafeStoragePath(filePath: string): boolean {
+	return Boolean(filePath) && !filePath.startsWith('/') && !filePath.includes('\0') && !filePath.split('/').includes('..')
+}
+
+function buildProxyUrl(filePath: string): string {
+	return `/api/docs/assets/proxy?path=${encodeURIComponent(filePath)}&cacheNonce=${Date.now()}`
+}
 
 // Multer storage: memory when Supabase configured, disk otherwise
 const multerStorage = storageService.isConfigured()
@@ -76,11 +85,10 @@ router.get('/', sessionRequired(), async (req, res) => {
 		const assets = await Promise.all(
 			files.map(async (f) => {
 				const storagePath = 'images/' + f.name
-				const signedUrl = await storageService.createSignedUrl(storagePath, 3600)
 				return {
 					filename: f.name,
 					path: storagePath,
-					signedUrl,
+					signedUrl: buildProxyUrl(storagePath),
 					size: (f.metadata?.size as number) ?? 0,
 					createdAt: f.created_at ?? '',
 				}
@@ -157,7 +165,10 @@ router.post('/', sessionRequired(), upload.single('file') as any, async (req, re
 
 		if (storageService.isConfigured()) {
 			// Upload to Supabase Storage
-			await storageService.uploadBuffer(storagePath, processedBuffer, 'image/webp')
+			await storageService.uploadBuffer(storagePath, processedBuffer, 'image/webp', {
+				cacheControl: '3600',
+				upsert: false,
+			})
 		} else {
 			// Local fallback: save to web/public/uploads/images
 			fs.mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true })
@@ -176,6 +187,38 @@ router.post('/', sessionRequired(), upload.single('file') as any, async (req, re
 	}
 })
 
+// GET /api/docs/assets/proxy?path=images/xxx.webp — stream image through this app
+router.get('/proxy', sessionRequired(), async (req, res) => {
+	try {
+		const filePath = req.query.path
+
+		if (!filePath || typeof filePath !== 'string') {
+			return res.status(400).json({ error: 'path is required' })
+		}
+
+		if (!isSafeStoragePath(filePath)) {
+			return res.status(400).json({ error: 'Invalid path' })
+		}
+
+		if (!storageService.isConfigured()) {
+			const localPath = path.resolve(LOCAL_UPLOAD_ROOT, filePath)
+			if (!localPath.startsWith(LOCAL_UPLOAD_ROOT + path.sep)) {
+				return res.status(400).json({ error: 'Invalid path' })
+			}
+			return res.sendFile(localPath)
+		}
+
+		const { buffer, contentType } = await storageService.downloadBuffer(filePath)
+		res.setHeader('Content-Type', contentType)
+		res.setHeader('Content-Length', String(buffer.length))
+		res.setHeader('Cache-Control', 'private, max-age=3600')
+		return res.send(buffer)
+	} catch (error) {
+		console.error('[docs/assets] Error proxying asset:', error)
+		return res.status(500).json({ error: 'Не удалось загрузить изображение' })
+	}
+})
+
 // GET /api/docs/assets/signed?path=images/xxx.webp — get signed URL
 router.get('/signed', sessionRequired(), async (req, res) => {
 	try {
@@ -185,13 +228,16 @@ router.get('/signed', sessionRequired(), async (req, res) => {
 			return res.status(400).json({ error: 'path is required' })
 		}
 
+		if (!isSafeStoragePath(filePath)) {
+			return res.status(400).json({ error: 'Invalid path' })
+		}
+
 		if (!storageService.isConfigured()) {
 			// Local fallback: return static path
 			return res.json({ signedUrl: '/uploads/' + filePath })
 		}
 
-		const signedUrl = await storageService.createSignedUrl(filePath, 3600)
-		return res.json({ signedUrl })
+		return res.json({ signedUrl: buildProxyUrl(filePath) })
 	} catch (error) {
 		console.error('[docs/assets] Error generating signed URL:', error)
 		return res.status(500).json({ error: 'Не удалось получить URL изображения' })
