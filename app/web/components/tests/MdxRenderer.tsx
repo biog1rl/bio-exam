@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ImgHTMLAttributes } from 'react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
 import { serialize } from 'next-mdx-remote/serialize'
 
+import { Skeleton } from '@/components/ui/skeleton'
 import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
 import { buildMdxOptions } from '@/lib/mdx/options'
 
@@ -23,13 +24,26 @@ function normalizeImageSrc(src: string): string {
 	return src
 }
 
+function getImageDimension(value: MdxImageProps['width'] | MdxImageProps['height']): number | undefined {
+	if (typeof value === 'number') return value
+	if (typeof value !== 'string') return undefined
+
+	const parsed = Number.parseInt(value, 10)
+	return Number.isFinite(parsed) ? parsed : undefined
+}
+
 function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	const rawSrc = typeof src === 'string' ? src : ''
 	const normalizedSrc = normalizeImageSrc(rawSrc)
 	const storagePath = getStoragePathForImageSrc(normalizedSrc)
 	const [resolvedSrc, setResolvedSrc] = useState<string>(() => (normalizedSrc && !storagePath ? normalizedSrc : ''))
+	const [isLoaded, setIsLoaded] = useState(false)
+	const width = getImageDimension(props.width)
+	const height = getImageDimension(props.height)
 
 	useEffect(() => {
+		setIsLoaded(false)
+
 		if (!normalizedSrc) {
 			setResolvedSrc('')
 			return
@@ -60,11 +74,38 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	}, [normalizedSrc, storagePath])
 
 	if (!resolvedSrc) {
-		return null
+		return <Skeleton className="my-2 h-48 w-full max-w-xl rounded-md" />
 	}
 
-	// eslint-disable-next-line @next/next/no-img-element
-	return <img {...props} src={resolvedSrc} alt={alt ?? ''} />
+	return (
+		<span className="relative my-2 block w-fit max-w-full">
+			{!isLoaded ? (
+				<Skeleton
+					className="h-48 w-full max-w-xl rounded-md"
+					style={{
+						width: width ?? undefined,
+						height: height ?? undefined,
+						minWidth: width ? undefined : 240,
+					}}
+				/>
+			) : null}
+			{/* eslint-disable-next-line @next/next/no-img-element */}
+			<img
+				{...props}
+				src={resolvedSrc}
+				alt={alt ?? ''}
+				className={isLoaded ? props.className : 'sr-only'}
+				onLoad={(event) => {
+					setIsLoaded(true)
+					props.onLoad?.(event)
+				}}
+				onError={(event) => {
+					setIsLoaded(true)
+					props.onError?.(event)
+				}}
+			/>
+		</span>
+	)
 }
 
 export default function MdxRenderer({ source, className }: Props) {

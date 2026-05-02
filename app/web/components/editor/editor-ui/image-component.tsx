@@ -30,7 +30,6 @@ import {
 	SELECTION_CHANGE_COMMAND,
 	TextNode,
 } from 'lexical'
-import { Loader2 } from 'lucide-react'
 import NextImage from 'next/image'
 
 // import brokenImage from '@/registry/new-york-v4/editor/images/image-broken.svg';
@@ -38,6 +37,7 @@ import NextImage from 'next/image'
 import { ContentEditable } from '@/components/editor/editor-ui/content-editable'
 import { ImageResizer } from '@/components/editor/editor-ui/image-resizer'
 import { $isImageNode } from '@/components/editor/nodes/image-node'
+import { Skeleton } from '@/components/ui/skeleton'
 import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
 
 const imageCache = new Set()
@@ -126,6 +126,27 @@ function BrokenImage(): JSX.Element {
 		<div className="flex items-center justify-center opacity-20" style={{ width: 200, height: 200 }}>
 			<span className="text-muted-foreground text-sm">Broken Image</span>
 		</div>
+	)
+}
+
+function ImageLoadingSkeleton({
+	width,
+	height,
+	maxWidth,
+}: {
+	height: 'inherit' | number
+	maxWidth: number
+	width: 'inherit' | number
+}): JSX.Element {
+	return (
+		<Skeleton
+			className="rounded-md"
+			style={{
+				width: typeof width === 'number' ? width : Math.min(maxWidth, 640),
+				height: typeof height === 'number' ? height : 180,
+				maxWidth: '100%',
+			}}
+		/>
 	)
 }
 
@@ -386,32 +407,26 @@ export default function ImageComponent({
 			<>
 				<div draggable={draggable}>
 					{isLoadingSrc ? (
-						<div
-							className="bg-muted/30 flex items-center justify-center rounded"
-							style={{
-								width: typeof width === 'number' ? width : 200,
-								height: typeof height === 'number' ? height : 150,
-							}}
-						>
-							<Loader2 className="text-muted-foreground size-6 animate-spin" />
-						</div>
+						<ImageLoadingSkeleton width={width} height={height} maxWidth={maxWidth} />
 					) : isLoadError || !resolvedSrc ? (
 						<BrokenImage />
 					) : (
-						<LazyImage
-							className={`max-w-full cursor-default ${
-								isFocused
-									? `${$isNodeSelection(selection) ? 'draggable cursor-grab active:cursor-grabbing' : ''} focused ring-primary ring-2 ring-offset-2`
-									: null
-							}`}
-							src={resolvedSrc}
-							altText={altText}
-							imageRef={imageRef}
-							width={width}
-							height={height}
-							maxWidth={maxWidth}
-							onError={() => setIsLoadError(true)}
-						/>
+						<Suspense fallback={<ImageLoadingSkeleton width={width} height={height} maxWidth={maxWidth} />}>
+							<LazyImage
+								className={`max-w-full cursor-default ${
+									isFocused
+										? `${$isNodeSelection(selection) ? 'draggable cursor-grab active:cursor-grabbing' : ''} focused ring-primary ring-2 ring-offset-2`
+										: null
+								}`}
+								src={resolvedSrc}
+								altText={altText}
+								imageRef={imageRef}
+								width={width}
+								height={height}
+								maxWidth={maxWidth}
+								onError={() => setIsLoadError(true)}
+							/>
+						</Suspense>
 					)}
 				</div>
 
