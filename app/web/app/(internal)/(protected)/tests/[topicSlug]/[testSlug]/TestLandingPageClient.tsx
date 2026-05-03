@@ -36,7 +36,7 @@ function ChartTooltipCustom({ active, payload }: { active?: boolean; payload?: {
 	const d = payload[0].payload
 	const dateLabel = format(new Date(d.date), 'd MMMM yyyy', { locale: ru })
 	return (
-		<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
+		<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm">
 			<p className="font-medium">{dateLabel}</p>
 			<p className="text-muted-foreground">Попыток: {d.count}</p>
 			<p className="text-green-600 dark:text-green-400">Лучший: {formatPercent(d.maxScore)}</p>

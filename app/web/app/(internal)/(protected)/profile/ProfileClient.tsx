@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -12,7 +13,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { AvatarEditor } from '@/components/users/AvatarEditor'
 import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 
@@ -36,6 +36,42 @@ interface ProfileData {
 
 interface ProfileClientProps {
 	initialData: ProfileData
+}
+
+function ProfilePanel({
+	title,
+	kicker,
+	description,
+	children,
+	className = '',
+}: {
+	title: string
+	kicker: string
+	description?: string
+	children: ReactNode
+	className?: string
+}) {
+	return (
+		<Card className={`rounded-4xl border-border/80 bg-card/90 ${className}`}>
+			<CardHeader>
+				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{kicker}</p>
+				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
+				{description ? <CardDescription>{description}</CardDescription> : null}
+			</CardHeader>
+			<CardContent>{children}</CardContent>
+		</Card>
+	)
+}
+
+function FormField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+	return (
+		<div className="space-y-2">
+			<Label htmlFor={id} className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.16em]">
+				{label}
+			</Label>
+			{children}
+		</div>
+	)
 }
 
 export function ProfileClient({ initialData }: ProfileClientProps) {
@@ -190,18 +226,24 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	}
 
 	return (
-		<div>
-			<h1 className="text-3xl font-bold">Личный кабинет</h1>
+		<div className="space-y-6">
+			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
+				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">профиль</p>
+				<h1 className="text-foreground tab-sm:text-5xl mt-2 font-serif text-4xl leading-none">Личный кабинет</h1>
+				<p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-6">
+					Настройте публичные данные, аватар и параметры доступа к аккаунту.
+				</p>
+			</section>
 
-			<div className="mt-6 grid gap-6 md:grid-cols-2">
+			<div className="grid gap-6 md:grid-cols-2">
 				{isAdmin && (
 					<div className="space-y-6">
-						<Card>
-							<CardHeader>
-								<CardTitle>Аватар</CardTitle>
-								<CardDescription>Загрузите фото или настройте инициалы и цвет аватара</CardDescription>
-							</CardHeader>
-							<CardContent className="flex justify-center">
+						<ProfilePanel
+							kicker="визуальный маркер"
+							title="Аватар"
+							description="Загрузите фото или настройте инициалы и цвет аватара"
+						>
+							<div className="bg-secondary/70 p-unit-mob tab-sm:p-unit flex justify-center rounded-3xl">
 								<AvatarEditor
 									firstName={profileData.firstName}
 									lastName={profileData.lastName}
@@ -220,67 +262,59 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									onInitialsChange={(initials) => handleProfileChange('initials', initials)}
 									size="lg"
 								/>
-							</CardContent>
-						</Card>
+							</div>
+						</ProfilePanel>
 					</div>
 				)}
 
 				<div className={`space-y-6 ${!isAdmin ? 'max-w-xl md:col-span-2' : ''}`}>
-					<Card>
-						<CardHeader>
-							<CardTitle>Основная информация</CardTitle>
-							<CardDescription>Редактируйте свои данные</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-4">
+					<ProfilePanel kicker="данные" title="Основная информация" description="Редактируйте свои данные">
+						<div className="space-y-4">
 							<div className="grid grid-cols-2 gap-4">
-								<div>
-									<Label htmlFor="firstName">Имя</Label>
+								<FormField id="firstName" label="Имя">
 									<Input
 										id="firstName"
 										value={profileData.firstName || ''}
 										onChange={(e) => handleProfileChange('firstName', e.target.value || null)}
 										placeholder="Введите имя"
 									/>
-								</div>
-								<div>
-									<Label htmlFor="lastName">Фамилия</Label>
+								</FormField>
+								<FormField id="lastName" label="Фамилия">
 									<Input
 										id="lastName"
 										value={profileData.lastName || ''}
 										onChange={(e) => handleProfileChange('lastName', e.target.value || null)}
 										placeholder="Введите фамилию"
 									/>
-								</div>
+								</FormField>
 							</div>
-							<div>
-								<Label htmlFor="login">Логин</Label>
+							<FormField id="login" label="Логин">
 								<Input
 									id="login"
 									value={profileData.login || ''}
 									onChange={(e) => handleProfileChange('login', e.target.value || null)}
 									placeholder="Введите логин"
 								/>
-							</div>
+							</FormField>
 							{myGroup && (
-								<div className="flex items-center gap-2">
-									<span className="text-muted-foreground text-sm">Группа</span>
-									<Badge variant="secondary">{myGroup.name}</Badge>
+								<div className="bg-secondary/70 flex items-center gap-2 rounded-3xl px-4 py-3">
+									<span className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.16em]">
+										Группа
+									</span>
+									<Badge variant="secondary" className="rounded-full">
+										{myGroup.name}
+									</Badge>
 								</div>
 							)}
 							<Button onClick={handleSaveProfile} disabled={isLoading} className="w-full">
 								{isLoading ? 'Сохранение...' : 'Сохранить изменения'}
 							</Button>
-						</CardContent>
-					</Card>
+						</div>
+					</ProfilePanel>
 
-					<Card>
-						<CardHeader>
-							<CardTitle>Безопасность</CardTitle>
-							<CardDescription>Смена пароля</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<div>
-								<Label htmlFor="oldPassword">Текущий пароль</Label>
+					<ProfilePanel kicker="доступ" title="Безопасность" description="Смена пароля">
+						<div className="space-y-4">
+							<FormField id="oldPassword" label="Текущий пароль">
 								<Input
 									id="oldPassword"
 									type="password"
@@ -288,9 +322,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									onChange={(e) => handlePasswordChange('oldPassword', e.target.value)}
 									placeholder="Введите текущий пароль"
 								/>
-							</div>
-							<div>
-								<Label htmlFor="newPassword">Новый пароль</Label>
+							</FormField>
+							<FormField id="newPassword" label="Новый пароль">
 								<Input
 									id="newPassword"
 									type="password"
@@ -298,9 +331,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
 									placeholder="Введите новый пароль"
 								/>
-							</div>
-							<div>
-								<Label htmlFor="confirmPassword">Подтвердите пароль</Label>
+							</FormField>
+							<FormField id="confirmPassword" label="Подтвердите пароль">
 								<Input
 									id="confirmPassword"
 									type="password"
@@ -308,25 +340,20 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
 									placeholder="Подтвердите новый пароль"
 								/>
-							</div>
+							</FormField>
 							<Button onClick={handleChangePassword} disabled={isPasswordLoading} className="w-full">
 								{isPasswordLoading ? 'Смена пароля...' : 'Сменить пароль'}
 							</Button>
-						</CardContent>
-					</Card>
+						</div>
+					</ProfilePanel>
 
-					<Card>
-						<CardHeader>
-							<CardTitle>Выход из аккаунта</CardTitle>
-							<CardDescription>Завершить текущую сессию</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<Separator className="my-4" />
+					<ProfilePanel kicker="сессия" title="Выход из аккаунта" description="Завершить текущую сессию">
+						<div className="bg-secondary/60 p-unit-mob rounded-3xl">
 							<Button onClick={handleLogout} variant="destructive" className="w-full">
 								Выйти из аккаунта
 							</Button>
-						</CardContent>
-					</Card>
+						</div>
+					</ProfilePanel>
 				</div>
 			</div>
 		</div>

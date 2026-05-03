@@ -481,15 +481,15 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (isLoading || (isDraftMode && questionDraftLoading && !isDraftHydratedRef.current)) {
 		return (
-			<div className="flex items-center justify-center p-12">
-				<Loader2 className="h-8 w-8 animate-spin" />
+			<div className="bg-card/90 rounded-4xl border-border/80 flex items-center justify-center border p-12 shadow-sm">
+				<Loader2 className="text-primary size-8 animate-spin" />
 			</div>
 		)
 	}
 
 	if (error || questionDraftError || !testData) {
 		return (
-			<div className="space-y-4 p-6">
+			<div className="rounded-4xl border-border/80 bg-card/90 p-unit border shadow-sm">
 				<p className="text-sm text-red-600">
 					{error instanceof Error
 						? error.message
@@ -497,7 +497,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 							? questionDraftError.message
 							: 'Не удалось загрузить данные'}
 				</p>
-				<Button variant="outline" onClick={backToTestEditor}>
+				<Button variant="outline" onClick={backToTestEditor} className="rounded-full">
 					Назад к тесту
 				</Button>
 			</div>
@@ -506,11 +506,11 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (!currentQuestion) {
 		return (
-			<div className="space-y-4 p-6">
+			<div className="rounded-4xl border-border/80 bg-card/90 p-unit border shadow-sm">
 				<p className="text-sm text-red-600">
 					{isEditingExistingQuestion ? 'Вопрос не найден' : 'Черновик вопроса не найден'}
 				</p>
-				<Button variant="outline" onClick={backToTestEditor}>
+				<Button variant="outline" onClick={backToTestEditor} className="rounded-full">
 					Назад к тесту
 				</Button>
 			</div>
@@ -528,8 +528,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				onCancel={backToTestEditor}
 				headerActions={
 					isEditingExistingQuestion && questionId ? (
-						<Button variant="secondary" onClick={openMoveDialog} disabled={moving}>
-							<ArrowRightLeft className="mr-2 h-4 w-4" />
+						<Button variant="secondary" onClick={openMoveDialog} disabled={moving} className="rounded-full">
+							<ArrowRightLeft className="mr-2 size-4" />
 							Перенести
 						</Button>
 					) : undefined
@@ -538,7 +538,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			/>
 
 			<Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
-				<DialogContent>
+				<DialogContent className="rounded-4xl">
 					<DialogHeader>
 						<DialogTitle>Перенести вопрос</DialogTitle>
 						<DialogDescription>
@@ -585,7 +585,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 							Отмена
 						</Button>
 						<Button onClick={handleMoveQuestion} disabled={moving || !targetTopicId}>
-							{moving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+							{moving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
 							Перенести
 						</Button>
 					</DialogFooter>

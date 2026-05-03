@@ -80,20 +80,24 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 		<div
 			ref={setNodeRef}
 			style={style}
-			className="bg-card hover:bg-accent/50 flex items-center gap-3 rounded-lg border p-3"
+			className="bg-secondary/45 p-unit hover:bg-secondary/70 border-border/70 flex items-center gap-3 rounded-3xl border transition-colors"
 		>
-			<button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
-				<GripVertical className="text-muted-foreground h-5 w-5" />
+			<button
+				{...attributes}
+				{...listeners}
+				className="bg-card text-muted-foreground hover:text-foreground cursor-grab rounded-2xl p-2 transition-colors active:cursor-grabbing"
+			>
+				<GripVertical className="size-5" />
 			</button>
 
-			<div className="bg-muted text-muted-foreground flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium">
+			<div className="bg-card text-muted-foreground flex size-10 items-center justify-center rounded-2xl font-mono text-sm font-medium">
 				{index + 1}
 			</div>
 
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-2">
-					<Badge variant="outline" className="flex items-center gap-1">
-						<TypeIcon className="h-3 w-3" />
+					<Badge variant="outline" className="bg-card flex items-center gap-1 rounded-full">
+						<TypeIcon className="size-3" />
 						{question.questionTypeTitle || typeConfig.label}
 					</Badge>
 					<span className="text-muted-foreground text-xs">
@@ -109,26 +113,26 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 			<div className="flex items-center gap-1">
 				{editHref ? (
 					<>
-						<Button size="sm" variant="ghost" asChild>
+						<Button size="sm" variant="ghost" asChild className="rounded-full">
 							<Link href={editHref} title="Редактировать вопрос">
-								<Edit className="h-4 w-4" />
+								<Edit className="size-4" />
 							</Link>
 						</Button>
 						{viewHref ? (
-							<Button size="sm" variant="ghost" asChild>
+							<Button size="sm" variant="ghost" asChild className="rounded-full">
 								<Link href={viewHref} title="Открыть вопрос в тесте">
-									<Eye className="h-4 w-4" />
+									<Eye className="size-4" />
 								</Link>
 							</Button>
 						) : null}
 					</>
 				) : (
-					<Button size="sm" variant="ghost" onClick={onEdit} disabled={!onEdit}>
-						<Edit className="h-4 w-4" />
+					<Button size="sm" variant="ghost" onClick={onEdit} disabled={!onEdit} className="rounded-full">
+						<Edit className="size-4" />
 					</Button>
 				)}
-				<Button size="sm" variant="ghost" onClick={onDelete}>
-					<Trash2 className="text-destructive h-4 w-4" />
+				<Button size="sm" variant="ghost" onClick={onDelete} className="rounded-full">
+					<Trash2 className="text-destructive size-4" />
 				</Button>
 			</div>
 		</div>

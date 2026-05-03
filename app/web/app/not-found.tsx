@@ -23,7 +23,7 @@ export default function NotFound() {
 
 			<div className="flex flex-col items-center gap-y-4 text-center">
 				<h1 className="animate-delay-1000 animate-[levitate_15s_ease_infinite] text-8xl font-bold">404-error</h1>
-				<p className="animate-delay-700 animate-[levitate_15s_ease_infinite] text-4xl font-semibold uppercase">
+				<p className="animate-delay-700 animate-[levitate_15s_ease_infinite] text-3xl font-semibold uppercase">
 					PAGE NOT FOUND
 				</p>
 				<p className="animate-delay-500 animate-[levitate_15s_ease_infinite] text-xl text-gray-600">

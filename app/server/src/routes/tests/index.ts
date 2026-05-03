@@ -2,12 +2,11 @@
  * API роуты для управления тестами
  */
 import crypto from 'crypto'
-import fs from 'fs'
-import path from 'path'
-
 import { and, asc, count, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { Router } from 'express'
+import fs from 'fs'
 import multer from 'multer'
+import path from 'path'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
@@ -21,6 +20,8 @@ import {
 	testScoringSettings,
 	tests,
 	topics,
+	userRoles,
+	users,
 } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import {
@@ -2407,6 +2408,145 @@ router.get('/topics/:slug/export', sessionRequired(), requirePerm('tests', 'read
 
 // Admin: test-side assignment endpoints
 router.use('/:testId/assignments', assignmentsRouter)
+
+// =============================================================================
+// Admin: Dashboard
+// =============================================================================
+
+// GET /api/tests/admin/dashboard — aggregate student activity for teacher/admin dashboard
+router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), async (_req, res, next) => {
+	try {
+		const studentOnly = sql`not exists (
+			select 1 from ${userRoles}
+			where ${userRoles.userId} = ${testAttempts.userId}
+				and ${userRoles.roleKey} = 'admin'
+		)`
+
+		const [summary] = await db
+			.select({
+				totalAttempts: sql<number>`count(*)::int`,
+				activeStudents: sql<number>`count(distinct ${testAttempts.userId})::int`,
+				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
+				passedAttempts: sql<number>`count(*) filter (where ${testAttempts.passed})::int`,
+			})
+			.from(testAttempts)
+			.where(studentOnly)
+
+		const latestAttempts = await db
+			.select({
+				attemptId: testAttempts.id,
+				testId: testAttempts.testId,
+				testTitle: tests.title,
+				testSlug: tests.slug,
+				topicSlug: topics.slug,
+				topicTitle: topics.title,
+				studentId: users.id,
+				studentName: sql<string>`coalesce(${users.name}, ${users.firstName}, ${users.login}, 'Пользователь')`,
+				submittedAt: testAttempts.submittedAt,
+				earnedPoints: testAttempts.earnedPoints,
+				totalPoints: testAttempts.totalPoints,
+				scorePercentage: testAttempts.scorePercentage,
+				passed: testAttempts.passed,
+			})
+			.from(testAttempts)
+			.innerJoin(users, eq(users.id, testAttempts.userId))
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.innerJoin(topics, eq(topics.id, tests.topicId))
+			.where(studentOnly)
+			.orderBy(desc(testAttempts.submittedAt))
+			.limit(8)
+
+		const dailyActivity = await db
+			.select({
+				date: sql<string>`to_char(date_trunc('day', ${testAttempts.submittedAt}), 'YYYY-MM-DD')`,
+				attempts: sql<number>`count(*)::int`,
+				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
+			})
+			.from(testAttempts)
+			.where(sql`${studentOnly} and ${testAttempts.submittedAt} >= now() - interval '30 days'`)
+			.groupBy(sql`date_trunc('day', ${testAttempts.submittedAt})`)
+			.orderBy(sql`date_trunc('day', ${testAttempts.submittedAt})`)
+
+		res.json({
+			summary: {
+				totalAttempts: Number(summary?.totalAttempts ?? 0),
+				activeStudents: Number(summary?.activeStudents ?? 0),
+				averageScore: Number(summary?.averageScore ?? 0),
+				passedAttempts: Number(summary?.passedAttempts ?? 0),
+			},
+			latestAttempts: latestAttempts.map((attempt) => ({
+				...attempt,
+				submittedAt: attempt.submittedAt instanceof Date ? attempt.submittedAt.toISOString() : attempt.submittedAt,
+			})),
+			dailyActivity: dailyActivity.map((item) => ({
+				date: item.date,
+				attempts: Number(item.attempts ?? 0),
+				averageScore: Number(item.averageScore ?? 0),
+			})),
+		})
+	} catch (e) {
+		next(e)
+	}
+})
+
+// GET /api/tests/admin/attempts — latest student attempts for admin list view
+router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
+	try {
+		const limitRaw = Number(req.query.limit ?? 50)
+		const offsetRaw = Number(req.query.offset ?? 0)
+		const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 100)
+		const offset = Math.max(Number.isFinite(offsetRaw) ? offsetRaw : 0, 0)
+		const studentOnly = sql`not exists (
+			select 1 from ${userRoles}
+			where ${userRoles.userId} = ${testAttempts.userId}
+				and ${userRoles.roleKey} = 'admin'
+		)`
+
+		const [{ total: totalRaw }] = await db
+			.select({
+				total: sql<number>`count(*)::int`,
+			})
+			.from(testAttempts)
+			.where(studentOnly)
+
+		const rows = await db
+			.select({
+				attemptId: testAttempts.id,
+				testId: testAttempts.testId,
+				testTitle: tests.title,
+				testSlug: tests.slug,
+				topicSlug: topics.slug,
+				topicTitle: topics.title,
+				studentId: users.id,
+				studentName: sql<string>`coalesce(${users.name}, ${users.firstName}, ${users.login}, 'Пользователь')`,
+				submittedAt: testAttempts.submittedAt,
+				earnedPoints: testAttempts.earnedPoints,
+				totalPoints: testAttempts.totalPoints,
+				scorePercentage: testAttempts.scorePercentage,
+				passed: testAttempts.passed,
+			})
+			.from(testAttempts)
+			.innerJoin(users, eq(users.id, testAttempts.userId))
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.innerJoin(topics, eq(topics.id, tests.topicId))
+			.where(studentOnly)
+			.orderBy(desc(testAttempts.submittedAt))
+			.limit(limit)
+			.offset(offset)
+
+		res.json({
+			rows: rows.map((attempt) => ({
+				...attempt,
+				submittedAt: attempt.submittedAt instanceof Date ? attempt.submittedAt.toISOString() : attempt.submittedAt,
+			})),
+			total: Number(totalRaw ?? 0),
+			limit,
+			offset,
+		})
+	} catch (e) {
+		next(e)
+	}
+})
 
 // =============================================================================
 // Admin: Attempt Review

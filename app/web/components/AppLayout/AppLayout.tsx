@@ -26,17 +26,17 @@ export default async function AppLayout({
 				{/* RBAC-провайдер с SSR-инициализацией */}
 				<AuthProvider initialMe={me}>
 					<BreadcrumbsProvider>
-						<SidebarProvider className="items-center justify-center">
+						<SidebarProvider className="items-center justify-center bg-[#fbfaf7]">
 							<AuthGuard>
 								<AppSidebar />
 							</AuthGuard>
 
-							<SidebarInset className="h-screen">
+							<SidebarInset className="h-screen bg-[#fbfaf7]">
 								<AuthGuard>
-									<header className="p-unit sticky top-0 z-10 flex items-center border-b bg-white">
+									<header className="p-unit sticky top-0 z-10 flex items-center border-b border-[#e6ded2] bg-[#fbfaf7]/90 backdrop-blur-xl">
 										<div className="flex h-full items-center gap-4">
-											<BackButton className="bg-background size-9 cursor-pointer" />
-											<Separator className="bg-background" orientation="vertical" />
+											<BackButton className="size-9 cursor-pointer border border-[#e0d6c8] bg-[#fffdf8] text-[#3c4738] transition-colors hover:border-[#cdbb9f] hover:bg-[#f3ecdf]" />
+											<Separator className="bg-[#e6ded2]" orientation="vertical" />
 										</div>
 
 										<div className="ml-unit flex min-w-0 items-center justify-between">

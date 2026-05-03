@@ -367,8 +367,10 @@ __metadata:
     "@trivago/prettier-plugin-sort-imports": "npm:^5.2.2"
     "@types/bcrypt": "npm:^5.0.2"
     "@types/flubber": "npm:^0.4.0"
+    "@types/jsonwebtoken": "npm:^9.0.10"
     "@types/lodash": "npm:^4.17.20"
     "@types/node": "npm:^25.0.3"
+    "@types/pg": "npm:^8.15.5"
     "@types/react": "npm:19.2.2"
     "@types/react-day-picker": "npm:^5.3.0"
     "@types/react-dom": "npm:19.2.2"
@@ -398,6 +400,7 @@ __metadata:
     imask: "npm:^7.6.1"
     intl-messageformat: "npm:^10.5.0"
     isomorphic-dompurify: "npm:^2.30.1"
+    jsonwebtoken: "npm:^9.0.2"
     lexical: "npm:^0.38.1"
     lightningcss: "npm:^1.30.2"
     lodash: "npm:^4.17.21"
@@ -408,6 +411,7 @@ __metadata:
     next-mdx-remote: "npm:^5.0.0"
     next-themes: "npm:^0.4.6"
     nuqs: "npm:^2.8.9"
+    pg: "npm:^8.16.3"
     pm2: "npm:^6.0.13"
     postcss: "npm:^8.5.6"
     postcss-cli: "npm:^11.0.1"
@@ -4883,44 +4887,44 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@turbo/darwin-64@npm:2.8.20":
-  version: 2.8.20
-  resolution: "@turbo/darwin-64@npm:2.8.20"
+"@turbo/darwin-64@npm:2.9.8":
+  version: 2.9.8
+  resolution: "@turbo/darwin-64@npm:2.9.8"
   conditions: os=darwin & cpu=x64
   languageName: node
   linkType: hard
 
-"@turbo/darwin-arm64@npm:2.8.20":
-  version: 2.8.20
-  resolution: "@turbo/darwin-arm64@npm:2.8.20"
+"@turbo/darwin-arm64@npm:2.9.8":
+  version: 2.9.8
+  resolution: "@turbo/darwin-arm64@npm:2.9.8"
   conditions: os=darwin & cpu=arm64
   languageName: node
   linkType: hard
 
-"@turbo/linux-64@npm:2.8.20":
-  version: 2.8.20
-  resolution: "@turbo/linux-64@npm:2.8.20"
+"@turbo/linux-64@npm:2.9.8":
+  version: 2.9.8
+  resolution: "@turbo/linux-64@npm:2.9.8"
   conditions: os=linux & cpu=x64
   languageName: node
   linkType: hard
 
-"@turbo/linux-arm64@npm:2.8.20":
-  version: 2.8.20
-  resolution: "@turbo/linux-arm64@npm:2.8.20"
+"@turbo/linux-arm64@npm:2.9.8":
+  version: 2.9.8
+  resolution: "@turbo/linux-arm64@npm:2.9.8"
   conditions: os=linux & cpu=arm64
   languageName: node
   linkType: hard
 
-"@turbo/windows-64@npm:2.8.20":
-  version: 2.8.20
-  resolution: "@turbo/windows-64@npm:2.8.20"
+"@turbo/windows-64@npm:2.9.8":
+  version: 2.9.8
+  resolution: "@turbo/windows-64@npm:2.9.8"
   conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
 
-"@turbo/windows-arm64@npm:2.8.20":
-  version: 2.8.20
-  resolution: "@turbo/windows-arm64@npm:2.8.20"
+"@turbo/windows-arm64@npm:2.9.8":
+  version: 2.9.8
+  resolution: "@turbo/windows-arm64@npm:2.9.8"
   conditions: os=win32 & cpu=arm64
   languageName: node
   linkType: hard
@@ -6626,7 +6630,7 @@ __metadata:
   resolution: "bio-exam@workspace:."
   dependencies:
     baseline-browser-mapping: "npm:^2.9.19"
-    turbo: "npm:^2.8.20"
+    turbo: "npm:^2.9.8"
   languageName: unknown
   linkType: soft
 
@@ -16671,16 +16675,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"turbo@npm:^2.8.20":
-  version: 2.8.20
-  resolution: "turbo@npm:2.8.20"
+"turbo@npm:^2.9.8":
+  version: 2.9.8
+  resolution: "turbo@npm:2.9.8"
   dependencies:
-    "@turbo/darwin-64": "npm:2.8.20"
-    "@turbo/darwin-arm64": "npm:2.8.20"
-    "@turbo/linux-64": "npm:2.8.20"
-    "@turbo/linux-arm64": "npm:2.8.20"
-    "@turbo/windows-64": "npm:2.8.20"
-    "@turbo/windows-arm64": "npm:2.8.20"
+    "@turbo/darwin-64": "npm:2.9.8"
+    "@turbo/darwin-arm64": "npm:2.9.8"
+    "@turbo/linux-64": "npm:2.9.8"
+    "@turbo/linux-arm64": "npm:2.9.8"
+    "@turbo/windows-64": "npm:2.9.8"
+    "@turbo/windows-arm64": "npm:2.9.8"
   dependenciesMeta:
     "@turbo/darwin-64":
       optional: true
@@ -16696,7 +16700,7 @@ __metadata:
       optional: true
   bin:
     turbo: bin/turbo
-  checksum: 10c0/a102bd30067c040240719c831e2ae2d5d9c5994b7028f75445339d4b3cf2e334e93ebbd05669871e22f41af8acb4f26268df5099a8a6d1f5b297dac02023bc8e
+  checksum: 10c0/deed2c7916125319cdbebf02f533d292871f805e5cf207bdfb4ae90554ceeb289452951c40f872fa1dbeb61cdd9bb5cf66c4c061ac43b7b48f81105f150d867c
   languageName: node
   linkType: hard
 

@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from 'next'
 
 import AppLayout from '@/components/AppLayout/AppLayout'
 import { Toaster } from '@/components/ui/sonner'
-import { fontSans } from '@/config/fonts'
+import { fontSans, fontSerif } from '@/config/fonts'
 import { siteConfig } from '@/config/site'
 import '@/styles/globals.css'
 
@@ -40,7 +40,7 @@ export default async function RootLayout({
 			data-theme="light"
 			style={{ overflow: 'hidden' }}
 		>
-			<body className={clsx('bg-white font-sans antialiased', fontSans.variable)}>
+			<body className={clsx('bg-background font-sans antialiased', fontSans.variable, fontSerif.variable)}>
 				<AppLayout>{children}</AppLayout>
 				<Toaster />
 			</body>

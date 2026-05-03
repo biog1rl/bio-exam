@@ -43,10 +43,5 @@ export default async function AttemptReviewPage({ params }: Props) {
 		notFound()
 	}
 
-	return (
-		<div>
-			<h1 className="mb-6 text-2xl font-semibold">Просмотр попытки</h1>
-			<AttemptReview attempt={data.attempt} questions={data.questions} />
-		</div>
-	)
+	return <AttemptReview attempt={data.attempt} questions={data.questions} />
 }

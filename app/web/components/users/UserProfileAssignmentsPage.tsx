@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { DateRange } from 'react-day-picker'
 
 import { format, subMonths, subWeeks } from 'date-fns'
@@ -59,6 +59,22 @@ const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var
 
 type Props = {
 	login: string
+}
+
+function ProfileSectionCard({ kicker, title, children }: { kicker: string; title: string; children: ReactNode }) {
+	return (
+		<Card className="rounded-4xl border-border/80 bg-card/90">
+			<CardHeader>
+				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{kicker}</p>
+				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
+			</CardHeader>
+			<CardContent>{children}</CardContent>
+		</Card>
+	)
+}
+
+function EmptyProfileState({ children }: { children: ReactNode }) {
+	return <div className="bg-secondary/70 p-unit text-muted-foreground rounded-3xl text-sm">{children}</div>
 }
 
 export default function UserProfileAssignmentsPage({ login }: Props) {
@@ -325,14 +341,18 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	if (usersLoading || (Boolean(userId) && (assignmentsLoading || attemptsLoading))) {
 		return (
-			<div className="flex items-center justify-center p-12">
+			<div className="rounded-4xl border-border/80 bg-card/90 border p-12">
 				<Loader2 className="h-8 w-8 animate-spin" />
 			</div>
 		)
 	}
 
 	if (!user) {
-		return <div className="text-muted-foreground p-8 text-center">Пользователь не найден</div>
+		return (
+			<div className="rounded-4xl border-border/80 bg-card/90 text-muted-foreground border p-8 text-center">
+				Пользователь не найден
+			</div>
+		)
 	}
 
 	const displayName = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.login
@@ -349,24 +369,33 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-start justify-between gap-4">
-				<div>
-					<div className="flex items-center gap-2">
-						<h1 className="text-2xl font-semibold">{displayName}</h1>
-						{user.groupName && <Badge variant="secondary">{user.groupName}</Badge>}
+			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
+				<div className="flex items-start justify-between gap-4">
+					<div>
+						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">профиль ученика</p>
+						<div className="mt-2 flex flex-wrap items-center gap-2">
+							<h1 className="text-foreground tab-sm:text-5xl font-serif text-4xl leading-none">{displayName}</h1>
+							{user.groupName && (
+								<Badge variant="secondary" className="rounded-full">
+									{user.groupName}
+								</Badge>
+							)}
+						</div>
+						<p className="text-muted-foreground mt-4 font-mono text-xs uppercase tracking-[0.18em]">{user.login}</p>
 					</div>
-					<p className="text-muted-foreground">{user.login}</p>
+					<Button
+						variant="outline"
+						size="icon"
+						onClick={() => setEditOpen(true)}
+						className="border-border/80 hover:border-primary hover:bg-secondary/70 rounded-2xl transition-colors"
+					>
+						<Pencil className="h-4 w-4" />
+					</Button>
 				</div>
-				<Button variant="outline" size="icon" onClick={() => setEditOpen(true)}>
-					<Pencil className="h-4 w-4" />
-				</Button>
-			</div>
+			</section>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Пройденные тесты</CardTitle>
-				</CardHeader>
-				<CardContent className="space-y-4">
+			<ProfileSectionCard kicker="динамика" title="Пройденные тесты">
+				<div className="space-y-4">
 					{/* Filters */}
 					{attempts.length > 0 && (
 						<div className="flex flex-wrap gap-2">
@@ -418,7 +447,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										<div className="max-h-60 space-y-1 overflow-y-auto">
 											{/* "All" option */}
 											<button
-												className="hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+												className="hover:bg-secondary/70 flex w-full items-center gap-2 rounded-2xl px-2 py-1.5 text-left text-sm transition-colors"
 												onClick={() => {
 													void setTestsParam(null)
 													setVisibleCount(5)
@@ -432,7 +461,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											{testOptions.map((t, i) => (
 												<label
 													key={t.id}
-													className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
+													className="hover:bg-secondary/70 flex cursor-pointer items-center gap-2 rounded-2xl px-2 py-1.5 text-sm transition-colors"
 												>
 													<Checkbox checked={selectedTestIds.has(t.id)} onCheckedChange={() => toggleTest(t.id)} />
 													<span
@@ -540,7 +569,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										if (!active || !payload?.length) return null
 										const dateLabel = format(new Date(label as string), 'd MMMM yyyy', { locale: ru })
 										return (
-											<div className="bg-background min-w-40 space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
+											<div className="border-border/80 bg-card/90 min-w-40 space-y-1 rounded-3xl border px-3 py-2 text-sm">
 												<p className="font-medium">{dateLabel}</p>
 												{payload.map((entry) => (
 													<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
@@ -574,7 +603,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 					{/* No data message for date range mode */}
 					{!selectedDay && chartData.length === 0 && filteredAttempts.length > 0 && (
-						<div className="text-muted-foreground flex h-32 items-center justify-center rounded-md border text-sm">
+						<div className="border-border/80 bg-secondary/60 text-muted-foreground flex h-32 items-center justify-center rounded-3xl border text-sm">
 							Нет данных за выбранный период
 						</div>
 					)}
@@ -586,7 +615,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 								Попытки за {format(new Date(selectedDay), 'd MMMM yyyy', { locale: ru })}
 							</p>
 							{dayChartData.length === 0 ? (
-								<div className="text-muted-foreground flex h-32 items-center justify-center rounded-md border text-sm">
+								<div className="border-border/80 bg-secondary/60 text-muted-foreground flex h-32 items-center justify-center rounded-3xl border text-sm">
 									Нет попыток за выбранный день
 								</div>
 							) : (
@@ -599,7 +628,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											content={({ active, payload, label }) => {
 												if (!active || !payload?.length) return null
 												return (
-													<div className="bg-background min-w-40 space-y-1 rounded-lg border px-3 py-2 text-sm shadow-sm">
+													<div className="border-border/80 bg-card/90 min-w-40 space-y-1 rounded-3xl border px-3 py-2 text-sm">
 														<p className="font-medium">Попытка {label}</p>
 														{payload.map((entry) => (
 															<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
@@ -638,9 +667,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 					{/* List */}
 					{attempts.length === 0 ? (
-						<p className="text-muted-foreground text-sm">Отправленных попыток пока нет</p>
+						<EmptyProfileState>Отправленных попыток пока нет</EmptyProfileState>
 					) : filteredAttempts.length === 0 ? (
-						<p className="text-muted-foreground text-sm">Ничего не найдено</p>
+						<EmptyProfileState>Ничего не найдено</EmptyProfileState>
 					) : (
 						<div className="space-y-2">
 							{visibleAttempts.map((attempt) => {
@@ -650,7 +679,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									<Link
 										href={`/admin/attempts/${attempt.attemptId}`}
 										key={attempt.attemptId}
-										className="hover:bg-secondary flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition hover:border-black/40"
+										className="border-border/70 bg-secondary/60 hover:border-primary/70 hover:bg-secondary/70 flex items-center justify-between gap-3 rounded-3xl border px-3 py-2 transition-colors"
 									>
 										<div className="min-w-0 flex-1">
 											<div className="flex items-center gap-1.5">
@@ -676,96 +705,99 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 								)
 							})}
 							{visibleCount < filteredAttempts.length && (
-								<Button variant="outline" size="sm" onClick={() => setVisibleCount((c) => c + 5)}>
+								<Button
+									variant="outline"
+									size="sm"
+									className="rounded-2xl"
+									onClick={() => setVisibleCount((c) => c + 5)}
+								>
 									Загрузить ещё
 								</Button>
 							)}
 						</div>
 					)}
-				</CardContent>
-			</Card>
+				</div>
+			</ProfileSectionCard>
 
 			<div className="grid gap-6 lg:grid-cols-2">
-				<Card>
-					<CardHeader>
-						<CardTitle>Назначенные тесты</CardTitle>
-					</CardHeader>
-					<CardContent>
-						{assignments.length === 0 ? (
-							<p className="text-muted-foreground text-sm">Нет назначенных тестов</p>
-						) : (
-							<div className="space-y-2">
-								{assignments.map((a) => (
-									<div key={a.testId} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-										<div className="min-w-0 flex-1">
-											<p className="truncate text-sm font-medium">{a.testTitle}</p>
-											<p className="text-muted-foreground text-xs">
-												{new Date(a.assignedAt).toLocaleDateString('ru-RU')}
-											</p>
-										</div>
-										<Button
-											size="icon"
-											variant="ghost"
-											aria-label="Удалить назначение"
-											onClick={() => handleRemove(a.testId)}
-											disabled={removingTestId === a.testId}
-										>
-											{removingTestId === a.testId ? (
-												<Loader2 className="h-4 w-4 animate-spin" />
-											) : (
-												<Trash2 className="h-4 w-4" />
-											)}
-										</Button>
+				<ProfileSectionCard kicker="назначения" title="Назначенные тесты">
+					{assignments.length === 0 ? (
+						<EmptyProfileState>Нет назначенных тестов</EmptyProfileState>
+					) : (
+						<div className="space-y-2">
+							{assignments.map((a) => (
+								<div
+									key={a.testId}
+									className="border-border/70 bg-secondary/60 flex items-center justify-between gap-2 rounded-3xl border px-3 py-2"
+								>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium">{a.testTitle}</p>
+										<p className="text-muted-foreground text-xs">
+											{new Date(a.assignedAt).toLocaleDateString('ru-RU')}
+										</p>
 									</div>
-								))}
-							</div>
-						)}
-					</CardContent>
-				</Card>
+									<Button
+										size="icon"
+										variant="ghost"
+										className="hover:bg-secondary/70 hover:text-destructive rounded-2xl transition-colors"
+										aria-label="Удалить назначение"
+										onClick={() => handleRemove(a.testId)}
+										disabled={removingTestId === a.testId}
+									>
+										{removingTestId === a.testId ? (
+											<Loader2 className="h-4 w-4 animate-spin" />
+										) : (
+											<Trash2 className="h-4 w-4" />
+										)}
+									</Button>
+								</div>
+							))}
+						</div>
+					)}
+				</ProfileSectionCard>
 
-				<Card>
-					<CardHeader>
-						<CardTitle>Назначить тест</CardTitle>
-					</CardHeader>
-					<CardContent>
-						{testsLoading ? (
-							<div className="text-muted-foreground flex items-center gap-2 text-sm">
-								<Loader2 className="h-4 w-4 animate-spin" />
-								Загрузка тестов...
-							</div>
-						) : availableTests.length === 0 ? (
-							<p className="text-muted-foreground text-sm">Все тесты уже назначены</p>
-						) : (
-							<div className="max-h-80 space-y-2 overflow-y-auto">
-								{availableTests.map((t) => (
-									<div key={t.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-										<div className="min-w-0 flex-1">
-											<p className="truncate text-sm font-medium">{t.title}</p>
-											{t.topicTitle && (
-												<Badge variant="secondary" className="mt-0.5 text-xs">
-													{t.topicTitle}
-												</Badge>
-											)}
-										</div>
-										<Button
-											size="sm"
-											variant="outline"
-											onClick={() => handleAssign(t.id)}
-											disabled={assigningTestId === t.id}
-										>
-											{assigningTestId === t.id ? (
-												<Loader2 className="mr-1 h-3 w-3 animate-spin" />
-											) : (
-												<UserPlus className="mr-1 h-3 w-3" />
-											)}
-											Назначить
-										</Button>
+				<ProfileSectionCard kicker="банк тестов" title="Назначить тест">
+					{testsLoading ? (
+						<div className="bg-secondary/70 p-unit text-muted-foreground flex items-center gap-2 rounded-3xl text-sm">
+							<Loader2 className="h-4 w-4 animate-spin" />
+							Загрузка тестов...
+						</div>
+					) : availableTests.length === 0 ? (
+						<EmptyProfileState>Все тесты уже назначены</EmptyProfileState>
+					) : (
+						<div className="max-h-80 space-y-2 overflow-y-auto">
+							{availableTests.map((t) => (
+								<div
+									key={t.id}
+									className="border-border/70 bg-secondary/60 flex items-center justify-between gap-2 rounded-3xl border px-3 py-2"
+								>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium">{t.title}</p>
+										{t.topicTitle && (
+											<Badge variant="secondary" className="mt-0.5 text-xs">
+												{t.topicTitle}
+											</Badge>
+										)}
 									</div>
-								))}
-							</div>
-						)}
-					</CardContent>
-				</Card>
+									<Button
+										size="sm"
+										variant="outline"
+										className="hover:border-primary/70 hover:bg-secondary/70 rounded-2xl transition-colors"
+										onClick={() => handleAssign(t.id)}
+										disabled={assigningTestId === t.id}
+									>
+										{assigningTestId === t.id ? (
+											<Loader2 className="mr-1 h-3 w-3 animate-spin" />
+										) : (
+											<UserPlus className="mr-1 h-3 w-3" />
+										)}
+										Назначить
+									</Button>
+								</div>
+							))}
+						</div>
+					)}
+				</ProfileSectionCard>
 			</div>
 
 			<EditUserDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={() => void mutateUsers()} />

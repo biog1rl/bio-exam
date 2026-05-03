@@ -22,7 +22,7 @@ const IMAGE_SKELETON_CLASS =
 
 function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: number }) {
 	return (
-		<div
+		<span
 			className={`my-2 flex h-48 w-full max-w-xl items-center justify-center ${IMAGE_SKELETON_CLASS}`}
 			style={{
 				width: width ?? undefined,
@@ -31,7 +31,7 @@ function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: n
 			}}
 		>
 			<Loader2 className="text-primary size-7 animate-spin drop-shadow-sm" />
-		</div>
+		</span>
 	)
 }
 

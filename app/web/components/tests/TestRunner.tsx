@@ -618,7 +618,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		<div className="flex gap-x-4 space-y-6">
 			<div className="flex-1">
 				<div className="space-y-2">
-					<h1 className="text-3xl font-semibold">{test.title}</h1>
+					<h1 className="text-2xl font-semibold">{test.title}</h1>
 					{test.description ? <p className="text-muted-foreground whitespace-pre-wrap">{test.description}</p> : null}
 					<div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
 						<span>Тема: {test.topicTitle}</span>
