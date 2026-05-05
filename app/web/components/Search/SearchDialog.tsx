@@ -45,6 +45,51 @@ const SCOPE_ICONS = {
 	attempts: ClipboardCheck,
 } as const
 
+function splitMeta(value: string): string[] {
+	return value
+		.split(' · ')
+		.map((part) => part.trim())
+		.filter(Boolean)
+}
+
+function MetaPill({ label, value }: { label: string; value: string }) {
+	return (
+		<span className="bg-muted/70 text-muted-foreground inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]">
+			<span className="text-muted-foreground/70">{label}</span>
+			<span className="truncate">{value}</span>
+		</span>
+	)
+}
+
+function ResultMeta({ item }: { item: SearchResultItem }) {
+	const parts = splitMeta(item.subtitle)
+	if (parts.length === 0) return null
+
+	if (item.type === 'test') {
+		const [topic, descriptionOrSlug, slug] = parts
+		return (
+			<div className="mt-1 flex min-w-0 flex-wrap gap-1">
+				{topic && <MetaPill label="Тема" value={topic} />}
+				{slug && descriptionOrSlug && <MetaPill label="Описание" value={descriptionOrSlug} />}
+				<MetaPill label="Slug" value={slug ?? descriptionOrSlug} />
+			</div>
+		)
+	}
+
+	if (item.type === 'question') {
+		const [topic, test, type] = parts
+		return (
+			<div className="mt-1 flex min-w-0 flex-wrap gap-1">
+				{topic && <MetaPill label="Тема" value={topic} />}
+				{test && <MetaPill label="Тест" value={test} />}
+				{type && <MetaPill label="Тип" value={type} />}
+			</div>
+		)
+	}
+
+	return <div className="text-muted-foreground truncate text-xs">{item.subtitle}</div>
+}
+
 function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (href: string | null) => void }) {
 	const Icon = TYPE_ICONS[item.type]
 	const isAttempt = item.type === 'attempt'
@@ -65,7 +110,7 @@ function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (hre
 						dangerouslySetInnerHTML={{ __html: item.snippetHtml }}
 					/>
 				) : (
-					item.subtitle && <div className="text-muted-foreground truncate text-xs">{item.subtitle}</div>
+					<ResultMeta item={item} />
 				)}
 				{!isAttempt && item.snippetHtml && (
 					<div

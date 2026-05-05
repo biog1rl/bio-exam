@@ -204,20 +204,20 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 				qsd.question_id::text as id,
 				('Вопрос #' || q.order::text) as title,
 				concat_ws(' · ', top.title, te.title, q.type) as subtitle,
-				concat_ws(' ', qsd.prompt_text, qsd.options_text, qsd.matching_text, te.title, top.title, q.type) as snippet_source,
+				concat_ws(' ', qsd.prompt_text, qsd.options_text, qsd.matching_text, q.type, 'Вопрос #' || q.order::text) as snippet_source,
 				('/admin/tests/' || top.slug || '/' || te.slug || '/questions/' || qsd.question_id::text) as href,
 				greatest(
 					similarity(coalesce(qsd.search_text, ''), $1),
-					similarity(coalesce(te.title, ''), $1),
-					similarity(coalesce(top.title, ''), $1),
-					case when concat_ws(' ', qsd.search_text, te.title, top.title, q.type) ilike $2 escape '\\' then 1 else 0 end
+					similarity(coalesce(q.type, ''), $1),
+					similarity('Вопрос #' || q.order::text, $1),
+					case when concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text) ilike $2 escape '\\' then 1 else 0 end
 				) as score
 			from question_search_documents qsd
 			inner join questions q on q.id = qsd.question_id
 			inner join tests te on te.id = qsd.test_id
 			inner join topics top on top.id = qsd.topic_id
-			where concat_ws(' ', qsd.search_text, te.title, top.title, q.type) ilike $2 escape '\\'
-				or similarity(concat_ws(' ', qsd.search_text, te.title, top.title, q.type), $1) > 0.08
+			where concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text) ilike $2 escape '\\'
+				or similarity(concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text), $1) > 0.08
 			order by score desc, top.title asc, te.title asc, q.order asc
 			limit $3
 		`,
