@@ -125,14 +125,14 @@ async function searchTests(params: { query: string; like: string; limit: number;
 						concat_ws(' ', t.title, t.description, t.slug) as snippet_source,
 						('/admin/tests/' || t.slug) as href,
 						greatest(
-							similarity(coalesce(t.title, ''), $1),
-							similarity(coalesce(t.description, ''), $1),
-							similarity(coalesce(t.slug, ''), $1),
+							extensions.similarity(coalesce(t.title, ''), $1),
+							extensions.similarity(coalesce(t.description, ''), $1),
+							extensions.similarity(coalesce(t.slug, ''), $1),
 							case when concat_ws(' ', t.title, t.description, t.slug) ilike $2 escape '\\' then 1 else 0 end
 						) as score
 					from topics t
 					where concat_ws(' ', t.title, t.description, t.slug) ilike $2 escape '\\'
-						or similarity(concat_ws(' ', t.title, t.description, t.slug), $1) > 0.08
+						or extensions.similarity(concat_ws(' ', t.title, t.description, t.slug), $1) > 0.08
 
 					union all
 
@@ -144,16 +144,16 @@ async function searchTests(params: { query: string; like: string; limit: number;
 						concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) as snippet_source,
 						('/admin/tests/' || top.slug || '/' || te.slug) as href,
 						greatest(
-							similarity(coalesce(te.title, ''), $1),
-							similarity(coalesce(te.description, ''), $1),
-							similarity(coalesce(te.slug, ''), $1),
-							similarity(coalesce(top.title, ''), $1),
+							extensions.similarity(coalesce(te.title, ''), $1),
+							extensions.similarity(coalesce(te.description, ''), $1),
+							extensions.similarity(coalesce(te.slug, ''), $1),
+							extensions.similarity(coalesce(top.title, ''), $1),
 							case when concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) ilike $2 escape '\\' then 1 else 0 end
 						) as score
 					from tests te
 					inner join topics top on top.id = te.topic_id
 					where concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) ilike $2 escape '\\'
-						or similarity(concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug), $1) > 0.08
+						or extensions.similarity(concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug), $1) > 0.08
 				) rows
 				order by score desc, title asc
 				limit $3
@@ -173,10 +173,10 @@ async function searchTests(params: { query: string; like: string; limit: number;
 				concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) as snippet_source,
 				('/tests/' || top.slug || '/' || te.slug) as href,
 				greatest(
-					similarity(coalesce(te.title, ''), $1),
-					similarity(coalesce(te.description, ''), $1),
-					similarity(coalesce(te.slug, ''), $1),
-					similarity(coalesce(top.title, ''), $1),
+					extensions.similarity(coalesce(te.title, ''), $1),
+					extensions.similarity(coalesce(te.description, ''), $1),
+					extensions.similarity(coalesce(te.slug, ''), $1),
+					extensions.similarity(coalesce(top.title, ''), $1),
 					case when concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) ilike $2 escape '\\' then 1 else 0 end
 				) as score
 			from tests te
@@ -186,7 +186,7 @@ async function searchTests(params: { query: string; like: string; limit: number;
 				and top.is_active = true
 				and (
 					concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) ilike $2 escape '\\'
-					or similarity(concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug), $1) > 0.08
+					or extensions.similarity(concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug), $1) > 0.08
 				)
 			order by score desc, te.title asc
 			limit $4
@@ -207,9 +207,9 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 				concat_ws(' ', qsd.prompt_text, qsd.options_text, qsd.matching_text, q.type, 'Вопрос #' || q.order::text) as snippet_source,
 				('/admin/tests/' || top.slug || '/' || te.slug || '/questions/' || qsd.question_id::text) as href,
 				greatest(
-					similarity(coalesce(qsd.search_text, ''), $1),
-					similarity(coalesce(q.type, ''), $1),
-					similarity('Вопрос #' || q.order::text, $1),
+					extensions.similarity(coalesce(qsd.search_text, ''), $1),
+					extensions.similarity(coalesce(q.type, ''), $1),
+					extensions.similarity('Вопрос #' || q.order::text, $1),
 					case when concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text) ilike $2 escape '\\' then 1 else 0 end
 				) as score
 			from question_search_documents qsd
@@ -217,7 +217,7 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 			inner join tests te on te.id = qsd.test_id
 			inner join topics top on top.id = qsd.topic_id
 			where concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text) ilike $2 escape '\\'
-				or similarity(concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text), $1) > 0.08
+				or extensions.similarity(concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text), $1) > 0.08
 			order by score desc, top.title asc, te.title asc, q.order asc
 			limit $3
 		`,
@@ -237,14 +237,14 @@ async function searchUsers(params: { query: string; like: string; limit: number 
 				concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone) as snippet_source,
 				('/admin/users/' || u.id::text) as href,
 				greatest(
-					similarity(coalesce(u.name, ''), $1),
-					similarity(coalesce(u.login, ''), $1),
-					similarity(coalesce(u.email, ''), $1),
+					extensions.similarity(coalesce(u.name, ''), $1),
+					extensions.similarity(coalesce(u.login, ''), $1),
+					extensions.similarity(coalesce(u.email, ''), $1),
 					case when concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone) ilike $2 escape '\\' then 1 else 0 end
 				) as score
 			from users u
 			where concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone) ilike $2 escape '\\'
-				or similarity(concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone), $1) > 0.08
+				or extensions.similarity(concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone), $1) > 0.08
 			order by score desc, title asc
 			limit $3
 		`,
@@ -264,8 +264,8 @@ async function searchGroups(params: { query: string; like: string; limit: number
 				concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')) as snippet_source,
 				'/admin/groups' as href,
 				greatest(
-					similarity(coalesce(sg.name, ''), $1),
-					similarity(coalesce(string_agg(coalesce(u.name, u.login, ''), ' '), ''), $1),
+					extensions.similarity(coalesce(sg.name, ''), $1),
+					extensions.similarity(coalesce(string_agg(coalesce(u.name, u.login, ''), ' '), ''), $1),
 					case when concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')) ilike $2 escape '\\' then 1 else 0 end
 				) as score
 			from student_groups sg
@@ -273,7 +273,7 @@ async function searchGroups(params: { query: string; like: string; limit: number
 			left join users u on u.id = ug.user_id
 			group by sg.id, sg.name
 			having concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')) ilike $2 escape '\\'
-				or similarity(concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')), $1) > 0.08
+				or extensions.similarity(concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')), $1) > 0.08
 			order by score desc, sg.name asc
 			limit $3
 		`,
@@ -309,9 +309,9 @@ async function searchAttempts(params: {
 					else ('/tests/' || top.slug || '/' || te.slug)
 				end as href,
 				greatest(
-					similarity(coalesce(te.title, ''), $1),
-					similarity(coalesce(top.title, ''), $1),
-					similarity(coalesce(u.name, ''), $1),
+					extensions.similarity(coalesce(te.title, ''), $1),
+					extensions.similarity(coalesce(top.title, ''), $1),
+					extensions.similarity(coalesce(u.name, ''), $1),
 					case
 						when concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text) ilike $2 escape '\\'
 							or concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text) ilike $3 escape '\\'
@@ -326,7 +326,7 @@ async function searchAttempts(params: {
 			where (
 				concat_ws(' ', te.title, top.title, u.name, u.login, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.score_percentage::text, ta.submitted_at::date::text) ilike $2 escape '\\'
 				or concat_ws(' ', te.title, top.title, u.name, u.login, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.score_percentage::text, ta.submitted_at::date::text) ilike $3 escape '\\'
-				or similarity(concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text), $1) > 0.08
+				or extensions.similarity(concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text), $1) > 0.08
 			)
 			${whereAccess}
 			order by score desc, ta.submitted_at desc

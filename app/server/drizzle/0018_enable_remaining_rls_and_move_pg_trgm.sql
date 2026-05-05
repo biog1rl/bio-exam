@@ -1,6 +1,3 @@
--- Locks public tables for direct PostgREST access.
--- The app backend uses the postgres role, which has BYPASSRLS on Supabase.
-
 CREATE SCHEMA IF NOT EXISTS extensions;
 
 DO $$
@@ -66,36 +63,3 @@ BEGIN
 		END IF;
 	END LOOP;
 END $$;
-
-SELECT schemaname, tablename, rowsecurity
-FROM pg_tables
-WHERE schemaname = 'public'
-	AND tablename IN (
-		'__drizzle_migrations',
-		'refresh_tokens',
-		'test_timer_settings',
-		'test_attempts',
-		'test_assignments',
-		'student_groups',
-		'user_groups',
-		'test_scoring_settings',
-		'app_settings',
-		'question_types',
-		'test_question_type_overrides',
-		'test_sessions',
-		'tests',
-		'question_search_documents',
-		'questions',
-		'answer_keys',
-		'topics',
-		'question_drafts',
-		'users',
-		'roles',
-		'user_roles',
-		'invites',
-		'rbac_role_grants',
-		'rbac_page_rules',
-		'rbac_user_grants',
-		'sidebar_items'
-	)
-ORDER BY tablename;
