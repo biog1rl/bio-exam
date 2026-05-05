@@ -54,6 +54,10 @@ import {
 	UpdateQuestionDraftSchema,
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
+import {
+	updateQuestionSearchDocumentLocation,
+	upsertQuestionSearchDocument,
+} from '../../services/search/question-documents.js'
 import { storageService } from '../../services/storage/storage.js'
 import { assignmentsRouter } from './assignments.js'
 
@@ -1493,6 +1497,15 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 			if (q.explanationPath && q.explanationText) {
 				await storageService.writeFile(q.explanationPath, q.explanationText)
 			}
+			await upsertQuestionSearchDocument({
+				questionId: q.id,
+				testId: result.test.id,
+				topicId: topic.id,
+				type: q.type,
+				promptText: q.promptText,
+				options: q.options,
+				matchingPairs: q.matchingPairs,
+			})
 		}
 
 		await writeTestSettingsFile({
@@ -1785,6 +1798,15 @@ router.post(
 			if (result.explanationPath && data.explanationText) {
 				await storageService.writeFile(result.explanationPath, data.explanationText)
 			}
+			await upsertQuestionSearchDocument({
+				questionId: result.id,
+				testId,
+				topicId: topic.id,
+				type: data.type,
+				promptText: data.promptText,
+				options: data.options,
+				matchingPairs: data.matchingPairs,
+			})
 
 			return res.status(201).json({
 				ok: true,
@@ -1903,6 +1925,15 @@ router.patch(
 			if (result.explanationPath && data.explanationText) {
 				await storageService.writeFile(result.explanationPath, data.explanationText)
 			}
+			await upsertQuestionSearchDocument({
+				questionId,
+				testId,
+				topicId: topic.id,
+				type: data.type,
+				promptText: data.promptText,
+				options: data.options,
+				matchingPairs: data.matchingPairs,
+			})
 
 			return res.json({ ok: true, questionId })
 		} catch (e) {
@@ -2122,6 +2153,11 @@ router.post(
 				}
 				throw txError
 			}
+			await updateQuestionSearchDocumentLocation({
+				questionId,
+				testId: resolvedTargetTest.id,
+				topicId: targetTopic.id,
+			})
 
 			res.json({
 				ok: true,

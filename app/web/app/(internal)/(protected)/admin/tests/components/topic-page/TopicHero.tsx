@@ -25,10 +25,10 @@ interface TopicHeroProps {
 export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTopic }: TopicHeroProps) {
 	return (
 		<section className="rounded-4xl border-border/80 bg-card/90 overflow-hidden border shadow-sm">
-			<div className="tab:grid-cols-[1fr_300px] grid gap-0">
+			<div className="tab:grid-cols-[1fr_18.75rem] grid gap-0">
 				<div className="p-unit-mob tab-sm:p-unit">
 					<div className="flex flex-wrap items-center gap-2">
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{topic.slug}</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{topic.slug}</p>
 						<Badge variant={topic.isActive ? 'default' : 'secondary'} className="rounded-full">
 							{topic.isActive ? 'Активна' : 'Скрыта'}
 						</Badge>

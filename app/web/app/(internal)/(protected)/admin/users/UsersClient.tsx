@@ -36,7 +36,7 @@ export default function UsersClient() {
 	}, [data, groupFilter, allGroups])
 	return (
 		<div className="space-y-4">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-3">
 				<h1 className="text-xl font-semibold">Пользователи</h1>
 				<Button size="icon" variant="outline" onClick={() => setOpen(true)}>
 					<UserPlusIcon />
@@ -45,7 +45,7 @@ export default function UsersClient() {
 			{allGroups.length > 0 && (
 				<div className="flex items-center gap-2">
 					<Select value={groupFilter} onValueChange={setGroupFilter}>
-						<SelectTrigger className="w-48">
+						<SelectTrigger className="mob:w-48 w-full">
 							<SelectValue placeholder="Все группы" />
 						</SelectTrigger>
 						<SelectContent>

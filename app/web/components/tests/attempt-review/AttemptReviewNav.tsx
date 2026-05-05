@@ -26,7 +26,7 @@ export function AttemptReviewNav({
 }) {
 	return (
 		<aside className="border-border/80 bg-card/90 rounded-4xl p-unit-mob tab:sticky tab:top-4 tab:h-fit tab-sm:p-unit border">
-			<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">навигация</p>
+			<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">навигация</p>
 
 			<div className="mt-5 flex flex-wrap gap-2">
 				{NAV_FILTERS.map((filter) => (

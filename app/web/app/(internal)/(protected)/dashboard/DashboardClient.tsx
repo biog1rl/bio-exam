@@ -155,7 +155,7 @@ const interactiveCardClass =
 function SectionTitle({ kicker, title, children }: { kicker: string; title: string; children?: ReactNode }) {
 	return (
 		<div>
-			<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{kicker}</p>
+			<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
 			<h2 className="text-foreground tab-sm:text-3xl mt-2 font-serif text-2xl">{title}</h2>
 			{children ? <p className="text-muted-foreground mt-3 max-w-2xl text-sm leading-6">{children}</p> : null}
 		</div>
@@ -288,7 +288,7 @@ export default function DashboardClient() {
 
 	return (
 		<main className="space-y-5">
-			<section className="tab:grid-cols-[1.08fr_.92fr] grid gap-5">
+			<section className="grid gap-5 xl:grid-cols-[1.08fr_.92fr]">
 				<SoftPanel className="p-unit-mob tab-sm:p-unit overflow-hidden">
 					<div className="mb-6 flex flex-wrap gap-2">
 						<span className="border-border bg-secondary text-secondary-foreground inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">
@@ -303,12 +303,12 @@ export default function DashboardClient() {
 
 					<div className="tab:grid-cols-[1fr_auto] tab:items-end grid gap-6">
 						<div>
-							<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">сегодня</p>
-							<h1 className="text-foreground tab-sm:text-5xl mt-2 max-w-3xl font-serif text-4xl leading-[1.02]">
+							<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">сегодня</p>
+							<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 max-w-3xl font-serif text-3xl leading-[1.02]">
 								{heroTitle}
 							</h1>
 						</div>
-						<Button asChild size="lg" className="-md rounded-full transition-all">
+						<Button asChild size="lg" className="-md mob:w-auto w-full rounded-full transition-all">
 							<Link href={heroHref}>
 								{heroCta}
 								<ArrowRight className="size-4" />
@@ -357,7 +357,7 @@ export default function DashboardClient() {
 					</div>
 				</SoftPanel>
 
-				<SoftPanel className="min-h-105 relative overflow-hidden">
+				<SoftPanel className="tab-sm:min-h-105 relative min-h-80 overflow-hidden">
 					<Image
 						src="/img/main-bg.jpg"
 						alt="Лесной биологический фон"
@@ -368,8 +368,8 @@ export default function DashboardClient() {
 						unoptimized
 					/>
 					<div className="bg-linear-to-b from-foreground/20 via-background/20 to-foreground/55 absolute inset-0" />
-					<div className="bg-card/85 p-unit absolute inset-x-5 bottom-5 rounded-3xl border border-white/45 shadow-lg backdrop-blur-md">
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.2em]">
+					<div className="bg-card/85 p-unit-mob tab-sm:p-unit tab-sm:inset-x-5 tab-sm:bottom-5 absolute inset-x-3 bottom-3 rounded-3xl border border-white/45 shadow-lg backdrop-blur-md">
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.2em]">
 							{canReadTests ? 'последняя попытка студента' : 'последняя попытка'}
 						</p>
 						{canReadTests ? (
@@ -380,7 +380,7 @@ export default function DashboardClient() {
 								>
 									<div className="flex items-start justify-between gap-3">
 										<div className="min-w-0">
-											<p className="truncate font-serif text-2xl">{adminLatestAttempt.studentName}</p>
+											<p className="mob:text-2xl truncate font-serif text-xl">{adminLatestAttempt.studentName}</p>
 											<p className="text-muted-foreground truncate text-sm">{adminLatestAttempt.testTitle}</p>
 										</div>
 										<ArrowRight className="text-primary mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-1" />
@@ -402,7 +402,7 @@ export default function DashboardClient() {
 						) : latestAttempt ? (
 							<Link href={latestAttempt.testHref} className={`group mt-3 block rounded-2xl ${interactiveCardClass}`}>
 								<div className="flex items-start justify-between gap-3">
-									<p className="truncate font-serif text-2xl">{latestAttempt.testTitle}</p>
+									<p className="mob:text-2xl truncate font-serif text-xl">{latestAttempt.testTitle}</p>
 									<ArrowRight className="text-primary mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-1" />
 								</div>
 								<div className="bg-muted mt-4 h-2 overflow-hidden rounded-full">
@@ -424,7 +424,7 @@ export default function DashboardClient() {
 			</section>
 
 			{canReadTests ? null : (
-				<section className="tab:grid-cols-[1fr_380px] grid gap-5">
+				<section className="grid gap-5 xl:grid-cols-[1fr_23.75rem]">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<div className="flex flex-wrap items-start justify-between gap-4">
 							<SectionTitle kicker="студент" title="Доступные тесты" />
@@ -501,7 +501,7 @@ export default function DashboardClient() {
 			)}
 
 			{canReadTests ? (
-				<section className="tab:grid-cols-[1fr_380px] grid gap-5">
+				<section className="grid gap-5 xl:grid-cols-[1fr_23.75rem]">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<SectionTitle kicker="история" title="Последние попытки студентов" />
 						<div className="mt-6 space-y-3">
@@ -666,7 +666,7 @@ export default function DashboardClient() {
       </section> */}
 
 			{canReadTests ? (
-				<section className="tab:grid-cols-[380px_1fr] grid gap-5">
+				<section className="tab:grid-cols-[23.75rem_1fr] grid gap-5">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<SectionTitle kicker="учитель / админ" title="Состояние базы" />
 

@@ -1,11 +1,16 @@
 'use client'
 
+import { roleDisplayName } from '@bio-exam/rbac'
+
 import { useState, useMemo } from 'react'
 
-import { Search } from 'lucide-react'
+import { Link as LinkIcon, Pencil, Search } from 'lucide-react'
+import Link from 'next/link'
 import { useSWRConfig } from 'swr'
 
 import { useAuth } from '@/components/providers/AuthProvider'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -137,9 +142,73 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				</div>
 			</div>
 
-			<div className="overflow-hidden rounded-md border">
+			<div className="tab-sm:hidden space-y-3">
+				{isLoading ? (
+					Array.from({ length: 5 }).map((_, i) => <Skeleton key={`mobile-sk-${i}`} className="h-36 rounded-3xl" />)
+				) : filteredRows.length === 0 ? (
+					<div className="text-muted-foreground rounded-3xl border p-4 text-center text-sm">
+						{searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
+					</div>
+				) : (
+					filteredRows.map((user) => {
+						const active = Boolean(user.isActive)
+						const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
+						const nameDisplay = fullName || user.name || '—'
+						const loginDisplay = user.login ?? '—'
+						const allowReinvite = !active && canInvite
+						const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
+
+						return (
+							<article key={user.id} className="bg-card rounded-3xl border p-4">
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0">
+										<Link href={profileHref} className="truncate font-medium hover:underline">
+											{loginDisplay}
+										</Link>
+										<p className="text-muted-foreground mt-1 truncate text-sm">{nameDisplay}</p>
+									</div>
+									<Badge variant={active ? 'default' : 'outline'}>{active ? 'Активен' : 'Ожидает'}</Badge>
+								</div>
+
+								<div className="mt-4 flex flex-wrap gap-1.5">
+									{user.roles.length > 0 ? (
+										user.roles.map((role) => (
+											<Badge key={role} variant="secondary" className="capitalize">
+												{roleDisplayName(role)}
+											</Badge>
+										))
+									) : (
+										<span className="text-muted-foreground text-sm">Роли не назначены</span>
+									)}
+								</div>
+
+								<div className="text-muted-foreground mt-4 grid gap-2 text-sm">
+									<p>Группа: {user.groupName ?? '—'}</p>
+									<p>Создан: {formatDateTime(user.createdAt)}</p>
+									<p>Кем создан: {user.createdByName ?? '—'}</p>
+								</div>
+
+								{effectiveCanEdit ? (
+									<div className="mt-4 flex justify-end gap-2">
+										<Button size="icon" variant="outline" onClick={() => handleEditClick(user)}>
+											<Pencil />
+										</Button>
+										{allowReinvite ? (
+											<Button size="icon" variant="outline" onClick={() => handleReinviteClick(user)}>
+												<LinkIcon />
+											</Button>
+										) : null}
+									</div>
+								) : null}
+							</article>
+						)
+					})
+				)}
+			</div>
+
+			<div className="tab-sm:block hidden overflow-hidden rounded-md border">
 				<div className="overflow-auto">
-					<Table className="min-w-[980px]">
+					<Table className="min-w-245">
 						<TableHeader className="bg-muted/50">
 							<TableRow>
 								<TableHead>Логин</TableHead>
@@ -167,4 +236,12 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 			/>
 		</>
 	)
+}
+
+function formatDateTime(iso: string) {
+	try {
+		return new Date(iso).toLocaleString()
+	} catch {
+		return iso
+	}
 }

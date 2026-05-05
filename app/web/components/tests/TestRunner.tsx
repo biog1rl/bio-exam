@@ -615,8 +615,8 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	}
 
 	return (
-		<div className="flex gap-x-4 space-y-6">
-			<div className="flex-1">
+		<div className="tab:flex-row flex min-w-0 flex-col gap-4">
+			<div className="min-w-0 flex-1">
 				<div className="space-y-2">
 					<h1 className="text-2xl font-semibold">{test.title}</h1>
 					{test.description ? <p className="text-muted-foreground whitespace-pre-wrap">{test.description}</p> : null}
@@ -652,7 +652,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 
 				{showTimeUp ? (
 					<section className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-						<div className="rounded-lg bg-white p-8 text-center shadow-xl">
+						<div className="tab-sm:p-8 mx-4 rounded-lg bg-white p-6 text-center shadow-xl">
 							<p className="text-2xl font-semibold">Время вышло</p>
 							<p className="text-muted-foreground mt-2 text-sm">Отправка ответов...</p>
 						</div>
@@ -749,14 +749,14 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 													: ''
 
 											return (
-												<div key={left.id} className="grid gap-2 sm:grid-cols-[1fr_220px] sm:items-center">
+												<div key={left.id} className="tab-sm:grid-cols-[1fr_13.75rem] tab-sm:items-center grid gap-2">
 													<div>{left.text}</div>
 													<Select
 														value={selectedRightId || undefined}
 														onValueChange={(value) => onSelectMatching(question.id, left.id, value)}
 														disabled={frozen || !!submitResult}
 													>
-														<SelectTrigger className="sm:w-55 w-full">
+														<SelectTrigger className="tab-sm:w-55 w-full">
 															<SelectValue placeholder="Выберите вариант" />
 														</SelectTrigger>
 														<SelectContent>
@@ -807,7 +807,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 							</div>
 
 							{/* Navigation buttons */}
-							<div className="mt-6 flex items-center justify-between">
+							<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
 								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || !!submitResult || frozen}>
 									Назад
 								</Button>
@@ -845,7 +845,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 			</div>
 
 			{/* Панель навигации по вопросам и прогресс */}
-			<section className="sticky top-4 h-fit w-48 shrink-0 space-y-4 rounded-lg border bg-white p-4">
+			<section className="tab:sticky tab:top-4 tab:w-48 h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4">
 				{secondsLeft !== null && !submitResult && (
 					<div
 						className={cn(

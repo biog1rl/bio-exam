@@ -4,107 +4,184 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { BookOpen, ClipboardCheck, FileQuestion, FolderOpen, UserIcon, UsersIcon } from 'lucide-react'
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { useRouter } from 'next/navigation'
 
-import { Command, CommandEmpty, CommandInput, CommandList } from '@/components/ui/command'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { DialogTitle, DialogDescription, Dialog, DialogContent } from '@/components/ui/dialog'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { searchTopics, searchFiles, searchUsers } from '@/lib/search/api'
-import type { TopicResult, FileResult, UserResult } from '@/types/search'
+import { searchAll } from '@/lib/search/api'
+import { makeSearchValue } from '@/lib/search/query'
+import type { SearchCategory, SearchResponse, SearchResultItem, SearchScope } from '@/types/search'
 
 import { useSearch } from './SearchProvider'
-import { SearchResultsFiles } from './SearchResultsFiles'
-import { SearchResultsTopics } from './SearchResultsTopics'
-import { SearchResultsUsers } from './SearchResultsUsers'
+
+type TabScope = SearchScope
+
+const TAB_LABELS: Record<TabScope, string> = {
+	all: 'Все',
+	tests: 'Тесты',
+	questions: 'Вопросы',
+	users: 'Пользователи',
+	groups: 'Группы',
+	attempts: 'Попытки',
+}
+
+const TYPE_ICONS = {
+	topic: FolderOpen,
+	test: BookOpen,
+	question: FileQuestion,
+	user: UserIcon,
+	group: UsersIcon,
+	attempt: ClipboardCheck,
+} as const
+
+const SCOPE_ICONS = {
+	all: FolderOpen,
+	tests: BookOpen,
+	questions: FileQuestion,
+	users: UserIcon,
+	groups: UsersIcon,
+	attempts: ClipboardCheck,
+} as const
+
+function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (href: string | null) => void }) {
+	const Icon = TYPE_ICONS[item.type]
+	const isAttempt = item.type === 'attempt'
+	return (
+		<CommandItem
+			value={makeSearchValue(item.title, item.subtitle)}
+			onSelect={() => onSelect(item.href)}
+			className="cursor-pointer items-start gap-3 rounded-md px-3 py-3 transition-colors"
+		>
+			<div className="bg-muted text-muted-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md">
+				<Icon className="size-4" />
+			</div>
+			<div className="min-w-0 flex-1">
+				<div className="truncate text-sm font-medium">{item.title}</div>
+				{isAttempt && item.snippetHtml ? (
+					<div
+						className="text-muted-foreground [&_mark]:bg-primary/20 [&_mark]:text-foreground truncate text-xs [&_mark]:rounded-[2px]"
+						dangerouslySetInnerHTML={{ __html: item.snippetHtml }}
+					/>
+				) : (
+					item.subtitle && <div className="text-muted-foreground truncate text-xs">{item.subtitle}</div>
+				)}
+				{!isAttempt && item.snippetHtml && (
+					<div
+						className="text-muted-foreground [&_mark]:bg-primary/20 [&_mark]:text-foreground mt-1 line-clamp-2 text-xs leading-relaxed [&_mark]:rounded-[2px]"
+						dangerouslySetInnerHTML={{ __html: item.snippetHtml }}
+					/>
+				)}
+			</div>
+		</CommandItem>
+	)
+}
+
+function CategoryResults({
+	category,
+	onSelect,
+}: {
+	category: SearchCategory
+	onSelect: (href: string | null) => void
+}) {
+	if (!category.available || category.items.length === 0) return null
+	return (
+		<CommandGroup heading={category.title} className="[&_[cmdk-group-heading]]:px-3">
+			{category.items.map((item) => (
+				<ResultItem key={`${item.type}:${item.id}`} item={item} onSelect={onSelect} />
+			))}
+		</CommandGroup>
+	)
+}
 
 export default function SearchDialog() {
 	const { open, setOpen, closeDialog } = useSearch()
 	const router = useRouter()
 
-	const [tab, setTab] = useState<'topics' | 'files' | 'users'>('topics')
+	const [tab, setTab] = useState<TabScope>('all')
 	const [query, setQuery] = useState('')
+	const [results, setResults] = useState<SearchResponse | null>(null)
+	const [loading, setLoading] = useState(false)
 
-	// Motion values для blur эффекта
 	const blur = useMotionValue(0)
 	const blurSpring = useSpring(blur, { stiffness: 300, damping: 30 })
 	const blurFilter = useTransform(blurSpring, (v) => `blur(${v}px)`)
-
-	// Результаты поиска
-	const [topics, setTopics] = useState<TopicResult[]>([])
-	const [files, setFiles] = useState<FileResult[]>([])
-	const [users, setUsers] = useState<UserResult[]>([])
-
-	// Состояние загрузки
-	const [loadingTopics, setLoadingTopics] = useState(false)
-	const [loadingFiles, setLoadingFiles] = useState(false)
-	const [loadingUsers, setLoadingUsers] = useState(false)
-
 	const openRef = useRef(open)
 
 	useEffect(() => {
 		openRef.current = open
 	}, [open])
 
-	// Сброс при закрытии
 	useEffect(() => {
 		if (!open) {
 			setQuery('')
-			setTopics([])
-			setFiles([])
-			setUsers([])
+			setResults(null)
+			setTab('all')
 		}
 	}, [open])
 
-	// Поиск с дебаунсом
 	useEffect(() => {
 		const q = query.trim()
 		if (q.length < 2) {
-			setTopics([])
-			setFiles([])
-			setUsers([])
+			setResults(null)
+			setLoading(false)
 			return
 		}
 
 		let cancelled = false
-		const t = setTimeout(async () => {
+		const timer = setTimeout(async () => {
 			if (!openRef.current) return
-
-			// Запускаем все поиски параллельно
-			setLoadingTopics(true)
-			setLoadingFiles(true)
-			setLoadingUsers(true)
-
+			setLoading(true)
 			try {
-				const [topicsResults, filesResults, usersResults] = await Promise.all([
-					searchTopics(q, 10),
-					searchFiles(q, 10),
-					searchUsers(q, 10),
-				])
-
-				if (!cancelled) {
-					setTopics(topicsResults)
-					setFiles(filesResults)
-					setUsers(usersResults)
-				}
+				const response = await searchAll(q, 'all', 10)
+				if (cancelled) return
+				setResults(response)
+				const visibleScopes = response.categories
+					.filter((category) => category.available)
+					.map((category) => category.scope)
+				setTab((currentTab) => (currentTab !== 'all' && !visibleScopes.includes(currentTab) ? 'all' : currentTab))
+			} catch {
+				if (!cancelled) setResults({ query: q, categories: [], total: 0 })
 			} finally {
-				if (!cancelled) {
-					setLoadingTopics(false)
-					setLoadingFiles(false)
-					setLoadingUsers(false)
-				}
+				if (!cancelled) setLoading(false)
 			}
 		}, 300)
 
 		return () => {
 			cancelled = true
-			clearTimeout(t)
+			clearTimeout(timer)
 		}
 	}, [query])
 
-	const canTopics = topics.length > 0
-	const canFiles = files.length > 0
-	const canUsers = users.length > 0
+	useEffect(() => {
+		blur.set(8)
+		const timer = setTimeout(() => blur.set(0), 50)
+		return () => clearTimeout(timer)
+	}, [tab, blur])
+
+	const availableCategories = useMemo(
+		() => (results?.categories ?? []).filter((category) => category.available),
+		[results]
+	)
+	const visibleTabs = useMemo<TabScope[]>(
+		() => ['all', ...availableCategories.map((category) => category.scope)],
+		[availableCategories]
+	)
+	const countsByScope = useMemo(() => {
+		const counts = new Map<TabScope, number>()
+		counts.set(
+			'all',
+			availableCategories.reduce((sum, category) => sum + category.items.length, 0)
+		)
+		for (const category of availableCategories) counts.set(category.scope, category.items.length)
+		return counts
+	}, [availableCategories])
+	const selectedCategories = useMemo(() => {
+		if (tab === 'all') return availableCategories
+		return availableCategories.filter((category) => category.scope === tab)
+	}, [availableCategories, tab])
+	const hasResults = selectedCategories.some((category) => category.items.length > 0)
 
 	const onSelect = (href: string | null) => {
 		if (!href) return
@@ -112,39 +189,22 @@ export default function SearchDialog() {
 		router.push(href)
 	}
 
-	// variants для fade эффекта
 	const fadeVariants = {
 		enter: { opacity: 0 },
 		center: { opacity: 1 },
 		exit: { opacity: 0 },
 	} as const
 
-	// Анимируем blur при смене таба
-	useEffect(() => {
-		blur.set(8)
-		const timer = setTimeout(() => {
-			blur.set(0)
-		}, 50)
-		return () => clearTimeout(timer)
-	}, [tab, blur])
-
-	const loading = useMemo(() => {
-		if (tab === 'topics') return loadingTopics
-		if (tab === 'files') return loadingFiles
-		return loadingUsers
-	}, [tab, loadingTopics, loadingFiles, loadingUsers])
-
-	const hasResults = useMemo(() => {
-		if (tab === 'topics') return canTopics
-		if (tab === 'files') return canFiles
-		return canUsers
-	}, [tab, canTopics, canFiles, canUsers])
-
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
-			<DialogContent forceMount className="overflow-hidden p-0">
-				<Command shouldFilter={false} className="rounded-lg border">
-					{/* a11y */}
+			<DialogContent
+				forceMount
+				className="tab-sm:p-0 [&>button]:bg-background/90 [&>button]:ring-border [&>button]:hover:bg-background w-[min(920px,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden rounded-2xl border-none bg-transparent p-0 shadow-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:z-20 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:opacity-100 [&>button]:shadow-sm [&>button]:ring-1"
+			>
+				<Command
+					shouldFilter={false}
+					className="bg-background/95 h-[min(720px,calc(100dvh-2rem))] rounded-2xl border shadow-[0_24px_90px_rgba(34,45,24,0.22)] backdrop-blur-xl"
+				>
 					<DialogTitle>
 						<VisuallyHidden>Поиск</VisuallyHidden>
 					</DialogTitle>
@@ -152,80 +212,80 @@ export default function SearchDialog() {
 						<VisuallyHidden>Начните печатать. ↑/↓ — навигация, Enter — открыть, Esc — закрыть.</VisuallyHidden>
 					</DialogDescription>
 
-					<CommandInput placeholder="Поиск…" value={query} onValueChange={setQuery} />
-
-					{/* Табы */}
-					<div className="px-2 pt-2">
-						<Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-							<TabsList className="grid w-full grid-cols-3">
-								<TabsTrigger value="topics" className={`cursor-pointer ${canTopics ? 'opacity-100' : 'opacity-60'}`}>
-									Темы
-									{loadingTopics ? (
-										<span className="ml-2 inline-flex">
-											<span className="animate-pulse">…</span>
-										</span>
-									) : canTopics ? (
-										<span className="bg-muted ml-2 rounded px-1 text-[10px]">{topics.length}</span>
-									) : null}
-								</TabsTrigger>
-
-								<TabsTrigger value="files" className={`cursor-pointer ${canFiles ? 'opacity-100' : 'opacity-60'}`}>
-									Файлы
-									{loadingFiles ? (
-										<span className="ml-2 inline-flex">
-											<span className="animate-pulse">…</span>
-										</span>
-									) : canFiles ? (
-										<span className="bg-muted ml-2 rounded px-1 text-[10px]">{files.length}</span>
-									) : null}
-								</TabsTrigger>
-
-								<TabsTrigger value="users" className={`cursor-pointer ${canUsers ? 'opacity-100' : 'opacity-60'}`}>
-									Пользователи
-									{loadingUsers ? (
-										<span className="ml-2 inline-flex">
-											<span className="animate-pulse">…</span>
-										</span>
-									) : canUsers ? (
-										<span className="bg-muted ml-2 rounded px-1 text-[10px]">{users.length}</span>
-									) : null}
-								</TabsTrigger>
-							</TabsList>
-						</Tabs>
+					<div className="border-border/70 border-b px-4 pb-3 pt-4 sm:px-5">
+						<div className="mb-3 flex items-center justify-between gap-4 pr-8">
+							<div>
+								<div className="text-sm font-semibold">Поиск</div>
+								<div className="text-muted-foreground text-xs">Тесты, вопросы, пользователи и попытки</div>
+							</div>
+							{loading && <div className="text-muted-foreground animate-pulse text-xs">Ищем…</div>}
+						</div>
+						<div className="[&_[cmdk-input-wrapper]]:rounded-xl [&_[cmdk-input-wrapper]]:border [&_[cmdk-input-wrapper]]:bg-white/70 [&_[cmdk-input-wrapper]]:shadow-inner [&_[cmdk-input]]:h-11">
+							<CommandInput placeholder="Введите запрос" value={query} onValueChange={setQuery} />
+						</div>
 					</div>
 
-					{/* Вьюпорт результатов */}
-					<CommandList className="min-h-75">
-						{!loading && !hasResults && query.trim().length >= 2 && (
-							<CommandEmpty>
-								Ничего не найдено в разделе &quot;
-								{tab === 'topics' ? 'Темы' : tab === 'files' ? 'Файлы' : 'Пользователи'}&quot;
-							</CommandEmpty>
-						)}
+					<div className="grid min-h-0 flex-1 grid-cols-1 sm:grid-cols-[210px_minmax(0,1fr)]">
+						<aside className="border-border/70 overflow-x-auto border-b p-2 sm:overflow-visible sm:border-b-0 sm:border-r sm:p-3">
+							<div className="flex gap-1 sm:flex-col">
+								{visibleTabs.map((scope) => {
+									const Icon = SCOPE_ICONS[scope]
+									const count = countsByScope.get(scope) || 0
+									const active = tab === scope
+									return (
+										<button
+											key={scope}
+											type="button"
+											onClick={() => setTab(scope)}
+											className={`flex min-w-32 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-all active:scale-[0.99] sm:min-w-0 ${
+												active
+													? 'bg-primary/10 text-foreground shadow-sm'
+													: 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+											}`}
+										>
+											<Icon className="size-4 shrink-0" />
+											<span className="min-w-0 flex-1 truncate">{TAB_LABELS[scope]}</span>
+											{loading && scope === 'all' ? (
+												<span className="animate-pulse text-xs">…</span>
+											) : count > 0 ? (
+												<span className="bg-background/80 rounded-md px-1.5 py-0.5 text-[11px] tabular-nums">
+													{count}
+												</span>
+											) : null}
+										</button>
+									)
+								})}
+							</div>
+						</aside>
 
-						{query.trim().length < 2 && <CommandEmpty>Введите минимум 2 символа для поиска</CommandEmpty>}
+						<div className="min-h-0 overflow-hidden">
+							<CommandList className="h-full max-h-none min-h-0">
+								{!loading && !hasResults && query.trim().length >= 2 && (
+									<CommandEmpty>Ничего не найдено в разделе &quot;{TAB_LABELS[tab]}&quot;</CommandEmpty>
+								)}
+								{query.trim().length < 2 && <CommandEmpty>Введите минимум 2 символа для поиска</CommandEmpty>}
 
-						<div className="relative h-full">
-							<AnimatePresence initial={false} mode="wait">
-								<motion.div
-									key={tab}
-									variants={fadeVariants}
-									initial="enter"
-									animate="center"
-									exit="exit"
-									transition={{ duration: 0.2, ease: 'easeInOut' }}
-									style={{
-										filter: blurFilter,
-									}}
-									className="absolute inset-0"
-								>
-									{tab === 'topics' && <SearchResultsTopics topics={topics} onSelect={onSelect} />}
-									{tab === 'files' && <SearchResultsFiles files={files} onSelect={onSelect} />}
-									{tab === 'users' && <SearchResultsUsers users={users} onSelect={onSelect} />}
-								</motion.div>
-							</AnimatePresence>
+								<div className="min-h-full px-2 py-3 sm:px-3">
+									<AnimatePresence initial={false} mode="wait">
+										<motion.div
+											key={tab}
+											variants={fadeVariants}
+											initial="enter"
+											animate="center"
+											exit="exit"
+											transition={{ duration: 0.18, ease: 'easeInOut' }}
+											style={{ filter: blurFilter }}
+											className="space-y-2"
+										>
+											{selectedCategories.map((category) => (
+												<CategoryResults key={category.scope} category={category} onSelect={onSelect} />
+											))}
+										</motion.div>
+									</AnimatePresence>
+								</div>
+							</CommandList>
 						</div>
-					</CommandList>
+					</div>
 				</Command>
 			</DialogContent>
 		</Dialog>

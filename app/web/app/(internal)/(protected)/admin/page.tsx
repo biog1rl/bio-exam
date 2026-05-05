@@ -56,7 +56,9 @@ export default function AdminPage() {
 			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
 				<div className="gap-unit tab:flex-row tab:items-end tab:justify-between flex flex-col">
 					<div className="max-w-3xl">
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">admin console</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+							admin console
+						</p>
 						<h1 className="text-foreground tab-sm:text-5xl mt-2 font-serif text-4xl leading-none">Панель управления</h1>
 						<p className="text-muted-foreground mt-4 max-w-2xl text-base leading-7">
 							Разделы администрирования собраны в одном рабочем контуре: контент экзамена, пользователи, группы и
@@ -65,7 +67,7 @@ export default function AdminPage() {
 					</div>
 
 					<div className="border-border/70 bg-secondary/55 rounded-3xl border p-4">
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">статус</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">статус</p>
 						<p className="mt-2 font-serif text-2xl leading-none">5 активных разделов</p>
 						<p className="text-muted-foreground mt-2 text-sm">Попытки доступны отдельным журналом.</p>
 					</div>
@@ -82,7 +84,7 @@ export default function AdminPage() {
 				<div className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
 					<div className="tab-sm:flex-row tab-sm:items-center tab-sm:justify-between flex flex-col gap-4">
 						<div>
-							<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">
+							<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
 								быстрые настройки
 							</p>
 							<h2 className="mt-2 font-serif text-3xl leading-none">Служебные экраны</h2>
@@ -113,7 +115,7 @@ export default function AdminPage() {
 					href="/admin/attempts"
 					className="rounded-4xl border-border/80 bg-secondary/35 p-unit-mob hover:border-primary/45 hover:bg-secondary/65 hover:text-primary focus-visible:border-primary tab-sm:p-unit group border transition-colors focus-visible:outline-none"
 				>
-					<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">результаты</p>
+					<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">результаты</p>
 					<h2 className="mt-2 font-serif text-3xl leading-none">Попытки</h2>
 					<p className="text-muted-foreground mt-4 text-sm leading-6">
 						Быстрый переход к журналу последних прохождений и детальным разборам ответов.
@@ -132,7 +134,7 @@ function AdminSectionCard({ href, kicker, title, description, meta, icon: Icon }
 		>
 			<div className="flex items-start justify-between gap-4">
 				<div>
-					<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{kicker}</p>
+					<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
 					<h2 className="text-foreground group-hover:text-primary mt-3 font-serif text-3xl leading-none transition-colors">
 						{title}
 					</h2>
@@ -147,7 +149,7 @@ function AdminSectionCard({ href, kicker, title, description, meta, icon: Icon }
 
 			<div className="mt-unit">
 				<p className="text-muted-foreground max-w-xl text-base leading-7">{description}</p>
-				<p className="text-muted-foreground mt-5 font-mono text-[11px] uppercase tracking-[0.18em]">{meta}</p>
+				<p className="text-muted-foreground mt-5 font-mono text-[0.6875rem] uppercase tracking-[0.18em]">{meta}</p>
 			</div>
 		</Link>
 	)

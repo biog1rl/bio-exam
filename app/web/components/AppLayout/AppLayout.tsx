@@ -31,27 +31,29 @@ export default async function AppLayout({
 								<AppSidebar />
 							</AuthGuard>
 
-							<SidebarInset className="h-screen bg-[#fbfaf7]">
+							<SidebarInset className="h-screen min-w-0 overflow-hidden bg-[#fbfaf7]">
 								<AuthGuard>
-									<header className="p-unit sticky top-0 z-10 flex items-center border-b border-[#e6ded2] bg-[#fbfaf7]/90 backdrop-blur-xl">
-										<div className="flex h-full items-center gap-4">
+									<header className="p-unit sticky top-0 z-10 flex min-w-0 items-center border-b border-[#e6ded2] bg-[#fbfaf7]/90 backdrop-blur-xl">
+										<div className="flex h-full shrink-0 items-center gap-4">
 											<BackButton className="size-9 cursor-pointer border border-[#e0d6c8] bg-[#fffdf8] text-[#3c4738] transition-colors hover:border-[#cdbb9f] hover:bg-[#f3ecdf]" />
-											<Separator className="bg-[#e6ded2]" orientation="vertical" />
+											<Separator className="mob:block hidden bg-[#e6ded2]" orientation="vertical" />
 										</div>
 
-										<div className="ml-unit flex min-w-0 items-center justify-between">
+										<div className="ml-unit-mob tab-sm:ml-unit flex min-w-0 flex-1 items-center justify-between">
 											<Breadcrumbs />
 										</div>
 
-										<div className="gap-unit ml-auto flex h-full items-center">
+										<div className="gap-unit-mob tab-sm:gap-unit ml-auto flex h-full shrink-0 items-center">
 											<SearchButton />
 										</div>
 									</header>
 								</AuthGuard>
 
-								<ScrollArea className="flex flex-1">
+								<ScrollArea className="flex min-w-0 flex-1">
 									<AuthGuard redirectTo="/login" skipPaths={['/login']} skipPathPrefixes={['/invite']}>
-										<div className="p-unit-mob tab:p-unit flex min-h-screen flex-col gap-4">{children}</div>
+										<div className="p-unit-mob tab:p-unit flex min-h-screen min-w-0 flex-col gap-4 overflow-x-hidden">
+											{children}
+										</div>
 									</AuthGuard>
 								</ScrollArea>
 							</SidebarInset>

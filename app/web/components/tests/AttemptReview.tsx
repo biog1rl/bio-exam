@@ -29,7 +29,7 @@ export default function AttemptReview({ attempt, questions }: Props) {
 		<div className="space-y-5">
 			<AttemptReviewHero attempt={attempt} questions={orderedQuestions} results={results} />
 
-			<div className="tab:grid-cols-[1fr_260px] grid gap-5">
+			<div className="tab:grid-cols-[1fr_16.25rem] grid gap-5">
 				<div className="space-y-5">
 					<AttemptQuestionsList
 						attempt={attempt}

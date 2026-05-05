@@ -65,7 +65,7 @@ function ProfileSectionCard({ kicker, title, children }: { kicker: string; title
 	return (
 		<Card className="rounded-4xl border-border/80 bg-card/90">
 			<CardHeader>
-				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{kicker}</p>
+				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
 				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
 			</CardHeader>
 			<CardContent>{children}</CardContent>
@@ -372,7 +372,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
 				<div className="flex items-start justify-between gap-4">
 					<div>
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">профиль ученика</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+							профиль ученика
+						</p>
 						<div className="mt-2 flex flex-wrap items-center gap-2">
 							<h1 className="text-foreground tab-sm:text-5xl font-serif text-4xl leading-none">{displayName}</h1>
 							{user.groupName && (

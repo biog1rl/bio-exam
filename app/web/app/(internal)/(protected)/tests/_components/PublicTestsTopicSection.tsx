@@ -11,7 +11,9 @@ export function PublicTestsTopicSection({ group }: { group: PublicTestsTopicGrou
 			<StackedAccordionTrigger>
 				<div className="tab-sm:flex-row tab-sm:items-end tab-sm:justify-between flex flex-col gap-4">
 					<div>
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{group.topicSlug}</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+							{group.topicSlug}
+						</p>
 						<h2 className="mt-2 font-serif text-3xl leading-tight">{group.topicTitle}</h2>
 					</div>
 					<div className="text-muted-foreground flex flex-wrap gap-2 text-sm">
@@ -31,7 +33,7 @@ export function PublicTestsTopicSection({ group }: { group: PublicTestsTopicGrou
 				</div>
 			</StackedAccordionTrigger>
 
-			<StackedAccordionContent className="tab-sm:grid-cols-4 grid gap-3 pt-2">
+			<StackedAccordionContent className="mob:grid-cols-2 tab:grid-cols-3 grid gap-3 pt-2 xl:grid-cols-4">
 				{group.tests.map((test) => (
 					<PublicTestCard key={test.id} test={test} />
 				))}

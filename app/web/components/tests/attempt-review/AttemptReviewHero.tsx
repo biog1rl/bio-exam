@@ -38,9 +38,9 @@ export function AttemptReviewHero({
 
 	return (
 		<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
-			<div className="tab:grid-cols-[1fr_290px] grid gap-8">
+			<div className="tab:grid-cols-[1fr_18.125rem] grid gap-8">
 				<div>
-					<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">попытка</p>
+					<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">попытка</p>
 					<h1 className="text-foreground tab-sm:text-5xl mt-2 max-w-3xl font-serif text-4xl leading-none">
 						Разбор результата
 					</h1>

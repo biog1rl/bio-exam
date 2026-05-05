@@ -99,7 +99,7 @@ export function GitCommitModal({ open, onOpenChange, documentPath, documentTitle
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-[500px]">
+			<DialogContent className="tab-sm:max-w-125">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
 						<GitCommitHorizontalIcon className="size-5" />

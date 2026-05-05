@@ -105,7 +105,7 @@ export default function QuestionEditor({
 			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
 				<div className="tab:flex-row tab:items-end tab:justify-between flex flex-col gap-5">
 					<div>
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">вопрос</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">вопрос</p>
 						<h1 className="text-foreground tab-sm:text-5xl mt-2 font-serif text-4xl leading-none">
 							{question.id ? 'Редактирование' : 'Новый вопрос'}
 						</h1>

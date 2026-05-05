@@ -16,6 +16,7 @@
 		"drizzle:migrate": "tsx src/scripts/apply-migration.ts",
 		"drizzle:studio": "drizzle-kit studio --config=drizzle.config.ts",
 		"seed": "tsx src/db/seed.ts",
+		"search:backfill": "tsx src/scripts/backfill-question-search.ts",
 		"bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts"
 	},
 	"dependencies": {
@@ -32,7 +33,6 @@
 		"file-type": "^22.0.0",
 		"helmet": "^8.1.0",
 		"jsonwebtoken": "^9.0.2",
-		"minisearch": "^7.2.0",
 		"multer": "^2.0.2",
 		"pg": "^8.16.3",
 		"pino": "^10.0.0",

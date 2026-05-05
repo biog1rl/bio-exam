@@ -88,10 +88,10 @@ function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
 			href={`/admin/attempts/${attempt.attemptId}`}
 			className="border-border/80 bg-card/90 hover:border-primary/45 hover:bg-secondary/45 focus-visible:border-primary block rounded-3xl border px-4 py-3 outline-none transition-colors"
 		>
-			<div className="tab-sm:grid-cols-[minmax(0,1fr)_170px_115px_24px] tab-sm:items-center grid gap-3">
+			<div className="tab-sm:grid-cols-[minmax(0,1fr)_10.625rem_7.1875rem_1.5rem] tab-sm:items-center grid gap-3">
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
-						<span className="text-muted-foreground font-mono text-[10px] uppercase tracking-[0.18em]">
+						<span className="text-muted-foreground font-mono text-[0.625rem] uppercase tracking-[0.18em]">
 							{attempt.topicTitle}
 						</span>
 						<span
@@ -104,7 +104,9 @@ function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
 							{attempt.passed ? 'Пройден' : 'Не пройден'}
 						</span>
 					</div>
-					<h2 className="mt-1 truncate font-serif text-2xl leading-tight">{attempt.testTitle}</h2>
+					<h2 className="mob:text-2xl tab-sm:truncate mt-1 line-clamp-2 font-serif text-xl leading-tight">
+						{attempt.testTitle}
+					</h2>
 					<p className="text-muted-foreground mt-1 truncate text-sm">{attempt.studentName}</p>
 				</div>
 
@@ -178,10 +180,12 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 	return (
 		<main className="space-y-4">
 			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
-				<div className="tab:grid-cols-[1fr_220px] grid gap-6">
+				<div className="tab:grid-cols-[1fr_13.75rem] grid gap-6">
 					<div>
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">администрирование</p>
-						<h1 className="text-foreground tab-sm:text-5xl mt-2 max-w-3xl font-serif text-4xl leading-none">
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+							администрирование
+						</p>
+						<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 max-w-3xl font-serif text-3xl leading-none">
 							Попытки студентов
 						</h1>
 						<p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-6">
@@ -205,7 +209,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 			</section>
 
 			<section className="rounded-4xl border-border/80 bg-card/90 tab-sm:p-4 border p-3">
-				<div className="tab:grid-cols-[minmax(220px,1fr)_210px_210px_210px_auto] grid gap-3">
+				<div className="tab:grid-cols-[minmax(13.75rem,1fr)_13.125rem_13.125rem_13.125rem_auto] grid gap-3">
 					<label className="relative block">
 						<Search className="text-muted-foreground pointer-events-none absolute left-3 top-3 size-4" />
 						<Input
@@ -261,7 +265,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 								selected={dateRange}
 								onSelect={handleDateRangeSelect}
 								locale={ru}
-								numberOfMonths={2}
+								numberOfMonths={1}
 							/>
 						</PopoverContent>
 					</Popover>

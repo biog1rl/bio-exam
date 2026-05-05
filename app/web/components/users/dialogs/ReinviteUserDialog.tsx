@@ -87,7 +87,7 @@ export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-[520px]">
+			<DialogContent className="tab-sm:max-w-130">
 				<DialogHeader>
 					<DialogTitle>Новая инвайт-ссылка {user ? `для ${user.login}` : ''}</DialogTitle>
 				</DialogHeader>

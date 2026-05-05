@@ -86,7 +86,7 @@ export function ComponentPickerMenuPlugin({
 				menuRenderFn={(anchorElementRef, { selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }) => {
 					return anchorElementRef.current && options.length
 						? createPortal(
-								<div className="fixed z-10 w-[250px] rounded-md shadow-md">
+								<div className="fixed z-10 w-[15.625rem] rounded-md shadow-md">
 									<Command
 										onKeyDown={(e) => {
 											if (e.key === 'ArrowUp') {

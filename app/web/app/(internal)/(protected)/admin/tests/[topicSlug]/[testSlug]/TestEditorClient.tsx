@@ -33,7 +33,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			<SetBreadcrumbsLabels labels={model.breadcrumbLabels} />
 			<TestEditorHeader {...model.headerProps} />
 
-			<div className="tab:grid-cols-[380px_1fr] grid gap-5">
+			<div className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
 				<TestSettingsPanel {...model.settingsPanelProps} />
 				<QuestionsPanel {...model.questionsPanelProps} getQuestionDraftLabel={resolveQuestionDraftLabel} />
 			</div>

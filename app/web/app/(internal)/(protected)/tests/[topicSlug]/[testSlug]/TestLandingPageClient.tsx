@@ -36,7 +36,7 @@ function ChartTooltipCustom({ active, payload }: { active?: boolean; payload?: {
 	const d = payload[0].payload
 	const dateLabel = format(new Date(d.date), 'd MMMM yyyy', { locale: ru })
 	return (
-		<div className="bg-background min-w-[160px] space-y-1 rounded-lg border px-3 py-2 text-sm">
+		<div className="bg-background min-w-40 space-y-1 rounded-lg border px-3 py-2 text-sm">
 			<p className="font-medium">{dateLabel}</p>
 			<p className="text-muted-foreground">Попыток: {d.count}</p>
 			<p className="text-green-600 dark:text-green-400">Лучший: {formatPercent(d.maxScore)}</p>
@@ -140,17 +140,17 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 	// --- Render ---
 	if (testLoading) {
 		return (
-			<main className="space-y-6 p-6">
+			<main className="tab-sm:p-6 space-y-6 p-4">
 				<Skeleton className="h-8 w-64" />
-				<Skeleton className="h-[280px] w-full" />
-				<Skeleton className="h-[260px] w-full" />
+				<Skeleton className="h-70 w-full" />
+				<Skeleton className="h-65 w-full" />
 			</main>
 		)
 	}
 
 	if (!test) {
 		return (
-			<main className="p-6">
+			<main className="tab-sm:p-6 p-4">
 				<p className="text-muted-foreground">Тест не найден</p>
 			</main>
 		)
@@ -164,7 +164,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 	const points = chartData?.data ?? []
 
 	return (
-		<main className="space-y-6 p-6">
+		<main className="tab-sm:p-6 space-y-6 p-4">
 			<SetBreadcrumbsLabels labels={labels} />
 
 			{/* Header */}
@@ -173,7 +173,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 					<h1 className="text-2xl font-semibold">{test.title}</h1>
 					{test.description && <p className="text-muted-foreground mt-1 text-sm">{test.description}</p>}
 				</div>
-				<Button asChild size="lg">
+				<Button asChild size="lg" className="mob:w-auto w-full">
 					<Link href={`/tests/${topicSlug}/${testSlug}/start/`}>Начать тест</Link>
 				</Button>
 			</div>
@@ -181,7 +181,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 			{/* Attempts widget */}
 			<section className="space-y-2">
 				<h2 className="text-lg font-medium">История попыток</h2>
-				<ScrollArea className="h-[280px] rounded-md border">
+				<ScrollArea className="h-70 rounded-md border">
 					{attemptsLoading ? (
 						<div className="space-y-2 p-4">
 							{[...Array(3)].map((_, i) => (
@@ -261,13 +261,13 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 
 				<div className="transition-opacity duration-300" style={{ opacity: chartLoading ? 0.4 : 1 }}>
 					{chartLoading && points.length === 0 ? (
-						<Skeleton className="h-[200px] w-full" />
+						<Skeleton className="h-50 w-full" />
 					) : !chartLoading && points.length === 0 ? (
-						<div className="text-muted-foreground flex h-[200px] items-center justify-center rounded-md border text-sm">
+						<div className="text-muted-foreground h-50 flex items-center justify-center rounded-md border text-sm">
 							Нет данных за выбранный период
 						</div>
 					) : (
-						<ChartContainer config={chartConfig} className="h-[200px] w-full">
+						<ChartContainer config={chartConfig} className="h-50 w-full">
 							<AreaChart data={points}>
 								<CartesianGrid vertical={false} />
 								<XAxis

@@ -188,7 +188,7 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 			<section className="space-y-3">
 				<div className="tab-sm:flex-row tab-sm:items-end tab-sm:justify-between flex flex-col gap-3">
 					<div>
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">тесты темы</p>
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">тесты темы</p>
 						<h2 className="mt-2 font-serif text-3xl">Материалы</h2>
 					</div>
 					<div className="bg-secondary text-muted-foreground inline-flex w-fit rounded-full px-4 py-2 text-sm">

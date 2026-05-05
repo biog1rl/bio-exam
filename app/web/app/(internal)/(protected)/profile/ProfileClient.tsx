@@ -54,7 +54,7 @@ function ProfilePanel({
 	return (
 		<Card className={`rounded-4xl border-border/80 bg-card/90 ${className}`}>
 			<CardHeader>
-				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">{kicker}</p>
+				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
 				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
 				{description ? <CardDescription>{description}</CardDescription> : null}
 			</CardHeader>
@@ -66,7 +66,7 @@ function ProfilePanel({
 function FormField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
 	return (
 		<div className="space-y-2">
-			<Label htmlFor={id} className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.16em]">
+			<Label htmlFor={id} className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.16em]">
 				{label}
 			</Label>
 			{children}
@@ -228,14 +228,16 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	return (
 		<div className="space-y-6">
 			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
-				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">профиль</p>
-				<h1 className="text-foreground tab-sm:text-5xl mt-2 font-serif text-4xl leading-none">Личный кабинет</h1>
+				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">профиль</p>
+				<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 font-serif text-3xl leading-none">
+					Личный кабинет
+				</h1>
 				<p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-6">
 					Настройте публичные данные, аватар и параметры доступа к аккаунту.
 				</p>
 			</section>
 
-			<div className="grid gap-6 md:grid-cols-2">
+			<div className="tab:grid-cols-2 grid gap-6">
 				{isAdmin && (
 					<div className="space-y-6">
 						<ProfilePanel
@@ -267,10 +269,10 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 					</div>
 				)}
 
-				<div className={`space-y-6 ${!isAdmin ? 'max-w-xl md:col-span-2' : ''}`}>
+				<div className={`space-y-6 ${!isAdmin ? 'tab:col-span-2 max-w-xl' : ''}`}>
 					<ProfilePanel kicker="данные" title="Основная информация" description="Редактируйте свои данные">
 						<div className="space-y-4">
-							<div className="grid grid-cols-2 gap-4">
+							<div className="mob:grid-cols-2 grid gap-4">
 								<FormField id="firstName" label="Имя">
 									<Input
 										id="firstName"
@@ -297,8 +299,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 								/>
 							</FormField>
 							{myGroup && (
-								<div className="bg-secondary/70 flex items-center gap-2 rounded-3xl px-4 py-3">
-									<span className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.16em]">
+								<div className="bg-secondary/70 flex flex-wrap items-center gap-2 rounded-3xl px-4 py-3">
+									<span className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.16em]">
 										Группа
 									</span>
 									<Badge variant="secondary" className="rounded-full">

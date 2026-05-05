@@ -32,7 +32,7 @@ export default function GroupsClient() {
 
 	return (
 		<div className="space-y-4">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-3">
 				<h1 className="text-xl font-semibold">Группы</h1>
 				<Button
 					size="icon"
@@ -56,7 +56,7 @@ export default function GroupsClient() {
 
 			<div className="overflow-hidden rounded-md border">
 				<div className="overflow-auto">
-					<Table className="min-w-100">
+					<Table className="min-w-100 tab-sm:min-w-0">
 						<TableHeader>
 							<TableRow>
 								<TableHead>Название</TableHead>

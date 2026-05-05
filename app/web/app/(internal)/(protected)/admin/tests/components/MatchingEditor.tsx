@@ -174,12 +174,12 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 				<div className="bg-muted/50 space-y-2 rounded-lg p-4">
 					{pairs.left.map((leftItem, index) => (
 						<div key={leftItem.id} className="flex items-center gap-2">
-							<span className="text-muted-foreground min-w-[100px] truncate text-sm">
+							<span className="text-muted-foreground min-w-25 truncate text-sm">
 								{index + 1}. {leftItem.text || 'Элемент'}
 							</span>
 							<ArrowRight className="text-muted-foreground h-4 w-4" />
 							<Select value={correct[leftItem.id] || ''} onValueChange={(v) => handleMapping(leftItem.id, v || null)}>
-								<SelectTrigger className="w-[200px]">
+								<SelectTrigger className="mob:w-50 w-full">
 									<SelectValue placeholder="Выберите..." />
 								</SelectTrigger>
 								<SelectContent>

@@ -75,7 +75,7 @@ export function AttemptReviewSummary({
 	return (
 		<section id="summary-section" className="scroll-mt-6 space-y-3">
 			<div>
-				<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">итоги</p>
+				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">итоги</p>
 				<h2 className="mt-2 font-serif text-3xl">Структура результата</h2>
 			</div>
 

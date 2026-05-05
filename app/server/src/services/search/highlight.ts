@@ -1,5 +1,12 @@
 import { transliterate } from '../../lib/transliterate.js'
-import { asciiFold, tokenizeUnicode } from './tokenize.js'
+
+function asciiFold(input: string): string {
+	return input.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+function tokenizeUnicode(source: string): string[] {
+	return Array.from(source.matchAll(/[\p{L}\p{N}]+/gu), (match) => match[0].toLowerCase()).filter(Boolean)
+}
 
 /**
  * Проверяет, что все слова из запроса встречаются в тексте.

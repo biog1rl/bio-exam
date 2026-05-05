@@ -27,7 +27,7 @@ export function TestEditorHeader({
 		<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
 			<div className="tab:flex-row tab:items-end tab:justify-between flex flex-col gap-5">
 				<div>
-					<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">
+					<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
 						{isEditingExisting ? 'редактор теста' : 'создание теста'}
 					</p>
 					<h1 className="text-foreground tab-sm:text-5xl mt-2 max-w-3xl font-serif text-4xl leading-none">

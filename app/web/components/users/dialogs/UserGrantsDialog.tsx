@@ -92,7 +92,7 @@ export function UserGrantsDialog({ open, onOpenChange, userId }: Props) {
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-[720px]">
+			<DialogContent className="tab-sm:max-w-180">
 				<DialogHeader>
 					<DialogTitle>Права пользователя</DialogTitle>
 				</DialogHeader>

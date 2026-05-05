@@ -129,7 +129,7 @@ export function EmojiPickerPlugin() {
 			menuRenderFn={(anchorElementRef, { selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }) => {
 				return anchorElementRef.current && options.length
 					? createPortal(
-							<div className="fixed z-10 w-[200px] rounded-md shadow-md">
+							<div className="w-50 fixed z-10 rounded-md shadow-md">
 								<Command
 									onKeyDown={(e) => {
 										if (e.key === 'ArrowUp') {

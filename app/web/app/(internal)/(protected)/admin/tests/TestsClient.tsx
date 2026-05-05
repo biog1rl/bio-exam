@@ -63,7 +63,7 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: string |
 
 function LoadingState() {
 	return (
-		<div className="tab:grid-cols-[380px_1fr] grid gap-5">
+		<div className="tab:grid-cols-[23.75rem_1fr] grid gap-5">
 			<Skeleton className="h-105 rounded-4xl" />
 			<div className="space-y-3">
 				<Skeleton className="rounded-4xl h-32" />
@@ -204,29 +204,33 @@ export default function TestsClient() {
 			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
 				<div className="tab:flex-row tab:items-end tab:justify-between flex flex-col gap-6">
 					<div>
-						<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">банк заданий</p>
-						<h1 className="text-foreground tab-sm:text-5xl mt-2 max-w-3xl font-serif text-4xl leading-none">
+						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">банк заданий</p>
+						<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 max-w-3xl font-serif text-3xl leading-none">
 							Тесты и темы
 						</h1>
 					</div>
 					<div className="flex flex-wrap gap-2">
-						<Button variant="outline" asChild className="-sm bg-card rounded-full transition-all">
+						<Button variant="outline" asChild className="-sm bg-card mob:w-auto w-full rounded-full transition-all">
 							<Link href="/admin/tests/scoring">
 								<SlidersHorizontal className="size-4" />
 								Баллы
 							</Link>
 						</Button>
-						<Button variant="outline" asChild className="-sm bg-card rounded-full transition-all">
+						<Button variant="outline" asChild className="-sm bg-card mob:w-auto w-full rounded-full transition-all">
 							<Link href="/admin/tests/question-types">
 								<Shapes className="size-4" />
 								Типы вопросов
 							</Link>
 						</Button>
-						<Button variant="outline" onClick={handleCreateTopic} className="-sm bg-card rounded-full transition-all">
+						<Button
+							variant="outline"
+							onClick={handleCreateTopic}
+							className="-sm bg-card mob:w-auto w-full rounded-full transition-all"
+						>
 							<FolderPlus className="size-4" />
 							Новая тема
 						</Button>
-						<Button asChild className="-md rounded-full transition-all">
+						<Button asChild className="-md mob:w-auto w-full rounded-full transition-all">
 							<Link href="/admin/tests/new">
 								<Plus className="size-4" />
 								Новый тест
@@ -246,11 +250,11 @@ export default function TestsClient() {
 			{topicsLoading || testsLoading ? (
 				<LoadingState />
 			) : (
-				<section className="tab:grid-cols-[380px_1fr] grid gap-5">
-					<aside className="top-unit rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit sticky h-fit border shadow-sm">
+				<section className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
+					<aside className="top-unit rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit h-fit border shadow-sm xl:sticky">
 						<div className="flex items-start justify-between gap-3">
 							<div>
-								<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">темы</p>
+								<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">темы</p>
 								<h2 className="mt-2 font-serif text-2xl">Навигация</h2>
 							</div>
 							<Button variant="outline" size="icon" onClick={handleCreateTopic} className="bg-card rounded-full">
@@ -332,7 +336,7 @@ export default function TestsClient() {
 					<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
 						<div className="tab-sm:flex-row tab-sm:items-end tab-sm:justify-between flex flex-col gap-4 pb-3">
 							<div>
-								<p className="text-muted-foreground font-mono text-[11px] uppercase tracking-[0.22em]">
+								<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
 									{selectedTopicData ? selectedTopicData.slug : 'все темы'}
 								</p>
 								<h2 className="mt-2 font-serif text-3xl">{selectedTopicData?.title ?? 'Все тесты'}</h2>
@@ -343,7 +347,7 @@ export default function TestsClient() {
 						</div>
 
 						<ScrollArea>
-							<div className="mt-3 h-full max-h-[calc(100dvh-550px)] space-y-3">
+							<div className="mt-3 h-full max-h-[calc(100dvh-34rem)] space-y-3">
 								{filteredTests.length === 0 ? (
 									<div className="bg-secondary/70 p-unit text-muted-foreground rounded-3xl text-sm">
 										{selectedTopic ? 'В этой теме пока нет тестов.' : 'Создайте первый тест.'}

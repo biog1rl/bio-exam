@@ -341,6 +341,32 @@ export const questions = pgTable(
 	})
 )
 
+/** Поисковая проекция текста вопросов */
+export const questionSearchDocuments = pgTable(
+	'question_search_documents',
+	{
+		questionId: uuid('question_id')
+			.primaryKey()
+			.references(() => questions.id, { onDelete: 'cascade' }),
+		testId: uuid('test_id')
+			.notNull()
+			.references(() => tests.id, { onDelete: 'cascade' }),
+		topicId: uuid('topic_id')
+			.notNull()
+			.references(() => topics.id, { onDelete: 'cascade' }),
+		promptText: text('prompt_text').notNull().default(''),
+		optionsText: text('options_text').notNull().default(''),
+		matchingText: text('matching_text').notNull().default(''),
+		searchText: text('search_text').notNull().default(''),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+	},
+	(t) => ({
+		testIdIdx: index('question_search_documents_test_id_idx').on(t.testId),
+		topicIdIdx: index('question_search_documents_topic_id_idx').on(t.topicId),
+		updatedAtIdx: index('question_search_documents_updated_at_idx').on(t.updatedAt),
+	})
+)
+
 /** Ключи ответов (версионируемые) */
 export const answerKeys = pgTable(
 	'answer_keys',
@@ -566,6 +592,25 @@ export const questionsRelations = relations(questions, ({ one, many }) => ({
 		references: [tests.id],
 	}),
 	answerKeys: many(answerKeys),
+	searchDocument: one(questionSearchDocuments, {
+		fields: [questions.id],
+		references: [questionSearchDocuments.questionId],
+	}),
+}))
+
+export const questionSearchDocumentsRelations = relations(questionSearchDocuments, ({ one }) => ({
+	question: one(questions, {
+		fields: [questionSearchDocuments.questionId],
+		references: [questions.id],
+	}),
+	test: one(tests, {
+		fields: [questionSearchDocuments.testId],
+		references: [tests.id],
+	}),
+	topic: one(topics, {
+		fields: [questionSearchDocuments.topicId],
+		references: [topics.id],
+	}),
 }))
 
 export const answerKeysRelations = relations(answerKeys, ({ one }) => ({

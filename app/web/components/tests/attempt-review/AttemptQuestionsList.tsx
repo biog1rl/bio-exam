@@ -60,7 +60,7 @@ function AnswerBlock({
 		>
 			<p
 				className={cn(
-					'mb-3 font-mono text-[11px] uppercase tracking-[0.18em]',
+					'mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em]',
 					variant === 'correct' ? 'text-green-700' : 'text-muted-foreground'
 				)}
 			>
