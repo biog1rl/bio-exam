@@ -7,6 +7,7 @@ import {
 	QuestionTypeScoringRuleSchema,
 	QuestionTypeValidationSchema,
 	isMistakeMetricAllowedForTemplate,
+	type MistakeMetric,
 	type QuestionTypeDefinition,
 	type QuestionTypeScoringRule,
 } from './question-types.js'
@@ -165,6 +166,10 @@ function hasDuplicates(values: string[]): boolean {
 	return new Set(values).size !== values.length
 }
 
+function normalizeCompactAnswer(value: string): string {
+	return value.replace(/\s+/g, '').toLowerCase()
+}
+
 function validateOptionsCount(
 	optionsCount: number,
 	validationSchema: ValidationSchema | null
@@ -181,12 +186,13 @@ function validateOptionsCount(
 
 function validateByTemplate(params: {
 	template: QuestionUiTemplate
+	mistakeMetric: MistakeMetric
 	validationSchema: ValidationSchema | null
 	options: unknown
 	matchingPairs: unknown
 	correct: unknown
 }): string | null {
-	const { template, validationSchema, options, matchingPairs, correct } = params
+	const { template, mistakeMetric, validationSchema, options, matchingPairs, correct } = params
 
 	if (template === 'single_choice' || template === 'multi_choice') {
 		if (!Array.isArray(options) || options.length < 2) return 'Нужно минимум 2 варианта ответа'
@@ -251,6 +257,17 @@ function validateByTemplate(params: {
 	}
 
 	if (template === 'short_text') {
+		if (mistakeMetric === 'compact_text_in_set') {
+			const answers = stringIdsArray(correct)
+			if (!answers || answers.length < 2 || answers.some((answer) => answer.trim().length === 0)) {
+				return 'Для краткого ответа укажите минимум два непустых варианта'
+			}
+			if (hasDuplicates(answers.map(normalizeCompactAnswer))) {
+				return 'Варианты правильного ответа не должны повторяться'
+			}
+			return null
+		}
+
 		if (typeof correct !== 'string' || correct.trim().length === 0) {
 			return 'Для краткого ответа нужен непустой строковый correct'
 		}
@@ -279,6 +296,7 @@ export function validateQuestionWithType(
 
 	return validateByTemplate({
 		template: resolvedType.uiTemplate,
+		mistakeMetric: resolvedType.scoringRule.mistakeMetric,
 		validationSchema: resolvedType.validationSchema,
 		options: question.options,
 		matchingPairs: question.matchingPairs,

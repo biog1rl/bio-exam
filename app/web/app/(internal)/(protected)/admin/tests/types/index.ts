@@ -11,6 +11,7 @@ export type MistakeMetric =
 	| 'set_distance'
 	| 'pair_mismatch_count'
 	| 'compact_text_equal'
+	| 'compact_text_in_set'
 	| 'hamming_digits'
 
 export interface QuestionScoringRule {
@@ -86,6 +87,7 @@ export const MISTAKE_METRIC_LABELS: Record<MistakeMetric, string> = {
 	set_distance: 'Расстояние множеств (для multi-choice)',
 	pair_mismatch_count: 'Количество неверных пар (для matching)',
 	compact_text_equal: 'Сравнение строк без пробелов/регистра',
+	compact_text_in_set: 'Совпадение с одним из вариантов',
 	hamming_digits: 'Позиционные ошибки в последовательности',
 }
 
@@ -94,6 +96,7 @@ export const MISTAKE_METRIC_DESCRIPTIONS: Record<MistakeMetric, string> = {
 	set_distance: 'Ошибка считается по отсутствующим/лишним выбранным вариантам.',
 	pair_mismatch_count: 'Каждая неверная пара добавляет 1 ошибку.',
 	compact_text_equal: 'Сравнивается строка после нормализации пробелов и регистра.',
+	compact_text_in_set: 'Ответ совпадает хотя бы с одной допустимой строкой без учёта пробелов и регистра.',
 	hamming_digits: 'Считаются несовпадения по позициям и разница длины.',
 }
 
@@ -101,7 +104,7 @@ export const ALLOWED_MISTAKE_METRICS_BY_TEMPLATE: Record<QuestionUiTemplate, Mis
 	single_choice: ['boolean_correct'],
 	multi_choice: ['set_distance'],
 	matching: ['pair_mismatch_count'],
-	short_text: ['compact_text_equal'],
+	short_text: ['compact_text_equal', 'compact_text_in_set'],
 	sequence_digits: ['hamming_digits'],
 }
 

@@ -14,6 +14,7 @@ export const MISTAKE_METRICS = [
 	'set_distance',
 	'pair_mismatch_count',
 	'compact_text_equal',
+	'compact_text_in_set',
 	'hamming_digits',
 ] as const
 export type MistakeMetric = (typeof MISTAKE_METRICS)[number]
@@ -22,7 +23,7 @@ export const ALLOWED_MISTAKE_METRICS_BY_TEMPLATE: Record<QuestionUiTemplate, Mis
 	single_choice: ['boolean_correct'],
 	multi_choice: ['set_distance'],
 	matching: ['pair_mismatch_count'],
-	short_text: ['compact_text_equal'],
+	short_text: ['compact_text_equal', 'compact_text_in_set'],
 	sequence_digits: ['hamming_digits'],
 }
 
@@ -195,6 +196,13 @@ export const BUILTIN_QUESTION_TYPES: BuiltinQuestionTypeSeed[] = [
 		description: 'Короткая строка/число',
 		uiTemplate: 'short_text',
 		scoringRule: { formula: 'exact_match', mistakeMetric: 'compact_text_equal', correctPoints: 1 },
+	},
+	{
+		key: 'short_answer_variants',
+		title: 'Краткий ответ (несколько вариантов)',
+		description: 'Несколько равнозначных правильных форм краткого ответа',
+		uiTemplate: 'short_text',
+		scoringRule: { formula: 'exact_match', mistakeMetric: 'compact_text_in_set', correctPoints: 1 },
 	},
 	{
 		key: 'sequence',

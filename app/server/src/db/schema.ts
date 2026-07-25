@@ -435,6 +435,7 @@ export const testSessions = pgTable(
 		attemptId: uuid('attempt_id').references(() => testAttempts.id, { onDelete: 'set null' }),
 		draftAnswers: jsonb('draft_answers'), // questionId -> user answer (промежуточное сохранение)
 		draftLastQuestionId: text('draft_last_question_id'), // последний открытый вопрос
+		draftTelemetry: jsonb('draft_telemetry').$type<TelemetryMap>(),
 		draftUpdatedAt: timestamp('draft_updated_at'), // когда последний раз сохранялся черновик
 	},
 	(t) => ({

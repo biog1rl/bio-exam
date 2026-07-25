@@ -28,6 +28,10 @@ function hasDuplicateIds(values: string[]): boolean {
 	return new Set(values).size !== values.length
 }
 
+function normalizeCompactAnswer(value: string): string {
+	return value.replace(/\s+/g, '').toLowerCase()
+}
+
 export const QuestionSchema = z
 	.object({
 		id: z.string().uuid().optional(),
@@ -151,6 +155,29 @@ export const QuestionSchema = z
 					path: ['correct'],
 					message: 'Для short_answer правильный ответ должен быть строкой',
 				})
+			}
+		}
+
+		if (value.type === 'short_answer_variants') {
+			if (
+				!Array.isArray(value.correct) ||
+				value.correct.length < 2 ||
+				value.correct.some((answer) => answer.trim().length === 0)
+			) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					path: ['correct'],
+					message: 'Укажите минимум два непустых варианта правильного ответа',
+				})
+			} else {
+				const normalizedAnswers = value.correct.map(normalizeCompactAnswer)
+				if (hasDuplicateIds(normalizedAnswers)) {
+					ctx.addIssue({
+						code: z.ZodIssueCode.custom,
+						path: ['correct'],
+						message: 'Варианты правильного ответа не должны повторяться',
+					})
+				}
 			}
 		}
 

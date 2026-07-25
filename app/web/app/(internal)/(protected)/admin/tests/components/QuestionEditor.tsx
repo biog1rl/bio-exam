@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 
 import { Editor } from '@/components/editor/editor'
 import { Button } from '@/components/ui/button'
@@ -47,7 +47,11 @@ export default function QuestionEditor({
 }: Props) {
 	const [form, setForm] = useState<Question>({ ...question })
 	const availableQuestionTypes = questionTypes.filter((item) => item.isActive || item.key === form.type)
+	const activeQuestionType = questionTypes.find((item) => item.key === form.type)
 	const activeTemplate = resolveTemplate(form.type, questionTypes, form.questionUiTemplate ?? null)
+	const acceptsMultipleShortAnswers =
+		activeTemplate === 'short_text' && activeQuestionType?.scoringRule.mistakeMetric === 'compact_text_in_set'
+	const acceptedAnswers = Array.isArray(form.correct) ? form.correct.map(String) : ['', '']
 
 	useEffect(() => {
 		setForm({ ...question })
@@ -85,6 +89,16 @@ export default function QuestionEditor({
 				{ id: generateId(), text: '' },
 			]
 			newForm.correct = template === 'multi_choice' ? [] : ''
+		} else if (template === 'short_text' && selectedType.scoringRule.mistakeMetric === 'compact_text_in_set') {
+			// Switch to short answer with several accepted variants
+			newForm.matchingPairs = null
+			newForm.options = null
+			const currentAnswers = Array.isArray(form.correct)
+				? form.correct.map(String)
+				: typeof form.correct === 'string'
+					? [form.correct]
+					: []
+			newForm.correct = currentAnswers.length >= 2 ? currentAnswers : [currentAnswers[0] ?? '', '']
 		} else {
 			// Switch to short answer / sequence
 			newForm.matchingPairs = null
@@ -191,6 +205,57 @@ export default function QuestionEditor({
 						correct={form.correct}
 						onChange={(options, correct) => setForm({ ...form, options, correct })}
 					/>
+				) : acceptsMultipleShortAnswers ? (
+					<div className="flex flex-col gap-3">
+						<div>
+							<Label>Допустимые правильные ответы</Label>
+							<p className="text-muted-foreground mt-1 text-xs">
+								Укажите минимум два варианта. Регистр и пробелы при проверке не учитываются.
+							</p>
+						</div>
+						{acceptedAnswers.map((answer, index) => (
+							<div key={index} className="flex items-end gap-2">
+								<div className="flex min-w-0 flex-1 flex-col gap-2">
+									<Label htmlFor={`correct-answer-${index}`}>Вариант {index + 1}</Label>
+									<Input
+										id={`correct-answer-${index}`}
+										type="text"
+										value={answer}
+										onChange={(event) => {
+											const nextAnswers = [...acceptedAnswers]
+											nextAnswers[index] = event.target.value
+											setForm((prev) => ({ ...prev, correct: nextAnswers }))
+										}}
+										placeholder={index === 0 ? 'Например: эксперимент' : 'Например: моделирование'}
+									/>
+								</div>
+								<Button
+									type="button"
+									variant="outline"
+									size="icon"
+									disabled={acceptedAnswers.length <= 2}
+									aria-label={`Удалить вариант ${index + 1}`}
+									onClick={() =>
+										setForm((prev) => ({
+											...prev,
+											correct: acceptedAnswers.filter((_, answerIndex) => answerIndex !== index),
+										}))
+									}
+								>
+									<Trash2 className="size-4" />
+								</Button>
+							</div>
+						))}
+						<Button
+							type="button"
+							variant="outline"
+							className="self-start"
+							onClick={() => setForm((prev) => ({ ...prev, correct: [...acceptedAnswers, ''] }))}
+						>
+							<Plus className="size-4" />
+							Добавить вариант
+						</Button>
+					</div>
 				) : (
 					<div className="flex flex-col gap-2">
 						<Label>Правильный ответ</Label>

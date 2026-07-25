@@ -18,7 +18,52 @@ export const NAV_FILTERS: { value: NavFilter; label: string; dotClass: string }[
 	{ value: 'wrong', label: 'Неверно', dotClass: 'bg-red-500' },
 ]
 
+function optionText(question: PublicTestQuestion, optionId: string) {
+	return question.options?.find((option) => option.id === optionId)?.text ?? optionId
+}
+
+export function formatAnswerLines(question: PublicTestQuestion, value: unknown): string[] {
+	const template = question.questionUiTemplate
+
+	if (template === 'single_choice' && (typeof value === 'string' || typeof value === 'number')) {
+		return [optionText(question, String(value))]
+	}
+	if (template === 'multi_choice' && Array.isArray(value)) {
+		return value.map((item) => optionText(question, String(item)))
+	}
+	if (template === 'short_text' && Array.isArray(value)) {
+		const answers = value
+			.filter((item) => typeof item === 'string' || typeof item === 'number')
+			.map((item) => String(item))
+			.filter(Boolean)
+		return answers.length > 0 ? answers : ['Нет ответа']
+	}
+	if (
+		(template === 'short_text' || template === 'sequence_digits') &&
+		(typeof value === 'string' || typeof value === 'number')
+	) {
+		return [String(value) || 'Нет ответа']
+	}
+
+	if (
+		template === 'matching' &&
+		value &&
+		typeof value === 'object' &&
+		!Array.isArray(value) &&
+		question.matchingPairs
+	) {
+		const map = value as Record<string, string | number>
+		return question.matchingPairs.left.map((left) => {
+			const right = question.matchingPairs?.right.find((item) => item.id === String(map[left.id]))
+			return `${left.text} -> ${right?.text ?? 'нет ответа'}`
+		})
+	}
+
+	return ['Нет ответа']
+}
+
 export function formatDuration(ms: number): string {
+	if (ms > 0 && ms < 1000) return '<1с'
 	const seconds = Math.floor(ms / 1000)
 	if (seconds < 60) return `${seconds}с`
 	const minutes = Math.floor(seconds / 60)

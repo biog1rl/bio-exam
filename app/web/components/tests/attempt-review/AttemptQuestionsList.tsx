@@ -5,42 +5,13 @@ import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
 import {
+	formatAnswerLines,
 	formatDuration,
 	getQuestionStatus,
 	getStatusClass,
 	getStatusLabel,
 	type QuestionResult,
 } from './attempt-review-utils'
-
-function optionText(question: PublicTestQuestion, optionId: string) {
-	return question.options?.find((option) => option.id === optionId)?.text ?? optionId
-}
-
-function answerLines(question: PublicTestQuestion, value: unknown): string[] {
-	const template = question.questionUiTemplate
-
-	if (template === 'single_choice' && typeof value === 'string') return [optionText(question, value)]
-	if (template === 'multi_choice' && Array.isArray(value))
-		return value.map((item) => optionText(question, String(item)))
-	if ((template === 'short_text' || template === 'sequence_digits') && typeof value === 'string')
-		return [value || 'Нет ответа']
-
-	if (
-		template === 'matching' &&
-		value &&
-		typeof value === 'object' &&
-		!Array.isArray(value) &&
-		question.matchingPairs
-	) {
-		const map = value as Record<string, string>
-		return question.matchingPairs.left.map((left) => {
-			const right = question.matchingPairs?.right.find((item) => item.id === map[left.id])
-			return `${left.text} -> ${right?.text ?? 'нет ответа'}`
-		})
-	}
-
-	return ['Нет ответа']
-}
 
 function AnswerBlock({
 	label,
@@ -130,11 +101,11 @@ export function AttemptQuestionsList({
 						<MdxRenderer source={question.promptText} className="prose mt-6 max-w-none text-sm" />
 
 						<div className="tab-sm:grid-cols-2 mt-6 grid gap-3">
-							<AnswerBlock label="ответ студента" lines={answerLines(question, studentAnswer)} />
+							<AnswerBlock label="ответ студента" lines={formatAnswerLines(question, studentAnswer)} />
 							{(status === 'wrong' || status === 'partial') && result?.correctAnswer !== undefined ? (
 								<AnswerBlock
 									label="правильный ответ"
-									lines={answerLines(question, result.correctAnswer)}
+									lines={formatAnswerLines(question, result.correctAnswer)}
 									variant="correct"
 								/>
 							) : null}

@@ -130,6 +130,18 @@ function countShortAnswerMistakes(userAnswer: unknown, correctAnswer: unknown): 
 	return userNormalized === correctNormalized ? 0 : 1
 }
 
+function countShortAnswerVariantsMistakes(userAnswer: unknown, correctAnswer: unknown): number {
+	const userNormalized = normalizeCompactString(userAnswer)
+	if (!userNormalized || !Array.isArray(correctAnswer)) return Number.MAX_SAFE_INTEGER
+
+	const correctVariants = correctAnswer
+		.map((answer) => normalizeCompactString(answer))
+		.filter((answer): answer is string => answer != null)
+	if (correctVariants.length === 0) return Number.MAX_SAFE_INTEGER
+
+	return correctVariants.includes(userNormalized) ? 0 : 1
+}
+
 function countSequenceMistakes(userAnswer: unknown, correctAnswer: unknown): number {
 	const userSequence = normalizeDigitsSequence(userAnswer)
 	const correctSequence = normalizeDigitsSequence(correctAnswer)
@@ -137,8 +149,25 @@ function countSequenceMistakes(userAnswer: unknown, correctAnswer: unknown): num
 
 	const minLength = Math.min(userSequence.length, correctSequence.length)
 	let mistakes = Math.abs(userSequence.length - correctSequence.length)
+	const mismatchedIndexes: number[] = []
 	for (let i = 0; i < minLength; i++) {
-		if (userSequence[i] !== correctSequence[i]) mistakes += 1
+		if (userSequence[i] !== correctSequence[i]) {
+			mistakes += 1
+			mismatchedIndexes.push(i)
+		}
+	}
+
+	if (
+		correctSequence.length > 3 &&
+		userSequence.length === correctSequence.length &&
+		mismatchedIndexes.length === 2
+	) {
+		const [firstIndex, secondIndex] = mismatchedIndexes
+		const isSingleAdjacentSwap =
+			secondIndex === firstIndex + 1 &&
+			userSequence[firstIndex] === correctSequence[secondIndex] &&
+			userSequence[secondIndex] === correctSequence[firstIndex]
+		if (isSingleAdjacentSwap) return 1
 	}
 
 	return mistakes
@@ -211,6 +240,8 @@ function scoreByMetric(metric: MistakeMetric, userAnswer: unknown, correctAnswer
 			return countMatchingMistakes(userAnswer, correctAnswer)
 		case 'compact_text_equal':
 			return countShortAnswerMistakes(userAnswer, correctAnswer)
+		case 'compact_text_in_set':
+			return countShortAnswerVariantsMistakes(userAnswer, correctAnswer)
 		case 'hamming_digits':
 			return countSequenceMistakes(userAnswer, correctAnswer)
 		case 'boolean_correct':

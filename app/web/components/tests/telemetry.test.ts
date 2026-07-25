@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit } from './telemetry'
+import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit, mergeTelemetryMaps } from './telemetry'
 
 const initial = {
 	q1: {
@@ -46,3 +46,19 @@ assert.deepEqual(incrementQuestionFocusLoss(initial, 'q1'), {
 		visitCount: 2,
 	},
 })
+
+assert.deepEqual(
+	mergeTelemetryMaps(
+		{
+			q1: { timeSpentMs: 5000, focusLossCount: 1, visitCount: 2 },
+		},
+		{
+			q1: { timeSpentMs: 7000, focusLossCount: 0, visitCount: 3 },
+			q2: { timeSpentMs: 1500, focusLossCount: 1, visitCount: 1 },
+		}
+	),
+	{
+		q1: { timeSpentMs: 7000, focusLossCount: 1, visitCount: 3 },
+		q2: { timeSpentMs: 1500, focusLossCount: 1, visitCount: 1 },
+	}
+)

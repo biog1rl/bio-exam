@@ -75,6 +75,39 @@ const shortAnswerWrong = scoreQuestionByType({
 })
 assert.equal(shortAnswerWrong.earnedPoints, 0)
 
+// --- short_answer_variants ---
+
+const shortAnswerVariantsTypesMap = {
+	short_answer_variants: {
+		key: 'short_answer_variants',
+		uiTemplate: 'short_text' as const,
+		scoringRule: {
+			formula: 'exact_match' as const,
+			mistakeMetric: 'compact_text_in_set' as const,
+			correctPoints: 1,
+		},
+	},
+}
+
+const shortAnswerAlternative = scoreQuestionByType({
+	questionType: 'short_answer_variants',
+	userAnswer: 'МОДЕЛИРОВАНИЕ',
+	correctAnswer: ['эксперимент', 'моделирование'],
+	fallbackMaxPoints: 0,
+	questionTypesMap: shortAnswerVariantsTypesMap,
+})
+assert.equal(shortAnswerAlternative.earnedPoints, 1)
+assert.equal(shortAnswerAlternative.isCorrect, true)
+
+const shortAnswerAlternativeWrong = scoreQuestionByType({
+	questionType: 'short_answer_variants',
+	userAnswer: 'наблюдение',
+	correctAnswer: ['эксперимент', 'моделирование'],
+	fallbackMaxPoints: 0,
+	questionTypesMap: shortAnswerVariantsTypesMap,
+})
+assert.equal(shortAnswerAlternativeWrong.earnedPoints, 0)
+
 // --- sequence ---
 
 const sequenceExact = scoreQuestionByType({
@@ -103,6 +136,88 @@ const sequenceManyMistakes = scoreQuestionByType({
 	questionTypesMap: builtinTypesMap,
 })
 assert.equal(sequenceManyMistakes.earnedPoints, 0)
+
+const sequenceAdjacentSwap = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '12354',
+	correctAnswer: '12345',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(sequenceAdjacentSwap.earnedPoints, 1)
+assert.equal(sequenceAdjacentSwap.isCorrect, false)
+
+const sequenceNonAdjacentSwap = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '14325',
+	correctAnswer: '12345',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(sequenceNonAdjacentSwap.earnedPoints, 0)
+
+const twoDigitSequenceOneCorrectFirst = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '11',
+	correctAnswer: '12',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(twoDigitSequenceOneCorrectFirst.earnedPoints, 1)
+
+const twoDigitSequenceOneCorrectSecond = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '22',
+	correctAnswer: '12',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(twoDigitSequenceOneCorrectSecond.earnedPoints, 1)
+
+const twoDigitSequenceSwapped = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '21',
+	correctAnswer: '12',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(twoDigitSequenceSwapped.earnedPoints, 0)
+
+const threeDigitSequenceExact = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '251',
+	correctAnswer: '251',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(threeDigitSequenceExact.earnedPoints, 2)
+
+const threeDigitSequenceWrongFirst = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '351',
+	correctAnswer: '251',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(threeDigitSequenceWrongFirst.earnedPoints, 1)
+
+const threeDigitSequenceWrongLast = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '259',
+	correctAnswer: '251',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(threeDigitSequenceWrongLast.earnedPoints, 1)
+
+const threeDigitSequenceSwapped = scoreQuestionByType({
+	questionType: 'sequence',
+	userAnswer: '521',
+	correctAnswer: '251',
+	fallbackMaxPoints: 0,
+	questionTypesMap: builtinTypesMap,
+})
+assert.equal(threeDigitSequenceSwapped.earnedPoints, 0)
 
 // --- matching ---
 

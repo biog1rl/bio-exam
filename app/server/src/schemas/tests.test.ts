@@ -41,6 +41,17 @@ const shortAnswerQuestion = {
 	correct: 'митоз',
 }
 
+const shortAnswerVariantsQuestion = {
+	type: 'short_answer_variants' as const,
+	order: 0,
+	points: 1,
+	options: null,
+	matchingPairs: null,
+	promptText: 'Назовите метод исследования',
+	explanationText: null,
+	correct: ['эксперимент', 'моделирование'],
+}
+
 const sequenceQuestion = {
 	type: 'sequence' as const,
 	order: 0,
@@ -118,6 +129,27 @@ const publishedWithShortAnswer = SaveTestSchema.safeParse({
 	questions: [shortAnswerQuestion],
 })
 assert.equal(publishedWithShortAnswer.success, true)
+
+const publishedWithShortAnswerVariants = SaveTestSchema.safeParse({
+	...basePayload,
+	isPublished: true,
+	questions: [shortAnswerVariantsQuestion],
+})
+assert.equal(publishedWithShortAnswerVariants.success, true)
+
+const shortAnswerVariantsWithScalar = SaveTestSchema.safeParse({
+	...basePayload,
+	isPublished: true,
+	questions: [{ ...shortAnswerVariantsQuestion, correct: 'эксперимент' }],
+})
+assert.equal(shortAnswerVariantsWithScalar.success, false)
+
+const shortAnswerVariantsWithDuplicate = SaveTestSchema.safeParse({
+	...basePayload,
+	isPublished: true,
+	questions: [{ ...shortAnswerVariantsQuestion, correct: ['Эксперимент', ' эксперимент '] }],
+})
+assert.equal(shortAnswerVariantsWithDuplicate.success, false)
 
 const publishedWithSequence = SaveTestSchema.safeParse({
 	...basePayload,

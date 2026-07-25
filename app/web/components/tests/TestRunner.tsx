@@ -8,7 +8,7 @@ import { useDebouncedCallback } from 'use-debounce'
 import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { isStoragePath, prefetchSignedUrls } from '@/lib/image-signed-url-cache'
-import { saveAnswer, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
+import { saveAnswer, saveSessionTelemetry, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
 import type {
 	PublicTestDetail,
@@ -38,7 +38,13 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit, type TelemetryMap } from './telemetry'
+import {
+	appendQuestionTime,
+	incrementQuestionFocusLoss,
+	incrementQuestionVisit,
+	mergeTelemetryMaps,
+	type TelemetryMap,
+} from './telemetry'
 
 type ResultByQuestion = Record<
 	string,
@@ -218,7 +224,6 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const [showTimeExpiredDialog, setShowTimeExpiredDialog] = useState(false)
 	const [expiredAttemptId, setExpiredAttemptId] = useState<string | null>(null)
 	const [awaitingStart, setAwaitingStart] = useState(false)
-	const [telemetry, setTelemetry] = useState<TelemetryMap>({})
 	const telemetryRef = useRef<TelemetryMap>({})
 	const enterTimeRef = useRef<number | null>(null)
 	const warningFiredRef = useRef(false)
@@ -228,10 +233,34 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const walKey = `test-answers-wal-${test.id}-${userId}`
 	const sessionKey = `test-session-${test.id}-${userId}`
 
+	const replaceTelemetry = useCallback(
+		(next: TelemetryMap) => {
+			telemetryRef.current = next
+
+			try {
+				const raw = localStorage.getItem(walKey)
+				const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+				const hasWrappedAnswers = parsed.answers && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers)
+				const wal = hasWrappedAnswers
+					? { ...parsed, telemetry: next }
+					: {
+							answers: parsed,
+							lastQuestionId: null,
+							telemetry: next,
+						}
+				localStorage.setItem(walKey, JSON.stringify(wal))
+			} catch {
+				/* localStorage is best-effort; the server draft remains the fallback */
+			}
+		},
+		[walKey]
+	)
+
 	const hydrateFromServerSession = useCallback(
 		(serverSession: SessionInfo) => {
 			setSession(serverSession)
 			localStorage.setItem(sessionKey, JSON.stringify(serverSession))
+			replaceTelemetry(mergeTelemetryMaps(telemetryRef.current, serverSession.draftTelemetry))
 
 			// Server draft has priority over stale WAL values.
 			if (serverSession.draftAnswers && Object.keys(serverSession.draftAnswers).length > 0) {
@@ -244,7 +273,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				}
 			}
 		},
-		[orderedQuestions, sessionKey]
+		[orderedQuestions, replaceTelemetry, sessionKey]
 	)
 
 	const secondsLeft = useCountdown(session?.startedAt ?? null, test.timeLimitMinutes ?? null)
@@ -335,14 +364,14 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					}
 				}
 				if (parsed.telemetry && typeof parsed.telemetry === 'object') {
-					setTelemetry(parsed.telemetry as TelemetryMap)
+					replaceTelemetry(mergeTelemetryMaps(telemetryRef.current, parsed.telemetry as TelemetryMap))
 				}
 			} catch {
 				/* ignore */
 			}
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [])
+	}, [replaceTelemetry])
 
 	const resultByQuestion = useMemo<ResultByQuestion>(() => {
 		const map: ResultByQuestion = {}
@@ -383,19 +412,19 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					const wal = {
 						answers: currentAnswers,
 						lastQuestionId: currentQuestionId,
-						telemetry,
+						telemetry: telemetryRef.current,
 					}
 					localStorage.setItem(walKey, JSON.stringify(wal))
 				} catch {
 					/* ignore */
 				}
 				try {
-					await saveAnswer(test.id, session.sessionId, questionId, value)
+					await saveAnswer(test.id, session.sessionId, questionId, value, telemetryRef.current)
 				} catch {
 					// localStorage already has value; silently ignore server errors
 				}
 			},
-			[session, walKey, test.id, currentQuestionId, telemetry]
+			[session, walKey, test.id, currentQuestionId]
 		),
 		600
 	)
@@ -436,19 +465,22 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		[orderedQuestions, currentQuestionId]
 	)
 
-	const applyTelemetry = useCallback((updater: (previous: TelemetryMap) => TelemetryMap) => {
-		const next = updater(telemetryRef.current)
-		telemetryRef.current = next
-		setTelemetry(next)
-		return next
-	}, [])
+	const applyTelemetry = useCallback(
+		(updater: (previous: TelemetryMap) => TelemetryMap) => {
+			const next = updater(telemetryRef.current)
+			replaceTelemetry(next)
+			return next
+		},
+		[replaceTelemetry]
+	)
 
 	const flushQuestionTime = useCallback(
 		(questionId: string | null) => {
-			if (!questionId || enterTimeRef.current === null) return
+			if (!questionId || enterTimeRef.current === null) return telemetryRef.current
 			const elapsed = Date.now() - enterTimeRef.current
-			applyTelemetry((prev) => appendQuestionTime(prev, questionId, elapsed))
+			const next = applyTelemetry((prev) => appendQuestionTime(prev, questionId, elapsed))
 			enterTimeRef.current = null
+			return next
 		},
 		[applyTelemetry]
 	)
@@ -458,13 +490,13 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 			const q = orderedQuestions[index]
 			if (!q) return
 			// Flush time spent on current question
-			flushQuestionTime(currentQuestionId)
+			const nextTelemetry = flushQuestionTime(currentQuestionId)
+			if (session) {
+				void saveSessionTelemetry(test.id, session.sessionId, nextTelemetry)
+			}
 			setCurrentQuestionId(q.id)
-			enterTimeRef.current = Date.now()
-			// Increment visitCount for the destination question
-			applyTelemetry((prev) => incrementQuestionVisit(prev, q.id))
 		},
-		[orderedQuestions, currentQuestionId, flushQuestionTime, applyTelemetry]
+		[orderedQuestions, currentQuestionId, flushQuestionTime, session, test.id]
 	)
 
 	const goPrev = useCallback(() => goToQuestion(currentIndex - 1), [goToQuestion, currentIndex])
@@ -474,9 +506,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		setSubmitting(true)
 		setSubmitError(null)
 		// Flush any pending question time before submitting
-		flushQuestionTime(currentQuestionId)
+		const finalTelemetry = flushQuestionTime(currentQuestionId)
 		try {
-			const result = await submitPublicTestAnswers(test.id, answers, telemetryRef.current)
+			const result = await submitPublicTestAnswers(test.id, answers, finalTelemetry)
 			if (isAutoSubmit) {
 				setShowTimeUp(true)
 				// Brief delay to show "Время вышло" screen before transitioning to results
@@ -547,9 +579,12 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		const handler = () => {
 			if (document.hidden) {
 				// Tab hidden: flush time + count focus loss
-				flushQuestionTime(currentQuestionId)
+				let nextTelemetry = flushQuestionTime(currentQuestionId)
 				if (currentQuestionId) {
-					applyTelemetry((prev) => incrementQuestionFocusLoss(prev, currentQuestionId))
+					nextTelemetry = applyTelemetry((prev) => incrementQuestionFocusLoss(prev, currentQuestionId))
+				}
+				if (session) {
+					void saveSessionTelemetry(test.id, session.sessionId, nextTelemetry)
 				}
 			} else {
 				// Tab visible again: restart timer
@@ -560,7 +595,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		}
 		document.addEventListener('visibilitychange', handler)
 		return () => document.removeEventListener('visibilitychange', handler)
-	}, [currentQuestionId, flushQuestionTime, submitResult, frozen, applyTelemetry])
+	}, [currentQuestionId, flushQuestionTime, submitResult, frozen, applyTelemetry, session, test.id])
 
 	// Prefetch signed URLs for all images in all questions on mount
 	useEffect(() => {
@@ -580,14 +615,15 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		}
 	}, [orderedQuestions])
 
-	// Telemetry: start timer and count first visit on initial question mount
+	// Telemetry: track the active question, including positions restored from a draft.
 	useEffect(() => {
+		if (!currentQuestionId || submitResult || frozen || document.hidden) return
 		enterTimeRef.current = Date.now()
-		if (currentQuestionId) {
-			applyTelemetry((prev) => incrementQuestionVisit(prev, currentQuestionId))
+		applyTelemetry((prev) => incrementQuestionVisit(prev, currentQuestionId))
+		return () => {
+			flushQuestionTime(currentQuestionId)
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []) // run once on mount
+	}, [applyTelemetry, currentQuestionId, flushQuestionTime, frozen, submitResult])
 
 	const handleSubmit = () => {
 		if (answeredCount < orderedQuestions.length) {

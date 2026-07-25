@@ -4,6 +4,7 @@ import type {
 	PublicTestDetail,
 	PublicTestListItem,
 	PublicTestQuestion,
+	QuestionTelemetry,
 	SessionInfo,
 	SubmitResult,
 	TestAnswerValue,
@@ -89,22 +90,26 @@ export async function saveAnswer(
 	testId: string,
 	sessionId: string,
 	questionId: string,
-	value: TestAnswerValue
+	value: TestAnswerValue,
+	telemetry?: TelemetryMap
 ): Promise<void> {
 	// Errors silently ignored (localStorage WAL fallback)
 	await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ questionId, value }),
+		body: JSON.stringify({ questionId, value, telemetry }),
 	})
 }
 
-type QuestionTelemetry = {
-	timeSpentMs: number
-	focusLossCount: number
-	visitCount: number
-}
 type TelemetryMap = Record<string, QuestionTelemetry>
+
+export async function saveSessionTelemetry(testId: string, sessionId: string, telemetry: TelemetryMap): Promise<void> {
+	await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ telemetry }),
+	})
+}
 
 export async function submitPublicTestAnswers(
 	testId: string,

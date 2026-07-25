@@ -89,6 +89,7 @@ export type SessionInfo = {
 	startedAt: string // ISO 8601 timestamp
 	draftAnswers?: Record<string, TestAnswerValue> | null
 	draftLastQuestionId?: string | null
+	draftTelemetry?: Record<string, QuestionTelemetry> | null
 }
 
 export type QuestionTelemetry = {

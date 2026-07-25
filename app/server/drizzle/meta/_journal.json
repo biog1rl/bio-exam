@@ -134,6 +134,20 @@
       "when": 1775820281000,
       "tag": "0018_enable_remaining_rls_and_move_pg_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784985000000,
+      "tag": "0019_session_draft_telemetry",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784985600000,
+      "tag": "0020_short_answer_variants",
+      "breakpoints": true
     }
   ]
 }
