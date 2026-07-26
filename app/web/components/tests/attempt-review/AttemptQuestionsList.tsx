@@ -1,4 +1,4 @@
-import { Clock3, Eye, RotateCcw } from 'lucide-react'
+import { Check, Clock3, Eye, RotateCcw, X } from 'lucide-react'
 
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils/cn'
 import {
 	formatAnswerLines,
 	formatDuration,
+	getChoiceOptionReviewRows,
 	getQuestionStatus,
 	getStatusClass,
 	getStatusLabel,
@@ -48,6 +49,54 @@ function AnswerBlock({
 	)
 }
 
+function ChoiceOptionsReview({
+	question,
+	studentAnswer,
+	correctAnswer,
+}: {
+	question: PublicTestQuestion
+	studentAnswer: unknown
+	correctAnswer: unknown
+}) {
+	const rows = getChoiceOptionReviewRows(question, studentAnswer, correctAnswer)
+
+	return (
+		<div className="mt-6">
+			<p className="text-muted-foreground mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em]">
+				варианты ответа
+			</p>
+			<div className="space-y-2" role="list">
+				{rows.map((row) => (
+					<div
+						key={row.id}
+						role="listitem"
+						className={cn(
+							'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm',
+							row.status === 'correct' && 'border-green-500/40 bg-green-50/80 text-green-900',
+							row.status === 'incorrect-selected' && 'border-red-500/40 bg-red-50/80 text-red-900',
+							row.status === 'neutral' && 'border-border/70 bg-secondary/45 text-muted-foreground'
+						)}
+					>
+						{row.status === 'correct' ? (
+							<Check className="size-4 shrink-0 text-green-700" aria-hidden="true" />
+						) : row.status === 'incorrect-selected' ? (
+							<X className="size-4 shrink-0 text-red-700" aria-hidden="true" />
+						) : (
+							<span className="border-muted-foreground/35 size-4 shrink-0 rounded-full border" aria-hidden="true" />
+						)}
+						<span className="min-w-0 flex-1">{row.text}</span>
+						{row.status === 'correct' ? (
+							<span className="shrink-0 text-xs font-medium text-green-700">Правильный</span>
+						) : row.status === 'incorrect-selected' ? (
+							<span className="shrink-0 text-xs font-medium text-red-700">Выбран неверно</span>
+						) : null}
+					</div>
+				))}
+			</div>
+		</div>
+	)
+}
+
 export function AttemptQuestionsList({
 	attempt,
 	questions,
@@ -75,6 +124,8 @@ export function AttemptQuestionsList({
 				const status = getQuestionStatus(question.id, results)
 				const telemetry = attempt.telemetry?.[question.id]
 				const studentAnswer = attempt.answers[question.id]
+				const isChoiceQuestion =
+					question.questionUiTemplate === 'single_choice' || question.questionUiTemplate === 'multi_choice'
 
 				return (
 					<section
@@ -98,18 +149,31 @@ export function AttemptQuestionsList({
 							) : null}
 						</div>
 
-						<MdxRenderer source={question.promptText} className="prose mt-6 max-w-none text-sm" />
-
-						<div className="tab-sm:grid-cols-2 mt-6 grid gap-3">
-							<AnswerBlock label="ответ студента" lines={formatAnswerLines(question, studentAnswer)} />
-							{(status === 'wrong' || status === 'partial') && result?.correctAnswer !== undefined ? (
-								<AnswerBlock
-									label="правильный ответ"
-									lines={formatAnswerLines(question, result.correctAnswer)}
-									variant="correct"
-								/>
-							) : null}
+						<div className="mt-6">
+							<MdxRenderer
+								source={question.promptText}
+								className="prose prose-p:my-0 prose-p:text-foreground max-w-none text-base font-medium"
+							/>
 						</div>
+
+						{isChoiceQuestion && result?.correctAnswer != null ? (
+							<ChoiceOptionsReview
+								question={question}
+								studentAnswer={studentAnswer}
+								correctAnswer={result.correctAnswer}
+							/>
+						) : (
+							<div className="tab-sm:grid-cols-2 mt-6 grid gap-3">
+								<AnswerBlock label="ответ студента" lines={formatAnswerLines(question, studentAnswer)} />
+								{(status === 'wrong' || status === 'partial') && result?.correctAnswer !== undefined ? (
+									<AnswerBlock
+										label="правильный ответ"
+										lines={formatAnswerLines(question, result.correctAnswer)}
+										variant="correct"
+									/>
+								) : null}
+							</div>
+						)}
 
 						{telemetry ? (
 							<div className="text-muted-foreground mt-5 flex flex-wrap gap-2 text-sm">

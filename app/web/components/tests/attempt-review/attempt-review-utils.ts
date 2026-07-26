@@ -18,6 +18,41 @@ export const NAV_FILTERS: { value: NavFilter; label: string; dotClass: string }[
 	{ value: 'wrong', label: 'Неверно', dotClass: 'bg-red-500' },
 ]
 
+export type ChoiceOptionReviewStatus = 'correct' | 'incorrect-selected' | 'neutral'
+
+export type ChoiceOptionReviewRow = {
+	id: string
+	text: string
+	status: ChoiceOptionReviewStatus
+}
+
+function answerIds(value: unknown): Set<string> {
+	if (Array.isArray(value)) {
+		return new Set(
+			value.filter((item) => typeof item === 'string' || typeof item === 'number').map((item) => String(item))
+		)
+	}
+	if (typeof value === 'string' || typeof value === 'number') {
+		return new Set([String(value)])
+	}
+	return new Set()
+}
+
+export function getChoiceOptionReviewRows(
+	question: PublicTestQuestion,
+	studentAnswer: unknown,
+	correctAnswer: unknown
+): ChoiceOptionReviewRow[] {
+	const selectedIds = answerIds(studentAnswer)
+	const correctIds = answerIds(correctAnswer)
+
+	return (question.options ?? []).map((option) => ({
+		id: option.id,
+		text: option.text,
+		status: correctIds.has(option.id) ? 'correct' : selectedIds.has(option.id) ? 'incorrect-selected' : 'neutral',
+	}))
+}
+
 function optionText(question: PublicTestQuestion, optionId: string) {
 	return question.options?.find((option) => option.id === optionId)?.text ?? optionId
 }
