@@ -7,6 +7,7 @@ import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
 import { serialize } from 'next-mdx-remote/serialize'
 
 import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
+import { normalizeMdxSource } from '@/lib/mdx/normalizeSource'
 import { buildMdxOptions } from '@/lib/mdx/options'
 
 type Props = {
@@ -117,7 +118,7 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 }
 
 export default function MdxRenderer({ source, className }: Props) {
-	const normalized = useMemo(() => (source ?? '').trim(), [source])
+	const normalized = useMemo(() => normalizeMdxSource((source ?? '').trim()), [source])
 	const [compiled, setCompiled] = useState<MDXRemoteSerializeResult | null>(null)
 	const [hasError, setHasError] = useState(false)
 	const components = useMemo(() => ({ img: MdxImage }), [])
