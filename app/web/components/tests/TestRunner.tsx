@@ -224,6 +224,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const [showTimeExpiredDialog, setShowTimeExpiredDialog] = useState(false)
 	const [expiredAttemptId, setExpiredAttemptId] = useState<string | null>(null)
 	const [awaitingStart, setAwaitingStart] = useState(false)
+	const [sessionStarting, setSessionStarting] = useState(false)
 	const telemetryRef = useRef<TelemetryMap>({})
 	const enterTimeRef = useRef<number | null>(null)
 	const warningFiredRef = useRef(false)
@@ -304,6 +305,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					localStorage.removeItem(sessionKey)
 				}
 				try {
+					setSessionStarting(true)
 					const serverSession = await startTestSession(test.id)
 					hydrateFromServerSession(serverSession)
 					if (wasRestored) {
@@ -311,6 +313,8 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					}
 				} catch {
 					/* graceful degradation */
+				} finally {
+					setSessionStarting(false)
 				}
 			}
 			void restoreSession(cached)
@@ -322,10 +326,13 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				// Untimed tests: start session silently to persist draft progress in DB.
 				async function startUntimedSession() {
 					try {
+						setSessionStarting(true)
 						const serverSession = await startTestSession(test.id)
 						hydrateFromServerSession(serverSession)
 					} catch {
 						/* graceful degradation */
+					} finally {
+						setSessionStarting(false)
 					}
 				}
 				void startUntimedSession()
@@ -527,7 +534,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 				},
 				...prev,
 			])
-			// Clean up frozen flag and WAL on successful submit
+			// The completed session must never be reused by a retake.
+			debouncedSaveAnswer.cancel()
+			setSession(null)
 			localStorage.removeItem(frozenKey)
 			localStorage.removeItem(walKey)
 			localStorage.removeItem(sessionKey)
@@ -577,6 +586,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	// Telemetry: track tab visibility changes (pause/resume timer, count focus loss)
 	useEffect(() => {
 		const handler = () => {
+			if (awaitingStart || sessionStarting) return
 			if (document.hidden) {
 				// Tab hidden: flush time + count focus loss
 				let nextTelemetry = flushQuestionTime(currentQuestionId)
@@ -595,7 +605,17 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 		}
 		document.addEventListener('visibilitychange', handler)
 		return () => document.removeEventListener('visibilitychange', handler)
-	}, [currentQuestionId, flushQuestionTime, submitResult, frozen, applyTelemetry, session, test.id])
+	}, [
+		applyTelemetry,
+		awaitingStart,
+		currentQuestionId,
+		flushQuestionTime,
+		frozen,
+		session,
+		sessionStarting,
+		submitResult,
+		test.id,
+	])
 
 	// Prefetch signed URLs for all images in all questions on mount
 	useEffect(() => {
@@ -617,13 +637,13 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 
 	// Telemetry: track the active question, including positions restored from a draft.
 	useEffect(() => {
-		if (!currentQuestionId || submitResult || frozen || document.hidden) return
+		if (!currentQuestionId || submitResult || frozen || awaitingStart || sessionStarting || document.hidden) return
 		enterTimeRef.current = Date.now()
 		applyTelemetry((prev) => incrementQuestionVisit(prev, currentQuestionId))
 		return () => {
 			flushQuestionTime(currentQuestionId)
 		}
-	}, [applyTelemetry, currentQuestionId, flushQuestionTime, frozen, submitResult])
+	}, [applyTelemetry, awaitingStart, currentQuestionId, flushQuestionTime, frozen, sessionStarting, submitResult])
 
 	const handleSubmit = () => {
 		if (answeredCount < orderedQuestions.length) {
@@ -635,20 +655,53 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 
 	const handleConfirmStart = async () => {
 		setAwaitingStart(false)
+		setSessionStarting(true)
 		try {
 			const serverSession = await startTestSession(test.id)
 			hydrateFromServerSession(serverSession)
 		} catch {
 			toast.error('Не удалось начать тест. Попробуйте ещё раз.')
+		} finally {
+			setSessionStarting(false)
 		}
 	}
 
 	const handleRetake = () => {
+		debouncedSaveAnswer.cancel()
+		enterTimeRef.current = null
+		telemetryRef.current = {}
+		warningFiredRef.current = false
+		autoSubmitFiredRef.current = false
+		setSession(null)
 		setSubmitResult(null)
 		setAnswers({})
 		setSubmitError(null)
-		goToQuestion(0)
+		setFrozen(false)
+		setShowTimeUp(false)
+		setShowTimeExpiredDialog(false)
+		setExpiredAttemptId(null)
+		setCurrentQuestionId(orderedQuestions[0]?.id ?? null)
+		localStorage.removeItem(frozenKey)
+		localStorage.removeItem(walKey)
+		localStorage.removeItem(sessionKey)
+
+		if (test.timeLimitMinutes) {
+			setAwaitingStart(true)
+			return
+		}
+
+		setSessionStarting(true)
+		void startTestSession(test.id)
+			.then(hydrateFromServerSession)
+			.catch(() => {
+				toast.error('Не удалось начать новую попытку. Попробуйте ещё раз.')
+			})
+			.finally(() => {
+				setSessionStarting(false)
+			})
 	}
+
+	const interactionDisabled = frozen || !!submitResult || awaitingStart || sessionStarting
 
 	return (
 		<div className="tab:flex-row flex min-w-0 flex-col gap-4">
@@ -718,7 +771,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 										className="w-fit space-y-2"
 										value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
 										onValueChange={(value) => onSelectRadio(question.id, value)}
-										disabled={frozen || !!submitResult}
+										disabled={interactionDisabled}
 									>
 										{question.options.map((option) => {
 											const inputId = `q-${question.id}-opt-${option.id}`
@@ -746,7 +799,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 														id={inputId}
 														checked={selected}
 														onCheckedChange={() => onToggleCheckbox(question.id, option.id)}
-														disabled={frozen || !!submitResult}
+														disabled={interactionDisabled}
 													/>
 													<Label htmlFor={inputId} className="cursor-pointer font-normal">
 														{option.text}
@@ -765,7 +818,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 											value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
 											onChange={(e) => onInputTextAnswer(question.id, e.target.value)}
 											placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
-											disabled={frozen || !!submitResult}
+											disabled={interactionDisabled}
 											className="bg-white"
 										/>
 										{template === 'sequence_digits' ? (
@@ -790,7 +843,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 													<Select
 														value={selectedRightId || undefined}
 														onValueChange={(value) => onSelectMatching(question.id, left.id, value)}
-														disabled={frozen || !!submitResult}
+														disabled={interactionDisabled}
 													>
 														<SelectTrigger className="tab-sm:w-55 w-full">
 															<SelectValue placeholder="Выберите вариант" />
@@ -844,15 +897,15 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 
 							{/* Navigation buttons */}
 							<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || !!submitResult || frozen}>
+								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || interactionDisabled}>
 									Назад
 								</Button>
 								{currentIndex < orderedQuestions.length - 1 ? (
-									<Button variant="outline" onClick={goNext} disabled={!!submitResult || frozen}>
+									<Button variant="outline" onClick={goNext} disabled={interactionDisabled}>
 										Далее
 									</Button>
 								) : (
-									<Button onClick={handleSubmit} disabled={submitting || !!submitResult || frozen}>
+									<Button onClick={handleSubmit} disabled={submitting || interactionDisabled}>
 										{submitting ? 'Отправка...' : 'Завершить'}
 									</Button>
 								)}
@@ -929,12 +982,7 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					})}
 				</div>
 
-				<Button
-					type="button"
-					onClick={handleSubmit}
-					disabled={submitting || frozen || !!submitResult}
-					className="w-full"
-				>
+				<Button type="button" onClick={handleSubmit} disabled={submitting || interactionDisabled} className="w-full">
 					{submitting ? 'Отправка...' : 'Завершить'}
 				</Button>
 			</section>
