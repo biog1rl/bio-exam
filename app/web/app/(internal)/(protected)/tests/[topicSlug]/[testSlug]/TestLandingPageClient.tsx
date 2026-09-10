@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { ChartDataPoint } from '@/lib/tests/api'
-import { fetchChartData, fetchChartDefaultRange, fetchMyTestAttempts, fetchPublicTestBySlug } from '@/lib/tests/api'
+import { fetchChartData, fetchChartDefaultRange, fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
 
@@ -52,8 +52,8 @@ interface Props {
 
 export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 	// --- Test resolution ---
-	const { data: testData, isLoading: testLoading } = useSWR(`${topicSlug}/${testSlug}`, () =>
-		fetchPublicTestBySlug(topicSlug, testSlug)
+	const { data: testData, isLoading: testLoading } = useSWR(`test-summary/${topicSlug}/${testSlug}`, () =>
+		fetchPublicTestSummary(topicSlug, testSlug)
 	)
 	const test = testData?.test ?? null
 	const testId = test?.id ?? null

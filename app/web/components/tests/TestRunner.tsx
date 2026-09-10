@@ -61,6 +61,7 @@ type Props = {
 	test: PublicTestDetail
 	questions: PublicTestQuestion[]
 	initialAttempts?: TestAttemptSummary[]
+	attemptsLoading?: boolean
 }
 
 function resolveTemplate(question: PublicTestQuestion): NonNullable<PublicTestQuestion['questionUiTemplate']> | null {
@@ -207,7 +208,7 @@ function formatTime(seconds: number, showHours: boolean): string {
 	return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export default function TestRunner({ test, questions, initialAttempts = [] }: Props) {
+export default function TestRunner({ test, questions, initialAttempts = [], attemptsLoading = false }: Props) {
 	const { me } = useAuth()
 	const userId = me?.id ?? 'anonymous'
 	const orderedQuestions = useMemo(() => [...questions].sort((a, b) => a.order - b.order), [questions])
@@ -216,6 +217,14 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 	const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null)
 	const [submitError, setSubmitError] = useState<string | null>(null)
 	const [attempts, setAttempts] = useState<TestAttemptSummary[]>(initialAttempts)
+	useEffect(() => {
+		if (initialAttempts.length === 0) return
+		setAttempts((prev) => {
+			const knownIds = new Set(prev.map((attempt) => attempt.id))
+			const added = initialAttempts.filter((attempt) => !knownIds.has(attempt.id))
+			return added.length > 0 ? [...prev, ...added] : prev
+		})
+	}, [initialAttempts])
 	const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(() => orderedQuestions[0]?.id ?? null)
 	const [showUnansweredDialog, setShowUnansweredDialog] = useState(false)
 	const [session, setSession] = useState<SessionInfo | null>(null)
@@ -914,7 +923,9 @@ export default function TestRunner({ test, questions, initialAttempts = [] }: Pr
 					)
 				})()}
 
-				{attempts.length > 0 ? (
+				{attemptsLoading ? (
+					<p role="status">Загрузка истории попыток...</p>
+				) : attempts.length > 0 ? (
 					<Accordion type="single" collapsible className="bg-secondary mt-8 max-w-lg rounded-lg px-4">
 						<AccordionItem className="border-none" value="score">
 							<AccordionTrigger className="cursor-pointer">Мои попытки</AccordionTrigger>

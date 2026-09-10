@@ -22,7 +22,11 @@ import { TopicTestCard } from '../components/topic-page/TopicTestCard'
 import { getTopicStats, getTopicTests } from '../components/topic-page/topic-page-utils'
 import type { Test, Topic, TopicsResponse, TestsResponse } from '../types'
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
+const fetcher = async (url: string) => {
+	const response = await apiFetch(url)
+	if (!response.ok) throw new Error('Не удалось загрузить данные')
+	return response.json()
+}
 
 function LoadingTopicPage() {
 	return (
@@ -50,15 +54,20 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		data: topicsData,
 		mutate: mutateTopics,
 		isLoading: topicsLoading,
+		error: topicsError,
 	} = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
-	const { data: testsData, mutate: mutateTests, isLoading: testsLoading } = useSWR<TestsResponse>('/api/tests', fetcher)
+	const {
+		data: testsData,
+		mutate: mutateTests,
+		isLoading: testsLoading,
+		error: testsError,
+	} = useSWR<TestsResponse>('/api/tests', fetcher)
 
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData?.topics])
 	const allTests = useMemo(() => testsData?.tests ?? [], [testsData?.tests])
 	const topic = useMemo(() => topics.find((item) => item.slug === topicSlug) ?? null, [topicSlug, topics])
 	const topicTests = useMemo(() => getTopicTests(allTests, topic, topicSlug), [allTests, topic, topicSlug])
 	const stats = useMemo(() => getTopicStats(topicTests), [topicTests])
-	const isLoading = topicsLoading || testsLoading
 
 	const handleExportTopic = async (withAnswers: boolean) => {
 		try {
@@ -146,9 +155,11 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		}
 	}
 
-	if (isLoading) {
+	if (topicsLoading) {
 		return <LoadingTopicPage />
 	}
+
+	if (topicsError) return <p role="alert">Не удалось загрузить тему</p>
 
 	if (!topic) {
 		return (
@@ -177,13 +188,21 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 
 			<TopicHero
 				topic={topic}
-				stats={stats}
+				stats={testsLoading || testsError ? null : stats}
 				onEditTopic={() => setTopicDialogOpen(true)}
 				onExportTopic={handleExportTopic}
 				onDeleteTopic={() => handleDeleteTopic(topic)}
 			/>
 
-			<TopicStatsPanel stats={stats} />
+			<section aria-label="Статистика темы">
+				{testsLoading ? (
+					<Skeleton className="h-32 w-full" />
+				) : testsError ? (
+					<p role="alert">Не удалось загрузить статистику</p>
+				) : (
+					<TopicStatsPanel stats={stats} />
+				)}
+			</section>
 
 			<section className="space-y-3">
 				<div className="tab-sm:flex-row tab-sm:items-end tab-sm:justify-between flex flex-col gap-3">
@@ -192,11 +211,15 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 						<h2 className="mt-2 font-serif text-3xl">Материалы</h2>
 					</div>
 					<div className="bg-secondary text-muted-foreground inline-flex w-fit rounded-full px-4 py-2 text-sm">
-						{topicTests.length} тестов
+						{testsLoading || testsError ? '…' : topicTests.length} тестов
 					</div>
 				</div>
 
-				{topicTests.length === 0 ? (
+				{testsLoading ? (
+					<Skeleton className="h-40 w-full" />
+				) : testsError ? (
+					<p role="alert">Не удалось загрузить тесты</p>
+				) : topicTests.length === 0 ? (
 					<TopicEmptyState
 						title="В теме пока нет тестов"
 						description="Создайте первый тест и привяжите его к этой теме в настройках редактора."

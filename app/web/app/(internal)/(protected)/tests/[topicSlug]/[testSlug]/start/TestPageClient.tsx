@@ -24,7 +24,7 @@ export default function TestPageClient({ topicSlug, testSlug }: Props) {
 		fetchMyTestAttempts(testId!)
 	)
 
-	if (loadingTest || (testId && loadingAttempts)) {
+	if (loadingTest) {
 		return <div className="p-6">Загрузка теста...</div>
 	}
 
@@ -40,7 +40,12 @@ export default function TestPageClient({ topicSlug, testSlug }: Props) {
 	return (
 		<>
 			<SetBreadcrumbsLabels labels={labels} />
-			<TestRunner test={testData.test} questions={testData.questions} initialAttempts={attemptsData?.rows ?? []} />
+			<TestRunner
+				test={testData.test}
+				questions={testData.questions}
+				initialAttempts={attemptsData?.rows ?? []}
+				attemptsLoading={loadingAttempts}
+			/>
 		</>
 	)
 }

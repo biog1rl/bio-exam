@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { transliterate } from '@/lib/utils/transliterate'
@@ -18,6 +19,8 @@ interface TestSettingsPanelProps {
 	form: TestFormData
 	setForm: TestFormSetter
 	topics: Topic[]
+	topicsLoading: boolean
+	topicsError: boolean
 	isCreateMode: boolean
 	isEditingExisting: boolean
 	topicSlug?: string
@@ -33,6 +36,8 @@ export function TestSettingsPanel({
 	form,
 	setForm,
 	topics,
+	topicsLoading,
+	topicsError,
 	isCreateMode,
 	isEditingExisting,
 	topicSlug,
@@ -49,7 +54,11 @@ export function TestSettingsPanel({
 				<ScrollArea>
 					<div className="space-y-2">
 						<Label>Тема</Label>
-						{topics.length === 0 ? (
+						{topicsLoading ? (
+							<Skeleton className="h-10 w-full" aria-label="Загрузка тем" />
+						) : topicsError ? (
+							<p role="alert">Не удалось загрузить темы</p>
+						) : topics.length === 0 ? (
 							<div className="space-y-2">
 								<p className="text-muted-foreground text-sm">Нет доступных тем. Создайте первую тему.</p>
 								<Button type="button" variant="outline" className="w-full rounded-full" onClick={onCreateTopic}>

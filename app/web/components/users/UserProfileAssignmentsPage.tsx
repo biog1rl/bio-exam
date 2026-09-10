@@ -26,7 +26,11 @@ import { EditUserDialog } from '@/components/users/dialogs/EditUserDialog'
 import { apiFetch } from '@/lib/api-fetch'
 import type { UserRow } from '@/types/users'
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
+const fetcher = async (url: string) => {
+	const response = await apiFetch(url)
+	if (!response.ok) throw new Error('Не удалось загрузить данные')
+	return response.json()
+}
 
 type TestAssignment = {
 	testId: string
@@ -61,14 +65,34 @@ type Props = {
 	login: string
 }
 
-function ProfileSectionCard({ kicker, title, children }: { kicker: string; title: string; children: ReactNode }) {
+function ProfileSectionCard({
+	kicker,
+	title,
+	children,
+	loading,
+	error,
+}: {
+	kicker: string
+	title: string
+	children: ReactNode
+	loading?: boolean
+	error?: boolean
+}) {
 	return (
 		<Card className="rounded-4xl border-border/80 bg-card/90">
 			<CardHeader>
 				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
 				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
 			</CardHeader>
-			<CardContent>{children}</CardContent>
+			<CardContent>
+				{loading ? (
+					<p role="status">Загрузка...</p>
+				) : error ? (
+					<p role="alert">Не удалось загрузить данные</p>
+				) : (
+					children
+				)}
+			</CardContent>
 		</Card>
 	)
 }
@@ -83,6 +107,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const {
 		data: usersData,
 		isLoading: usersLoading,
+		error: usersError,
 		mutate: mutateUsers,
 	} = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
 
@@ -97,14 +122,20 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const {
 		data: assignmentsData,
 		isLoading: assignmentsLoading,
+		error: assignmentsError,
 		mutate: mutateAssignments,
 	} = useSWR<{ assignments: TestAssignment[] }>(userId ? `/api/users/${userId}/test-assignments` : null, fetcher)
-	const { data: attemptsData, isLoading: attemptsLoading } = useSWR<{ attempts: UserAttempt[] }>(
-		userId ? `/api/users/${userId}/test-attempts` : null,
-		fetcher
-	)
+	const {
+		data: attemptsData,
+		isLoading: attemptsLoading,
+		error: attemptsError,
+	} = useSWR<{ attempts: UserAttempt[] }>(userId ? `/api/users/${userId}/test-attempts` : null, fetcher)
 
-	const { data: testsData, isLoading: testsLoading } = useSWR<{ tests: TestItem[] }>('/api/tests', fetcher)
+	const {
+		data: testsData,
+		isLoading: testsLoading,
+		error: testsError,
+	} = useSWR<{ tests: TestItem[] }>('/api/tests', fetcher)
 
 	const [editOpen, setEditOpen] = useState(false)
 	const [assigningTestId, setAssigningTestId] = useState<string | null>(null)
@@ -339,13 +370,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		void setSelectedDay(null)
 	}
 
-	if (usersLoading || (Boolean(userId) && (assignmentsLoading || attemptsLoading))) {
+	if (usersLoading) {
 		return (
 			<div className="rounded-4xl border-border/80 bg-card/90 border p-12">
 				<Loader2 className="h-8 w-8 animate-spin" />
 			</div>
 		)
 	}
+
+	if (usersError) return <p role="alert">Не удалось загрузить пользователя</p>
 
 	if (!user) {
 		return (
@@ -396,7 +429,12 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				</div>
 			</section>
 
-			<ProfileSectionCard kicker="динамика" title="Пройденные тесты">
+			<ProfileSectionCard
+				kicker="динамика"
+				title="Пройденные тесты"
+				loading={attemptsLoading || assignmentsLoading}
+				error={Boolean(attemptsError || assignmentsError)}
+			>
 				<div className="space-y-4">
 					{/* Filters */}
 					{attempts.length > 0 && (
@@ -722,7 +760,12 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			</ProfileSectionCard>
 
 			<div className="grid gap-6 lg:grid-cols-2">
-				<ProfileSectionCard kicker="назначения" title="Назначенные тесты">
+				<ProfileSectionCard
+					kicker="назначения"
+					title="Назначенные тесты"
+					loading={assignmentsLoading}
+					error={Boolean(assignmentsError)}
+				>
 					{assignments.length === 0 ? (
 						<EmptyProfileState>Нет назначенных тестов</EmptyProfileState>
 					) : (
@@ -758,13 +801,13 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					)}
 				</ProfileSectionCard>
 
-				<ProfileSectionCard kicker="банк тестов" title="Назначить тест">
-					{testsLoading ? (
-						<div className="bg-secondary/70 p-unit text-muted-foreground flex items-center gap-2 rounded-3xl text-sm">
-							<Loader2 className="h-4 w-4 animate-spin" />
-							Загрузка тестов...
-						</div>
-					) : availableTests.length === 0 ? (
+				<ProfileSectionCard
+					kicker="банк тестов"
+					title="Назначить тест"
+					loading={testsLoading || assignmentsLoading}
+					error={Boolean(testsError || assignmentsError)}
+				>
+					{availableTests.length === 0 ? (
 						<EmptyProfileState>Все тесты уже назначены</EmptyProfileState>
 					) : (
 						<div className="max-h-80 space-y-2 overflow-y-auto">

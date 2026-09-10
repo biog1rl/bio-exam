@@ -175,20 +175,18 @@ export async function getMeData(): Promise<MeData | null> {
 
 		const perms = buildPermissionSet(roles)
 
-		if (roles.length > 0) {
-			const roleGrantRows = await pool.query<RoleGrantRow>(
-				'select domain, action, allow from rbac_role_grants where role_key = any($1::text[])',
-				[roles]
-			)
-			for (const row of roleGrantRows.rows) {
-				applyGrant(perms, row)
-			}
+		const [roleGrantRows, userGrantRows] = await Promise.all([
+			roles.length > 0
+				? pool.query<RoleGrantRow>(
+						'select domain, action, allow from rbac_role_grants where role_key = any($1::text[])',
+						[roles]
+					)
+				: Promise.resolve({ rows: [] }),
+			pool.query<UserGrantRow>('select domain, action, allow from rbac_user_grants where user_id = $1', [userId]),
+		])
+		for (const row of roleGrantRows.rows) {
+			applyGrant(perms, row)
 		}
-
-		const userGrantRows = await pool.query<UserGrantRow>(
-			'select domain, action, allow from rbac_user_grants where user_id = $1',
-			[userId]
-		)
 		for (const row of userGrantRows.rows) {
 			applyGrant(perms, row)
 		}

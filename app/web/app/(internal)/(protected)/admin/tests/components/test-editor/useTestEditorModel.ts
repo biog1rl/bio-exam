@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
+import { apiFetch } from '@/lib/api-fetch'
 
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type {
@@ -38,7 +39,11 @@ import {
 	resolveQuestionDraftId,
 } from './test-editor-utils'
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
+const fetcher = async (url: string) => {
+	const response = await apiFetch(url)
+	if (!response.ok) throw new Error('Не удалось загрузить данные')
+	return response.json()
+}
 
 interface UseTestEditorModelParams {
 	topicSlug?: string
@@ -52,16 +57,32 @@ interface CreateTestPersistenceResult {
 	forcedDraft: boolean
 }
 
+type TestSummaryResponse = Pick<TestDetailResponse, 'test'> & { questionsCount: number }
+
 export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelParams) {
 	const router = useRouter()
 	const { confirm, alertDialog } = useUiAlertDialog()
 	const isEditingExisting = Boolean(topicSlug && testSlug)
 	const isCreateMode = !isEditingExisting
 
-	const { data: topicsData, mutate: mutateTopics } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
+	const {
+		data: topicsData,
+		mutate: mutateTopics,
+		isLoading: topicsLoading,
+		error: topicsError,
+	} = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
 	const {
 		data: testData,
 		isLoading: testLoading,
+		error: testError,
+	} = useSWR<TestSummaryResponse>(
+		isEditingExisting ? `/api/tests/by-slug/${topicSlug}/${testSlug}?view=summary` : null,
+		fetcher
+	)
+	const {
+		data: questionsData,
+		isLoading: questionsLoading,
+		error: questionsError,
 		mutate: mutateTest,
 	} = useSWR<TestDetailResponse>(isEditingExisting ? `/api/tests/by-slug/${topicSlug}/${testSlug}` : null, fetcher)
 	const testId = testData?.test?.id
@@ -95,8 +116,9 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 
 	useEffect(() => {
 		if (!isEditingExisting) return
-		if (testData?.test && testData?.questions) {
-			setForm({
+		if (testData?.test) {
+			setForm((prev) => ({
+				...prev,
 				topicId: testData.test.topicId,
 				title: testData.test.title,
 				slug: testData.test.slug,
@@ -108,16 +130,22 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				warningThresholdMinutes: testData.test.warningThresholdMinutes ?? null,
 				passingScore: testData.test.passingScore,
 				order: testData.test.order,
-				questions: testData.questions.map((q, i) => {
-					const normalized = normalizeQuestionForSave(q)
-					return {
-						...normalized,
-						order: q.order ?? i,
-					}
-				}),
-			})
+			}))
 		}
 	}, [isEditingExisting, testData])
+
+	useEffect(() => {
+		if (!isEditingExisting || !questionsData?.questions) return
+		setForm((prev) => ({
+			...prev,
+			questions: questionsData.questions.map((q, i) => ({
+				...normalizeQuestionForSave(q),
+				order: q.order ?? i,
+			})),
+		}))
+	}, [isEditingExisting, questionsData])
+
+	const questionCount = questionsData ? form.questions.length : (testData?.questionsCount ?? form.questions.length)
 
 	useEffect(() => {
 		if (!isCreateMode) return
@@ -345,7 +373,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			toast.error(baseValidationError)
 			return
 		}
-		if (isEditingExisting && form.isPublished && form.questions.length === 0) {
+		if (isEditingExisting && form.isPublished && questionCount === 0) {
 			toast.error('Для публикации добавьте хотя бы один вопрос')
 			return
 		}
@@ -429,7 +457,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 
 	const headerProps = {
 		title: form.title,
-		questionCount: form.questions.length,
+		questionCount,
 		isEditingExisting,
 		isPublished: form.isPublished,
 		timeLimitMinutes: form.timeLimitMinutes,
@@ -442,6 +470,8 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		form,
 		setForm,
 		topics,
+		topicsLoading,
+		topicsError: Boolean(topicsError),
 		isCreateMode,
 		isEditingExisting,
 		topicSlug,
@@ -490,6 +520,9 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		headerProps,
 		isEditingExisting,
 		isLoading: isEditingExisting && testLoading,
+		testError,
+		questionsLoading,
+		questionsError,
 		questionsPanelProps,
 		settingsPanelProps,
 		studentAccessPanelProps,

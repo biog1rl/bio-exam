@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -100,13 +100,6 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 		return map
 	}, [parts, root, tree, treeRoots])
 
-	const WAIT_MS = 1200
-	const [allowFallback, setAllowFallback] = useState(false)
-
-	useEffect(() => {
-		setAllowFallback(false)
-	}, [pathname])
-
 	const displayItems = useMemo(() => {
 		const allLabels = { ...initialLabels, ...contextLabels }
 
@@ -123,28 +116,10 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 			return {
 				...item,
 				pretty: resolvedLabel ?? humanize(raw),
-				shouldShowLoader: shouldWaitForAsyncLabel && !allowFallback,
+				shouldShowLoader: shouldWaitForAsyncLabel,
 			}
 		})
-	}, [
-		contextLabels,
-		initialLabels,
-		allowFallback,
-		asyncLabelOn,
-		filteredItems,
-		labelOverrides,
-		root,
-		treeHrefToLabel,
-		treeRoots,
-	])
-
-	const hasPendingAsyncLabels = displayItems.some((item) => item.shouldShowLoader)
-
-	useEffect(() => {
-		if (!hasPendingAsyncLabels) return
-		const t = setTimeout(() => setAllowFallback(true), WAIT_MS)
-		return () => clearTimeout(t)
-	}, [hasPendingAsyncLabels])
+	}, [contextLabels, initialLabels, asyncLabelOn, filteredItems, labelOverrides, root, treeHrefToLabel, treeRoots])
 
 	if (shouldHide) {
 		return null
@@ -168,7 +143,7 @@ export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<
 						<BreadcrumbSeparator />
 						<BreadcrumbItem>
 							{item.shouldShowLoader ? (
-								<BreadcrumbPage>
+								<BreadcrumbPage aria-label="Загрузка названия">
 									<LoaderComponent />
 								</BreadcrumbPage>
 							) : item.last ? (

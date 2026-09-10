@@ -3,6 +3,7 @@
 import { Loader2 } from 'lucide-react'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { Skeleton } from '@/components/ui/skeleton'
 
 import { TopicFormDialog } from '../../components/TopicFormDialog'
 import { QuestionsPanel } from '../../components/test-editor/QuestionsPanel'
@@ -28,6 +29,10 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 		)
 	}
 
+	if (model.testError) {
+		return <p role="alert">Не удалось загрузить настройки теста</p>
+	}
+
 	return (
 		<div className="space-y-5">
 			<SetBreadcrumbsLabels labels={model.breadcrumbLabels} />
@@ -35,7 +40,13 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 			<div className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
 				<TestSettingsPanel {...model.settingsPanelProps} />
-				<QuestionsPanel {...model.questionsPanelProps} getQuestionDraftLabel={resolveQuestionDraftLabel} />
+				{model.questionsLoading ? (
+					<Skeleton className="rounded-4xl h-96" aria-label="Загрузка вопросов" />
+				) : model.questionsError ? (
+					<p role="alert">Не удалось загрузить вопросы</p>
+				) : (
+					<QuestionsPanel {...model.questionsPanelProps} getQuestionDraftLabel={resolveQuestionDraftLabel} />
+				)}
 			</div>
 
 			{model.isEditingExisting && model.testId ? <StudentAccessPanel {...model.studentAccessPanelProps} /> : null}

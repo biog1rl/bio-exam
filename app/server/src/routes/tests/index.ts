@@ -985,6 +985,14 @@ router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), requirePerm('test
 			return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 		}
 
+		if (req.query.view === 'summary') {
+			const [totals] = await db.select({ count: count() }).from(questions).where(eq(questions.testId, test.id))
+			return res.json({
+				test: { ...test, topicSlug: topic.slug, topicTitle: topic.title },
+				questionsCount: totals.count,
+			})
+		}
+
 		// Загружаем вопросы
 		const questionRows = await db
 			.select()

@@ -43,6 +43,10 @@ export async function fetchPublicTestById(testId: string) {
 	return fetchJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(`/api/tests/public/tests/${testId}`)
 }
 
+export async function fetchPublicTestSummary(topicSlug: string, testSlug: string) {
+	return fetchJson<{ test: PublicTestDetail }>(`/api/tests/public/topics/${topicSlug}/tests/${testSlug}?view=summary`)
+}
+
 export async function fetchMyTestAttempts(testId: string, options?: { offset?: number; limit?: number }) {
 	const params = new URLSearchParams()
 	if (options?.offset !== undefined) params.set('offset', String(options.offset))

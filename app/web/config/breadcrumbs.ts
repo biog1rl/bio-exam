@@ -14,6 +14,7 @@ export const breadcrumbConfig = {
 		/^\/admin\/tests\/[^/]+$/,
 		/^\/admin\/tests\/[^/]+\/[^/]+$/,
 		/^\/admin\/tests\/question-types\/[^/]+$/,
+		/^\/admin\/tests\/[^/]+\/[^/]+\/questions\/(?:drafts\/)?[^/]+$/,
 	] as RoutePattern[],
 
 	/** корневые сегменты, где крошки берут имена из дерева (segmentSlug → name) */
@@ -32,6 +33,8 @@ export const breadcrumbConfig = {
 		profile: 'Профиль',
 		settings: 'Настройки',
 		groups: 'Группы',
+		new: 'Создание',
+		start: 'Прохождение',
 	} as Record<string, string>,
 
 	/** скрыть технические сегменты в конкретных ветках */

@@ -320,6 +320,10 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 				}
 			}
 
+		if (req.query.view === 'summary') {
+			return res.json({ test })
+		}
+
 			const questionRows = await withTransientDbRetry('public test questions list', () =>
 				db
 					.select({

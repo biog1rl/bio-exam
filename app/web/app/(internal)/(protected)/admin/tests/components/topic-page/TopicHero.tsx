@@ -16,7 +16,7 @@ import type { TopicStats } from './topic-page-utils'
 
 interface TopicHeroProps {
 	topic: Topic
-	stats: TopicStats
+	stats: TopicStats | null
 	onEditTopic: () => void
 	onExportTopic: (withAnswers: boolean) => void
 	onDeleteTopic: () => void
@@ -82,17 +82,17 @@ export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTo
 
 				<aside className="border-border/70 bg-secondary/55 p-unit-mob tab-sm:p-unit tab:border-t-0 tab:border-l border-t">
 					<FlaskConical className="text-primary size-7" />
-					<p className="mt-6 font-serif text-4xl leading-none">{stats.totalQuestions}</p>
+					<p className="mt-6 font-serif text-4xl leading-none">{stats?.totalQuestions ?? '…'}</p>
 					<p className="text-muted-foreground mt-2 text-sm">вопросов в теме</p>
 
 					<div className="mt-8 space-y-3 text-sm">
 						<div className="bg-card flex items-center justify-between gap-4 rounded-full px-4 py-2">
 							<span className="text-muted-foreground">Опубликовано</span>
-							<span className="font-medium">{stats.publishedTests}</span>
+							<span className="font-medium">{stats?.publishedTests ?? '…'}</span>
 						</div>
 						<div className="bg-card flex items-center justify-between gap-4 rounded-full px-4 py-2">
 							<span className="text-muted-foreground">Черновики</span>
-							<span className="font-medium">{stats.draftTests}</span>
+							<span className="font-medium">{stats?.draftTests ?? '…'}</span>
 						</div>
 						{topic.isActive ? null : (
 							<div className="border-border/70 bg-card text-muted-foreground flex items-center gap-2 rounded-3xl border px-4 py-3">
