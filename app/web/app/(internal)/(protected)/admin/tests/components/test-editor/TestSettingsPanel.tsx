@@ -44,11 +44,7 @@ export function TestSettingsPanel({
 	onSave,
 }: TestSettingsPanelProps) {
 	return (
-		<AdminTestsSectionCard
-			title="Настройки теста"
-			className="top-unit tab:max-h-[calc(100dvh-22rem)] sticky h-fit"
-			headerClassName="pb-3"
-		>
+		<AdminTestsSectionCard title="Настройки теста" className="top-unit sticky h-fit" headerClassName="pb-3">
 			<div className="space-y-4 pr-3">
 				<ScrollArea>
 					<div className="space-y-2">
