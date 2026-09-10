@@ -1,6 +1,10 @@
+import { useState } from 'react'
+
 import { Loader2, Trash2, UserPlus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { UserStatusFilter } from '@/components/users/UserStatusFilter'
+import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 
 import { AdminTestsSectionCard } from '../AdminTestsSectionCard'
 import type { StudentAssignment, UserItem } from './test-editor-types'
@@ -31,19 +35,33 @@ export function StudentAccessPanel({
 	onAssignStudent,
 	onRemoveStudent,
 }: StudentAccessPanelProps) {
+	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
+	const [assignmentStatus, setAssignmentStatus] = useState<UserStatus>('active')
+	const filteredUsers = availableUsers.filter((user) => matchesUserStatus(user.isActive, statusFilter))
+	const filteredAssignments = studentAssignments.filter((assignment) =>
+		matchesUserStatus(assignment.isActive, assignmentStatus)
+	)
+
 	return (
 		<div className="tab:grid-cols-2 grid gap-5">
 			<AdminTestsSectionCard title="Доступ студентов" headerClassName="pb-3">
+				<div className="mb-3">
+					<UserStatusFilter
+						value={assignmentStatus}
+						onChange={setAssignmentStatus}
+						label="Статус студентов с доступом"
+					/>
+				</div>
 				{!assignmentsLoaded ? (
 					<div className="text-muted-foreground flex items-center gap-2 text-sm">
 						<Loader2 className="size-4 animate-spin" />
 						Загрузка...
 					</div>
-				) : studentAssignments.length === 0 ? (
-					<p className="text-muted-foreground text-sm">Нет студентов с доступом к этому тесту</p>
+				) : filteredAssignments.length === 0 ? (
+					<p className="text-muted-foreground text-sm">Нет студентов с доступом и выбранным статусом</p>
 				) : (
 					<div className="space-y-2">
-						{studentAssignments.map((assignment) => {
+						{filteredAssignments.map((assignment) => {
 							const displayName = assignment.name || assignment.login || assignment.userId
 							return (
 								<div
@@ -77,16 +95,19 @@ export function StudentAccessPanel({
 			</AdminTestsSectionCard>
 
 			<AdminTestsSectionCard title="Добавить студента" headerClassName="pb-3">
+				<div className="mb-3">
+					<UserStatusFilter value={statusFilter} onChange={setStatusFilter} />
+				</div>
 				{!usersLoaded ? (
 					<div className="text-muted-foreground flex items-center gap-2 text-sm">
 						<Loader2 className="size-4 animate-spin" />
 						Загрузка пользователей...
 					</div>
-				) : availableUsers.length === 0 ? (
-					<p className="text-muted-foreground text-sm">Все пользователи уже имеют доступ</p>
+				) : filteredUsers.length === 0 ? (
+					<p className="text-muted-foreground text-sm">Нет студентов для добавления с выбранным статусом</p>
 				) : (
 					<div className="max-h-80 space-y-2 overflow-y-auto">
-						{availableUsers.map((user) => {
+						{filteredUsers.map((user) => {
 							const displayName = getUserDisplayName(user)
 							return (
 								<div

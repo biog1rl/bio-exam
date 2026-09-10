@@ -6,6 +6,7 @@ export type TestFormSetter = Dispatch<SetStateAction<TestFormData>>
 
 export type StudentAssignment = {
 	userId: string
+	isActive: boolean
 	assignedAt: string
 	name: string | null
 	login: string | null
@@ -13,6 +14,7 @@ export type StudentAssignment = {
 
 export type UserItem = {
 	id: string
+	isActive: boolean
 	login: string | null
 	name: string | null
 	firstName: string | null

@@ -59,7 +59,7 @@ export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditCl
 			</TableCell>
 
 			<TableCell>
-				{active ? <Badge variant="default">Активен</Badge> : <Badge variant="outline">Ожидает</Badge>}
+				{active ? <Badge variant="default">Активен</Badge> : <Badge variant="outline">Неактивен</Badge>}
 			</TableCell>
 
 			<TableCell>

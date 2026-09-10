@@ -24,6 +24,7 @@ assignmentsRouter.get(
 					userId: testAssignments.userId,
 					assignedAt: testAssignments.assignedAt,
 					name: users.name,
+					isActive: users.isActive,
 					login: users.login,
 				})
 				.from(testAssignments)

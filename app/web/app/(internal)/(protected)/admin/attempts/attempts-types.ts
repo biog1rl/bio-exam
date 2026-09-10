@@ -6,6 +6,7 @@ export type AdminAttemptListItem = {
 	topicSlug: string
 	topicTitle: string
 	studentId: string
+	studentIsActive: boolean
 	studentName: string
 	submittedAt: string
 	earnedPoints: number

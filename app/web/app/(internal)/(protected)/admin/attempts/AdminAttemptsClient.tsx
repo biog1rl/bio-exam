@@ -12,6 +12,8 @@ import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { UserStatusFilter } from '@/components/users/UserStatusFilter'
+import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 
 import type { AdminAttemptListItem } from './attempts-types'
 
@@ -132,8 +134,13 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 	const [query, setQuery] = useState('')
 	const [topicSlug, setTopicSlug] = useState('all')
 	const [studentId, setStudentId] = useState('all')
+	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
 	const [dateRange, setDateRange] = useState<DateRange | undefined>()
 	const [calendarOpen, setCalendarOpen] = useState(false)
+	const statusRows = useMemo(
+		() => rows.filter((attempt) => matchesUserStatus(attempt.studentIsActive, statusFilter)),
+		[rows, statusFilter]
+	)
 
 	const topics = useMemo(() => {
 		const map = new Map<string, string>()
@@ -143,14 +150,14 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 
 	const students = useMemo(() => {
 		const map = new Map<string, string>()
-		rows.forEach((attempt) => map.set(attempt.studentId, attempt.studentName))
+		statusRows.forEach((attempt) => map.set(attempt.studentId, attempt.studentName))
 		return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
-	}, [rows])
+	}, [statusRows])
 
 	const filteredRows = useMemo(() => {
 		const search = normalizeSearch(query)
 
-		return rows.filter((attempt) => {
+		return statusRows.filter((attempt) => {
 			if (topicSlug !== 'all' && attempt.topicSlug !== topicSlug) return false
 			if (studentId !== 'all' && attempt.studentId !== studentId) return false
 			if (dateRange && !isDateInRange(attempt.submittedAt, dateRange)) return false
@@ -161,7 +168,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 			)
 			return haystack.includes(search)
 		})
-	}, [dateRange, query, rows, studentId, topicSlug])
+	}, [dateRange, query, statusRows, studentId, topicSlug])
 
 	const passedCount = filteredRows.filter((attempt) => attempt.passed).length
 	const averageScore =
@@ -170,7 +177,9 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 					filteredRows.reduce((sum, attempt) => sum + Number(attempt.scorePercentage ?? 0), 0) / filteredRows.length
 				)
 			: 0
-	const hasFilters = Boolean(query || dateRange?.from || studentId !== 'all' || topicSlug !== 'all')
+	const hasFilters = Boolean(
+		query || dateRange?.from || studentId !== 'all' || topicSlug !== 'all' || statusFilter !== 'active'
+	)
 
 	const handleDateRangeSelect = (range: DateRange | undefined) => {
 		setDateRange(range)
@@ -209,6 +218,15 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 			</section>
 
 			<section className="rounded-4xl border-border/80 bg-card/90 tab-sm:p-4 border p-3">
+				<div className="mb-3 max-w-xs">
+					<UserStatusFilter
+						value={statusFilter}
+						onChange={(status) => {
+							setStatusFilter(status)
+							setStudentId('all')
+						}}
+					/>
+				</div>
 				<div className="tab:grid-cols-[minmax(13.75rem,1fr)_13.125rem_13.125rem_13.125rem_auto] grid gap-3">
 					<label className="relative block">
 						<Search className="text-muted-foreground pointer-events-none absolute left-3 top-3 size-4" />
@@ -276,6 +294,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 							setQuery('')
 							setTopicSlug('all')
 							setStudentId('all')
+							setStatusFilter('active')
 							setDateRange(undefined)
 						}}
 						disabled={!hasFilters}

@@ -14,9 +14,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import type { UserRow } from '@/types/users'
 
 import { UserRowItem } from './UserRowItem'
+import { UserStatusFilter } from './UserStatusFilter'
 import { EditUserDialog } from './dialogs/EditUserDialog'
 import { ReinviteUserDialog } from './dialogs/ReinviteUserDialog'
 
@@ -36,6 +38,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 	const cols = 7 + (effectiveCanEdit ? 1 : 0)
 
 	const [searchQuery, setSearchQuery] = useState('')
+	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
 	const [editOpen, setEditOpen] = useState(false)
 	const [reinviteOpen, setReinviteOpen] = useState(false)
 	const [currentUser, setCurrentUser] = useState<UserRow | null>(null)
@@ -54,12 +57,12 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 		void mutate('/api/users')
 	}
 
-	// Фильтрация пользователей по поисковому запросу
 	const filteredRows = useMemo(() => {
-		if (!searchQuery.trim()) return rows
+		const visibleRows = rows.filter((user) => matchesUserStatus(user.isActive, statusFilter))
+		if (!searchQuery.trim()) return visibleRows
 
 		const query = searchQuery.toLowerCase().trim()
-		return rows.filter((user) => {
+		return visibleRows.filter((user) => {
 			const login = (user.login ?? '').toLowerCase()
 			const firstName = (user.firstName ?? '').toLowerCase()
 			const lastName = (user.lastName ?? '').toLowerCase()
@@ -67,7 +70,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 
 			return login.includes(query) || fullName.includes(query) || firstName.includes(query) || lastName.includes(query)
 		})
-	}, [rows, searchQuery])
+	}, [rows, searchQuery, statusFilter])
 
 	const body = useMemo(() => {
 		if (isLoading) {
@@ -129,7 +132,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 
 	return (
 		<>
-			<div className="mb-4">
+			<div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3">
 				<div className="relative">
 					<Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
 					<Input
@@ -140,6 +143,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 						className="pl-9"
 					/>
 				</div>
+				<UserStatusFilter value={statusFilter} onChange={setStatusFilter} label="Статус пользователей" />
 			</div>
 
 			<div className="tab-sm:hidden space-y-3">
@@ -167,7 +171,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 										</Link>
 										<p className="text-muted-foreground mt-1 truncate text-sm">{nameDisplay}</p>
 									</div>
-									<Badge variant={active ? 'default' : 'outline'}>{active ? 'Активен' : 'Ожидает'}</Badge>
+									<Badge variant={active ? 'default' : 'outline'}>{active ? 'Активен' : 'Неактивен'}</Badge>
 								</div>
 
 								<div className="mt-4 flex flex-wrap gap-1.5">
@@ -206,8 +210,8 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				)}
 			</div>
 
-			<div className="tab-sm:block hidden overflow-hidden rounded-md border">
-				<div className="overflow-auto">
+			<div className="tab-sm:block hidden w-0 min-w-full overflow-hidden rounded-md border">
+				<div className="[&>div]:overflow-x-auto">
 					<Table className="min-w-245">
 						<TableHeader className="bg-muted/50">
 							<TableRow>

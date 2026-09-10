@@ -14,7 +14,9 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { UserStatusFilter } from '@/components/users/UserStatusFilter'
 import { apiFetch } from '@/lib/api-fetch'
+import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cn } from '@/lib/utils'
 import type { UserRow } from '@/types/users'
 
@@ -39,9 +41,14 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	const [selectedIds, setSelectedIds] = useState<string[]>([])
 	const [comboOpen, setComboOpen] = useState(false)
 	const [saving, setSaving] = useState(false)
+	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
 
 	const { data: usersData } = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
 	const allUsers = useMemo(() => usersData?.rows ?? [], [usersData])
+	const visibleUsers = useMemo(
+		() => allUsers.filter((user) => matchesUserStatus(user.isActive, statusFilter)),
+		[allUsers, statusFilter]
+	)
 
 	const { data: groupData, isLoading: membersLoading } = useSWR(
 		open && group ? `/api/groups/${group.id}` : null,
@@ -54,6 +61,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 			setSelectedIds([])
 			setComboOpen(false)
 			setSaving(false)
+			setStatusFilter('active')
 			return
 		}
 		if (group) {
@@ -70,7 +78,10 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		}
 	}, [groupData])
 
-	const selectedUsers = useMemo(() => allUsers.filter((u) => selectedIds.includes(u.id)), [allUsers, selectedIds])
+	const selectedUsers = useMemo(
+		() => visibleUsers.filter((u) => selectedIds.includes(u.id)),
+		[visibleUsers, selectedIds]
+	)
 
 	const displayName = (u: UserRow) => {
 		const full = [u.firstName, u.lastName].filter(Boolean).join(' ')
@@ -145,7 +156,8 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 					{/* Combobox user picker */}
 					{(!group || !membersLoading) && (
 						<div className="space-y-2">
-							<Label className="text-muted-foreground text-sm">Участники</Label>
+							<Label className="text-muted-foreground text-sm">Участники: {selectedIds.length}</Label>
+							<UserStatusFilter value={statusFilter} onChange={setStatusFilter} label="Статус участников" />
 							<Popover open={comboOpen} onOpenChange={setComboOpen}>
 								<PopoverTrigger asChild>
 									<Button variant="outline" role="combobox" className="w-full justify-between">
@@ -159,7 +171,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 										<CommandList>
 											<CommandEmpty>Пользователи не найдены</CommandEmpty>
 											<CommandGroup>
-												{allUsers.map((u) => (
+												{visibleUsers.map((u) => (
 													<CommandItem
 														key={u.id}
 														value={`${displayName(u)} ${u.login}`}

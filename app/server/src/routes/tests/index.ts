@@ -2554,6 +2554,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 				topicSlug: topics.slug,
 				topicTitle: topics.title,
 				studentId: users.id,
+				studentIsActive: users.isActive,
 				studentName: sql<string>`coalesce(${users.name}, ${users.firstName}, ${users.login}, 'Пользователь')`,
 				submittedAt: testAttempts.submittedAt,
 				earnedPoints: testAttempts.earnedPoints,
