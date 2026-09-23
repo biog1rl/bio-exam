@@ -26,11 +26,9 @@ export type ChoiceOptionReviewRow = {
 	status: ChoiceOptionReviewStatus
 }
 
-function answerIds(value: unknown): Set<string> {
+export function answerIds(value: unknown): Set<string> {
 	if (Array.isArray(value)) {
-		return new Set(
-			value.filter((item) => typeof item === 'string' || typeof item === 'number').map((item) => String(item))
-		)
+		return new Set(value.filter((item: unknown) => typeof item === 'string' || typeof item === 'number').map(String))
 	}
 	if (typeof value === 'string' || typeof value === 'number') {
 		return new Set([String(value)])
@@ -64,12 +62,12 @@ export function formatAnswerLines(question: PublicTestQuestion, value: unknown):
 		return [optionText(question, String(value))]
 	}
 	if (template === 'multi_choice' && Array.isArray(value)) {
-		return value.map((item) => optionText(question, String(item)))
+		return value.map((item: unknown) => optionText(question, String(item)))
 	}
 	if (template === 'short_text' && Array.isArray(value)) {
 		const answers = value
-			.filter((item) => typeof item === 'string' || typeof item === 'number')
-			.map((item) => String(item))
+			.filter((item: unknown) => typeof item === 'string' || typeof item === 'number')
+			.map(String)
 			.filter(Boolean)
 		return answers.length > 0 ? answers : ['Нет ответа']
 	}
@@ -120,7 +118,7 @@ export function formatAttemptDate(value?: string): string {
 export function getQuestionStatus(questionId: string, results: QuestionResult[]): QuestionStatus {
 	const result = results.find((item) => item.questionId === questionId)
 	if (!result || result.points === 0) return null
-	if (result.earnedPoints === result.points) return 'correct'
+	if (result.isCorrect) return 'correct'
 	if (result.earnedPoints > 0) return 'partial'
 	return 'wrong'
 }

@@ -32,7 +32,7 @@ export function AttemptReviewHero({
 	const telemetryStats = getAttemptTelemetryStats(attempt.telemetry, questions)
 	const correctCount = questions.filter((question) => {
 		const result = results.find((item) => item.questionId === question.id)
-		return result && result.points > 0 && result.earnedPoints === result.points
+		return result && result.points > 0 && result.isCorrect
 	}).length
 	const ResultIcon = attempt.passed ? CheckCircle2 : XCircle
 

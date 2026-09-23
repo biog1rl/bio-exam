@@ -7,6 +7,8 @@ import { useDebouncedCallback } from 'use-debounce'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
+import { QuestionInput } from '@/components/tests/QuestionInput'
+import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { isStoragePath, prefetchSignedUrls } from '@/lib/image-signed-url-cache'
 import { saveAnswer, saveSessionTelemetry, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
@@ -32,12 +34,7 @@ import {
 	AlertDialogTitle,
 } from '../ui/alert-dialog'
 import { Button } from '../ui/button'
-import { Checkbox } from '../ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
-import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import {
 	appendQuestionTime,
 	incrementQuestionFocusLoss,
@@ -52,6 +49,7 @@ type ResultByQuestion = Record<
 		isCorrect: boolean
 		earnedPoints: number
 		points: number
+		userAnswer: unknown
 		correctAnswer: unknown
 		explanationText: string | null
 	}
@@ -94,56 +92,6 @@ function formatDate(value: string): string {
 	})
 }
 
-function formatCorrectAnswer(question: PublicTestQuestion, correctAnswer: unknown): string | null {
-	if (correctAnswer == null) return null
-	const template = resolveTemplate(question)
-
-	if ((template === 'single_choice' || template === 'multi_choice') && Array.isArray(question.options)) {
-		const optionMap = new Map(question.options.map((option) => [option.id, option.text]))
-
-		if (typeof correctAnswer === 'string' || typeof correctAnswer === 'number') {
-			const normalizedId = String(correctAnswer)
-			return optionMap.get(normalizedId) || normalizedId
-		}
-		if (Array.isArray(correctAnswer)) {
-			const labels = correctAnswer
-				.filter((value): value is string | number => typeof value === 'string' || typeof value === 'number')
-				.map((id) => {
-					const normalizedId = String(id)
-					return optionMap.get(normalizedId) || normalizedId
-				})
-			return labels.length > 0 ? labels.join(', ') : null
-		}
-	}
-
-	if (template === 'short_text' || template === 'sequence_digits') {
-		if (typeof correctAnswer === 'string') return correctAnswer
-		if (typeof correctAnswer === 'number' && Number.isFinite(correctAnswer)) return String(correctAnswer)
-		if (typeof correctAnswer === 'bigint') return correctAnswer.toString()
-		return null
-	}
-
-	if (
-		template === 'matching' &&
-		question.matchingPairs &&
-		typeof correctAnswer === 'object' &&
-		!Array.isArray(correctAnswer)
-	) {
-		const map = correctAnswer as Record<string, string>
-		const leftMap = new Map(question.matchingPairs.left.map((option) => [option.id, option.text]))
-		const rightMap = new Map(question.matchingPairs.right.map((option) => [option.id, option.text]))
-
-		const lines = Object.entries(map).map(([leftId, rightId]) => {
-			const leftText = leftMap.get(leftId) || leftId
-			const rightText = rightMap.get(rightId) || rightId
-			return `${leftText} -> ${rightText}`
-		})
-		return lines.length > 0 ? lines.join('; ') : null
-	}
-
-	return typeof correctAnswer === 'string' ? correctAnswer : JSON.stringify(correctAnswer)
-}
-
 function tryParseJson(text: string): Record<string, unknown> | null {
 	try {
 		return JSON.parse(text) as Record<string, unknown>
@@ -164,7 +112,7 @@ function extractImagePaths(lexicalJson: unknown): string[] {
 			paths.push(node.src)
 		}
 		if (Array.isArray(node.children)) {
-			for (const child of node.children) walk(child as Record<string, unknown>)
+			for (const child of node.children as unknown[]) walk(child as Record<string, unknown>)
 		}
 	}
 	if (typeof lexicalJson === 'object' && lexicalJson !== null) {
@@ -396,6 +344,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 				isCorrect: item.isCorrect,
 				earnedPoints: item.earnedPoints,
 				points: item.points,
+				userAnswer: item.userAnswer,
 				correctAnswer: item.correctAnswer,
 				explanationText: item.explanationText,
 			}
@@ -632,7 +581,8 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 		for (const question of orderedQuestions) {
 			if (question.promptText) {
 				try {
-					const json = typeof question.promptText === 'string' ? JSON.parse(question.promptText) : question.promptText
+					const json: unknown =
+						typeof question.promptText === 'string' ? JSON.parse(question.promptText) : question.promptText
 					allPaths.push(...extractImagePaths(json))
 				} catch {
 					// Not JSON — skip
@@ -775,100 +725,16 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 									<MdxRenderer source={question.promptText} className="prose max-w-none select-none text-sm" />
 								</div>
 
-								{template === 'single_choice' && Array.isArray(question.options) ? (
-									<RadioGroup
-										className="w-fit space-y-2"
-										value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
-										onValueChange={(value) => onSelectRadio(question.id, value)}
+								{!questionResult ? (
+									<QuestionInput
+										question={question}
+										answer={answers[question.id]}
 										disabled={interactionDisabled}
-									>
-										{question.options.map((option) => {
-											const inputId = `q-${question.id}-opt-${option.id}`
-											return (
-												<div key={option.id} className="flex items-center gap-2">
-													<RadioGroupItem id={inputId} value={option.id} />
-													<Label htmlFor={inputId} className="cursor-pointer font-normal">
-														{option.text}
-													</Label>
-												</div>
-											)
-										})}
-									</RadioGroup>
-								) : null}
-
-								{template === 'multi_choice' && Array.isArray(question.options) ? (
-									<div className="space-y-2">
-										{question.options.map((option) => {
-											const inputId = `q-${question.id}-opt-${option.id}`
-											const selected =
-												Array.isArray(answers[question.id]) && (answers[question.id] as string[]).includes(option.id)
-											return (
-												<div key={option.id} className="flex items-center gap-2">
-													<Checkbox
-														id={inputId}
-														checked={selected}
-														onCheckedChange={() => onToggleCheckbox(question.id, option.id)}
-														disabled={interactionDisabled}
-													/>
-													<Label htmlFor={inputId} className="cursor-pointer font-normal">
-														{option.text}
-													</Label>
-												</div>
-											)
-										})}
-									</div>
-								) : null}
-
-								{template === 'short_text' || template === 'sequence_digits' ? (
-									<div className="max-w-xs space-y-1">
-										<Input
-											type="text"
-											inputMode={template === 'sequence_digits' ? 'numeric' : 'text'}
-											value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
-											onChange={(e) => onInputTextAnswer(question.id, e.target.value)}
-											placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
-											disabled={interactionDisabled}
-											className="bg-white"
-										/>
-										{template === 'sequence_digits' ? (
-											<p className="text-muted-foreground text-xs">Последовательность вводится цифрами без пробелов.</p>
-										) : null}
-									</div>
-								) : null}
-
-								{template === 'matching' && question.matchingPairs ? (
-									<div className="space-y-3">
-										{question.matchingPairs.left.map((left) => {
-											const selectedRightId =
-												answers[question.id] &&
-												typeof answers[question.id] === 'object' &&
-												!Array.isArray(answers[question.id])
-													? (answers[question.id] as Record<string, string>)[left.id] || ''
-													: ''
-
-											return (
-												<div key={left.id} className="tab-sm:grid-cols-[1fr_13.75rem] tab-sm:items-center grid gap-2">
-													<div>{left.text}</div>
-													<Select
-														value={selectedRightId || undefined}
-														onValueChange={(value) => onSelectMatching(question.id, left.id, value)}
-														disabled={interactionDisabled}
-													>
-														<SelectTrigger className="tab-sm:w-55 w-full">
-															<SelectValue placeholder="Выберите вариант" />
-														</SelectTrigger>
-														<SelectContent>
-															{question.matchingPairs?.right.map((right) => (
-																<SelectItem key={right.id} value={right.id}>
-																	{right.text}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-												</div>
-											)
-										})}
-									</div>
+										onSelectRadio={onSelectRadio}
+										onToggleCheckbox={onToggleCheckbox}
+										onInputTextAnswer={onInputTextAnswer}
+										onSelectMatching={onSelectMatching}
+									/>
 								) : null}
 								{template == null ? (
 									<p className="text-sm text-amber-600">Тип этого вопроса не настроен. Обратитесь к администратору.</p>
@@ -879,21 +745,29 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 										className={
 											questionResult.isCorrect
 												? 'rounded border border-emerald-200 bg-emerald-50 p-3 text-sm'
-												: 'rounded border border-rose-200 bg-rose-50 p-3 text-sm'
+												: questionResult.earnedPoints > 0
+													? 'rounded border border-amber-200 bg-amber-50 p-3 text-sm'
+													: 'rounded border border-rose-200 bg-rose-50 p-3 text-sm'
 										}
 									>
-										<p>{questionResult.isCorrect ? 'Верно' : 'Неверно'}</p>
+										<p>
+											{questionResult.isCorrect
+												? 'Верно'
+												: questionResult.earnedPoints > 0
+													? 'Частично верно'
+													: 'Неверно'}
+										</p>
 										<p className="text-muted-foreground mt-0.5 text-xs">
 											{questionResult.earnedPoints} / {questionResult.points} баллов
 										</p>
-										{!questionResult.isCorrect && test.showCorrectAnswer && questionResult.correctAnswer != null ? (
-											<p className="mt-1">
-												Правильный ответ:{' '}
-												<code>
-													{formatCorrectAnswer(question, questionResult.correctAnswer) || 'Не удалось определить'}
-												</code>
-											</p>
-										) : null}
+										<QuestionAnswerReview
+											question={question}
+											studentAnswer={questionResult.userAnswer}
+											correctAnswer={test.showCorrectAnswer ? questionResult.correctAnswer : null}
+											isCorrect={questionResult.isCorrect}
+											earnedPoints={questionResult.earnedPoints}
+											showCorrectAnswer={test.showCorrectAnswer}
+										/>
 										{questionResult.explanationText ? (
 											<MdxRenderer
 												source={questionResult.explanationText}

@@ -1,101 +1,17 @@
-import { Check, Clock3, Eye, RotateCcw, X } from 'lucide-react'
+import { Clock3, Eye, RotateCcw } from 'lucide-react'
 
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
+import { QuestionAnswerReview } from './QuestionAnswerReview'
 import {
-	formatAnswerLines,
 	formatDuration,
-	getChoiceOptionReviewRows,
 	getQuestionStatus,
 	getStatusClass,
 	getStatusLabel,
 	type QuestionResult,
 } from './attempt-review-utils'
-
-function AnswerBlock({
-	label,
-	lines,
-	variant = 'student',
-}: {
-	label: string
-	lines: string[]
-	variant?: 'student' | 'correct'
-}) {
-	return (
-		<div
-			className={cn(
-				'p-unit rounded-3xl border text-sm',
-				variant === 'correct' ? 'border-green-500/35 bg-green-50/80' : 'border-border/70 bg-secondary/55'
-			)}
-		>
-			<p
-				className={cn(
-					'mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em]',
-					variant === 'correct' ? 'text-green-700' : 'text-muted-foreground'
-				)}
-			>
-				{label}
-			</p>
-			<div className="space-y-2">
-				{lines.map((line, index) => (
-					<p key={`${line}-${index}`} className={variant === 'correct' ? 'text-green-900' : 'text-foreground'}>
-						{line}
-					</p>
-				))}
-			</div>
-		</div>
-	)
-}
-
-function ChoiceOptionsReview({
-	question,
-	studentAnswer,
-	correctAnswer,
-}: {
-	question: PublicTestQuestion
-	studentAnswer: unknown
-	correctAnswer: unknown
-}) {
-	const rows = getChoiceOptionReviewRows(question, studentAnswer, correctAnswer)
-
-	return (
-		<div className="mt-6">
-			<p className="text-muted-foreground mb-3 font-mono text-[0.6875rem] uppercase tracking-[0.18em]">
-				варианты ответа
-			</p>
-			<div className="space-y-2" role="list">
-				{rows.map((row) => (
-					<div
-						key={row.id}
-						role="listitem"
-						className={cn(
-							'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm',
-							row.status === 'correct' && 'border-green-500/40 bg-green-50/80 text-green-900',
-							row.status === 'incorrect-selected' && 'border-red-500/40 bg-red-50/80 text-red-900',
-							row.status === 'neutral' && 'border-border/70 bg-secondary/45 text-muted-foreground'
-						)}
-					>
-						{row.status === 'correct' ? (
-							<Check className="size-4 shrink-0 text-green-700" aria-hidden="true" />
-						) : row.status === 'incorrect-selected' ? (
-							<X className="size-4 shrink-0 text-red-700" aria-hidden="true" />
-						) : (
-							<span className="border-muted-foreground/35 size-4 shrink-0 rounded-full border" aria-hidden="true" />
-						)}
-						<span className="min-w-0 flex-1">{row.text}</span>
-						{row.status === 'correct' ? (
-							<span className="shrink-0 text-xs font-medium text-green-700">Правильный</span>
-						) : row.status === 'incorrect-selected' ? (
-							<span className="shrink-0 text-xs font-medium text-red-700">Выбран неверно</span>
-						) : null}
-					</div>
-				))}
-			</div>
-		</div>
-	)
-}
 
 export function AttemptQuestionsList({
 	attempt,
@@ -124,8 +40,6 @@ export function AttemptQuestionsList({
 				const status = getQuestionStatus(question.id, results)
 				const telemetry = attempt.telemetry?.[question.id]
 				const studentAnswer = attempt.answers[question.id]
-				const isChoiceQuestion =
-					question.questionUiTemplate === 'single_choice' || question.questionUiTemplate === 'multi_choice'
 
 				return (
 					<section
@@ -156,24 +70,14 @@ export function AttemptQuestionsList({
 							/>
 						</div>
 
-						{isChoiceQuestion && result?.correctAnswer != null ? (
-							<ChoiceOptionsReview
-								question={question}
-								studentAnswer={studentAnswer}
-								correctAnswer={result.correctAnswer}
-							/>
-						) : (
-							<div className="tab-sm:grid-cols-2 mt-6 grid gap-3">
-								<AnswerBlock label="ответ студента" lines={formatAnswerLines(question, studentAnswer)} />
-								{(status === 'wrong' || status === 'partial') && result?.correctAnswer !== undefined ? (
-									<AnswerBlock
-										label="правильный ответ"
-										lines={formatAnswerLines(question, result.correctAnswer)}
-										variant="correct"
-									/>
-								) : null}
-							</div>
-						)}
+						<QuestionAnswerReview
+							question={question}
+							studentAnswer={studentAnswer}
+							correctAnswer={result?.correctAnswer}
+							isCorrect={result?.isCorrect ?? false}
+							earnedPoints={result?.earnedPoints ?? 0}
+							showCorrectAnswer={true}
+						/>
 
 						{telemetry ? (
 							<div className="text-muted-foreground mt-5 flex flex-wrap gap-2 text-sm">
