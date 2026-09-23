@@ -1,4 +1,4 @@
-import { Check, X } from 'lucide-react'
+import { Check } from 'lucide-react'
 
 import type { PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
@@ -14,6 +14,13 @@ type Props = {
 	showCorrectAnswer: boolean
 }
 
+function choiceLabel(isSelected: boolean, correct: boolean, missed: boolean, wrong: boolean): string | null {
+	if (missed) return 'Верный ответ · пропущен'
+	if (correct) return 'Выбран · верно'
+	if (wrong) return 'Выбран · неверно'
+	return isSelected ? 'Выбран' : null
+}
+
 function ChoiceAnswerReview({ question, studentAnswer, correctAnswer, isCorrect, showCorrectAnswer }: Props) {
 	const selected = answerIds(studentAnswer)
 	const rows = getChoiceOptionReviewRows(question, studentAnswer, correctAnswer)
@@ -21,47 +28,60 @@ function ChoiceAnswerReview({ question, studentAnswer, correctAnswer, isCorrect,
 	const selectedCorrect = isCorrect
 		? selected.size
 		: rows.filter((row) => selected.has(row.id) && row.status === 'correct').length
+	const missedCorrect = keyVisible ? rows.filter((row) => !selected.has(row.id) && row.status === 'correct').length : 0
 
 	return (
 		<div className="mt-4 space-y-2">
 			<p className="text-muted-foreground text-sm">
 				Выбрано: {selected.size}
 				{keyVisible ? ` · из них верно: ${selectedCorrect} · неверно: ${selected.size - selectedCorrect}` : null}
+				{missedCorrect > 0 ? ` · пропущено верных: ${missedCorrect}` : null}
 			</p>
 			<div className="space-y-2" role="list">
 				{rows.map((row) => {
 					const isSelected = selected.has(row.id)
 					const correct = keyVisible && (row.status === 'correct' || (isCorrect && isSelected))
-					const wrong = keyVisible && isSelected && row.status === 'incorrect-selected'
-					const label = correct
-						? isSelected
-							? 'Выбран · верно'
-							: 'Правильный · не выбран'
-						: wrong
-							? 'Выбран · неверно'
-							: isSelected
-								? 'Выбран'
-								: null
+					const missed = correct && !isSelected
+					const wrong = keyVisible && isSelected && !correct
+					const label = choiceLabel(isSelected, correct, missed, wrong)
 					return (
 						<div
 							key={row.id}
 							role="listitem"
 							className={cn(
 								'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm',
-								correct && 'border-green-500/40 bg-green-50/80 text-green-900',
+								correct && isSelected && 'border-green-500/40 bg-green-50/80 text-green-900',
+								missed && 'border-amber-500/50 bg-amber-50/60 text-amber-950',
 								wrong && 'border-red-500/40 bg-red-50/80 text-red-900',
 								!correct && !wrong && 'border-border/70 bg-secondary/45 text-foreground'
 							)}
 						>
-							{correct ? (
-								<Check className="size-4 shrink-0 text-green-700" aria-hidden="true" />
-							) : wrong ? (
-								<X className="size-4 shrink-0 text-red-700" aria-hidden="true" />
+							{isSelected ? (
+								<span
+									className={cn(
+										'flex size-4 shrink-0 items-center justify-center rounded-sm',
+										correct ? 'bg-green-700' : wrong ? 'bg-red-700' : 'bg-foreground'
+									)}
+									aria-hidden="true"
+								>
+									<Check className="size-3 text-white" />
+								</span>
 							) : (
-								<span className="border-muted-foreground/35 size-4 shrink-0 rounded-full border" aria-hidden="true" />
+								<span className="border-muted-foreground/50 size-4 shrink-0 rounded-sm border" aria-hidden="true" />
 							)}
 							<span className="min-w-0 flex-1">{row.text}</span>
-							{label ? <span className="shrink-0 text-xs font-medium">{label}</span> : null}
+							{label ? (
+								<span
+									className={cn(
+										'max-w-[45%] rounded-full px-3 py-1 text-right text-xs font-medium',
+										missed && 'bg-amber-100 text-amber-900',
+										correct && isSelected && 'bg-green-100 text-green-900',
+										wrong && 'bg-red-100 text-red-900'
+									)}
+								>
+									{label}
+								</span>
+							) : null}
 						</div>
 					)
 				})}
