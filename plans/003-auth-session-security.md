@@ -39,8 +39,8 @@ domain changes.
 
 ## Steps
 
-1. Run GitNexus impact on every edited auth/RBAC symbol; warn before any
-   HIGH/CRITICAL blast radius.
+1. Run `codegraph impact` on every edited auth/RBAC symbol; warn before any
+   wide blast radius.
 2. Make current DB roles authoritative whenever DB enforcement is active.
 3. Introduce short-lived access tokens bound to a revocable server session
    family/version; revoke on logout and support password/admin revocation.
@@ -58,7 +58,7 @@ domain changes.
   sends no access cookie; throttling cannot cheaply lock a victim out; `/auth/me`
   parity for role/user overrides.
 - `yarn verify` → exit 0.
-- `gitnexus detect-changes --scope all` → only auth/RBAC flows plus tests/docs.
+- `codegraph affected` over the changed files → only auth/RBAC tests plus docs.
 
 ## STOP conditions
 

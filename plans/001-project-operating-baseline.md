@@ -17,16 +17,16 @@
 ## Why this matters
 
 The monorepo has 11 executable tests but no `test` or repository-wide
-verification command and no CI workflow. Agent guidance contains only a stale
-generated GitNexus block; root onboarding and a complete env contract are
-missing. Every later security/refactor phase needs a deterministic gate first.
+verification command and no CI workflow. Agent guidance (`AGENTS.md`, imported
+by `CLAUDE.md`) covers only the CodeGraph workflow; root onboarding and a
+complete env contract are missing. Every later security/refactor phase needs a deterministic gate first.
 
 ## Current state
 
 - `package.json` exposes `build`, `lint`, and `typecheck`, not `test`/`verify`.
 - `turbo.json` has no test task; server and RBAC expose no lint/test scripts.
-- `AGENTS.md` and `CLAUDE.md` duplicate stale GitNexus counts and use `main`
-  although the branch is `master`.
+- `AGENTS.md` holds only the CodeGraph workflow and pointers to `docs/adr/`
+  and `plans/`; `CLAUDE.md` imports it.
 - `app/server/README.md` documents obsolete routes and only three question
   types. No root README or `app/web/.env.example` exists.
 - Stack: Yarn 4.12, Turbo 2.9, Next 16/React 19, Express/Drizzle/Postgres.
@@ -50,9 +50,8 @@ from lifemy-doc.
 3. Add concise root onboarding, correct server route/access docs, and complete
    value-free web/server env examples. Add an allowlisted env-contract check.
    **Verify**: no `.env` value is read or copied; `yarn verify` exits 0.
-4. Preserve the generated GitNexus block but add project commands/scope/routing
-   outside it; make `CLAUDE.md` point to `AGENTS.md`. Refresh GitNexus using
-   the current generator and preserve embeddings if present.
+4. Add project commands/scope/routing to `AGENTS.md` beside the CodeGraph
+   section; `CLAUDE.md` keeps importing `AGENTS.md`.
 5. Use `skill-creator` to scaffold and validate three thin project overlays:
    `bio-exam-web`, `bio-exam-api`, and `bio-exam-data`. Adapt relevant lifemy
    concepts, never its identity/paths/commands.
@@ -69,6 +68,5 @@ from lifemy-doc.
 ## STOP conditions
 
 - Any proposed test runner requires rewriting the existing test corpus.
-- GitNexus refresh would discard existing embeddings.
 - A required env key cannot be classified without reading a secret value.
 

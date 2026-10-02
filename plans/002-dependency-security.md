@@ -42,9 +42,8 @@ audit results without a documented reachability decision.
 2. Upgrade all direct affected packages to patched compatible releases. Remove
    Lodash by replacing its single debounce use if no patched release exists.
    Upgrade/adapt `next-mdx-remote` safely; keep untrusted MDX from executing.
-3. Move the exact redundant `package-lock.json` to Trash using
-   `/Users/kdvornichenko/.codex/bin/codex-trash`; add a CI guard against a
-   second lockfile.
+3. Delete the redundant `package-lock.json`; add a CI guard against a second
+   lockfile.
 4. Test upload abort/limits/formats, proxy-protected routes, MDX rendering,
    editor content, and Drizzle queries.
 

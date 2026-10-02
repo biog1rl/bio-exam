@@ -61,6 +61,6 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED.
 - Lifemy-doc `its-doc-*`, Bitrix, native, Vite, migration, and CodeGraph skills:
   rejected for bio-exam because their paths, package manager, providers, or
   architecture are incompatible.
-- Existing GitNexus project skills: retained. They are relevant graph tooling;
-  the plan updates generated guidance instead of deleting it.
+- GitNexus: removed on 2026-10-02. CodeGraph (`.codegraph/`) is the code
+  intelligence tool; plan gates use `codegraph impact` / `codegraph affected`.
 

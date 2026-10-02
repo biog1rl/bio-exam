@@ -92,4 +92,5 @@ next-env.d.ts
 # Uploads
 app/web/public/uploads/**
 !app/web/public/uploads/**/.gitkeep
-.gitnexus
+.codegraph/
+graphify-out/

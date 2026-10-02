@@ -55,7 +55,8 @@ feature expansion.
 - [ ] Concurrent starts produce one open session.
 - [ ] Concurrent/retried submits produce one attempt and stable response.
 - [ ] Concurrent answer+telemetry PATCHes preserve all fields.
-- [ ] `yarn verify` and GitNexus change detection pass.
+- [ ] `yarn verify` passes; `codegraph affected` over the diff lists only
+  expected tests.
 
 ## STOP conditions
 

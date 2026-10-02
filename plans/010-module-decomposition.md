@@ -36,21 +36,21 @@ implementation proven unused.
 
 ## Steps
 
-1. Run GitNexus context/impact for each extraction target. Add characterization
+1. Run `codegraph node`/`codegraph impact` for each extraction target. Add characterization
    tests for route registration/order and TestRunner state transitions first.
 2. Split admin router by existing domain boundary, retaining a small composition
    entrypoint and exact middleware/path order.
 3. Extract TestRunner session persistence, telemetry, answer state, and submit
    orchestration into focused tested hooks/modules; leave presentation in the
    component.
-4. Confirm no caller uses the old Next auth DB/policy code, then remove only the
-   exact obsolete files via `codex-trash`.
+4. Confirm no caller uses the old Next auth DB/policy code, then delete only the
+   exact obsolete files.
 
 ## Verification
 
 - Public route inventory before/after is byte-for-byte equivalent.
 - TestRunner behavior and props remain compatible under characterization tests.
-- GitNexus detects only expected test/auth processes.
+- `codegraph affected` over the changed files lists only expected test/auth files.
 - `yarn verify` and production build exit 0.
 
 ## STOP conditions
