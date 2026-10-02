@@ -18,6 +18,7 @@ read-only audit handoff; implementation is performed through GSD Autonomous.
 | 008 | Remove proven search, storage, editor, and export bottlenecks | P2 | L | 001, 002 | TODO |
 | 009 | Restore Drizzle migration metadata continuity | P1 | M | 001, 002 | TODO |
 | 010 | Decompose the auth and test-domain god modules | P2 | L | 003–009 | TODO |
+| 011 | Deepen modules per architecture review (ADR-0001–0005) | P1 | L | 001 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED.
 
@@ -36,6 +37,8 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED.
 - 008: PERFORMANCE-01–PERFORMANCE-04.
 - 009: DEPENDENCIES-04.
 - 010: TECHDEBT-02.
+- 011: architecture review 2026-10-02 (candidates C1–C8, defects D1–D8);
+  sequencing in its section 4. ADR-0005 supersedes plan 010 step 3.
 
 ## Dependency notes
 
