@@ -1,0 +1,35 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"useTabs": true,
+	"trailingComma": "es5",
+	"semi": false,
+	"singleQuote": true,
+	"endOfLine": "lf",
+	"printWidth": 120,
+	"sortImports": {
+		"newlinesBetween": true,
+		"ignoreCase": false,
+		"internalPattern": ["@/"],
+		"groups": ["scoped", "react-scan", "react", ["builtin", "external"], "internal", ["parent", "sibling", "index"]],
+		"customGroups": [
+			{ "groupName": "scoped", "elementNamePattern": ["@[a-z]*/**"] },
+			{ "groupName": "react-scan", "elementNamePattern": ["react-scan"] },
+			{ "groupName": "react", "elementNamePattern": ["react", "react/*", "react-*", "react-*/**"] }
+		]
+	},
+	"ignorePatterns": [
+		"**/drizzle/**",
+		"**/.next/**",
+		"**/dist/**",
+		"**/coverage/**",
+		"**/logs/**",
+		"app/web/public/**",
+		"app/web/components.json",
+		"app/web/.vscode/**",
+		".yarn/**",
+		"**/*.pen",
+		"yarn.lock",
+		".planning/**",
+		".codegraph/**"
+	]
+}

@@ -4,14 +4,12 @@
 	"private": true,
 	"scripts": {
 		"dev": "next dev --turbopack",
-		"format": "npm run prettier && npm run lint",
 		"build": "next build",
 		"typecheck": "tsc --noEmit",
 		"build:dev": "next build",
 		"start": "next start",
-		"lint": "eslint . --config eslint.config.mjs",
-		"prettier": "prettier --write . --config .prettierrc.json",
-		"deploy": "npm run format && vercel --prod"
+		"lint": "oxlint -c .oxlintrc.json .",
+		"deploy": "yarn --cwd ../.. format:check && yarn lint && vercel --prod"
 	},
 	"dependencies": {
 		"@bio-exam/rbac": "*",
@@ -19,7 +17,6 @@
 		"@dnd-kit/modifiers": "^9.0.0",
 		"@dnd-kit/sortable": "^10.0.0",
 		"@dnd-kit/utilities": "^3.2.2",
-		"@eslint/eslintrc": "^3.3.1",
 		"@internationalized/date": "^3.7.0",
 		"@lexical/code": "^0.38.1",
 		"@lexical/file": "^0.38.1",
@@ -74,7 +71,6 @@
 		"@tiptap/core": "^2.7.0",
 		"@tiptap/pm": "^2.7.0",
 		"@tiptap/react": "2",
-		"@trivago/prettier-plugin-sort-imports": "^5.2.2",
 		"@types/bcrypt": "^5.0.2",
 		"@types/react-day-picker": "^5.3.0",
 		"bcrypt": "^5.1.1",
@@ -103,7 +99,6 @@
 		"pg": "^8.16.3",
 		"pm2": "^6.0.13",
 		"postcss-cli": "^11.0.1",
-		"prettier-plugin-tailwindcss": "^0.6.14",
 		"prosemirror-model": "^1.25.3",
 		"radix-ui": "^1.4.3",
 		"react": "19.2.2",
@@ -139,7 +134,6 @@
 		"zustand": "^5.0.3"
 	},
 	"devDependencies": {
-		"@next/eslint-plugin-next": "^16.2.1",
 		"@react-types/shared": "3.25.0",
 		"@types/flubber": "^0.4.0",
 		"@types/jsonwebtoken": "^9.0.10",
@@ -149,37 +143,20 @@
 		"@types/react": "19.2.2",
 		"@types/react-dom": "19.2.2",
 		"@types/three": "^0",
-		"@typescript-eslint/eslint-plugin": "^8.45.0",
-		"@typescript-eslint/parser": "^8.45.0",
 		"autoprefixer": "^10.4.21",
-		"eslint": "^9.18.0",
-		"eslint-config-next": "^16.2.1",
-		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-import": "^2.26.0",
-		"eslint-plugin-jsx-a11y": "^6.4.1",
-		"eslint-plugin-node": "^11.1.0",
-		"eslint-plugin-prettier": "^5.5.4",
-		"eslint-plugin-react": "^7.23.2",
-		"eslint-plugin-react-hooks": "^5.1.0",
-		"eslint-plugin-unused-imports": "4.1.4",
+		"oxlint": "1.86.0",
 		"postcss": "^8.5.6",
-		"prettier": "^3.6.2",
 		"react-scan": "^0.3.3",
 		"tailwind-variants": "0.3.0",
 		"tailwindcss": "^4.1.13",
-		"typescript": "5.6.3"
+		"typescript": "5.6.3",
+		"vite": "8.3.2",
+		"vitest": "5.0.3"
 	},
 	"postcss": {
 		"plugins": {
 			"@tailwindcss/postcss": {}
 		}
-	},
-	"prettier": {
-		"printWidth": 120,
-		"plugins": [
-			"prettier-plugin-tailwindcss"
-		],
-		"tailwindStylesheet": "./styles/globals.css"
 	},
 	"resolutions": {
 		"@types/react": "19.2.2",

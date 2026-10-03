@@ -18,15 +18,19 @@
     }
   },
   "scripts": {
-    "build": "rimraf dist && tsup src/index.ts --dts --format esm,cjs --out-dir dist --clean",
+    "build": "tsdown",
     "clean": "rimraf dist",
-    "watch": "tsup src/index.ts --dts --format esm,cjs --out-dir dist --watch --clean=false",
-    "typecheck": "tsc --noEmit"
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "devDependencies": {
+    "oxlint": "1.86.0",
     "rimraf": "^5.0.5",
-    "tsup": "^8.5.0",
-    "typescript": "^5.6.3"
+    "tsdown": "0.23.0",
+    "typescript": "^5.6.3",
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
   },
   "dependencies": {
     "@tiptap/core": "^3.10.3",

@@ -13,10 +13,14 @@
 		"dev": "turbo run dev",
 		"start": "turbo run start",
 		"lint": "turbo run lint",
-		"typecheck": "turbo run typecheck"
+		"typecheck": "turbo run typecheck",
+		"format": "oxfmt .",
+		"format:check": "oxfmt --check ."
 	},
 	"devDependencies": {
+		"@playwright/test": "1.63.0",
 		"baseline-browser-mapping": "^2.9.19",
+		"oxfmt": "0.71.0",
 		"turbo": "^2.9.8"
 	},
 	"resolutions": {
