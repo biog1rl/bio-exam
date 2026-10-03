@@ -1,0 +1,242 @@
+/**
+ * D-14 flow 4: администратор создаёт вопросы каждого шаблона, который сегодня сохраняется,
+ * в тесте authoring-<p> и видит их в списке вопросов после перезагрузки страницы. Плюс известный
+ * дефект D5 (краткий ответ с несколькими допустимыми вариантами не сохраняется) как ожидаемое падение.
+ *
+ * Тест authoring-<p> принадлежит только этим проверкам и только своему проекту, поэтому ни порядок
+ * тестов, ни второй проект не видят изменённых данных.
+ *
+ * Формулировка вводится в редактор Lexical: его contenteditable имеет роль textbox и первым
+ * стоит на странице, раньше полей ответа. Тексты формулировок короткие и без символов разметки
+ * (# * _ ` [ ]), потому что карточка вопроса вырезает их из превью.
+ */
+import { type BrowserContext, type Locator, type Page } from '@playwright/test'
+
+import { seedTest } from '../fixtures/accounts'
+import { expect, newSessionContext, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
+
+type SavedQuestion = {
+	id: string
+	type: string
+	promptText: string
+	options: { id: string; text: string }[] | null
+	matchingPairs: { left: { id: string }[]; right: { id: string }[] } | null
+	correct: unknown
+}
+
+function testPageUrl(slug: string): string {
+	return `/admin/tests/${TOPIC_SLUG}/${slug}`
+}
+
+/** Открывает форму нового вопроса: страница создаёт черновик и ведёт на его адрес */
+async function openNewQuestion(page: Page, slug: string): Promise<void> {
+	await page.goto(`${testPageUrl(slug)}/questions/new`)
+	await expect(page).toHaveURL(new RegExp(`${testPageUrl(slug)}/questions/drafts/[0-9a-f-]+$`))
+	await expect(page.getByRole('heading', { level: 1, name: 'Новый вопрос' })).toBeVisible()
+	// Список типов приходит отдельным запросом: пока он пуст, селект типа заблокирован
+	await expect(typeSelect(page)).toBeEnabled()
+}
+
+/** Селект «Тип вопроса»: первые combobox страницы принадлежат тулбару редактора формулировки (Paragraph, Heading) */
+function typeSelect(page: Page): Locator {
+	return page.getByText('Тип вопроса', { exact: true }).locator('xpath=..').getByRole('combobox')
+}
+
+async function selectType(page: Page, title: string): Promise<void> {
+	await typeSelect(page).click()
+	await page.getByRole('option', { name: title, exact: true }).click()
+	await expect(typeSelect(page)).toContainText(title)
+}
+
+async function typePrompt(page: Page, prompt: string): Promise<void> {
+	const editor = page.getByRole('textbox').first()
+	await expect(editor).toHaveAttribute('contenteditable', 'true')
+	await editor.click()
+	await page.keyboard.type(prompt)
+	await expect(editor).toContainText(prompt)
+}
+
+async function savedQuestions(page: Page, slug: string): Promise<SavedQuestion[]> {
+	const response = await page.request.get(`/api/tests/by-slug/${TOPIC_SLUG}/${slug}`)
+	expect(response.ok()).toBe(true)
+	return ((await response.json()) as { questions: SavedQuestion[] }).questions
+}
+
+/** Нажимает «Сохранить вопрос» и ждёт возврата на страницу теста */
+async function saveQuestion(page: Page, slug: string): Promise<void> {
+	await page.getByRole('button', { name: 'Сохранить вопрос' }).click()
+	await expect(page, 'saving a valid question returns to the test page').toHaveURL(
+		new RegExp(`${testPageUrl(slug)}/?$`)
+	)
+}
+
+type AuthoredQuestion = {
+	template: string
+	/** Название типа в селекте и в бейдже карточки; null — тип по умолчанию, выбирать не нужно */
+	typeTitle: string | null
+	prompt: string
+	fill: (page: Page) => Promise<void>
+	/** Проверка сохранённого ключа ответа по данным API */
+	expectStored: (question: SavedQuestion) => void
+}
+
+const AUTHORED: AuthoredQuestion[] = [
+	{
+		template: 'single_choice',
+		typeTitle: 'Один правильный вариант (legacy)',
+		prompt: 'Автор e2e одиночный выбор',
+		fill: async (page) => {
+			await page.getByPlaceholder('Вариант 1', { exact: true }).fill('Первый вариант')
+			await page.getByPlaceholder('Вариант 2', { exact: true }).fill('Второй вариант')
+			// Тулбар редактора тоже содержит radio (выравнивание), поэтому радио берётся из строки варианта
+			const correct = page.getByPlaceholder('Вариант 1', { exact: true }).locator('xpath=..').getByRole('radio')
+			await correct.click()
+			await expect(correct).toBeChecked()
+		},
+		expectStored: (question) => {
+			expect(question.type).toBe('radio')
+			expect(question.options?.map((option) => option.text)).toEqual(['Первый вариант', 'Второй вариант'])
+			expect(question.correct).toBe(question.options?.[0].id)
+		},
+	},
+	{
+		template: 'multi_choice',
+		typeTitle: 'Множественный выбор',
+		prompt: 'Автор e2e множественный выбор',
+		fill: async (page) => {
+			await page.getByPlaceholder('Вариант 1', { exact: true }).fill('Первый вариант')
+			await page.getByPlaceholder('Вариант 2', { exact: true }).fill('Второй вариант')
+			for (const placeholder of ['Вариант 1', 'Вариант 2']) {
+				const correct = page.getByPlaceholder(placeholder, { exact: true }).locator('xpath=..').getByRole('checkbox')
+				await correct.click()
+				await expect(correct).toBeChecked()
+			}
+		},
+		expectStored: (question) => {
+			expect(question.type).toBe('checkbox')
+			expect(question.correct).toEqual(question.options?.map((option) => option.id))
+		},
+	},
+	{
+		template: 'matching',
+		typeTitle: 'Сопоставление',
+		prompt: 'Автор e2e сопоставление',
+		fill: async (page) => {
+			await page.getByPlaceholder('Элемент 1', { exact: true }).fill('Левый один')
+			await page.getByPlaceholder('Элемент 2', { exact: true }).fill('Левый два')
+			await page.getByPlaceholder('Соответствие A', { exact: true }).fill('Правый один')
+			await page.getByPlaceholder('Соответствие B', { exact: true }).fill('Правый два')
+			// Правильные соответствия: строка «N. подпись» и select справа от неё в одном контейнере
+			for (const [index, right] of ['A. Правый один', 'B. Правый два'].entries()) {
+				const left = ['1. Левый один', '2. Левый два'][index]
+				const select = page.getByText(left, { exact: true }).locator('xpath=..').getByRole('combobox')
+				await select.click()
+				await page.getByRole('option', { name: right, exact: true }).click()
+				await expect(select).toContainText(right)
+			}
+		},
+		expectStored: (question) => {
+			expect(question.type).toBe('matching')
+			const pairs = question.matchingPairs
+			expect(pairs?.left).toHaveLength(2)
+			expect(question.correct).toEqual({
+				[pairs!.left[0].id]: pairs!.right[0].id,
+				[pairs!.left[1].id]: pairs!.right[1].id,
+			})
+		},
+	},
+	{
+		template: 'sequence_digits',
+		typeTitle: 'Правильная последовательность',
+		prompt: 'Автор e2e последовательность',
+		fill: async (page) => {
+			await page.getByPlaceholder('Например: 2314').fill('3142')
+		},
+		expectStored: (question) => {
+			expect(question.type).toBe('sequence')
+			// Ключ из одних цифр сервер хранит числом (JSONB), поэтому сравнивается строковая запись
+			expect(String(question.correct)).toBe('3142')
+		},
+	},
+	{
+		template: 'short_text',
+		typeTitle: null,
+		prompt: 'Автор e2e краткий ответ',
+		fill: async (page) => {
+			await page.getByPlaceholder('Введите правильный ответ').fill('митоз')
+		},
+		expectStored: (question) => {
+			expect(question.type).toBe('short_answer')
+			expect(question.correct).toBe('митоз')
+		},
+	},
+]
+
+test.describe.serial('flow 4: question authoring', () => {
+	for (const authored of AUTHORED) {
+		test(`admin creates a ${authored.template} question and finds it after reload @flow4`, async ({
+			adminPage: page,
+		}, testInfo) => {
+			const slug = seedTest(projectKey(testInfo), 'authoring').slug
+
+			await openNewQuestion(page, slug)
+			if (authored.typeTitle) await selectType(page, authored.typeTitle)
+			await typePrompt(page, authored.prompt)
+			await authored.fill(page)
+			await saveQuestion(page, slug)
+
+			// Перезагрузка: вопрос приходит с сервера, а не из состояния страницы
+			await page.reload()
+			await expect(page.getByText(authored.prompt)).toBeVisible()
+			if (authored.typeTitle) await expect(page.getByText(authored.typeTitle, { exact: true }).first()).toBeVisible()
+
+			const stored = (await savedQuestions(page, slug)).find((question) =>
+				question.promptText.includes(authored.prompt)
+			)
+			expect(stored, `question "${authored.prompt}" is stored for the test`).toBeDefined()
+			authored.expectStored(stored!)
+		})
+	}
+})
+
+const D5_PROMPT = 'Автор e2e несколько вариантов'
+
+test.describe.serial('known defect D5: short answer with several accepted variants', () => {
+	let admin: BrowserContext | undefined
+	let page: Page | undefined
+	let slug = ''
+
+	// Подготовка: форма нового вопроса, тип «несколько вариантов», формулировка и два варианта.
+	// Обычный тест: test.fail() засчитывает даже ошибку beforeAll как ожидаемую (проверено пробой), а
+	// упавший обычный тест красный всегда, поэтому любой сбой здесь валит прогон, а не маскируется под D5.
+	test('D5 setup: admin opens a new question and fills the variants type @known-defect', async ({
+		browser,
+	}, testInfo) => {
+		slug = seedTest(projectKey(testInfo), 'authoring').slug
+		admin = await newSessionContext(browser, testInfo, 'admin')
+		page = await admin.newPage()
+
+		await openNewQuestion(page, slug)
+		await selectType(page, 'Краткий ответ (несколько вариантов)')
+		await typePrompt(page, D5_PROMPT)
+		await page.getByLabel('Вариант 1', { exact: true }).fill('эксперимент')
+		await page.getByLabel('Вариант 2', { exact: true }).fill('моделирование')
+		await expect(page.getByLabel('Вариант 2', { exact: true })).toHaveValue('моделирование')
+	})
+
+	test.afterAll(async () => {
+		await admin?.close()
+	})
+
+	// Ожидаемо падает единственная проверка ниже: редактор не сохраняет вопрос с несколькими вариантами.
+	// validateQuestion в QuestionEditorPageClient принимает за ключ только строку, а здесь ключ — массив,
+	// поэтому показывается «Укажите правильный краткий ответ», запрос не уходит, страница остаётся на черновике.
+	test.fail(
+		'D5 — fixed in Phase 3 (EXAM-07): a short answer with two accepted variants saves @known-defect',
+		async () => {
+			await saveQuestion(page!, slug)
+			await page!.reload()
+			await expect(page!.getByText(D5_PROMPT), 'the saved question appears in the list after reload').toBeVisible()
+		}
+	)
+})
