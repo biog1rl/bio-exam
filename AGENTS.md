@@ -22,7 +22,7 @@ Run everything from the repository root. Node 24 (`.nvmrc`), Yarn 4.12 through C
 
 - `yarn install`: install dependencies. `yarn.lock` is the only lockfile.
 - `yarn dev`: run web (`:3000`) and the Express API (`:4000`) through Turbo.
-- `yarn verify`: the single repository gate (lockfile, env contract, docs commands, lint, typecheck, tests, migrations, script tests). It starts its own disposable PostgreSQL 17 and ends with `yarn verify: OK` or `yarn verify: FAILED at <step>`.
+- `yarn verify`: the single repository gate (steps `lockfile`, `env-contract`, `docs-commands`, `ci-workflow`, `format-check`, `lint-typecheck-test`, `migrations`, `script-tests`). It starts its own disposable PostgreSQL 17 and ends with `yarn verify: OK` or `yarn verify: FAILED at <step>`.
 - `yarn e2e`: isolated Playwright run (first `yarn playwright install chromium`). It is not part of `yarn verify`.
 - `yarn lint`, `yarn typecheck`, `yarn test`: the same Turbo tasks `yarn verify` runs, for a quicker loop.
 - `yarn format` / `yarn format:check`: oxfmt over the repository.

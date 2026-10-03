@@ -67,9 +67,11 @@ yarn verify
 1. `lockfile`: в репозитории только `yarn.lock`;
 2. `env-contract`: примеры `.env.example` совпадают с ключами, которые читает код, и не содержат секретов;
 3. `docs-commands`: команды `yarn ...` в README и `AGENTS.md` существуют;
-4. `lint-typecheck-test`: `turbo run lint typecheck test` по `packages/rbac`, `app/server` и `app/web`;
-5. `migrations`: цепочка миграций Drizzle с нуля совпадает со схемой;
-6. `script-tests`: тесты корневых скриптов.
+4. `ci-workflow`: CI только читает репозиторий: без записи, секретов и публикации;
+5. `format-check`: `oxfmt --check .`, форматирование репозитория;
+6. `lint-typecheck-test`: `turbo run lint typecheck test` по `packages/rbac`, `app/server` и `app/web`;
+7. `migrations`: цепочка миграций Drizzle с нуля совпадает со схемой;
+8. `script-tests`: тесты корневых скриптов.
 
 Успешный прогон заканчивается строкой `yarn verify: OK`, неуспешный строкой `yarn verify: FAILED at <шаг>`.
 Если PostgreSQL 17 не найден и `TEST_DATABASE_URL` не задан, команда падает с подсказкой, шаги с базой не пропускаются.
