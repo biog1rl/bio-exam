@@ -3,7 +3,8 @@
  *
  * Этапы (каждый печатает «ok - <этап>» или «not ok - <этап>» с подробностями):
  *  1. manifest — журнал, app/server/drizzle/migrations-manifest.json и файлы *.sql совпадают:
- *     одно и то же число записей, те же теги в том же порядке, sha256 каждого файла как в манифесте.
+ *     одно и то же число записей, те же теги в том же порядке, sha256 каждого файла как в манифесте,
+ *     when и breakpoints каждой записи журнала как в манифесте; when в журнале строго возрастает.
  *  2. chain-vs-schema (DRZ-01) — цепочка 0000-0020 и schema.ts описывают одну и ту же базу:
  *     сторона миграций — настоящий раннер (yarn workspace @bio-exam/server drizzle:migrate) в
  *     изолированном окружении против test_migchk_chain; сторона schema.ts — DDL от drizzle-kit
@@ -171,6 +172,34 @@ export async function checkManifest(dir = MIGRATIONS_PATH) {
 		if (entry.idx !== i) lines.push(`order: journal position ${i} ${entry.tag} has idx ${entry.idx}`)
 		if (expected.idx !== i || expected.file !== `${expected.tag}.sql`) {
 			lines.push(`${MANIFEST_FILE}: position ${i} has idx ${expected.idx} and file ${expected.file}`)
+		}
+		// when решает, что применит раннер drizzle в production (created_at последней записи < when),
+		// поэтому он закреплён в манифесте вместе с breakpoints
+		if (entry.when !== expected.when) {
+			lines.push(
+				`order: journal position ${i} ${entry.tag} when ${entry.when} differs from the manifest ${expected.when}`
+			)
+		}
+		if (entry.breakpoints !== expected.breakpoints) {
+			lines.push(
+				`order: journal position ${i} ${entry.tag} breakpoints ${entry.breakpoints} differs from the manifest ${expected.breakpoints}`
+			)
+		}
+	}
+
+	// Монотонность: запись с when не больше предыдущего drizzle 0.45.3 в production молча пропускает
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i]
+		if (!entry) continue
+		if (!Number.isSafeInteger(entry.when) || entry.when <= 0) {
+			lines.push(`order: journal position ${i} ${entry.tag} when ${entry.when} is not a positive integer`)
+			continue
+		}
+		const previous = entries[i - 1]
+		if (i > 0 && previous && Number.isSafeInteger(previous.when) && entry.when <= previous.when) {
+			lines.push(
+				`order: journal position ${i} ${entry.tag} when ${entry.when} is not greater than the previous entry ${previous.tag} when ${previous.when}`
+			)
 		}
 	}
 

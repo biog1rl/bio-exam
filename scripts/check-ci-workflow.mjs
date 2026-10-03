@@ -15,10 +15,12 @@ import { fileURLToPath } from 'node:url'
 
 const WORKFLOW_PATH = fileURLToPath(new URL('../.github/workflows/ci.yml', import.meta.url))
 
-/** Запретные фрагменты (без учёта регистра): запись, секреты, публикация, хостинг, обходные триггеры */
+/**
+ * Запретные фрагменты (без учёта регистра): запись, публикация, хостинг, обходные триггеры.
+ * Секреты проверяются отдельно (SECRETS_CONTEXT): любое упоминание контекста secrets, а не только secrets.X
+ */
 const FORBIDDEN = [
 	'pull_request_target',
-	'secrets.',
 	'deploy',
 	'vercel',
 	': write',
@@ -27,6 +29,15 @@ const FORBIDDEN = [
 	'upload-artifact',
 	'git push',
 ]
+
+/**
+ * Контекст secrets в любой форме: secrets.X, secrets['X'], toJSON(secrets), в том числе в комментариях.
+ * Слово ищется целиком: AUTH_JWT_SECRET и ci-build-secret не совпадают
+ */
+const SECRETS_CONTEXT = /\bsecrets\b/i
+
+/** Единственные разрешённые триггеры под on: (workflow_run, schedule, issue_comment и прочие запрещены) */
+const ALLOWED_TRIGGERS = new Set(['pull_request', 'push'])
 
 /** Задачи, которые обязаны быть в файле, и их обязательные команды в порядке выполнения */
 const REQUIRED_JOBS = ['verify', 'build', 'e2e']
@@ -112,6 +123,18 @@ function checkTriggers(lines, findings) {
 	if (onAt === -1) {
 		findings.push('missing: on: block with pull_request and push triggers')
 		return
+	}
+	// Разрешающий список: любой другой ключ блока on: — находка. Ключи — строки с наименьшим
+	// отступом в блоке, какой бы он ни был (2, 4 и т. д.)
+	const onBody = blockBody(lines, onAt)
+	const keyIndent = Math.min(...onBody.map(indentOf))
+	for (const line of onBody) {
+		if (indentOf(line) !== keyIndent) continue
+		const key = /^\s*(?:-\s*)?['"]?([^\s'":]+)['"]?\s*(?::|$)/.exec(line)
+		const name = key ? key[1] : line.trim()
+		if (!ALLOWED_TRIGGERS.has(name)) {
+			findings.push(`forbidden: trigger ${name} (only pull_request and push are allowed)`)
+		}
 	}
 	const pr = indexOfLine(lines, /^ {2}pull_request:/, onAt)
 	if (pr === -1) {
@@ -229,6 +252,7 @@ export function checkCiWorkflow(text) {
 	for (const token of FORBIDDEN) {
 		if (lower.includes(token)) findings.push(`forbidden: "${token}"`)
 	}
+	if (SECRETS_CONTEXT.test(text)) findings.push('forbidden: reference to the secrets context')
 	if (/^\s*paths(-ignore)?:/m.test(text) || /^\s*branches-ignore:/m.test(text)) {
 		findings.push('forbidden: paths/branches-ignore filters (every change must run every job)')
 	}

@@ -71,7 +71,53 @@ test('ссылка на секрет репозитория отклоняетс
 			'      - name: Verify\n        env:\n          TOKEN: ${{ secrets.SOME_TOKEN }}\n'
 		)
 	)
-	assert.ok(hasFinding(findings, 'forbidden: "secrets."'), findings.join('\n'))
+	assert.ok(hasFinding(findings, 'forbidden: reference to the secrets context'), findings.join('\n'))
+})
+
+/** Вставляет env с выражением в шаг Verify */
+function withVerifyEnv(expression) {
+	return mutate(
+		WORKFLOW,
+		'      - name: Verify\n',
+		`      - name: Verify\n        env:\n          TOKEN: ${expression}\n`
+	)
+}
+
+test("секрет через индекс secrets['X'] отклоняется", () => {
+	const findings = checkCiWorkflow(withVerifyEnv("${{ secrets['NPM_TOKEN'] }}"))
+	assert.ok(hasFinding(findings, 'forbidden: reference to the secrets context'), findings.join('\n'))
+})
+
+test('весь контекст toJSON(secrets) отклоняется', () => {
+	const findings = checkCiWorkflow(withVerifyEnv('${{ toJSON(secrets) }}'))
+	assert.ok(hasFinding(findings, 'forbidden: reference to the secrets context'), findings.join('\n'))
+})
+
+test('упоминание secrets в комментарии тоже отклоняется', () => {
+	const findings = checkCiWorkflow(mutate(WORKFLOW, 'name: CI\n', 'name: CI\n# uses Secrets.TOKEN later\n'))
+	assert.ok(hasFinding(findings, 'forbidden: reference to the secrets context'), findings.join('\n'))
+})
+
+for (const [trigger, block] of [
+	['workflow_run', '  workflow_run:\n    workflows: [CI]\n    types: [completed]\n'],
+	['schedule', "  schedule:\n    - cron: '0 3 * * *'\n"],
+	['workflow_dispatch', '  workflow_dispatch:\n'],
+	['issue_comment', '  issue_comment:\n    types: [created]\n'],
+]) {
+	test(`триггер ${trigger} отклоняется: разрешены только pull_request и push`, () => {
+		const findings = checkCiWorkflow(mutate(WORKFLOW, '  pull_request:\n', `  pull_request:\n${block}`))
+		assert.ok(hasFinding(findings, `forbidden: trigger ${trigger}`), findings.join('\n'))
+	})
+}
+
+test('лишний триггер с другим отступом тоже отклоняется', () => {
+	const text = mutate(
+		WORKFLOW,
+		'  pull_request:\n  push:\n    branches: [master]\n',
+		'    pull_request:\n    push:\n      branches: [master]\n    workflow_run:\n      workflows: [CI]\n'
+	)
+	const findings = checkCiWorkflow(text)
+	assert.ok(hasFinding(findings, 'forbidden: trigger workflow_run'), findings.join('\n'))
 })
 
 test('триггер в контексте цели отклоняется', () => {

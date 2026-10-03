@@ -63,7 +63,7 @@ function getFreePort() {
 	})
 }
 
-/** Текущий дочерний процесс: ему пересылаются SIGINT/SIGTERM */
+/** Текущий дочерний процесс: ему пересылаются SIGINT/SIGTERM (SIGHUP — как SIGTERM) */
 let activeChild = null
 
 /** Запуск шага с наследованием вывода; бросает при ненулевом коде */
@@ -157,6 +157,7 @@ async function main() {
 		const onSigterm = onSignal('SIGTERM')
 		process.on('SIGINT', onSigint)
 		process.on('SIGTERM', onSigterm)
+		process.on('SIGHUP', onSigterm)
 
 		try {
 			const childEnv = isolatedChildEnv({
@@ -205,6 +206,7 @@ async function main() {
 		} finally {
 			process.off('SIGINT', onSigint)
 			process.off('SIGTERM', onSigterm)
+			process.off('SIGHUP', onSigterm)
 			await fsp.rm(storageDir, { recursive: true, force: true })
 		}
 	})

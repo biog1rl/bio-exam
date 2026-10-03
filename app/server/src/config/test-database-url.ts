@@ -3,7 +3,8 @@
  *
  * Переключатель изоляции: BIO_EXAM_ISOLATED_ENV=1. В изолированном режиме серверный код
  * не читает .env и DATABASE_URL, а берёт адрес базы только из TEST_DATABASE_URL и
- * проверяет его здесь: хост localhost или 127.0.0.1, имя базы ^test_[a-z0-9_]+$.
+ * проверяет его здесь: хост localhost или 127.0.0.1, имя базы ^test_[a-z0-9_]+$, без строки
+ * запроса и фрагмента (иначе ?host= или ?hostaddr= подменили бы проверенный хост).
  *
  * Файл намеренно без импортов и только со стираемым синтаксисом TypeScript: корневые
  * .mjs-скрипты импортируют его напрямую через нативное удаление типов в Node 24.
@@ -40,6 +41,13 @@ export function assertTestDatabaseUrl(raw: string | undefined): string {
 
 	if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
 		throw new Error(`TEST_DATABASE_URL protocol ${parsed.protocol} is not postgres: or postgresql:`)
+	}
+
+	// Параметры запроса меняют цель подключения в обход проверки ниже: node-postgres и libpq
+	// читают ?host=, ?hostaddr=, ?sslmode= и другие. Поэтому строка запроса и фрагмент запрещены целиком.
+	// Сообщение фиксированное: значения параметров могут содержать хост или учётные данные
+	if (parsed.search !== '' || parsed.hash !== '') {
+		throw new Error('TEST_DATABASE_URL must not contain a query string or fragment')
 	}
 
 	if (!ALLOWED_HOSTS.includes(parsed.hostname)) {

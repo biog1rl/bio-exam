@@ -10,7 +10,7 @@ import sharp from 'sharp'
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
-import { storageService } from '../../services/storage/storage.js'
+import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
 
 const router = Router()
 
@@ -35,6 +35,12 @@ const multerStorage = useSupabase
 	? multer.memoryStorage()
 	: multer.diskStorage({
 			destination: (_req, _file, cb) => {
+				// В изолированном процессе multer не пишет в рабочее дерево (WR-04)
+				try {
+					assertLegacyUploadsAllowed()
+				} catch (error) {
+					return cb(error as Error, '')
+				}
 				ensureUploadDir()
 				cb(null, UPLOAD_DIR)
 			},
@@ -136,6 +142,8 @@ router.post('/', sessionRequired(), upload.single('avatar') as any, async (req, 
 
 		// Если Supabase настроен — загружаем файлы в Supabase Storage
 		const supabaseEnabled = storageService.isConfigured()
+		// Без Supabase аватар пишется и удаляется в ../web/public: в изолированном процессе запрещено (WR-04)
+		if (!supabaseEnabled) assertLegacyUploadsAllowed()
 
 		// Получаем параметры кропа из body
 		const cropX = req.body.cropX ? parseFloat(req.body.cropX) : null
@@ -389,6 +397,9 @@ router.delete('/', sessionRequired(), async (req, res) => {
 			.limit(1)
 
 		if (user.length > 0) {
+			// Файлы удаляются из ../web/public: в изолированном процессе запрещено (WR-04)
+			if (user[0].avatar || user[0].avatarCropped) assertLegacyUploadsAllowed()
+
 			// Удаляем оригинальный файл
 			if (user[0].avatar) {
 				const avatarPath = path.join(process.cwd(), '../web/public', user[0].avatar)

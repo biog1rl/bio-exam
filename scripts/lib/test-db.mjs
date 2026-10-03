@@ -46,19 +46,24 @@ const FIXED_PG_DIRS = [
 	'/usr/lib/postgresql/17/bin',
 ]
 
-/** Переменные, которые никогда не передаются изолированному дочернему процессу */
-const STRIPPED_ENV = [
-	'DATABASE_URL',
-	'SUPABASE_URL',
-	'SUPABASE_SERVICE_KEY',
-	'SUPABASE_STORAGE_BUCKET',
-	'PGHOST',
-	'PGPORT',
-	'PGUSER',
-	'PGPASSWORD',
-	'PGDATABASE',
-	'PGSERVICE',
-]
+/**
+ * Переменные, которые никогда не передаются изолированному дочернему процессу: DATABASE_URL, любые
+ * SUPABASE_* и любые переменные libpq PG<БУКВЫ> (PGHOST, PGHOSTADDR, PGPASSFILE, PGSERVICEFILE,
+ * PGOPTIONS и т. д.). Отбор по шаблону, а не по списку: новая переменная libpq не просочится.
+ * Переменные проекта с подчёркиванием после PG (PG_BIN_DIR, PG_FORCE_SSL, PG_POOL_MAX) остаются.
+ */
+export function isStrippedEnvKey(key) {
+	return key === 'DATABASE_URL' || /^SUPABASE_/.test(key) || /^PG(?!_)[A-Z]+$/.test(key)
+}
+
+/** Копия окружения без вырезаемых переменных */
+function strippedEnv(source) {
+	const env = { ...source }
+	for (const key of Object.keys(env)) {
+		if (isStrippedEnvKey(key)) delete env[key]
+	}
+	return env
+}
 
 // ---------------------------------------------------------------------------
 // Вспомогательное
@@ -88,9 +93,7 @@ function tail(text, lines = 15) {
 
 /** Окружение для initdb/pg_ctl/createdb: без PG* и с LC_ALL (иначе postmaster падает на macOS) */
 function pgToolEnv() {
-	const env = { ...process.env, LC_ALL: 'en_US.UTF-8' }
-	for (const key of STRIPPED_ENV) delete env[key]
-	return env
+	return { ...strippedEnv(process.env), LC_ALL: 'en_US.UTF-8' }
 }
 
 /** Жив ли процесс: мёртвым считается только ESRCH (EPERM — чужой, но живой процесс) */
@@ -200,12 +203,85 @@ function pidProtects(pid) {
 	return pid !== null && (Number.isNaN(pid) || isPidAlive(pid))
 }
 
+/** Командная строка процесса по ps (null — процесса нет или ps не ответил) */
+async function processCommand(pid) {
+	const result = await run('ps', ['-ww', '-o', 'command=', '-p', String(pid)])
+	if (result.code !== 0) return null
+	const command = result.stdout.trim()
+	return command === '' ? null : command
+}
+
+function escapeRegExp(text) {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 /**
- * Удаляет брошенные кластеры bio-exam-pg-* (например, после kill -9).
- * Каталог удаляется, только если все существующие PID-файлы (owner.pid и data/postmaster.pid)
- * указывают на мёртвые процессы. Живой owner.pid защищает каталог соседнего запуска ещё до
- * появления postmaster.pid (во время initdb). Каталог без обоих файлов удаляется, только если
- * он старше 10 минут.
+ * Процесс pid — postmaster именно этого каталога данных: исполняемый файл postgres и аргумент
+ * -D <dataDir> отдельным словом. PID из postmaster.pid после перезагрузки может принадлежать
+ * чужому процессу, а pg_ctl stop ничего не проверяет и послал бы ему SIGQUIT; поэтому сигнал
+ * уходит только процессу, чья командная строка совпала.
+ */
+async function isPostmasterOf(pid, dataDir) {
+	const command = await processCommand(pid)
+	if (command === null) return false
+	const executable = command.split(/\s+/)[0]
+	if (path.basename(executable) !== 'postgres') return false
+	const dirs = new Set([dataDir])
+	try {
+		dirs.add(await fsp.realpath(dataDir))
+	} catch {
+		// каталога уже нет: сравниваем только исходный путь
+	}
+	return [...dirs].some((dir) => new RegExp(`\\s-D\\s+["']?${escapeRegExp(dir)}["']?(\\s|$)`).test(command))
+}
+
+/** Ждёт завершения процесса до timeoutMs; true — процесс завершился */
+async function waitForExit(pid, timeoutMs) {
+	const deadline = Date.now() + timeoutMs
+	while (isPidAlive(pid)) {
+		if (Date.now() >= deadline) return false
+		await new Promise((resolve) => setTimeout(resolve, 100))
+	}
+	return true
+}
+
+/**
+ * Останавливает postmaster брошенного кластера: владелец мёртв, а postmaster жив (pg_ctl start
+ * запускает его в собственной сессии, и он переживает обёртку после SIGHUP, kill -9 или закрытого
+ * терминала). Сигнал получает только проверенный PID; SIGQUIT — немедленная остановка, как
+ * pg_ctl -m immediate. Возвращает true, если postmaster остановлен.
+ */
+async function stopOrphanPostmaster(dir, pid) {
+	const dataDir = path.join(dir, 'data')
+	if (!(await isPostmasterOf(pid, dataDir))) {
+		console.error(`[test-db] orphan cluster ${dir}: pid ${pid} is not its postmaster, left untouched`)
+		return false
+	}
+	try {
+		process.kill(pid, 'SIGQUIT')
+	} catch (error) {
+		if (error.code !== 'ESRCH') {
+			console.error(`[test-db] could not stop orphan postmaster ${pid}: ${error.message}`)
+			return false
+		}
+	}
+	if (await waitForExit(pid, 10_000)) {
+		console.error(`[test-db] stopped orphan postmaster ${pid} (${dir})`)
+		return true
+	}
+	console.error(`[test-db] orphan postmaster ${pid} did not exit, ${dir} left in place`)
+	return false
+}
+
+/**
+ * Удаляет брошенные кластеры bio-exam-pg-* (например, после kill -9, SIGHUP или закрытого терминала).
+ * - Живой owner.pid защищает каталог всегда, в том числе до появления postmaster.pid (во время initdb).
+ * - Если owner.pid указывает на мёртвый процесс, а postmaster из data/postmaster.pid жив и его
+ *   командная строка — postgres с -D именно этого каталога, postmaster останавливается, затем
+ *   каталог удаляется. Живой процесс с другой командной строкой (PID переиспользован) не трогается,
+ *   и каталог остаётся.
+ * - Каталог удаляется, только если все существующие PID-файлы указывают на мёртвые процессы.
+ * - Каталог без обоих файлов удаляется, только если он старше 10 минут.
  */
 export async function sweepOrphanClusters() {
 	const root = os.tmpdir()
@@ -220,7 +296,13 @@ export async function sweepOrphanClusters() {
 		if (!entry.isDirectory() || !entry.name.startsWith(CLUSTER_PREFIX)) continue
 		const dir = path.join(root, entry.name)
 		const owner = await readPidFile(path.join(dir, 'owner.pid'))
-		const postmaster = await readPidFile(path.join(dir, 'data', 'postmaster.pid'))
+		const postmasterFile = path.join(dir, 'data', 'postmaster.pid')
+		let postmaster = await readPidFile(postmasterFile)
+		const ownerDead = owner !== null && !Number.isNaN(owner) && !isPidAlive(owner)
+		if (ownerDead && postmaster !== null && !Number.isNaN(postmaster) && isPidAlive(postmaster)) {
+			if (!(await stopOrphanPostmaster(dir, postmaster))) continue
+			postmaster = await readPidFile(postmasterFile)
+		}
 		if (pidProtects(owner) || pidProtects(postmaster)) continue
 		if (owner === null && postmaster === null) {
 			try {
@@ -370,16 +452,34 @@ export async function assertDatabaseSettings(url) {
 
 /** Окружение изолированного дочернего процесса: без DATABASE_URL, SUPABASE_*, PG*; флаг изоляции */
 export function isolatedChildEnv(extra = {}) {
-	const env = { ...process.env }
-	for (const key of STRIPPED_ENV) delete env[key]
+	const env = strippedEnv(process.env)
 	env[ISOLATED_ENV_FLAG] = '1'
 	return { ...env, ...extra }
 }
 
+/** Сигналы, по которым withTestDatabase удаляет базу и кластер, и коды выхода (128 + номер) */
+const SIGNAL_EXIT_CODES = [
+	['SIGINT', 130],
+	['SIGTERM', 143],
+	// Закрытый терминал: без обработчика обёртка умирает, а postmaster в своей сессии остаётся
+	['SIGHUP', 129],
+]
+
+/** Ошибки записи в stdout/stderr (EIO после закрытия терминала) больше не роняют процесс */
+function ignoreStreamErrors() {
+	for (const stream of [process.stdout, process.stderr]) {
+		if (!stream.listeners('error').includes(swallowStreamError)) stream.on('error', swallowStreamError)
+	}
+}
+
+function swallowStreamError() {}
+
 /**
  * Поднимает сервер, создаёт временную базу, проверяет настройки и вызывает fn({ url, name, dir }).
- * База и кластер удаляются всегда: в finally и по SIGINT/SIGTERM (выход 130/143).
+ * База и кластер удаляются всегда: в finally и по SIGINT/SIGTERM/SIGHUP (выход 130/143/129).
  * Очистка выполняется один раз; обработчики сигналов снимаются после обычного завершения.
+ * Если обёртка всё же умерла без очистки (kill -9), кластер подберёт sweepOrphanClusters при
+ * следующем запуске.
  */
 export async function withTestDatabase(prefix, fn) {
 	let serverPromise = null
@@ -396,13 +496,18 @@ export async function withTestDatabase(prefix, fn) {
 		return cleanupPromise
 	}
 	const onSignal = (signal, code) => () => {
-		console.error(`[test-db] ${signal}: cleaning up`)
+		// Закрытый терминал (SIGHUP): запись в консоль может упасть с EIO синхронно или событием
+		// 'error' потока. Ни то, ни другое не должно прервать очистку кластера
+		ignoreStreamErrors()
+		try {
+			console.error(`[test-db] ${signal}: cleaning up`)
+		} catch {
+			// консоль недоступна
+		}
 		cleanup().finally(() => process.exit(code))
 	}
-	const onSigint = onSignal('SIGINT', 130)
-	const onSigterm = onSignal('SIGTERM', 143)
-	process.on('SIGINT', onSigint)
-	process.on('SIGTERM', onSigterm)
+	const handlers = SIGNAL_EXIT_CODES.map(([signal, code]) => [signal, onSignal(signal, code)])
+	for (const [signal, handler] of handlers) process.on(signal, handler)
 	try {
 		serverPromise = acquireTestServer()
 		const server = await serverPromise
@@ -412,8 +517,7 @@ export async function withTestDatabase(prefix, fn) {
 		return await fn({ url: scratch.url, name: scratch.name, dir: server.dir })
 	} finally {
 		await cleanup()
-		process.off('SIGINT', onSigint)
-		process.off('SIGTERM', onSigterm)
+		for (const [signal, handler] of handlers) process.off(signal, handler)
 	}
 }
 
@@ -457,6 +561,8 @@ async function selfTest() {
 			['postgres://u@127.0.0.1:5432/postgres', 'database postgres does not match ^test_[a-z0-9_]+$'],
 			['postgres://u@127.0.0.1:5432/prod', 'database prod does not match ^test_[a-z0-9_]+$'],
 			['postgres://u@127.0.0.1:5432/Test_x', 'database Test_x does not match ^test_[a-z0-9_]+$'],
+			['postgres://u@127.0.0.1:5432/test_x?host=db.example.invalid', 'must not contain a query string'],
+			['postgres://u@127.0.0.1:5432/test_x?hostaddr=192.0.2.1', 'must not contain a query string'],
 		]
 		for (const [value, fragment] of rejected) {
 			let message = null
@@ -663,20 +769,54 @@ async function selfTest() {
 			}
 			return dir
 		}
-		const deadOwner = await makeFake({ owner: deadPid, postmaster: deadPid })
-		const liveOwner = await makeFake({ owner: process.pid })
-		const staleBare = await makeFake({ ageMinutes: 20 })
-		const freshBare = await makeFake({})
+		const postmasterPid = async (cluster) => readPidFile(path.join(cluster.dir, 'data', 'postmaster.pid'))
+
+		// Настоящие кластеры поднимаются до подмены owner.pid: startTestCluster сам вызывает очистку
+		const orphan = await startTestCluster()
+		const live = await startTestCluster().catch(async (error) => {
+			await orphan.stop()
+			throw error
+		})
+		// Живой процесс, который не postgres: его PID в postmaster.pid (переиспользованный PID)
+		const sleeper = spawn('sleep', ['600'], { stdio: 'ignore' })
+		const fakes = []
 		try {
-			const cluster = await startTestCluster()
-			await cluster.stop()
-			expect(!fs.existsSync(deadOwner), 'dead-owner directory was not removed')
+			const orphanPid = await postmasterPid(orphan)
+			const livePid = await postmasterPid(live)
+			expect(isPidAlive(orphanPid) && isPidAlive(livePid), 'test clusters are not running')
+			expect(isPidAlive(sleeper.pid), 'sleep did not start')
+
+			// Владелец кластера умер (SIGHUP, kill -9), postmaster работает дальше
+			await fsp.writeFile(path.join(orphan.dir, 'owner.pid'), `${deadPid}\n`)
+			const foreignSleep = await makeFake({ owner: deadPid, postmaster: sleeper.pid })
+			// postgres, но другого каталога: -D не совпадает, сигнал запрещён
+			const foreignPostgres = await makeFake({ owner: deadPid, postmaster: livePid })
+			const staleFiles = await makeFake({ owner: deadPid, postmaster: deadPid })
+			const liveOwner = await makeFake({ owner: process.pid })
+			const staleBare = await makeFake({ ageMinutes: 20 })
+			const freshBare = await makeFake({})
+			fakes.push(foreignSleep, foreignPostgres, staleFiles, liveOwner, staleBare, freshBare)
+
+			const removed = await sweepOrphanClusters()
+
+			expect(!isPidAlive(orphanPid), `orphan postmaster ${orphanPid} still runs after the sweep`)
+			expect(!fs.existsSync(orphan.dir), 'orphan cluster directory was not removed')
+			expect(removed.includes(orphan.dir), 'sweep did not report the orphan cluster')
+			expect(isPidAlive(sleeper.pid), 'a non-postgres process from postmaster.pid was signalled')
+			expect(fs.existsSync(foreignSleep), 'directory with a live non-postgres pid was removed')
+			expect(isPidAlive(livePid), 'a postgres of another data directory was signalled')
+			expect(fs.existsSync(foreignPostgres), 'directory pointing at a foreign postgres was removed')
+			expect(fs.existsSync(live.dir), 'cluster with a live owner was removed')
+			expect(!fs.existsSync(staleFiles), 'directory with dead owner and dead postmaster was not removed')
 			expect(fs.existsSync(liveOwner), 'live-owner directory without postmaster.pid was removed')
 			expect(!fs.existsSync(staleBare), 'stale directory without pid files was not removed')
 			expect(fs.existsSync(freshBare), 'fresh directory without pid files was removed')
 		} finally {
-			for (const dir of [deadOwner, liveOwner, staleBare, freshBare])
-				await fsp.rm(dir, { recursive: true, force: true })
+			sleeper.kill('SIGKILL')
+			// stop() идемпотентен: остановит postmaster, если очистка его не тронула, и удалит каталог
+			await orphan.stop()
+			await live.stop()
+			for (const dir of fakes) await fsp.rm(dir, { recursive: true, force: true })
 		}
 	})
 

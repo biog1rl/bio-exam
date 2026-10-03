@@ -12,6 +12,8 @@ import {
 const SECRET_USER = 'appuser_zq'
 const SECRET_PASSWORD = 'pw_s3cret_zq'
 const withSecrets = (rest: string) => `${rest.split('//')[0]}//${SECRET_USER}:${SECRET_PASSWORD}@${rest.split('//')[1]}`
+// Текст фиксированный: в нём нет ни хоста, ни значений параметров
+const QUERY_MESSAGE = /^TEST_DATABASE_URL must not contain a query string or fragment$/
 
 describe('assertTestDatabaseUrl: допустимые адреса', () => {
 	test.each([
@@ -39,6 +41,11 @@ describe('assertTestDatabaseUrl: отклоняемые адреса', () => {
 		['база test_ без суффикса', withSecrets('postgres://127.0.0.1/test_'), /does not match/],
 		['база без имени', withSecrets('postgres://127.0.0.1'), /does not match/],
 		['имя с дефисом', withSecrets('postgres://127.0.0.1/test_a-b'), /does not match/],
+		// H-1: ?host= и ?hostaddr= переопределяют хост для node-postgres и libpq, ?sslmode= меняет подключение
+		['?host= в строке запроса', withSecrets('postgres://127.0.0.1:5432/test_x?host=db.example.invalid'), QUERY_MESSAGE],
+		['?hostaddr= в строке запроса', withSecrets('postgres://127.0.0.1:5432/test_x?hostaddr=1.2.3.4'), QUERY_MESSAGE],
+		['?sslmode= в строке запроса', withSecrets('postgres://localhost/test_x?sslmode=disable'), QUERY_MESSAGE],
+		['фрагмент', withSecrets('postgres://127.0.0.1/test_x#db.example.invalid'), QUERY_MESSAGE],
 	])('отклоняет: %s', (_label, url, message) => {
 		expect(() => assertTestDatabaseUrl(url)).toThrow(message)
 	})
@@ -48,6 +55,9 @@ describe('assertTestDatabaseUrl: отклоняемые адреса', () => {
 		['протокол mysql', withSecrets('mysql://localhost/test_x')],
 		['база prod', withSecrets('postgres://127.0.0.1/prod')],
 		['некорректный URL', `postgres://${SECRET_USER}:${SECRET_PASSWORD}@[::1`],
+		['?host=', withSecrets('postgres://127.0.0.1/test_x?host=db.example.invalid')],
+		['?hostaddr=', withSecrets('postgres://127.0.0.1/test_x?hostaddr=1.2.3.4')],
+		['?sslmode=', withSecrets('postgres://127.0.0.1/test_x?sslmode=disable')],
 	])('сообщение об отказе (%s) не содержит пользователя и пароль', (_label, url) => {
 		let message = ''
 		try {

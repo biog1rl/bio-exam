@@ -7,7 +7,7 @@ import path from 'path'
 import sharp from 'sharp'
 
 import { sessionRequired } from '../../middleware/auth/session.js'
-import { storageService } from '../../services/storage/storage.js'
+import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
 
 const router = Router()
 
@@ -31,6 +31,12 @@ const multerStorage = storageService.isConfigured()
 	? multer.memoryStorage()
 	: multer.diskStorage({
 			destination: (_req, _file, cb) => {
+				// В изолированном процессе multer не пишет в рабочее дерево (WR-04)
+				try {
+					assertLegacyUploadsAllowed()
+				} catch (error) {
+					return cb(error as Error, '')
+				}
 				fs.mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true })
 				cb(null, LOCAL_UPLOAD_DIR)
 			},
@@ -117,7 +123,8 @@ router.delete('/', sessionRequired(), async (req, res) => {
 		}
 
 		if (!storageService.isConfigured()) {
-			// Local fallback: delete from disk
+			// Local fallback: delete from disk (в изолированном процессе запрещено, WR-04)
+			assertLegacyUploadsAllowed()
 			const localPath = path.join(process.cwd(), '../web/public/uploads', filePath)
 			if (fs.existsSync(localPath)) {
 				fs.unlinkSync(localPath)
@@ -171,7 +178,8 @@ router.post('/', sessionRequired(), upload.single('file') as any, async (req, re
 				upsert: false,
 			})
 		} else {
-			// Local fallback: save to web/public/uploads/images
+			// Local fallback: save to web/public/uploads/images (в изолированном процессе запрещено, WR-04)
+			assertLegacyUploadsAllowed()
 			fs.mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true })
 			fs.writeFileSync(path.join(LOCAL_UPLOAD_DIR, filename), processedBuffer)
 

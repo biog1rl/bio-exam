@@ -50,7 +50,7 @@ function exitCodeOf(code, signal) {
 	return 1
 }
 
-/** Запускает команду и ждёт её завершения, пересылая SIGINT/SIGTERM */
+/** Запускает команду и ждёт её завершения, пересылая SIGINT/SIGTERM (SIGHUP — как SIGTERM) */
 function runCommand(command, env) {
 	return new Promise((resolve) => {
 		const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env })
@@ -61,9 +61,11 @@ function runCommand(command, env) {
 		const onSigterm = forward('SIGTERM')
 		process.on('SIGINT', onSigint)
 		process.on('SIGTERM', onSigterm)
+		process.on('SIGHUP', onSigterm)
 		const detach = () => {
 			process.off('SIGINT', onSigint)
 			process.off('SIGTERM', onSigterm)
+			process.off('SIGHUP', onSigterm)
 		}
 		child.on('error', (error) => {
 			detach()

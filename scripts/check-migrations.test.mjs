@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -105,6 +106,75 @@ test('manifest: a renamed migration file fails', async (t) => {
 	assert.equal(result.ok, false)
 	assert.match(joined(result), /0003_refresh_tokens\.sql/)
 	assert.match(joined(result), /0003_refresh_tokens_renamed\.sql/)
+})
+
+test('manifest: an edited when on an applied journal entry fails and names the entry', async (t) => {
+	const dir = await fixture(t, async (d) => {
+		const file = path.join(d, 'meta/_journal.json')
+		const journal = await readJson(file)
+		// Поднятый when последней применённой миграции: раннер в production применил бы 0020 повторно
+		journal.entries[20].when += 1000
+		await writeJson(file, journal)
+	})
+	const result = await checkManifest(dir)
+	assert.equal(result.ok, false)
+	assert.equal(result.lines.length, 1, joined(result))
+	assert.match(joined(result), /0020_short_answer_variants when \d+ differs from the manifest \d+/)
+})
+
+test('manifest: an edited breakpoints on an applied journal entry fails', async (t) => {
+	const dir = await fixture(t, async (d) => {
+		const file = path.join(d, 'meta/_journal.json')
+		const journal = await readJson(file)
+		journal.entries[3].breakpoints = false
+		await writeJson(file, journal)
+	})
+	const result = await checkManifest(dir)
+	assert.equal(result.ok, false)
+	assert.match(joined(result), /0003_refresh_tokens breakpoints false differs from the manifest true/)
+})
+
+/** Дописывает в копию полностью оформленную миграцию 0021 (файл, журнал, манифест) с when = when(0020) + delta */
+async function appendMigration(d, tag, delta) {
+	const sql = 'SELECT 1;\n'
+	await fsp.writeFile(path.join(d, `${tag}.sql`), sql)
+	const journalFile = path.join(d, 'meta/_journal.json')
+	const journal = await readJson(journalFile)
+	const last = journal.entries.at(-1)
+	const when = last.when + delta
+	journal.entries.push({ ...last, idx: 21, tag, when })
+	await writeJson(journalFile, journal)
+	const manifestFile = path.join(d, 'migrations-manifest.json')
+	const manifest = await readJson(manifestFile)
+	manifest.migrations.push({
+		idx: 21,
+		tag,
+		file: `${tag}.sql`,
+		sha256: crypto.createHash('sha256').update(sql).digest('hex'),
+		when,
+		breakpoints: true,
+	})
+	await writeJson(manifestFile, manifest)
+}
+
+test('manifest: a new entry whose when is not greater than the previous one fails', async (t) => {
+	// Ошибка только в when: drizzle 0.45.3 в production молча пропустил бы такую миграцию
+	for (const delta of [0, -1]) {
+		const dir = await fixture(t, (d) => appendMigration(d, '0021_late_entry', delta))
+		const result = await checkManifest(dir)
+		assert.equal(result.ok, false, `delta ${delta}`)
+		assert.equal(result.lines.length, 1, joined(result))
+		assert.match(
+			joined(result),
+			/0021_late_entry when \d+ is not greater than the previous entry 0020_short_answer_variants/
+		)
+	}
+})
+
+test('manifest: a correctly appended entry with a greater when passes', async (t) => {
+	const dir = await fixture(t, (d) => appendMigration(d, '0021_next_entry', 1))
+	const result = await checkManifest(dir)
+	assert.equal(result.ok, true, joined(result))
 })
 
 test('generate-no-diff: the restored snapshot produces no new file', async (t) => {

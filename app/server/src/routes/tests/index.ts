@@ -58,7 +58,7 @@ import {
 	updateQuestionSearchDocumentLocation,
 	upsertQuestionSearchDocument,
 } from '../../services/search/question-documents.js'
-import { storageService } from '../../services/storage/storage.js'
+import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
 import { assignmentsRouter } from './assignments.js'
 
 const router = Router()
@@ -2332,6 +2332,8 @@ router.post(
 				return res.status(201).json({ url: storagePath })
 			} else {
 				// Local disk fallback: save under web/public/uploads/tests/{topicSlug}/{testSlug}/assets
+				// В изолированном процессе запрещено: рабочее дерево не меняется (WR-04)
+				assertLegacyUploadsAllowed()
 				const UPLOAD_DIR = path.join(process.cwd(), `../web/public/uploads/tests/${topic.slug}/${test.slug}/assets`)
 				fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 				const filePath = path.join(UPLOAD_DIR, filename)

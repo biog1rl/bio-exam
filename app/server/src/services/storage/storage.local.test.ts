@@ -565,6 +565,27 @@ describe('Supabase client lock-out', () => {
 		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
 
+	test('isolated env refuses the legacy ../web/public/uploads fallback instead of writing into the working tree', async () => {
+		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '1')
+		vi.stubEnv('SUPABASE_URL', undefined)
+		vi.stubEnv('SUPABASE_SERVICE_KEY', undefined)
+		const legacy = path.resolve(process.cwd(), '../web/public/uploads')
+		const before = fs.existsSync(legacy) ? snapshot(legacy) : null
+		const { StorageService: Fresh, assertLegacyUploadsAllowed } = await loadStorage()
+
+		const refusal = /legacy web\/public\/uploads fallback is disabled in isolated mode/
+		assert.throws(() => assertLegacyUploadsAllowed(), refusal)
+		await assert.rejects(() => new Fresh().moveDirectory('topics/a/t1', 'topics/a/t2'), refusal)
+		assert.deepEqual(fs.existsSync(legacy) ? snapshot(legacy) : null, before)
+		assert.equal(createClientSpy.mock.calls.length, 0)
+	})
+
+	test('outside isolation the legacy fallback guard is a no-op (production path unchanged)', async () => {
+		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '')
+		const { assertLegacyUploadsAllowed } = await loadStorage()
+		assert.doesNotThrow(() => assertLegacyUploadsAllowed())
+	})
+
 	test('the local driver works in an isolated process with SUPABASE_* unset (e2e setup)', async () => {
 		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '1')
 		vi.stubEnv('SUPABASE_URL', undefined)

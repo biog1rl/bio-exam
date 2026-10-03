@@ -37,6 +37,15 @@ const SCRIPTS_DIR = path.join(REPO_ROOT, 'scripts')
 /** Имя "шага" для отказа до начала шагов: нет PostgreSQL 17 или база не поднялась */
 const SETUP_STEP = 'test-database'
 
+/**
+ * Сигналы verify и то, что получает выполняющийся шаг. SIGHUP пересылается как SIGTERM: шаги
+ * (check-migrations, turbo) убирают за собой по SIGTERM, а SIGHUP у check-migrations не обрабатывается
+ */
+const FORWARDED_SIGNALS = { SIGINT: 'SIGINT', SIGTERM: 'SIGTERM', SIGHUP: 'SIGTERM' }
+
+/** Процесс выполняющегося шага (null между шагами) */
+let activeChild = null
+
 /** Тестовые файлы скриптов: рекурсивно, без зависимости от глобов оболочки или Node */
 function collectScriptTests(dir = SCRIPTS_DIR) {
 	const files = []
@@ -81,12 +90,33 @@ function runStep(step, env) {
 		}
 		console.error(`\n[verify] step ${step.name}: ${[path.basename(step.cmd), ...args].join(' ')}`)
 		const child = spawn(step.cmd, args, { cwd: REPO_ROOT, stdio: 'inherit', env })
-		child.on('error', (error) => resolve({ ok: false, detail: `cannot start ${step.cmd}: ${error.message}` }))
+		activeChild = child
+		child.on('error', (error) => {
+			if (activeChild === child) activeChild = null
+			resolve({ ok: false, detail: `cannot start ${step.cmd}: ${error.message}` })
+		})
 		child.on('close', (code, signal) => {
+			if (activeChild === child) activeChild = null
 			if (code === 0) resolve({ ok: true })
 			else resolve({ ok: false, detail: signal ? `terminated by ${signal}` : `exit code ${code}` })
 		})
 	})
+}
+
+/**
+ * Пересылка сигнала шагу. Обработчик withTestDatabase (зарегистрирован раньше) удаляет базу и кластер
+ * и завершает процесс; без пересылки kill <pid verify> оставил бы шаг (turbo, check-migrations с его
+ * кластером) работать сиротой. Очистка асинхронная, поэтому сигнал уходит шагу до process.exit
+ */
+function forwardToActiveChild(signal) {
+	const child = activeChild
+	if (child && child.exitCode === null && child.signalCode === null) {
+		try {
+			child.kill(signal)
+		} catch {
+			// шаг уже завершился
+		}
+	}
 }
 
 /** Блок итогов: каждый шаг по порядку (passed / FAILED / not run) и финальная строка */
@@ -103,16 +133,25 @@ async function main() {
 	try {
 		await withTestDatabase('test_verify', async ({ url }) => {
 			const env = isolatedChildEnv({ TEST_DATABASE_URL: url })
-			for (const step of STEPS) {
-				const result = await runStep(step, env)
-				if (result.ok) {
-					statuses.set(step.name, 'passed')
-					continue
+			const forwarders = Object.entries(FORWARDED_SIGNALS).map(([signal, sent]) => [
+				signal,
+				() => forwardToActiveChild(sent),
+			])
+			for (const [signal, handler] of forwarders) process.on(signal, handler)
+			try {
+				for (const step of STEPS) {
+					const result = await runStep(step, env)
+					if (result.ok) {
+						statuses.set(step.name, 'passed')
+						continue
+					}
+					statuses.set(step.name, 'FAILED')
+					console.error(`[verify] step ${step.name} failed: ${result.detail}`)
+					failed = step.name
+					break
 				}
-				statuses.set(step.name, 'FAILED')
-				console.error(`[verify] step ${step.name} failed: ${result.detail}`)
-				failed = step.name
-				break
+			} finally {
+				for (const [signal, handler] of forwarders) process.off(signal, handler)
 			}
 		})
 	} catch (error) {

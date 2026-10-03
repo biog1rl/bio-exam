@@ -38,6 +38,18 @@ function isConfigured(): boolean {
 	return Boolean(SUPABASE_URL && SUPABASE_SERVICE_KEY)
 }
 
+/**
+ * Устаревший запасной путь на локальный диск (../web/public/uploads, рабочее дерево веб-приложения)
+ * в изолированном процессе запрещён: тест или e2e иначе писали бы в рабочее дерево разработчика
+ * мимо STORAGE_LOCAL_DIR. Вне изоляции ничего не делает, поведение production прежнее.
+ * Перевод загрузок на локальный драйвер — Phase 7 (ADR-0004).
+ */
+export function assertLegacyUploadsAllowed(): void {
+	if (isIsolatedEnv()) {
+		throw new Error('[storage] legacy web/public/uploads fallback is disabled in isolated mode')
+	}
+}
+
 function showConfigWarning(): void {
 	if (!configWarningShown) {
 		console.warn('[StorageService] SUPABASE_URL and SUPABASE_SERVICE_KEY not set. Storage operations will be skipped.')
@@ -719,6 +731,9 @@ export class StorageService {
 			})
 			return
 		}
+
+		// Изолированный процесс не трогает рабочее дерево: отказ до любого обращения к диску
+		assertLegacyUploadsAllowed()
 
 		// Локальный диск: переводим пути в web/public/uploads
 		// Преобразование: topics/{topic}/{test}/... -> web/public/uploads/tests/{topic}/{test}/...
