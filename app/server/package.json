@@ -12,6 +12,7 @@
 		"build": "rimraf dist && tsc -p tsconfig.json",
 		"start": "node --enable-source-maps dist/index.js",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run",
 		"lint": "oxlint -c ../../.oxlintrc.json src",
 		"drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
 		"drizzle:migrate": "tsx src/scripts/apply-migration.ts",

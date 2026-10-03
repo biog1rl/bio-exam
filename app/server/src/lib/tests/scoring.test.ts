@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { test } from 'vitest'
 
 import { scoreQuestionByType } from './scoring.js'
 
@@ -56,24 +57,28 @@ const builtinTypesMap = {
 
 // --- short_answer ---
 
-const shortAnswerExact = scoreQuestionByType({
-	questionType: 'short_answer',
-	userAnswer: ' МИТОЗ ',
-	correctAnswer: 'митоз',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('short_answer: совпадение без учёта регистра и пробелов', () => {
+	const shortAnswerExact = scoreQuestionByType({
+		questionType: 'short_answer',
+		userAnswer: ' МИТОЗ ',
+		correctAnswer: 'митоз',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(shortAnswerExact.earnedPoints, 1)
+	assert.equal(shortAnswerExact.isCorrect, true)
 })
-assert.equal(shortAnswerExact.earnedPoints, 1)
-assert.equal(shortAnswerExact.isCorrect, true)
 
-const shortAnswerWrong = scoreQuestionByType({
-	questionType: 'short_answer',
-	userAnswer: 'мейоз',
-	correctAnswer: 'митоз',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('short_answer: неверный ответ даёт 0 баллов', () => {
+	const shortAnswerWrong = scoreQuestionByType({
+		questionType: 'short_answer',
+		userAnswer: 'мейоз',
+		correctAnswer: 'митоз',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(shortAnswerWrong.earnedPoints, 0)
 })
-assert.equal(shortAnswerWrong.earnedPoints, 0)
 
 // --- short_answer_variants ---
 
@@ -89,193 +94,233 @@ const shortAnswerVariantsTypesMap = {
 	},
 }
 
-const shortAnswerAlternative = scoreQuestionByType({
-	questionType: 'short_answer_variants',
-	userAnswer: 'МОДЕЛИРОВАНИЕ',
-	correctAnswer: ['эксперимент', 'моделирование'],
-	fallbackMaxPoints: 0,
-	questionTypesMap: shortAnswerVariantsTypesMap,
+test('short_answer_variants: любой из допустимых вариантов засчитывается', () => {
+	const shortAnswerAlternative = scoreQuestionByType({
+		questionType: 'short_answer_variants',
+		userAnswer: 'МОДЕЛИРОВАНИЕ',
+		correctAnswer: ['эксперимент', 'моделирование'],
+		fallbackMaxPoints: 0,
+		questionTypesMap: shortAnswerVariantsTypesMap,
+	})
+	assert.equal(shortAnswerAlternative.earnedPoints, 1)
+	assert.equal(shortAnswerAlternative.isCorrect, true)
 })
-assert.equal(shortAnswerAlternative.earnedPoints, 1)
-assert.equal(shortAnswerAlternative.isCorrect, true)
 
-const shortAnswerAlternativeWrong = scoreQuestionByType({
-	questionType: 'short_answer_variants',
-	userAnswer: 'наблюдение',
-	correctAnswer: ['эксперимент', 'моделирование'],
-	fallbackMaxPoints: 0,
-	questionTypesMap: shortAnswerVariantsTypesMap,
+test('short_answer_variants: ответ вне набора даёт 0 баллов', () => {
+	const shortAnswerAlternativeWrong = scoreQuestionByType({
+		questionType: 'short_answer_variants',
+		userAnswer: 'наблюдение',
+		correctAnswer: ['эксперимент', 'моделирование'],
+		fallbackMaxPoints: 0,
+		questionTypesMap: shortAnswerVariantsTypesMap,
+	})
+	assert.equal(shortAnswerAlternativeWrong.earnedPoints, 0)
 })
-assert.equal(shortAnswerAlternativeWrong.earnedPoints, 0)
 
 // --- sequence ---
 
-const sequenceExact = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '2314',
-	correctAnswer: '2314',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence: точный ответ', () => {
+	const sequenceExact = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '2314',
+		correctAnswer: '2314',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(sequenceExact.earnedPoints, 2)
 })
-assert.equal(sequenceExact.earnedPoints, 2)
 
-const sequenceOneMistake = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '2315',
-	correctAnswer: '2314',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence: одна ошибка', () => {
+	const sequenceOneMistake = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '2315',
+		correctAnswer: '2314',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(sequenceOneMistake.earnedPoints, 1)
 })
-assert.equal(sequenceOneMistake.earnedPoints, 1)
 
-const sequenceManyMistakes = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '2415',
-	correctAnswer: '2314',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence: несколько ошибок', () => {
+	const sequenceManyMistakes = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '2415',
+		correctAnswer: '2314',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(sequenceManyMistakes.earnedPoints, 0)
 })
-assert.equal(sequenceManyMistakes.earnedPoints, 0)
 
-const sequenceAdjacentSwap = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '12354',
-	correctAnswer: '12345',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence: перестановка соседних цифр', () => {
+	const sequenceAdjacentSwap = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '12354',
+		correctAnswer: '12345',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(sequenceAdjacentSwap.earnedPoints, 1)
+	assert.equal(sequenceAdjacentSwap.isCorrect, false)
 })
-assert.equal(sequenceAdjacentSwap.earnedPoints, 1)
-assert.equal(sequenceAdjacentSwap.isCorrect, false)
 
-const sequenceNonAdjacentSwap = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '14325',
-	correctAnswer: '12345',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence: перестановка несоседних цифр', () => {
+	const sequenceNonAdjacentSwap = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '14325',
+		correctAnswer: '12345',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(sequenceNonAdjacentSwap.earnedPoints, 0)
 })
-assert.equal(sequenceNonAdjacentSwap.earnedPoints, 0)
 
-const twoDigitSequenceOneCorrectFirst = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '11',
-	correctAnswer: '12',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из двух цифр: верна первая', () => {
+	const twoDigitSequenceOneCorrectFirst = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '11',
+		correctAnswer: '12',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(twoDigitSequenceOneCorrectFirst.earnedPoints, 1)
 })
-assert.equal(twoDigitSequenceOneCorrectFirst.earnedPoints, 1)
 
-const twoDigitSequenceOneCorrectSecond = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '22',
-	correctAnswer: '12',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из двух цифр: верна вторая', () => {
+	const twoDigitSequenceOneCorrectSecond = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '22',
+		correctAnswer: '12',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(twoDigitSequenceOneCorrectSecond.earnedPoints, 1)
 })
-assert.equal(twoDigitSequenceOneCorrectSecond.earnedPoints, 1)
 
-const twoDigitSequenceSwapped = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '21',
-	correctAnswer: '12',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из двух цифр: цифры переставлены', () => {
+	const twoDigitSequenceSwapped = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '21',
+		correctAnswer: '12',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(twoDigitSequenceSwapped.earnedPoints, 0)
 })
-assert.equal(twoDigitSequenceSwapped.earnedPoints, 0)
 
-const threeDigitSequenceExact = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '251',
-	correctAnswer: '251',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из трёх цифр: точный ответ', () => {
+	const threeDigitSequenceExact = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '251',
+		correctAnswer: '251',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(threeDigitSequenceExact.earnedPoints, 2)
 })
-assert.equal(threeDigitSequenceExact.earnedPoints, 2)
 
-const threeDigitSequenceWrongFirst = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '351',
-	correctAnswer: '251',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из трёх цифр: неверна первая', () => {
+	const threeDigitSequenceWrongFirst = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '351',
+		correctAnswer: '251',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(threeDigitSequenceWrongFirst.earnedPoints, 1)
 })
-assert.equal(threeDigitSequenceWrongFirst.earnedPoints, 1)
 
-const threeDigitSequenceWrongLast = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '259',
-	correctAnswer: '251',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из трёх цифр: неверна последняя', () => {
+	const threeDigitSequenceWrongLast = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '259',
+		correctAnswer: '251',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(threeDigitSequenceWrongLast.earnedPoints, 1)
 })
-assert.equal(threeDigitSequenceWrongLast.earnedPoints, 1)
 
-const threeDigitSequenceSwapped = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '521',
-	correctAnswer: '251',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('sequence из трёх цифр: цифры переставлены', () => {
+	const threeDigitSequenceSwapped = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '521',
+		correctAnswer: '251',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(threeDigitSequenceSwapped.earnedPoints, 0)
 })
-assert.equal(threeDigitSequenceSwapped.earnedPoints, 0)
 
 // --- matching ---
 
-const matchingExact = scoreQuestionByType({
-	questionType: 'matching',
-	userAnswer: { a: '1', b: '2', c: '3' },
-	correctAnswer: { a: '1', b: '2', c: '3' },
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('matching: точное соответствие', () => {
+	const matchingExact = scoreQuestionByType({
+		questionType: 'matching',
+		userAnswer: { a: '1', b: '2', c: '3' },
+		correctAnswer: { a: '1', b: '2', c: '3' },
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(matchingExact.earnedPoints, 2)
 })
-assert.equal(matchingExact.earnedPoints, 2)
 
-const matchingOneMistake = scoreQuestionByType({
-	questionType: 'matching',
-	userAnswer: { a: '1', b: '3', c: '3' },
-	correctAnswer: { a: '1', b: '2', c: '3' },
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('matching: одна ошибка', () => {
+	const matchingOneMistake = scoreQuestionByType({
+		questionType: 'matching',
+		userAnswer: { a: '1', b: '3', c: '3' },
+		correctAnswer: { a: '1', b: '2', c: '3' },
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(matchingOneMistake.earnedPoints, 1)
 })
-assert.equal(matchingOneMistake.earnedPoints, 1)
 
-const matchingManyMistakes = scoreQuestionByType({
-	questionType: 'matching',
-	userAnswer: { a: '2', b: '3', c: '1' },
-	correctAnswer: { a: '1', b: '2', c: '3' },
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('matching: несколько ошибок', () => {
+	const matchingManyMistakes = scoreQuestionByType({
+		questionType: 'matching',
+		userAnswer: { a: '2', b: '3', c: '1' },
+		correctAnswer: { a: '1', b: '2', c: '3' },
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(matchingManyMistakes.earnedPoints, 0)
 })
-assert.equal(matchingManyMistakes.earnedPoints, 0)
 
 // --- checkbox ---
 
-const checkboxExact = scoreQuestionByType({
-	questionType: 'checkbox',
-	userAnswer: ['1', '2', '3'],
-	correctAnswer: ['1', '2', '3'],
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('checkbox: точный набор', () => {
+	const checkboxExact = scoreQuestionByType({
+		questionType: 'checkbox',
+		userAnswer: ['1', '2', '3'],
+		correctAnswer: ['1', '2', '3'],
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(checkboxExact.earnedPoints, 2)
 })
-assert.equal(checkboxExact.earnedPoints, 2)
 
-const checkboxOneMistake = scoreQuestionByType({
-	questionType: 'checkbox',
-	userAnswer: ['1', '2', '4'],
-	correctAnswer: ['1', '2', '3'],
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('checkbox: одна ошибка', () => {
+	const checkboxOneMistake = scoreQuestionByType({
+		questionType: 'checkbox',
+		userAnswer: ['1', '2', '4'],
+		correctAnswer: ['1', '2', '3'],
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(checkboxOneMistake.earnedPoints, 1)
 })
-assert.equal(checkboxOneMistake.earnedPoints, 1)
 
-const checkboxManyMistakes = scoreQuestionByType({
-	questionType: 'checkbox',
-	userAnswer: ['1', '4', '5'],
-	correctAnswer: ['1', '2', '3'],
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('checkbox: несколько ошибок', () => {
+	const checkboxManyMistakes = scoreQuestionByType({
+		questionType: 'checkbox',
+		userAnswer: ['1', '4', '5'],
+		correctAnswer: ['1', '2', '3'],
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(checkboxManyMistakes.earnedPoints, 0)
 })
-assert.equal(checkboxManyMistakes.earnedPoints, 0)
 
 // --- custom type (tiers formula) ---
 
@@ -295,75 +340,90 @@ const customTypeRules = {
 	},
 }
 
-const customExact = scoreQuestionByType({
-	questionType: 'custom_sequence',
-	userAnswer: '1234',
-	correctAnswer: '1234',
-	fallbackMaxPoints: 0,
-	questionTypesMap: customTypeRules,
+test('custom_sequence (tiers): точный ответ', () => {
+	const customExact = scoreQuestionByType({
+		questionType: 'custom_sequence',
+		userAnswer: '1234',
+		correctAnswer: '1234',
+		fallbackMaxPoints: 0,
+		questionTypesMap: customTypeRules,
+	})
+	assert.equal(customExact.earnedPoints, 3)
 })
-assert.equal(customExact.earnedPoints, 3)
 
-const customOneMistake = scoreQuestionByType({
-	questionType: 'custom_sequence',
-	userAnswer: '1235',
-	correctAnswer: '1234',
-	fallbackMaxPoints: 0,
-	questionTypesMap: customTypeRules,
+test('custom_sequence (tiers): одна ошибка', () => {
+	const customOneMistake = scoreQuestionByType({
+		questionType: 'custom_sequence',
+		userAnswer: '1235',
+		correctAnswer: '1234',
+		fallbackMaxPoints: 0,
+		questionTypesMap: customTypeRules,
+	})
+	assert.equal(customOneMistake.earnedPoints, 2)
 })
-assert.equal(customOneMistake.earnedPoints, 2)
 
 // --- VALID-01: числовой correctAnswer для sequence (JSONB numeric coercion) ---
 // Тест: correctAnswer хранится в JSONB как число — должен засчитываться как верный
 
-const sequenceNumericCorrectAnswer = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '1234',
-	correctAnswer: 1234, // число, как из JSONB
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('VALID-01: sequence с числовым correctAnswer (JSONB) засчитывается', () => {
+	const sequenceNumericCorrectAnswer = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '1234',
+		correctAnswer: 1234, // число, как из JSONB
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.ok(sequenceNumericCorrectAnswer.earnedPoints > 0, 'sequence с числовым correctAnswer должен давать баллы')
+	assert.equal(sequenceNumericCorrectAnswer.isCorrect, true)
 })
-assert.ok(sequenceNumericCorrectAnswer.earnedPoints > 0, 'sequence с числовым correctAnswer должен давать баллы')
-assert.equal(sequenceNumericCorrectAnswer.isCorrect, true)
 
-const sequenceNumericCorrectAnswerWrong = scoreQuestionByType({
-	questionType: 'sequence',
-	userAnswer: '9999',
-	correctAnswer: 1234, // число, как из JSONB
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('VALID-01: sequence с числовым correctAnswer, неверный ответ', () => {
+	const sequenceNumericCorrectAnswerWrong = scoreQuestionByType({
+		questionType: 'sequence',
+		userAnswer: '9999',
+		correctAnswer: 1234, // число, как из JSONB
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(sequenceNumericCorrectAnswerWrong.earnedPoints, 0, 'неверный ответ должен давать 0 баллов')
 })
-assert.equal(sequenceNumericCorrectAnswerWrong.earnedPoints, 0, 'неверный ответ должен давать 0 баллов')
 
 // --- checkbox с числовыми ID в correctAnswer ---
 
-const checkboxNumericCorrectArray = scoreQuestionByType({
-	questionType: 'checkbox',
-	userAnswer: ['1', '2', '3'],
-	correctAnswer: [1, 2, 3],
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('checkbox с числовыми ID в correctAnswer', () => {
+	const checkboxNumericCorrectArray = scoreQuestionByType({
+		questionType: 'checkbox',
+		userAnswer: ['1', '2', '3'],
+		correctAnswer: [1, 2, 3],
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(checkboxNumericCorrectArray.earnedPoints, 2)
 })
-assert.equal(checkboxNumericCorrectArray.earnedPoints, 2)
 
 // --- radio ---
 
-const radioExact = scoreQuestionByType({
-	questionType: 'radio',
-	userAnswer: 'option_a',
-	correctAnswer: 'option_a',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('radio: верный вариант', () => {
+	const radioExact = scoreQuestionByType({
+		questionType: 'radio',
+		userAnswer: 'option_a',
+		correctAnswer: 'option_a',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(radioExact.earnedPoints, 1)
+	assert.equal(radioExact.isCorrect, true)
 })
-assert.equal(radioExact.earnedPoints, 1)
-assert.equal(radioExact.isCorrect, true)
 
-const radioWrong = scoreQuestionByType({
-	questionType: 'radio',
-	userAnswer: 'option_b',
-	correctAnswer: 'option_a',
-	fallbackMaxPoints: 0,
-	questionTypesMap: builtinTypesMap,
+test('radio: неверный вариант', () => {
+	const radioWrong = scoreQuestionByType({
+		questionType: 'radio',
+		userAnswer: 'option_b',
+		correctAnswer: 'option_a',
+		fallbackMaxPoints: 0,
+		questionTypesMap: builtinTypesMap,
+	})
+	assert.equal(radioWrong.earnedPoints, 0)
+	assert.equal(radioWrong.isCorrect, false)
+
 })
-assert.equal(radioWrong.earnedPoints, 0)
-assert.equal(radioWrong.isCorrect, false)

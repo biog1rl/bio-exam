@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { test, vi } from 'vitest'
+
+// Резолвер импортирует db/index.js, а тот открывает пул соединений. Для юнит-теста база не нужна.
+vi.mock('../../db/index.js', () => ({ db: {} }))
 
 import { validateQuestionWithType, type RuntimeQuestionTypesMap } from './question-type-resolver.js'
 
@@ -19,28 +23,32 @@ const questionTypesMap: RuntimeQuestionTypesMap = {
 	},
 }
 
-assert.equal(
-	validateQuestionWithType(
-		{
-			type: 'short_answer_variants',
-			options: null,
-			matchingPairs: null,
-			correct: ['эксперимент', 'моделирование'],
-		},
-		questionTypesMap
-	),
-	null
-)
+test('short_answer_variants: непустые варианты проходят валидацию', () => {
+	assert.equal(
+		validateQuestionWithType(
+			{
+				type: 'short_answer_variants',
+				options: null,
+				matchingPairs: null,
+				correct: ['эксперимент', 'моделирование'],
+			},
+			questionTypesMap
+		),
+		null
+	)
+})
 
-assert.match(
-	validateQuestionWithType(
-		{
-			type: 'short_answer_variants',
-			options: null,
-			matchingPairs: null,
-			correct: ['эксперимент', ''],
-		},
-		questionTypesMap
-	) ?? '',
-	/непустых/
-)
+test('short_answer_variants: пустой вариант отклоняется', () => {
+	assert.match(
+		validateQuestionWithType(
+			{
+				type: 'short_answer_variants',
+				options: null,
+				matchingPairs: null,
+				correct: ['эксперимент', ''],
+			},
+			questionTypesMap
+		) ?? '',
+		/непустых/
+	)
+})

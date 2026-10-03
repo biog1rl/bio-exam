@@ -22,6 +22,7 @@
     "clean": "rimraf dist",
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "devDependencies": {

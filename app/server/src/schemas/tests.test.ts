@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { test } from 'vitest'
 
 import { createDefaultTestScoringRules } from '../lib/tests/scoring.js'
 import { SaveTestSchema } from './tests.js'
@@ -93,111 +94,137 @@ const customQuestionType = {
 	correct: [1, 2],
 }
 
-const draftWithoutQuestions = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: false,
-	questions: [],
+test('SaveTestSchema: черновик без вопросов допустим', () => {
+	const draftWithoutQuestions = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: false,
+		questions: [],
+	})
+
+	assert.equal(draftWithoutQuestions.success, true)
 })
 
-assert.equal(draftWithoutQuestions.success, true)
+test('SaveTestSchema: опубликованный тест без вопросов отклоняется', () => {
+	const publishedWithoutQuestions = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [],
+	})
 
-const publishedWithoutQuestions = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [],
+	assert.equal(publishedWithoutQuestions.success, false)
+	if (publishedWithoutQuestions.success) {
+		throw new Error('Published test without questions should be rejected')
+	}
+
+	const hasQuestionsIssue = publishedWithoutQuestions.error.issues.some((issue) => issue.path.join('.') === 'questions')
+	assert.equal(hasQuestionsIssue, true)
 })
 
-assert.equal(publishedWithoutQuestions.success, false)
-if (publishedWithoutQuestions.success) {
-	throw new Error('Published test without questions should be rejected')
-}
+test('SaveTestSchema: опубликованный тест с radio-вопросом допустим', () => {
+	const publishedWithQuestion = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [radioQuestion],
+	})
 
-const hasQuestionsIssue = publishedWithoutQuestions.error.issues.some((issue) => issue.path.join('.') === 'questions')
-assert.equal(hasQuestionsIssue, true)
-
-const publishedWithQuestion = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [radioQuestion],
+	assert.equal(publishedWithQuestion.success, true)
 })
 
-assert.equal(publishedWithQuestion.success, true)
-
-const publishedWithShortAnswer = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [shortAnswerQuestion],
+test('SaveTestSchema: опубликованный тест с short_answer допустим', () => {
+	const publishedWithShortAnswer = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [shortAnswerQuestion],
+	})
+	assert.equal(publishedWithShortAnswer.success, true)
 })
-assert.equal(publishedWithShortAnswer.success, true)
 
-const publishedWithShortAnswerVariants = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [shortAnswerVariantsQuestion],
+test('SaveTestSchema: опубликованный тест с short_answer_variants допустим', () => {
+	const publishedWithShortAnswerVariants = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [shortAnswerVariantsQuestion],
+	})
+	assert.equal(publishedWithShortAnswerVariants.success, true)
 })
-assert.equal(publishedWithShortAnswerVariants.success, true)
 
-const shortAnswerVariantsWithScalar = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [{ ...shortAnswerVariantsQuestion, correct: 'эксперимент' }],
+test('SaveTestSchema: short_answer_variants со скалярным ответом отклоняется', () => {
+	const shortAnswerVariantsWithScalar = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [{ ...shortAnswerVariantsQuestion, correct: 'эксперимент' }],
+	})
+	assert.equal(shortAnswerVariantsWithScalar.success, false)
 })
-assert.equal(shortAnswerVariantsWithScalar.success, false)
 
-const shortAnswerVariantsWithDuplicate = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [{ ...shortAnswerVariantsQuestion, correct: ['Эксперимент', ' эксперимент '] }],
+test('SaveTestSchema: short_answer_variants с дублями вариантов отклоняется', () => {
+	const shortAnswerVariantsWithDuplicate = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [{ ...shortAnswerVariantsQuestion, correct: ['Эксперимент', ' эксперимент '] }],
+	})
+	assert.equal(shortAnswerVariantsWithDuplicate.success, false)
 })
-assert.equal(shortAnswerVariantsWithDuplicate.success, false)
 
-const publishedWithSequence = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [sequenceQuestion],
+test('SaveTestSchema: опубликованный тест с sequence допустим', () => {
+	const publishedWithSequence = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [sequenceQuestion],
+	})
+	assert.equal(publishedWithSequence.success, true)
 })
-assert.equal(publishedWithSequence.success, true)
 
-const publishedCheckboxWithNumericIds = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [checkboxWithNumericIdsQuestion],
+test('SaveTestSchema: checkbox с числовыми id допустим', () => {
+	const publishedCheckboxWithNumericIds = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [checkboxWithNumericIdsQuestion],
+	})
+	assert.equal(publishedCheckboxWithNumericIds.success, true)
 })
-assert.equal(publishedCheckboxWithNumericIds.success, true)
 
-const publishedCustomType = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [customQuestionType],
+test('SaveTestSchema: кастомный тип вопроса допустим', () => {
+	const publishedCustomType = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [customQuestionType],
+	})
+	assert.equal(publishedCustomType.success, true)
 })
-assert.equal(publishedCustomType.success, true)
 
-const invalidSequence = SaveTestSchema.safeParse({
-	...basePayload,
-	isPublished: true,
-	questions: [{ ...sequenceQuestion, correct: '23a4' }],
+test('SaveTestSchema: sequence с нецифровым ответом отклоняется', () => {
+	const invalidSequence = SaveTestSchema.safeParse({
+		...basePayload,
+		isPublished: true,
+		questions: [{ ...sequenceQuestion, correct: '23a4' }],
+	})
+	assert.equal(invalidSequence.success, false)
 })
-assert.equal(invalidSequence.success, false)
 
-const scoringRulesByDefault = SaveTestSchema.safeParse({
-	...basePayload,
-	scoringRules: undefined,
-	questions: [radioQuestion],
+test('SaveTestSchema: payload без scoringRules допустим', () => {
+	const scoringRulesByDefault = SaveTestSchema.safeParse({
+		...basePayload,
+		scoringRules: undefined,
+		questions: [radioQuestion],
+	})
+	assert.equal(scoringRulesByDefault.success, true)
+	if (!scoringRulesByDefault.success) throw new Error('Payload without scoringRules should be accepted')
+	assert.equal(scoringRulesByDefault.data.scoringRules, undefined)
 })
-assert.equal(scoringRulesByDefault.success, true)
-if (!scoringRulesByDefault.success) throw new Error('Payload without scoringRules should be accepted')
-assert.equal(scoringRulesByDefault.data.scoringRules, undefined)
 
-const draftWithTimerThresholds = SaveTestSchema.safeParse({
-	...basePayload,
-	timeLimitMinutes: 90,
-	redThresholdMinutes: 10,
-	warningThresholdMinutes: 3,
-	questions: [],
+test('SaveTestSchema: пороги таймера сохраняются', () => {
+	const draftWithTimerThresholds = SaveTestSchema.safeParse({
+		...basePayload,
+		timeLimitMinutes: 90,
+		redThresholdMinutes: 10,
+		warningThresholdMinutes: 3,
+		questions: [],
+	})
+	assert.equal(draftWithTimerThresholds.success, true)
+	if (!draftWithTimerThresholds.success) {
+		throw new Error('Payload with timer thresholds should be accepted')
+	}
+	assert.equal(draftWithTimerThresholds.data.redThresholdMinutes, 10)
+	assert.equal(draftWithTimerThresholds.data.warningThresholdMinutes, 3)
 })
-assert.equal(draftWithTimerThresholds.success, true)
-if (!draftWithTimerThresholds.success) {
-	throw new Error('Payload with timer thresholds should be accepted')
-}
-assert.equal(draftWithTimerThresholds.data.redThresholdMinutes, 10)
-assert.equal(draftWithTimerThresholds.data.warningThresholdMinutes, 3)
