@@ -1,13 +1,20 @@
 /**
  * Storage Service для работы с Supabase Storage
  * Если переменные окружения не установлены, операции записи пропускаются с предупреждением
+ *
+ * Локальный режим (D-18): STORAGE_DRIVER=local и абсолютный STORAGE_LOCAL_DIR. Все ключи хранятся
+ * файлами внутри этого каталога, Supabase не используется. Публичный интерфейс класса не меняется.
+ * Полный порт хранилища (ADR-0004) остаётся в Phase 7.
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
+import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
 import archiver from 'archiver'
+
+import { isIsolatedEnv } from '../../config/test-database-url.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
@@ -27,6 +34,8 @@ function appendCacheNonce(url: string): string {
 }
 
 function isConfigured(): boolean {
+	// Изолированный процесс не может дойти до Supabase, даже если переменные просочились в окружение (D-17)
+	if (isIsolatedEnv()) return false
 	return Boolean(SUPABASE_URL && SUPABASE_SERVICE_KEY)
 }
 
@@ -38,6 +47,11 @@ function showConfigWarning(): void {
 }
 
 function getClient(): SupabaseClient | null {
+	// Изолированный (тестовый или e2e) процесс никогда не создаёт клиент Supabase (D-17),
+	// и константы SUPABASE_* здесь даже не читаются
+	if (isIsolatedEnv()) return null
+	// Локальный режим (D-18) имеет приоритет над Supabase
+	if (isLocalStorage()) return null
 	if (!isConfigured()) {
 		showConfigWarning()
 		return null
@@ -46,6 +60,259 @@ function getClient(): SupabaseClient | null {
 		supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!)
 	}
 	return supabase
+}
+
+// ---------------------------------------------------------------------------
+// Локальный режим хранилища (D-18)
+// ---------------------------------------------------------------------------
+
+const LOCAL_TEMP_SUFFIX = /\.tmp-[0-9a-f]{12}$/
+
+const CONTENT_TYPES_BY_EXTENSION: Record<string, string> = {
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+	'.svg': 'image/svg+xml',
+	'.md': 'text/markdown',
+	'.json': 'application/json',
+	'.txt': 'text/plain',
+	'.zip': 'application/zip',
+}
+
+/** Включён ли локальный режим (читается при каждом вызове, чтобы тесты могли менять окружение) */
+function isLocalStorage(): boolean {
+	return process.env.STORAGE_DRIVER === 'local'
+}
+
+function getLocalRoot(): string {
+	const dir = process.env.STORAGE_LOCAL_DIR
+	if (!dir || !path.isAbsolute(dir)) {
+		throw new Error('STORAGE_LOCAL_DIR must be an absolute path')
+	}
+	return path.resolve(dir)
+}
+
+function localContentType(key: string): string {
+	return CONTENT_TYPES_BY_EXTENSION[path.extname(key).toLowerCase()] ?? 'application/octet-stream'
+}
+
+function unsupportedInLocal(method: string): Error {
+	return new Error(`[StorageService] ${method} is not supported in local storage mode (ADR-0004, Phase 7)`)
+}
+
+function hasErrorCode(error: unknown, ...codes: string[]): boolean {
+	const code = (error as NodeJS.ErrnoException | null)?.code
+	return typeof code === 'string' && codes.includes(code)
+}
+
+/** Лежит ли target внутри base (или совпадает с ним). Сравнение через path.relative, не по префиксу строки */
+function isInsideRoot(base: string, target: string): boolean {
+	const rel = path.relative(base, target)
+	if (rel === '') return true
+	return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+}
+
+function escapesRootError(): Error {
+	return new Error('[StorageService] path escapes storage root')
+}
+
+/** Синтаксические проверки ключа до любого обращения к файловой системе */
+function assertSafeLocalKey(key: string): void {
+	if (typeof key !== 'string' || key === '' || key.includes('\0')) {
+		throw new Error('[StorageService] invalid storage key')
+	}
+	if (key.startsWith('/') || key.startsWith('\\') || /^[A-Za-z]:/.test(key) || key.includes('\\')) {
+		throw escapesRootError()
+	}
+	if (key.split('/').includes('..')) {
+		throw escapesRootError()
+	}
+}
+
+async function realpathOrNull(target: string): Promise<string | null> {
+	try {
+		return await fs.promises.realpath(target)
+	} catch (e) {
+		if (hasErrorCode(e, 'ENOENT', 'ENOTDIR')) return null
+		throw e
+	}
+}
+
+/**
+ * Переводит ключ хранилища в абсолютный путь внутри STORAGE_LOCAL_DIR.
+ * Отклоняет пустые ключи, NUL, абсолютные пути, сегменты `..` и выход за корень через symlink.
+ * Для чтения реальный путь существующей цели обязан лежать под realpath(корня). Для записи под корнем
+ * обязан лежать realpath самого глубокого существующего предка.
+ * Литерал `%2e%2e` не декодируется и остаётся обычным именем.
+ */
+async function resolveLocalPath(key: string, { forWrite }: { forWrite: boolean }): Promise<string> {
+	assertSafeLocalKey(key)
+
+	const root = getLocalRoot()
+	const abs = path.resolve(root, path.posix.normalize(key))
+	const rel = path.relative(root, abs)
+	if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+		throw escapesRootError()
+	}
+
+	if (forWrite) {
+		await fs.promises.mkdir(root, { recursive: true })
+		const rootReal = await fs.promises.realpath(root)
+		let probe = abs
+		for (;;) {
+			const real = await realpathOrNull(probe)
+			if (real !== null) {
+				if (!isInsideRoot(rootReal, real)) throw escapesRootError()
+				break
+			}
+			// Несуществующая цель: висячий symlink (мог бы указывать наружу) отклоняем, иначе поднимаемся к предку
+			const link = await fs.promises.lstat(probe).catch(() => null)
+			if (link) throw escapesRootError()
+			const parent = path.dirname(probe)
+			if (parent === probe) throw escapesRootError()
+			probe = parent
+		}
+		return abs
+	}
+
+	const rootReal = await realpathOrNull(root)
+	if (rootReal === null) return abs
+	const real = await realpathOrNull(abs)
+	if (real !== null && !isInsideRoot(rootReal, real)) throw escapesRootError()
+	return abs
+}
+
+/** Атомарная запись: временный файл рядом с целью, затем rename */
+async function localWrite(key: string, data: string | Buffer): Promise<void> {
+	const abs = await resolveLocalPath(key, { forWrite: true })
+	await fs.promises.mkdir(path.dirname(abs), { recursive: true })
+
+	const tmp = `${abs}.tmp-${crypto.randomBytes(6).toString('hex')}`
+	try {
+		await fs.promises.writeFile(tmp, data)
+		await fs.promises.rename(tmp, abs)
+	} catch (e) {
+		await fs.promises.unlink(tmp).catch(() => {})
+		throw e
+	}
+}
+
+/** Содержимое файла или null, если файла нет (или ключ указывает на каталог) */
+async function localReadBuffer(key: string): Promise<Buffer | null> {
+	const abs = await resolveLocalPath(key, { forWrite: false })
+	try {
+		return await fs.promises.readFile(abs)
+	} catch (e) {
+		if (hasErrorCode(e, 'ENOENT', 'ENOTDIR', 'EISDIR')) return null
+		throw e
+	}
+}
+
+async function localReadText(key: string): Promise<string | null> {
+	const buffer = await localReadBuffer(key)
+	return buffer === null ? null : buffer.toString('utf8')
+}
+
+/** Прямые записи каталога, отсортированные по имени; недописанные временные файлы скрыты */
+async function localReadDir(abs: string): Promise<fs.Dirent[]> {
+	try {
+		const entries = await fs.promises.readdir(abs, { withFileTypes: true })
+		return entries
+			.filter((entry) => !LOCAL_TEMP_SUFFIX.test(entry.name))
+			.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+	} catch (e) {
+		if (hasErrorCode(e, 'ENOENT', 'ENOTDIR')) return []
+		throw e
+	}
+}
+
+async function localExists(key: string): Promise<boolean> {
+	const abs = await resolveLocalPath(key, { forWrite: false })
+	try {
+		return (await fs.promises.stat(abs)).isFile()
+	} catch (e) {
+		if (hasErrorCode(e, 'ENOENT', 'ENOTDIR')) return false
+		throw e
+	}
+}
+
+async function localListFiles(prefix: string): Promise<string[]> {
+	const abs = await resolveLocalPath(prefix, { forWrite: false })
+	const entries = await localReadDir(abs)
+	return entries.map((entry) => `${prefix}/${entry.name}`)
+}
+
+/** Только файлы, symlink не раскрываются и не обходятся */
+async function localListFilesRecursive(prefix: string): Promise<string[]> {
+	const abs = await resolveLocalPath(prefix, { forWrite: false })
+	const entries = await localReadDir(abs)
+
+	const result: string[] = []
+	for (const entry of entries) {
+		const itemPath = `${prefix}/${entry.name}`
+		if (entry.isDirectory()) {
+			result.push(...(await localListFilesRecursive(itemPath)))
+		} else if (entry.isFile()) {
+			result.push(itemPath)
+		}
+	}
+	return result
+}
+
+async function localDeleteFiles(paths: string[]): Promise<void> {
+	for (const key of paths) {
+		const abs = await resolveLocalPath(key, { forWrite: false })
+		try {
+			await fs.promises.unlink(abs)
+		} catch (e) {
+			if (hasErrorCode(e, 'ENOENT', 'ENOTDIR')) continue
+			throw e
+		}
+	}
+}
+
+/** Удаляет пустые каталоги снизу вверх; непустые (rmdir падает) остаются нетронутыми */
+async function removeEmptyDirs(abs: string): Promise<void> {
+	let entries: fs.Dirent[]
+	try {
+		entries = await fs.promises.readdir(abs, { withFileTypes: true })
+	} catch {
+		return
+	}
+	for (const entry of entries) {
+		if (entry.isDirectory()) await removeEmptyDirs(path.join(abs, entry.name))
+	}
+	await fs.promises.rmdir(abs).catch(() => {})
+}
+
+async function localDeleteDirectory(prefix: string): Promise<void> {
+	const files = await localListFilesRecursive(prefix)
+	await localDeleteFiles(files)
+	await removeEmptyDirs(await resolveLocalPath(prefix, { forWrite: false }))
+}
+
+async function localMoveDirectory(oldPrefix: string, newPrefix: string): Promise<void> {
+	// Оба префикса проверяются до первого перемещения: выход за корень не оставит половину файлов на месте
+	const oldAbs = await resolveLocalPath(oldPrefix, { forWrite: false })
+	await resolveLocalPath(newPrefix, { forWrite: true })
+
+	const files = await localListFilesRecursive(oldPrefix)
+	for (const filePath of files) {
+		const newPath = newPrefix + filePath.slice(oldPrefix.length)
+		const src = await resolveLocalPath(filePath, { forWrite: false })
+		const dest = await resolveLocalPath(newPath, { forWrite: true })
+		await fs.promises.mkdir(path.dirname(dest), { recursive: true })
+		try {
+			await fs.promises.rename(src, dest)
+		} catch (e) {
+			if (!hasErrorCode(e, 'EXDEV')) throw e
+			await fs.promises.copyFile(src, dest)
+			await fs.promises.unlink(src)
+		}
+	}
+	await removeEmptyDirs(oldAbs)
 }
 
 export class StorageService {
@@ -88,6 +355,8 @@ export class StorageService {
 	 * @returns Содержимое файла или пустую строку при ошибке
 	 */
 	async readFile(path: string): Promise<string> {
+		if (isLocalStorage()) return (await localReadText(path)) ?? ''
+
 		const client = getClient()
 		if (!client) return ''
 
@@ -105,6 +374,12 @@ export class StorageService {
 	}
 
 	async downloadBuffer(path: string): Promise<{ buffer: Buffer; contentType: string }> {
+		if (isLocalStorage()) {
+			const buffer = await localReadBuffer(path)
+			if (buffer === null) throw new Error(`[StorageService] File not found: ${path}`)
+			return { buffer, contentType: localContentType(path) }
+		}
+
 		const client = getClient()
 		if (!client) throw new Error('[StorageService] Cannot download: Supabase not configured')
 
@@ -128,6 +403,19 @@ export class StorageService {
 	 * @returns Map с путями файлов и их содержимым
 	 */
 	async readFilesParallel(paths: string[], concurrency = 5): Promise<Map<string, string>> {
+		if (isLocalStorage()) {
+			const found = new Map<string, string>()
+			for (let i = 0; i < paths.length; i += concurrency) {
+				const batch = paths.slice(i, i + concurrency)
+				const contents = await Promise.all(batch.map((key) => localReadText(key)))
+				batch.forEach((key, index) => {
+					const content = contents[index]
+					if (content !== null && content !== undefined) found.set(key, content)
+				})
+			}
+			return found
+		}
+
 		const client = getClient()
 		if (!client) return new Map()
 
@@ -164,6 +452,8 @@ export class StorageService {
 	 * @param content Содержимое файла
 	 */
 	async writeFile(path: string, content: string): Promise<void> {
+		if (isLocalStorage()) return localWrite(path, content)
+
 		const client = getClient()
 		if (!client) {
 			throw new Error('[StorageService] Cannot write: Supabase not configured')
@@ -189,6 +479,13 @@ export class StorageService {
 		contentType = 'application/octet-stream',
 		options: UploadBufferOptions = {}
 	): Promise<void> {
+		if (isLocalStorage()) {
+			if (options.upsert === false && (await localExists(path))) {
+				throw new Error('Storage error: The resource already exists')
+			}
+			return localWrite(path, buffer)
+		}
+
 		const client = getClient()
 		if (!client) {
 			throw new Error('[StorageService] Cannot upload: Supabase not configured')
@@ -210,6 +507,8 @@ export class StorageService {
 
 	/** Get public URL for a stored object (depends on bucket policy) */
 	getPublicUrl(path: string): string {
+		if (isLocalStorage()) throw unsupportedInLocal('getPublicUrl')
+
 		const client = getClient()
 		if (!client) return ''
 		try {
@@ -227,6 +526,8 @@ export class StorageService {
 	 * @returns Signed URL
 	 */
 	async createSignedUrl(filePath: string, expiresIn = 3600): Promise<string> {
+		if (isLocalStorage()) throw unsupportedInLocal('createSignedUrl')
+
 		const client = getClient()
 		if (!client) throw new Error('[StorageService] Cannot create signed URL: Supabase not configured')
 		const { data, error } = await client.storage.from(BUCKET).createSignedUrl(filePath, expiresIn)
@@ -241,6 +542,8 @@ export class StorageService {
 	 * @param data Данные для записи
 	 */
 	async writeJson(path: string, data: unknown): Promise<void> {
+		if (isLocalStorage()) return localWrite(path, JSON.stringify(data, null, 2))
+
 		const client = getClient()
 		if (!client) {
 			throw new Error('[StorageService] Cannot write JSON: Supabase not configured')
@@ -265,6 +568,18 @@ export class StorageService {
 	 * @returns Распарсенные данные или null при ошибке
 	 */
 	async readJson<T = unknown>(path: string): Promise<T | null> {
+		if (isLocalStorage()) {
+			// readFile вызывается вне try: ошибки ключа (выход за корень) не должны превращаться в null
+			const content = await this.readFile(path)
+			if (!content) return null
+			try {
+				return JSON.parse(content) as T
+			} catch (e) {
+				console.error(`Error parsing JSON from ${path}:`, e)
+				return null
+			}
+		}
+
 		try {
 			const content = await this.readFile(path)
 			if (!content) return null
@@ -281,6 +596,8 @@ export class StorageService {
 	 */
 	async deleteFiles(paths: string[]): Promise<void> {
 		if (paths.length === 0) return
+		if (isLocalStorage()) return localDeleteFiles(paths)
+
 		const client = getClient()
 		if (!client) return
 
@@ -297,6 +614,8 @@ export class StorageService {
 	 * @returns Массив путей к файлам
 	 */
 	async listFiles(prefix: string): Promise<string[]> {
+		if (isLocalStorage()) return localListFiles(prefix)
+
 		const client = getClient()
 		if (!client) return []
 
@@ -314,6 +633,8 @@ export class StorageService {
 	 * @returns Массив путей к файлам
 	 */
 	async listFilesRecursive(prefix: string): Promise<string[]> {
+		if (isLocalStorage()) return localListFilesRecursive(prefix)
+
 		const client = getClient()
 		if (!client) return []
 
@@ -341,6 +662,8 @@ export class StorageService {
 	 * @param prefix Путь к директории
 	 */
 	async deleteDirectory(prefix: string): Promise<void> {
+		if (isLocalStorage()) return localDeleteDirectory(prefix)
+
 		const files = await this.listFilesRecursive(prefix)
 		if (files.length > 0) {
 			await this.deleteFiles(files)
@@ -357,6 +680,10 @@ export class StorageService {
 		if (!oldPrefix || !newPrefix) {
 			throw new Error('[StorageService] moveDirectory: both oldPrefix and newPrefix are required')
 		}
+
+		// Локальный режим (D-18): свой корень с проверкой выхода за него. Устаревшая ветка ../web/public/uploads
+		// ниже остаётся только для случая «ни локального режима, ни Supabase»
+		if (isLocalStorage()) return localMoveDirectory(oldPrefix, newPrefix)
 
 		const client = getClient()
 		// Если настроен Supabase - работаем через API
@@ -448,6 +775,8 @@ export class StorageService {
 	 * @returns Buffer с ZIP архивом
 	 */
 	async createZip(basePath: string, includeAnswers: boolean = false): Promise<Buffer> {
+		if (isLocalStorage()) throw unsupportedInLocal('createZip')
+
 		const client = getClient()
 		if (!client) {
 			throw new Error('Storage not configured. Cannot create ZIP export.')
@@ -490,6 +819,8 @@ export class StorageService {
 	 * @returns true если файл существует
 	 */
 	async exists(path: string): Promise<boolean> {
+		if (isLocalStorage()) return localExists(path)
+
 		const client = getClient()
 		if (!client) return false
 
@@ -531,6 +862,8 @@ export class StorageService {
 		files: Array<{ name: string; id: string | null; metadata: Record<string, unknown>; created_at: string }>
 		total: number
 	}> {
+		if (isLocalStorage()) throw unsupportedInLocal('listFilesWithMeta')
+
 		const client = getClient()
 		if (!client) return { files: [], total: 0 }
 
