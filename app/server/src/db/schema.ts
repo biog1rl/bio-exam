@@ -14,6 +14,7 @@ import {
 	index,
 	real,
 	jsonb,
+	pgPolicy,
 } from 'drizzle-orm/pg-core'
 
 import type { QuestionTypeScoringRule, QuestionUiTemplate } from '../lib/tests/question-types.js'
@@ -25,6 +26,21 @@ export type QuestionTelemetry = {
 	visitCount: number
 }
 export type TelemetryMap = Record<string, QuestionTelemetry>
+
+/**
+ * Политика deny_direct_access из миграции 0018: прямой доступ через API Supabase закрыт,
+ * сервер ходит в базу владельцем таблиц. Каждой таблице нужен свой экземпляр (link() привязывает
+ * политику к таблице), поэтому функция, а не общая константа.
+ */
+function denyDirectAccessPolicy() {
+	return pgPolicy('deny_direct_access', {
+		as: 'permissive',
+		for: 'all',
+		to: 'public',
+		using: sql`false`,
+		withCheck: sql`false`,
+	})
+}
 
 /** Тип открытия ссылки */
 export const linkTarget = pgEnum('link_target', ['_self', '_blank'])
@@ -62,7 +78,7 @@ export const users = pgTable(
 		avatarCropViewY: real('avatar_crop_view_y'),
 		// Login guard (brute-force protection)
 		failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
-		lockedUntil: timestamp('locked_until'),
+		lockedUntil: timestamp('locked_until', { withTimezone: true }),
 	},
 	(t) => ({
 		loginUniq: uniqueIndex('users_login_uniq').on(t.login),
@@ -71,13 +87,21 @@ export const users = pgTable(
 			columns: [t.createdBy],
 			foreignColumns: [t.id],
 		}),
+		lockedUntilIdx: index('idx_users_locked_until').on(t.lockedUntil),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Роли (глобальные) */
-export const roles = pgTable('roles', {
-	key: text('key').primaryKey(), // 'admin' | 'manager' | 'frontend_dev' | 'backend_dev' | 'designer' | 'client'
-})
+export const roles = pgTable(
+	'roles',
+	{
+		key: text('key').primaryKey(), // 'admin' | 'manager' | 'frontend_dev' | 'backend_dev' | 'designer' | 'client'
+	},
+	() => ({
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
 
 /** Связка пользователь—роль (многие-ко-многим) */
 export const userRoles = pgTable(
@@ -92,8 +116,9 @@ export const userRoles = pgTable(
 	},
 	(t) => ({
 		pk: primaryKey({ columns: [t.userId, t.roleKey] }),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Инвайты на регистрацию (одноразовые) */
 export const invites = pgTable(
@@ -111,8 +136,9 @@ export const invites = pgTable(
 	},
 	(t) => ({
 		tokenUniq: uniqueIndex('invites_token_uniq').on(t.tokenHash),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** RBAC: переопределения грантов ролей */
 export const rbacRoleGrants = pgTable(
@@ -127,20 +153,27 @@ export const rbacRoleGrants = pgTable(
 	},
 	(t) => ({
 		pk: primaryKey({ columns: [t.roleKey, t.domain, t.action] }),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Правила доступа к страницам (паттерн → домен.экшен) */
-export const rbacPageRules = pgTable('rbac_page_rules', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	pattern: text('pattern').notNull(), // например: '/(protected)/users' или '/docs/:slug*'
-	domain: text('domain').notNull(),
-	action: text('action').notNull(),
-	exact: boolean('exact').notNull().default(false),
-	enabled: boolean('enabled').notNull().default(true),
-	updatedAt: timestamp('updated_at').notNull().defaultNow(),
-	updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
-})
+export const rbacPageRules = pgTable(
+	'rbac_page_rules',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		pattern: text('pattern').notNull(), // например: '/(protected)/users' или '/docs/:slug*'
+		domain: text('domain').notNull(),
+		action: text('action').notNull(),
+		exact: boolean('exact').notNull().default(false),
+		enabled: boolean('enabled').notNull().default(true),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+		updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+	},
+	() => ({
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
 
 /** Персональные гранты пользователя (только additive: allow=true) */
 export const rbacUserGrants = pgTable(
@@ -157,8 +190,9 @@ export const rbacUserGrants = pgTable(
 	},
 	(t) => ({
 		pk: primaryKey({ columns: [t.userId, t.domain, t.action] }),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Пункты бокового меню (сайдбара) */
 export const sidebarItems = pgTable(
@@ -176,8 +210,9 @@ export const sidebarItems = pgTable(
 	},
 	(t) => ({
 		orderIdx: index('sidebar_items_order_idx').on(t.order),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 // =============================================================================
 // ТЕСТЫ
@@ -203,8 +238,9 @@ export const topics = pgTable(
 	(t) => ({
 		slugUniq: uniqueIndex('topics_slug_uniq').on(t.slug),
 		orderIdx: index('topics_order_idx').on(t.order),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Тесты */
 export const tests = pgTable(
@@ -234,8 +270,9 @@ export const tests = pgTable(
 	(t) => ({
 		topicSlugUniq: uniqueIndex('tests_topic_slug_uniq').on(t.topicId, t.slug),
 		orderIdx: index('tests_order_idx').on(t.order),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Черновики вопросов внутри теста */
 export const questionDrafts = pgTable(
@@ -257,18 +294,29 @@ export const questionDrafts = pgTable(
 		updatedAt: timestamp('updated_at').notNull().defaultNow(),
 	},
 	(t) => ({
-		ownerTestUpdatedIdx: index('question_drafts_owner_test_updated_idx').on(t.ownerId, t.testId, t.updatedAt),
-		testUpdatedIdx: index('question_drafts_test_updated_idx').on(t.testId, t.updatedAt),
+		ownerTestUpdatedIdx: index('question_drafts_owner_test_updated_idx').on(
+			t.ownerId,
+			t.testId,
+			t.updatedAt.desc().nullsFirst()
+		),
+		testUpdatedIdx: index('question_drafts_test_updated_idx').on(t.testId, t.updatedAt.desc().nullsFirst()),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Глобальные настройки начисления баллов для тестов */
-export const testScoringSettings = pgTable('test_scoring_settings', {
-	id: text('id').primaryKey().default('global'),
-	rules: jsonb('rules').$type<TestScoringRules>().notNull(),
-	updatedAt: timestamp('updated_at').notNull().defaultNow(),
-	updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
-})
+export const testScoringSettings = pgTable(
+	'test_scoring_settings',
+	{
+		id: text('id').primaryKey().default('global'),
+		rules: jsonb('rules').$type<TestScoringRules>().notNull(),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+		updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+	},
+	() => ({
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
 
 /** Справочник типов вопросов */
 export const questionTypes = pgTable(
@@ -291,8 +339,9 @@ export const questionTypes = pgTable(
 	(t) => ({
 		keyUniq: uniqueIndex('question_types_key_uniq').on(t.key),
 		isActiveIdx: index('question_types_is_active_idx').on(t.isActive),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Переопределения типа вопроса для конкретного теста */
 export const testQuestionTypeOverrides = pgTable(
@@ -314,8 +363,9 @@ export const testQuestionTypeOverrides = pgTable(
 	(t) => ({
 		testTypeUniq: uniqueIndex('test_question_type_overrides_test_type_uniq').on(t.testId, t.questionTypeKey),
 		testIdIdx: index('test_question_type_overrides_test_id_idx').on(t.testId),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Вопросы теста */
 export const questions = pgTable(
@@ -338,8 +388,9 @@ export const questions = pgTable(
 	(t) => ({
 		testIdIdx: index('questions_test_id_idx').on(t.testId),
 		orderIdx: index('questions_order_idx').on(t.order),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Поисковая проекция текста вопросов */
 export const questionSearchDocuments = pgTable(
@@ -364,8 +415,13 @@ export const questionSearchDocuments = pgTable(
 		testIdIdx: index('question_search_documents_test_id_idx').on(t.testId),
 		topicIdIdx: index('question_search_documents_topic_id_idx').on(t.topicId),
 		updatedAtIdx: index('question_search_documents_updated_at_idx').on(t.updatedAt),
+		searchTextTrgmIdx: index('question_search_documents_search_text_trgm_idx').using(
+			'gin',
+			t.searchText.op('gin_trgm_ops')
+		),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Ключи ответов (версионируемые) */
 export const answerKeys = pgTable(
@@ -384,40 +440,49 @@ export const answerKeys = pgTable(
 	(t) => ({
 		questionVersionUniq: uniqueIndex('answer_keys_question_version_uniq').on(t.questionId, t.version),
 		questionIdIdx: index('answer_keys_question_id_idx').on(t.questionId),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Попытки прохождения тестов пользователями */
 export const testAttempts = pgTable(
 	'test_attempts',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		testId: uuid('test_id')
-			.notNull()
-			.references(() => tests.id, { onDelete: 'cascade' }),
-		userId: uuid('user_id')
-			.notNull()
-			.references(() => users.id, { onDelete: 'cascade' }),
+		testId: uuid('test_id').notNull(),
+		userId: uuid('user_id').notNull(),
 		answers: jsonb('answers').notNull(), // questionId -> user answer
 		results: jsonb('results').notNull(), // per-question result breakdown
 		earnedPoints: real('earned_points').notNull(),
 		totalPoints: real('total_points').notNull(),
 		scorePercentage: real('score_percentage').notNull(),
 		passed: boolean('passed').notNull().default(false),
-		createdAt: timestamp('created_at').notNull().defaultNow(),
-		submittedAt: timestamp('submitted_at').notNull().defaultNow(),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
 		clientAttemptId: text('client_attempt_id'), // optional idempotency key from client
 		telemetry: jsonb('telemetry').$type<TelemetryMap>(), // per-question telemetry: questionId -> { timeSpentMs, focusLossCount, visitCount }
 	},
 	(t) => ({
-		testIdIdx: index('test_attempts_test_id_idx').on(t.testId),
-		userIdIdx: index('test_attempts_user_id_idx').on(t.userId),
-		submittedAtIdx: index('test_attempts_submitted_at_idx').on(t.submittedAt),
+		testIdIdx: index('idx_test_attempts_test_id').on(t.testId),
+		userIdIdx: index('idx_test_attempts_user_id').on(t.userId),
+		submittedAtIdx: index('idx_test_attempts_submitted_at').on(t.submittedAt),
 		userClientAttemptUniq: uniqueIndex('test_attempts_user_client_attempt_idx')
 			.on(t.userId, t.clientAttemptId)
 			.where(sql`${t.clientAttemptId} IS NOT NULL`),
+		// Имена внешних ключей из миграции 0004 (REFERENCES без имени даёт *_fkey)
+		testIdFk: foreignKey({
+			name: 'test_attempts_test_id_fkey',
+			columns: [t.testId],
+			foreignColumns: [tests.id],
+		}).onDelete('cascade'),
+		userIdFk: foreignKey({
+			name: 'test_attempts_user_id_fkey',
+			columns: [t.userId],
+			foreignColumns: [users.id],
+		}).onDelete('cascade'),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Тестовые сессии (для отслеживания времени прохождения) */
 export const testSessions = pgTable(
@@ -430,8 +495,8 @@ export const testSessions = pgTable(
 		userId: uuid('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		startedAt: timestamp('started_at').notNull().defaultNow(),
-		submittedAt: timestamp('submitted_at'),
+		startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+		submittedAt: timestamp('submitted_at', { withTimezone: true }),
 		attemptId: uuid('attempt_id').references(() => testAttempts.id, { onDelete: 'set null' }),
 		draftAnswers: jsonb('draft_answers'), // questionId -> user answer (промежуточное сохранение)
 		draftLastQuestionId: text('draft_last_question_id'), // последний открытый вопрос
@@ -440,8 +505,9 @@ export const testSessions = pgTable(
 	},
 	(t) => ({
 		testUserIdx: index('test_sessions_test_user_idx').on(t.testId, t.userId),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Назначения тестов студентам (per-student access control) */
 export const testAssignments = pgTable(
@@ -454,38 +520,57 @@ export const testAssignments = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
-		assignedAt: timestamp('assigned_at').notNull().defaultNow(),
+		assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
-		pk: primaryKey({ columns: [t.testId, t.userId] }),
+		pk: primaryKey({ name: 'test_assignments_pkey', columns: [t.testId, t.userId] }),
 		userIdx: index('test_assignments_user_idx').on(t.userId),
 		testIdx: index('test_assignments_test_idx').on(t.testId),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Глобальные настройки таймера тестов */
-export const testTimerSettings = pgTable('test_timer_settings', {
-	id: text('id').primaryKey().default('global'),
-	redThresholdMinutes: integer('red_threshold_minutes').notNull().default(5),
-	warningThresholdMinutes: integer('warning_threshold_minutes').notNull().default(1),
-	updatedAt: timestamp('updated_at').notNull().defaultNow(),
-	updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
-})
+export const testTimerSettings = pgTable(
+	'test_timer_settings',
+	{
+		id: text('id').primaryKey().default('global'),
+		redThresholdMinutes: integer('red_threshold_minutes').notNull().default(5),
+		warningThresholdMinutes: integer('warning_threshold_minutes').notNull().default(1),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+	},
+	() => ({
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
 
 /** Глобальные настройки приложения (key-value) */
-export const appSettings = pgTable('app_settings', {
-	key: text('key').primaryKey(),
-	value: text('value').notNull(),
-})
+export const appSettings = pgTable(
+	'app_settings',
+	{
+		key: text('key').primaryKey(),
+		value: text('value').notNull(),
+	},
+	() => ({
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
 
 /** Группы студентов */
-export const studentGroups = pgTable('student_groups', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	name: text('name').notNull(),
-	createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
-	createdAt: timestamp('created_at').notNull().defaultNow(),
-	updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const studentGroups = pgTable(
+	'student_groups',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		name: text('name').notNull(),
+		createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+	},
+	() => ({
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
 
 /** Связка пользователь—группа (многие-ко-многим) */
 export const userGroups = pgTable(
@@ -502,27 +587,34 @@ export const userGroups = pgTable(
 		pk: primaryKey({ columns: [t.groupId, t.userId] }),
 		groupIdx: index('user_groups_group_idx').on(t.groupId),
 		userIdx: index('user_groups_user_idx').on(t.userId),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 /** Refresh tokens for session management */
 export const refreshTokens = pgTable(
 	'refresh_tokens',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		userId: uuid('user_id')
-			.notNull()
-			.references(() => users.id, { onDelete: 'cascade' }),
+		userId: uuid('user_id').notNull(),
 		tokenHash: text('token_hash').notNull(),
-		expiresAt: timestamp('expires_at').notNull(),
-		revokedAt: timestamp('revoked_at'),
-		createdAt: timestamp('created_at').notNull().defaultNow(),
+		expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+		revokedAt: timestamp('revoked_at', { withTimezone: true }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		createdByIp: text('created_by_ip'),
 	},
 	(t) => ({
-		tokenHashIdx: index('refresh_tokens_token_hash_idx').on(t.tokenHash),
+		tokenHashIdx: index('idx_refresh_tokens_token_hash').on(t.tokenHash),
+		expiresAtIdx: index('idx_refresh_tokens_expires_at').on(t.expiresAt),
+		// Имя внешнего ключа из миграции 0003 (REFERENCES без имени даёт *_fkey)
+		userIdFk: foreignKey({
+			name: 'refresh_tokens_user_id_fkey',
+			columns: [t.userId],
+			foreignColumns: [users.id],
+		}).onDelete('cascade'),
+		denyDirectAccess: denyDirectAccessPolicy(),
 	})
-)
+).enableRLS()
 
 // =============================================================================
 // RELATIONS
