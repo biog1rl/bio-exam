@@ -15,6 +15,7 @@
 		"lint": "turbo run lint",
 		"typecheck": "turbo run typecheck",
 		"test": "turbo run test",
+		"verify": "node scripts/verify.mjs",
 		"e2e": "node scripts/e2e.mjs",
 		"format": "oxfmt .",
 		"format:check": "oxfmt --check ."
