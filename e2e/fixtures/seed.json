@@ -1,0 +1,413 @@
+{
+	"_note": "Только для e2e: логины, пароль и данные тестовые, нигде больше не используются (T-1-27).",
+	"password": "e2e-Password-1",
+	"topic": {
+		"slug": "e2e-topic",
+		"title": "E2E: клетка",
+		"description": "Тема для сквозных тестов"
+	},
+	"projects": {
+		"desktop": {
+			"accounts": [
+				{
+					"login": "student-desktop",
+					"role": "user",
+					"name": "Студент desktop",
+					"storageState": true
+				},
+				{
+					"login": "admin-desktop",
+					"role": "admin",
+					"name": "Администратор desktop",
+					"storageState": true
+				},
+				{
+					"login": "login-student-desktop",
+					"role": "user",
+					"name": "Студент для входа desktop",
+					"storageState": false
+				},
+				{
+					"login": "login-admin-desktop",
+					"role": "admin",
+					"name": "Администратор для входа desktop",
+					"storageState": false
+				}
+			],
+			"tests": [
+				{
+					"slug": "all-templates-desktop",
+					"title": "Все шаблоны (desktop)",
+					"published": true,
+					"assignedTo": ["student-desktop"],
+					"questions": [
+						{
+							"key": "single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой органоид клетки синтезирует АТФ?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Рибосома"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								},
+								{
+									"id": "3",
+									"text": "Лизосома"
+								},
+								{
+									"id": "4",
+									"text": "Комплекс Гольджи"
+								}
+							],
+							"correct": "2"
+						},
+						{
+							"key": "multi-choice",
+							"template": "multi_choice",
+							"type": "checkbox",
+							"prompt": "Выберите органоиды, которые есть в растительной клетке.",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Центриоль"
+								},
+								{
+									"id": "3",
+									"text": "Клеточная стенка"
+								},
+								{
+									"id": "4",
+									"text": "Жгутик сперматозоида"
+								}
+							],
+							"correct": ["1", "3"]
+						},
+						{
+							"key": "matching",
+							"template": "matching",
+							"type": "matching",
+							"prompt": "Установите соответствие между процессом и органоидом.",
+							"matchingPairs": {
+								"left": [
+									{
+										"id": "a",
+										"text": "Фотосинтез"
+									},
+									{
+										"id": "b",
+										"text": "Синтез белка"
+									},
+									{
+										"id": "c",
+										"text": "Клеточное дыхание"
+									}
+								],
+								"right": [
+									{
+										"id": "1",
+										"text": "Хлоропласт"
+									},
+									{
+										"id": "2",
+										"text": "Рибосома"
+									},
+									{
+										"id": "3",
+										"text": "Митохондрия"
+									}
+								]
+							},
+							"correct": {
+								"a": "1",
+								"b": "2",
+								"c": "3"
+							}
+						},
+						{
+							"key": "short-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется деление соматической клетки с сохранением числа хромосом?",
+							"correct": "митоз"
+						},
+						{
+							"key": "sequence-digits",
+							"template": "sequence_digits",
+							"type": "sequence",
+							"prompt": "Установите последовательность стадий митоза: 1) анафаза, 2) профаза, 3) метафаза, 4) телофаза.",
+							"correct": "2314"
+						}
+					]
+				},
+				{
+					"slug": "review-d1-desktop",
+					"title": "Разбор попытки D1 (desktop)",
+					"published": true,
+					"assignedTo": ["student-desktop"],
+					"questions": [
+						{
+							"key": "d1-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой газ выделяется при фотосинтезе?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Углекислый газ"
+								},
+								{
+									"id": "2",
+									"text": "Кислород"
+								},
+								{
+									"id": "3",
+									"text": "Азот"
+								}
+							],
+							"correct": "2"
+						},
+						{
+							"key": "d1-short-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется носитель наследственной информации в ядре?",
+							"correct": "днк"
+						}
+					]
+				},
+				{
+					"slug": "seq-d2-desktop",
+					"title": "Последовательность D2 (desktop)",
+					"published": true,
+					"assignedTo": ["student-desktop"],
+					"questions": [
+						{
+							"key": "d2-sequence-digits",
+							"template": "sequence_digits",
+							"type": "sequence",
+							"prompt": "Установите последовательность уровней организации: 1) клеточный, 2) тканевый, 3) организменный, 4) органный.",
+							"correct": "1243"
+						}
+					]
+				},
+				{
+					"slug": "authoring-desktop",
+					"title": "Создание вопросов (desktop)",
+					"published": false,
+					"assignedTo": [],
+					"questions": []
+				}
+			]
+		},
+		"mobile": {
+			"accounts": [
+				{
+					"login": "student-mobile",
+					"role": "user",
+					"name": "Студент mobile",
+					"storageState": true
+				},
+				{
+					"login": "admin-mobile",
+					"role": "admin",
+					"name": "Администратор mobile",
+					"storageState": true
+				},
+				{
+					"login": "login-student-mobile",
+					"role": "user",
+					"name": "Студент для входа mobile",
+					"storageState": false
+				},
+				{
+					"login": "login-admin-mobile",
+					"role": "admin",
+					"name": "Администратор для входа mobile",
+					"storageState": false
+				}
+			],
+			"tests": [
+				{
+					"slug": "all-templates-mobile",
+					"title": "Все шаблоны (mobile)",
+					"published": true,
+					"assignedTo": ["student-mobile"],
+					"questions": [
+						{
+							"key": "single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой органоид клетки синтезирует АТФ?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Рибосома"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								},
+								{
+									"id": "3",
+									"text": "Лизосома"
+								},
+								{
+									"id": "4",
+									"text": "Комплекс Гольджи"
+								}
+							],
+							"correct": "2"
+						},
+						{
+							"key": "multi-choice",
+							"template": "multi_choice",
+							"type": "checkbox",
+							"prompt": "Выберите органоиды, которые есть в растительной клетке.",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Центриоль"
+								},
+								{
+									"id": "3",
+									"text": "Клеточная стенка"
+								},
+								{
+									"id": "4",
+									"text": "Жгутик сперматозоида"
+								}
+							],
+							"correct": ["1", "3"]
+						},
+						{
+							"key": "matching",
+							"template": "matching",
+							"type": "matching",
+							"prompt": "Установите соответствие между процессом и органоидом.",
+							"matchingPairs": {
+								"left": [
+									{
+										"id": "a",
+										"text": "Фотосинтез"
+									},
+									{
+										"id": "b",
+										"text": "Синтез белка"
+									},
+									{
+										"id": "c",
+										"text": "Клеточное дыхание"
+									}
+								],
+								"right": [
+									{
+										"id": "1",
+										"text": "Хлоропласт"
+									},
+									{
+										"id": "2",
+										"text": "Рибосома"
+									},
+									{
+										"id": "3",
+										"text": "Митохондрия"
+									}
+								]
+							},
+							"correct": {
+								"a": "1",
+								"b": "2",
+								"c": "3"
+							}
+						},
+						{
+							"key": "short-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется деление соматической клетки с сохранением числа хромосом?",
+							"correct": "митоз"
+						},
+						{
+							"key": "sequence-digits",
+							"template": "sequence_digits",
+							"type": "sequence",
+							"prompt": "Установите последовательность стадий митоза: 1) анафаза, 2) профаза, 3) метафаза, 4) телофаза.",
+							"correct": "2314"
+						}
+					]
+				},
+				{
+					"slug": "review-d1-mobile",
+					"title": "Разбор попытки D1 (mobile)",
+					"published": true,
+					"assignedTo": ["student-mobile"],
+					"questions": [
+						{
+							"key": "d1-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой газ выделяется при фотосинтезе?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Углекислый газ"
+								},
+								{
+									"id": "2",
+									"text": "Кислород"
+								},
+								{
+									"id": "3",
+									"text": "Азот"
+								}
+							],
+							"correct": "2"
+						},
+						{
+							"key": "d1-short-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется носитель наследственной информации в ядре?",
+							"correct": "днк"
+						}
+					]
+				},
+				{
+					"slug": "seq-d2-mobile",
+					"title": "Последовательность D2 (mobile)",
+					"published": true,
+					"assignedTo": ["student-mobile"],
+					"questions": [
+						{
+							"key": "d2-sequence-digits",
+							"template": "sequence_digits",
+							"type": "sequence",
+							"prompt": "Установите последовательность уровней организации: 1) клеточный, 2) тканевый, 3) организменный, 4) органный.",
+							"correct": "1243"
+						}
+					]
+				},
+				{
+					"slug": "authoring-mobile",
+					"title": "Создание вопросов (mobile)",
+					"published": false,
+					"assignedTo": [],
+					"questions": []
+				}
+			]
+		}
+	}
+}
