@@ -1,0 +1,157 @@
+# Информационный CI (VER-03, D-20..D-24): тот же гейт, что и локально, на каждый pull request и push в master.
+# Токен только на чтение, репозиторные секреты не используются, публикации и записи нет.
+# Политику проверяет scripts/check-ci-workflow.mjs внутри yarn verify.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_bio_exam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Одноразовые учётные данные сервис-контейнера, не секрет
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_bio_exam
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+      - name: Lockfile guard
+        run: node scripts/check-lockfile.mjs
+      - name: Install dependencies
+        run: yarn install --immutable
+      - name: Verify
+        run: yarn verify
+
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --immutable
+      - name: Build rbac
+        run: yarn workspace @bio-exam/rbac build
+      - name: Check rbac dist
+        run: node scripts/check-rbac-dist.mjs
+      - name: Build server
+        run: yarn workspace @bio-exam/server build
+      # Боевая (неизолированная) ветка старта сервера: NODE_ENV=production, сборка app/server/dist.
+      # /healthz не обращается к базе, поэтому PostgreSQL не нужен; значения заведомо фиктивные (R3).
+      - name: Production start smoke
+        env:
+          NODE_ENV: production
+          PORT: '4100'
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/test_ci
+          AUTH_JWT_SECRET: ci-smoke-secret-not-a-real-secret-0123456789
+          ALLOWED_ORIGIN: http://127.0.0.1:3000
+        run: |
+          node --enable-source-maps app/server/dist/index.js > "$RUNNER_TEMP/server-smoke.log" 2>&1 &
+          server_pid=$!
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:${PORT}/healthz"; then
+              ok=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill "$server_pid" 2>/dev/null || true
+          wait "$server_pid" 2>/dev/null || true
+          echo
+          echo '--- server log ---'
+          cat "$RUNNER_TEMP/server-smoke.log"
+          if [ "$ok" != 1 ]; then
+            echo 'production start smoke: /healthz did not answer'
+            exit 1
+          fi
+          echo 'production start smoke: OK'
+      - name: Build web
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/test_ci
+          AUTH_JWT_SECRET: ci-build-secret
+          API_ORIGIN: http://127.0.0.1:4000
+        run: yarn workspace @bio-exam/web build
+
+  e2e:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_bio_exam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Одноразовые учётные данные сервис-контейнера, не секрет
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_bio_exam
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Enable Corepack
+        run: corepack enable
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --immutable
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+      # Системные зависимости ставятся и при попадании в кеш браузера
+      - name: Install Playwright Chromium
+        run: yarn playwright install --with-deps chromium
+      - name: End-to-end
+        run: yarn e2e

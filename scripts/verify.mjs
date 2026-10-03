@@ -5,9 +5,11 @@
  *   1. lockfile             node scripts/check-lockfile.mjs
  *   2. env-contract         node scripts/check-env-contract.mjs (.env.example совпадают с кодом, без секретов)
  *   3. docs-commands        node scripts/check-docs-commands.mjs (команды yarn в README и AGENTS.md существуют)
- *   4. lint-typecheck-test  yarn turbo run lint typecheck test (все три воркспейса)
- *   5. migrations           node scripts/check-migrations.mjs
- *   6. script-tests         node --test scripts/**\/*.test.mjs
+ *   4. ci-workflow          node scripts/check-ci-workflow.mjs (CI только читает: без записи, секретов и публикации)
+ *   5. format-check         yarn format:check (oxfmt --check .)
+ *   6. lint-typecheck-test  yarn turbo run lint typecheck test (все три воркспейса)
+ *   7. migrations           node scripts/check-migrations.mjs
+ *   8. script-tests         node --test scripts/**\/*.test.mjs
  * Новые шаги добавляются в массив STEPS, порядок задаётся только им.
  *
  * Все шаги работают с одноразовой PostgreSQL 17, которую поднимает withTestDatabase (или с
@@ -51,6 +53,8 @@ export const STEPS = [
 	{ name: 'lockfile', cmd: process.execPath, args: ['scripts/check-lockfile.mjs'] },
 	{ name: 'env-contract', cmd: process.execPath, args: ['scripts/check-env-contract.mjs'] },
 	{ name: 'docs-commands', cmd: process.execPath, args: ['scripts/check-docs-commands.mjs'] },
+	{ name: 'ci-workflow', cmd: process.execPath, args: ['scripts/check-ci-workflow.mjs'] },
+	{ name: 'format-check', cmd: 'yarn', args: ['format:check'] },
 	{ name: 'lint-typecheck-test', cmd: 'yarn', args: ['turbo', 'run', 'lint', 'typecheck', 'test'] },
 	{ name: 'migrations', cmd: process.execPath, args: ['scripts/check-migrations.mjs'] },
 	{
