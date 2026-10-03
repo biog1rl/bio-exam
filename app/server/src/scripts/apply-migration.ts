@@ -1,13 +1,23 @@
+import { join } from 'path'
+
+import { config as loadDotenv } from 'dotenv'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import pg from 'pg'
-import 'dotenv/config'
-import { join } from 'path'
+
+import { isIsolatedEnv, resolveIsolatedDatabaseUrl } from '../config/test-database-url.js'
+
+// В изолированном режиме (BIO_EXAM_ISOLATED_ENV=1) .env не загружаем: ни DATABASE_URL,
+// ни SUPABASE_* не должны подтянуться из файла. Иначе — прежнее поведение dotenv/config.
+if (!isIsolatedEnv()) {
+	loadDotenv()
+}
 
 const { Pool } = pg
 
 async function main() {
-	const connectionString = process.env.DATABASE_URL
+	// Изолированный режим: только TEST_DATABASE_URL через защиту, проверка до new Pool
+	const connectionString = isIsolatedEnv() ? resolveIsolatedDatabaseUrl() : process.env.DATABASE_URL
 	if (!connectionString) {
 		throw new Error('DATABASE_URL is not set')
 	}

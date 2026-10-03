@@ -1,9 +1,14 @@
 import bcrypt from 'bcryptjs'
-import 'dotenv/config'
+import { config as loadDotenv } from 'dotenv'
 import { eq } from 'drizzle-orm'
 
+import { isIsolatedEnv } from '../config/test-database-url.js'
 import { db } from '../db/index.js'
 import { roles, userRoles, users } from '../db/schema.js'
+
+// В изолированном режиме (BIO_EXAM_ISOLATED_ENV=1) .env не загружается:
+// ADMIN_BOOTSTRAP_* и SUPABASE_* приходят только от вызывающего процесса
+if (!isIsolatedEnv()) loadDotenv()
 
 async function main(): Promise<void> {
 	const LOGIN = (process.env.ADMIN_BOOTSTRAP_LOGIN ?? '').trim().toLowerCase()

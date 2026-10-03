@@ -3,12 +3,27 @@ import { Pool, type PoolConfig } from 'pg'
 
 import '../config/env.js'
 import { ENV_LOADED_FROM, safeDsn } from '../config/env.js'
+import { isIsolatedEnv, resolveIsolatedDatabaseUrl } from '../config/test-database-url.js'
 import * as schema from './schema.js'
 
-const databaseUrl = process.env.DATABASE_URL
-if (!databaseUrl) {
-	throw new Error('DATABASE_URL is not set')
+/**
+ * Источник адреса базы.
+ * Изолированный режим (BIO_EXAM_ISOLATED_ENV=1): только TEST_DATABASE_URL через защиту
+ * (localhost/127.0.0.1 и база test_*), DATABASE_URL игнорируется. Проверка идёт до new Pool.
+ * Обычный режим: DATABASE_URL, как и раньше.
+ */
+function resolveDatabaseUrl(): string {
+	if (isIsolatedEnv()) {
+		return resolveIsolatedDatabaseUrl()
+	}
+	const url = process.env.DATABASE_URL
+	if (!url) {
+		throw new Error('DATABASE_URL is not set')
+	}
+	return url
 }
+
+const databaseUrl = resolveDatabaseUrl()
 
 const isDev = process.env.NODE_ENV !== 'production'
 

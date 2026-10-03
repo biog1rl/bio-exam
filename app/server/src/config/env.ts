@@ -3,6 +3,12 @@
  * Приоритет: app/server/.env  → cwd/.env → app/.env → repo/.env
  * Последний загрузившийся файл МОЖЕТ переопределять предыдущие (override: true).
  * Можно включить отладочный вывод: DEBUG_ENV=1
+ *
+ * Изолированный режим: BIO_EXAM_ISOLATED_ENV=1 (тесты, проверка миграций, e2e).
+ * В нём ни один .env не загружается (ENV_LOADED_FROM = null), окружение берётся только
+ * от вызывающего процесса, а адрес базы — только из TEST_DATABASE_URL
+ * (см. ./test-database-url.ts). Иначе override: true молча переключил бы процесс
+ * с одноразовой базы на боевую из app/server/.env.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -11,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { config as dotenv } from 'dotenv'
 
 import { DEFAULTS } from '../lib/constants.js'
+import { isIsolatedEnv } from './test-database-url.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -27,15 +34,18 @@ const candidates = [
 ]
 
 let loadedFrom: string | null = null
-for (const p of candidates) {
-	try {
-		if (fs.existsSync(p)) {
-			dotenv({ path: p, override: true }) // <- разрешаем переопределять
-			loadedFrom = p
-			break // берём ПЕРВЫЙ существующий по приоритету
+// В изолированном режиме .env не читаем вовсе: dotenv() не вызывается, loadedFrom остаётся null
+if (!isIsolatedEnv()) {
+	for (const p of candidates) {
+		try {
+			if (fs.existsSync(p)) {
+				dotenv({ path: p, override: true }) // <- разрешаем переопределять
+				loadedFrom = p
+				break // берём ПЕРВЫЙ существующий по приоритету
+			}
+		} catch {
+			/* ignore */
 		}
-	} catch {
-		/* ignore */
 	}
 }
 
