@@ -1,0 +1,131 @@
+{
+  "checksumAlgorithm": "sha256",
+  "migrations": [
+    {
+      "idx": 0,
+      "tag": "0000_typical_exiles",
+      "file": "0000_typical_exiles.sql",
+      "sha256": "d9d5f12c2ed7d135eb0b4e8edb02f3ec54bd06c7d650a8cd2ec98e712302b7b3"
+    },
+    {
+      "idx": 1,
+      "tag": "0001_dry_changeling",
+      "file": "0001_dry_changeling.sql",
+      "sha256": "bfd5410417059ef837e1c0e13c29d55760291bb0dcc96145c49a6e998c2c865f"
+    },
+    {
+      "idx": 2,
+      "tag": "0002_add_login_attempts",
+      "file": "0002_add_login_attempts.sql",
+      "sha256": "77546d8192b53ea8b2dff0dc776ce3b6b9522130fcbdfea383c2ec572dd181b1"
+    },
+    {
+      "idx": 3,
+      "tag": "0003_refresh_tokens",
+      "file": "0003_refresh_tokens.sql",
+      "sha256": "335000c2f86a81e76c12d5ce0e04c6fd2a899fa8bba496c02a28d63734e9ebfa"
+    },
+    {
+      "idx": 4,
+      "tag": "0004_test_attempts",
+      "file": "0004_test_attempts.sql",
+      "sha256": "164aac848f10c17013ea57b998010417cb673ce22455cdbcd426dfd2617878c0"
+    },
+    {
+      "idx": 5,
+      "tag": "0005_show_correct_answer",
+      "file": "0005_show_correct_answer.sql",
+      "sha256": "63ccaf41ca5cbf6486db762eca3786cf6ef380a7d35ed99da54cd0925f28dfb3"
+    },
+    {
+      "idx": 6,
+      "tag": "0006_scoring_rules",
+      "file": "0006_scoring_rules.sql",
+      "sha256": "d6b12ce0dde62801cec6e6a258fc062f166671e012fbca7561bbaa4c52d721ad"
+    },
+    {
+      "idx": 7,
+      "tag": "0007_global_scoring_settings",
+      "file": "0007_global_scoring_settings.sql",
+      "sha256": "43dc7600b28ea67d201d5c98a88cd1aa282d1c2b9c2410be74fa10c97a3022c5"
+    },
+    {
+      "idx": 8,
+      "tag": "0008_question_types",
+      "file": "0008_question_types.sql",
+      "sha256": "323de05e95fec3f93d9bf156b8acebe5b70d6cfa2b33f2cf08d39daad1fa0137"
+    },
+    {
+      "idx": 9,
+      "tag": "0009_add_client_attempt_id",
+      "file": "0009_add_client_attempt_id.sql",
+      "sha256": "a31e34422145096358ee6c78086647077fb660a26387f3c5cf98c77043aab972"
+    },
+    {
+      "idx": 10,
+      "tag": "0010_question_drafts",
+      "file": "0010_question_drafts.sql",
+      "sha256": "33e213be5ed34814d11e5e7652817eb7ad65e755ffaba896220bf871a4966593"
+    },
+    {
+      "idx": 11,
+      "tag": "0011_test_sessions",
+      "file": "0011_test_sessions.sql",
+      "sha256": "e5aef733b4f57cb710aded46d8da6b370702903671eeea349d96ead8ec856b69"
+    },
+    {
+      "idx": 12,
+      "tag": "0012_test_assignments_telemetry",
+      "file": "0012_test_assignments_telemetry.sql",
+      "sha256": "80c4a7088709136e39d43bc012c77b3d840c63b5c2c3194965751abd91001037"
+    },
+    {
+      "idx": 13,
+      "tag": "0013_drop_user_position_and_show_in_team",
+      "file": "0013_drop_user_position_and_show_in_team.sql",
+      "sha256": "6f7be5aa776299e9604f4064e9d81febcae95e6d9ba2661a365a1b2d76ebd0ad"
+    },
+    {
+      "idx": 14,
+      "tag": "0014_app_settings",
+      "file": "0014_app_settings.sql",
+      "sha256": "6598fab846d463d7ac236d2d7631aedf8a26198d1422bd698355d539a9c112a6"
+    },
+    {
+      "idx": 15,
+      "tag": "0015_student_groups",
+      "file": "0015_student_groups.sql",
+      "sha256": "fd5253486408a0465c25e605e9e7ed1122c154266d24cf2e817ead17e4b37929"
+    },
+    {
+      "idx": 16,
+      "tag": "0016_session_draft_answers",
+      "file": "0016_session_draft_answers.sql",
+      "sha256": "e70a2beab99ed37383341f6892c50ad002e1cc403e849d166683661c1c3a26e0"
+    },
+    {
+      "idx": 17,
+      "tag": "0017_question_search_documents",
+      "file": "0017_question_search_documents.sql",
+      "sha256": "91511cda74a751741f1c8aef8a15b55fadbbf9555452113758080261e8a424f7"
+    },
+    {
+      "idx": 18,
+      "tag": "0018_enable_remaining_rls_and_move_pg_trgm",
+      "file": "0018_enable_remaining_rls_and_move_pg_trgm.sql",
+      "sha256": "985f08b76189f957e9f34a1b3a581c1d75c00295d5efca36339694f24103e533"
+    },
+    {
+      "idx": 19,
+      "tag": "0019_session_draft_telemetry",
+      "file": "0019_session_draft_telemetry.sql",
+      "sha256": "dd32a502ae2f2edbd0a5b796218a2a5a06a8f46bcc3aa65239b21171557010b2"
+    },
+    {
+      "idx": 20,
+      "tag": "0020_short_answer_variants",
+      "file": "0020_short_answer_variants.sql",
+      "sha256": "1a3777e02e255a6647f0c1cfef46eb4a846074cb88ec8579a89cd03d0aaefa36"
+    }
+  ]
+}
