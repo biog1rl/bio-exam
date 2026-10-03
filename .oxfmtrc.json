@@ -6,6 +6,10 @@
 	"singleQuote": true,
 	"endOfLine": "lf",
 	"printWidth": 120,
+	"sortTailwindcss": {
+		"stylesheet": "./app/web/styles/globals.css",
+		"functions": ["clsx", "cn", "cva"]
+	},
 	"sortImports": {
 		"newlinesBetween": true,
 		"ignoreCase": false,
@@ -29,6 +33,7 @@
 		".yarn/**",
 		"**/*.pen",
 		"yarn.lock",
+		".yarnrc.yml",
 		".planning/**",
 		".codegraph/**"
 	]

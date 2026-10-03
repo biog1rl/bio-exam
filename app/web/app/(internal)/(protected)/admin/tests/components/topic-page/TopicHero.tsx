@@ -24,21 +24,21 @@ interface TopicHeroProps {
 
 export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTopic }: TopicHeroProps) {
 	return (
-		<section className="rounded-4xl border-border/80 bg-card/90 overflow-hidden border shadow-sm">
-			<div className="tab:grid-cols-[1fr_18.75rem] grid gap-0">
+		<section className="overflow-hidden rounded-4xl border border-border/80 bg-card/90 shadow-sm">
+			<div className="grid gap-0 tab:grid-cols-[1fr_18.75rem]">
 				<div className="p-unit-mob tab-sm:p-unit">
 					<div className="flex flex-wrap items-center gap-2">
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{topic.slug}</p>
+						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{topic.slug}</p>
 						<Badge variant={topic.isActive ? 'default' : 'secondary'} className="rounded-full">
 							{topic.isActive ? 'Активна' : 'Скрыта'}
 						</Badge>
 					</div>
 
 					<div className="mt-5 max-w-4xl">
-						<h1 className="text-foreground tab-sm:text-5xl tab:text-7xl font-serif text-4xl leading-none">
+						<h1 className="font-serif text-4xl leading-none text-foreground tab-sm:text-5xl tab:text-7xl">
 							{topic.title}
 						</h1>
-						<p className="text-muted-foreground mt-5 max-w-2xl text-base leading-7">
+						<p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
 							{topic.description ||
 								'Тема без описания. Добавьте короткую аннотацию, чтобы команда быстрее понимала контекст набора тестов.'}
 						</p>
@@ -51,13 +51,13 @@ export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTo
 								Новый тест
 							</Link>
 						</Button>
-						<Button variant="outline" onClick={onEditTopic} className="bg-card rounded-full transition-all">
+						<Button variant="outline" onClick={onEditTopic} className="rounded-full bg-card transition-all">
 							<Edit className="size-4" />
 							Тема
 						</Button>
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
-								<Button variant="outline" className="bg-card rounded-full transition-all">
+								<Button variant="outline" className="rounded-full bg-card transition-all">
 									<FileArchive className="size-4" />
 									Экспорт
 								</Button>
@@ -80,22 +80,22 @@ export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTo
 					</div>
 				</div>
 
-				<aside className="border-border/70 bg-secondary/55 p-unit-mob tab-sm:p-unit tab:border-t-0 tab:border-l border-t">
-					<FlaskConical className="text-primary size-7" />
+				<aside className="border-t border-border/70 bg-secondary/55 p-unit-mob tab-sm:p-unit tab:border-t-0 tab:border-l">
+					<FlaskConical className="size-7 text-primary" />
 					<p className="mt-6 font-serif text-4xl leading-none">{stats?.totalQuestions ?? '…'}</p>
-					<p className="text-muted-foreground mt-2 text-sm">вопросов в теме</p>
+					<p className="mt-2 text-sm text-muted-foreground">вопросов в теме</p>
 
 					<div className="mt-8 space-y-3 text-sm">
-						<div className="bg-card flex items-center justify-between gap-4 rounded-full px-4 py-2">
+						<div className="flex items-center justify-between gap-4 rounded-full bg-card px-4 py-2">
 							<span className="text-muted-foreground">Опубликовано</span>
 							<span className="font-medium">{stats?.publishedTests ?? '…'}</span>
 						</div>
-						<div className="bg-card flex items-center justify-between gap-4 rounded-full px-4 py-2">
+						<div className="flex items-center justify-between gap-4 rounded-full bg-card px-4 py-2">
 							<span className="text-muted-foreground">Черновики</span>
 							<span className="font-medium">{stats?.draftTests ?? '…'}</span>
 						</div>
 						{topic.isActive ? null : (
-							<div className="border-border/70 bg-card text-muted-foreground flex items-center gap-2 rounded-3xl border px-4 py-3">
+							<div className="flex items-center gap-2 rounded-3xl border border-border/70 bg-card px-4 py-3 text-muted-foreground">
 								<EyeOff className="size-4 shrink-0" />
 								<span>Тема скрыта в публичном каталоге.</span>
 							</div>

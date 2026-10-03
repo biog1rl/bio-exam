@@ -11,7 +11,7 @@ export default function Home() {
 				alt="main-bg"
 				width={1920}
 				height={1080}
-				className="pointer-events-none absolute left-0 top-0 h-full w-full object-cover blur"
+				className="pointer-events-none absolute top-0 left-0 h-full w-full object-cover blur"
 				quality={100}
 				priority
 				unoptimized

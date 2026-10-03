@@ -57,10 +57,10 @@ function formatDate(value?: string) {
 
 function StatTile({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof BookOpen }) {
 	return (
-		<div className="border-border/70 bg-secondary/70 p-unit rounded-3xl border">
-			<Icon className="text-primary mb-5 size-5" />
-			<p className="tab-sm:text-4xl font-serif text-3xl leading-none">{value}</p>
-			<p className="text-muted-foreground mt-2 text-sm">{label}</p>
+		<div className="rounded-3xl border border-border/70 bg-secondary/70 p-unit">
+			<Icon className="mb-5 size-5 text-primary" />
+			<p className="font-serif text-3xl leading-none tab-sm:text-4xl">{value}</p>
+			<p className="mt-2 text-sm text-muted-foreground">{label}</p>
 		</div>
 	)
 }
@@ -68,9 +68,9 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: string |
 function LoadingState() {
 	return (
 		<div className="space-y-3">
-			<Skeleton className="rounded-4xl h-32" />
-			<Skeleton className="rounded-4xl h-32" />
-			<Skeleton className="rounded-4xl h-32" />
+			<Skeleton className="h-32 rounded-4xl" />
+			<Skeleton className="h-32 rounded-4xl" />
+			<Skeleton className="h-32 rounded-4xl" />
 		</div>
 	)
 }
@@ -208,22 +208,22 @@ export default function TestsClient() {
 
 	return (
 		<div className="space-y-5">
-			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
-				<div className="tab:flex-row tab:items-end tab:justify-between flex flex-col gap-6">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+				<div className="flex flex-col gap-6 tab:flex-row tab:items-end tab:justify-between">
 					<div>
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">банк заданий</p>
-						<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 max-w-3xl font-serif text-3xl leading-none">
+						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">банк заданий</p>
+						<h1 className="mt-2 max-w-3xl font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">
 							Тесты и темы
 						</h1>
 					</div>
 					<div className="flex flex-wrap gap-2">
-						<Button variant="outline" asChild className="-sm bg-card mob:w-auto w-full rounded-full transition-all">
+						<Button variant="outline" asChild className="-sm w-full rounded-full bg-card transition-all mob:w-auto">
 							<Link href="/admin/tests/scoring">
 								<SlidersHorizontal className="size-4" />
 								Баллы
 							</Link>
 						</Button>
-						<Button variant="outline" asChild className="-sm bg-card mob:w-auto w-full rounded-full transition-all">
+						<Button variant="outline" asChild className="-sm w-full rounded-full bg-card transition-all mob:w-auto">
 							<Link href="/admin/tests/question-types">
 								<Shapes className="size-4" />
 								Типы вопросов
@@ -232,12 +232,12 @@ export default function TestsClient() {
 						<Button
 							variant="outline"
 							onClick={handleCreateTopic}
-							className="-sm bg-card mob:w-auto w-full rounded-full transition-all"
+							className="-sm w-full rounded-full bg-card transition-all mob:w-auto"
 						>
 							<FolderPlus className="size-4" />
 							Новая тема
 						</Button>
-						<Button asChild className="-md mob:w-auto w-full rounded-full transition-all">
+						<Button asChild className="-md w-full rounded-full transition-all mob:w-auto">
 							<Link href="/admin/tests/new">
 								<Plus className="size-4" />
 								Новый тест
@@ -246,7 +246,7 @@ export default function TestsClient() {
 					</div>
 				</div>
 
-				<div className="tab-sm:grid-cols-2 tab:grid-cols-4 mt-8 grid gap-3">
+				<div className="mt-8 grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-4">
 					<StatTile label="всего тестов" value={testsLoading || testsError ? '…' : allTests.length} icon={BookOpen} />
 					<StatTile
 						label="опубликовано"
@@ -259,13 +259,13 @@ export default function TestsClient() {
 			</section>
 
 			<section className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
-				<aside className="top-unit rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit h-fit border shadow-sm xl:sticky">
+				<aside className="top-unit h-fit rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit xl:sticky">
 					<div className="flex items-start justify-between gap-3">
 						<div>
-							<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">темы</p>
+							<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">темы</p>
 							<h2 className="mt-2 font-serif text-2xl">Навигация</h2>
 						</div>
-						<Button variant="outline" size="icon" onClick={handleCreateTopic} className="bg-card rounded-full">
+						<Button variant="outline" size="icon" onClick={handleCreateTopic} className="rounded-full bg-card">
 							<FolderPlus className="size-4" />
 						</Button>
 					</div>
@@ -285,17 +285,17 @@ export default function TestsClient() {
 											type="button"
 											onClick={() => setSelectedTopic(topic.id)}
 											className={cn(
-												'p-unit hover:bg-secondary/70 flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-3xl border border-transparent text-left',
+												'flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-3xl border border-transparent p-unit text-left hover:bg-secondary/70',
 												interactiveClass,
-												isSelected && 'border-border bg-secondary text-secondary-foreground border'
+												isSelected && 'border border-border bg-secondary text-secondary-foreground'
 											)}
 										>
-											<BookOpen className="text-primary size-4 shrink-0" />
+											<BookOpen className="size-4 shrink-0 text-primary" />
 											<span className="min-w-0 flex-1 truncate text-sm font-medium">{topic.title}</span>
 											{!isAll && 'isActive' in topic && !topic.isActive ? (
-												<EyeOff className="text-muted-foreground size-3.5" />
+												<EyeOff className="size-3.5 text-muted-foreground" />
 											) : null}
-											<span className="bg-card text-muted-foreground rounded-full px-3 py-1 text-xs">
+											<span className="rounded-full bg-card px-3 py-1 text-xs text-muted-foreground">
 												{isAll && (testsLoading || testsError) ? '…' : (topic.testsCount ?? 0)}
 											</span>
 										</button>
@@ -347,15 +347,15 @@ export default function TestsClient() {
 					</div>
 				</aside>
 
-				<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
-					<div className="tab-sm:flex-row tab-sm:items-end tab-sm:justify-between flex flex-col gap-4 pb-3">
+				<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+					<div className="flex flex-col gap-4 pb-3 tab-sm:flex-row tab-sm:items-end tab-sm:justify-between">
 						<div>
-							<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+							<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
 								{selectedTopicData ? selectedTopicData.slug : 'все темы'}
 							</p>
 							<h2 className="mt-2 font-serif text-3xl">{selectedTopicData?.title ?? 'Все тесты'}</h2>
 						</div>
-						<div className="bg-secondary text-muted-foreground rounded-full px-4 py-2 text-sm">
+						<div className="rounded-full bg-secondary px-4 py-2 text-sm text-muted-foreground">
 							{filteredTests.length} из {allTests.length}
 						</div>
 					</div>
@@ -367,28 +367,28 @@ export default function TestsClient() {
 							) : testsError ? (
 								<p role="alert">Не удалось загрузить тесты</p>
 							) : filteredTests.length === 0 ? (
-								<div className="bg-secondary/70 p-unit text-muted-foreground rounded-3xl text-sm">
+								<div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">
 									{selectedTopic ? 'В этой теме пока нет тестов.' : 'Создайте первый тест.'}
 								</div>
 							) : (
 								filteredTests.map((test) => (
 									<article
 										key={test.id}
-										className="border-border/70 bg-secondary/45 p-unit hover:bg-secondary/70 rounded-3xl border transition-colors"
+										className="rounded-3xl border border-border/70 bg-secondary/45 p-unit transition-colors hover:bg-secondary/70"
 									>
-										<div className="tab-sm:grid-cols-[1fr_auto] tab-sm:items-start grid gap-4">
+										<div className="grid gap-4 tab-sm:grid-cols-[1fr_auto] tab-sm:items-start">
 											<Link href={`/admin/tests/${test.topicSlug}/${test.slug}`} className="group min-w-0">
 												<div className="flex flex-wrap items-center gap-2">
-													<h3 className="group-hover:text-primary font-serif text-2xl leading-tight">{test.title}</h3>
+													<h3 className="font-serif text-2xl leading-tight group-hover:text-primary">{test.title}</h3>
 													<Badge variant={test.isPublished ? 'default' : 'secondary'} className="rounded-full">
 														{test.isPublished ? 'Опубликован' : 'Черновик'}
 													</Badge>
 												</div>
-												<p className="text-muted-foreground mt-2 text-sm">{test.topicTitle}</p>
+												<p className="mt-2 text-sm text-muted-foreground">{test.topicTitle}</p>
 											</Link>
 
-											<div className="tab-sm:justify-end flex items-center justify-between gap-2">
-												<Button asChild variant="outline" className="bg-card rounded-full">
+											<div className="flex items-center justify-between gap-2 tab-sm:justify-end">
+												<Button asChild variant="outline" className="rounded-full bg-card">
 													<Link href={`/admin/tests/${test.topicSlug}/${test.slug}`}>Редактировать</Link>
 												</Button>
 												<DropdownMenu>
@@ -416,16 +416,16 @@ export default function TestsClient() {
 											</div>
 										</div>
 
-										<div className="text-muted-foreground mt-5 flex flex-wrap gap-2 text-sm">
-											<span className="bg-card inline-flex items-center gap-2 rounded-full px-3 py-1">
+										<div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">
+											<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
 												<FileText className="size-3.5" />
 												{test.questionsCount ?? 0} вопросов
 											</span>
-											<span className="bg-card inline-flex items-center gap-2 rounded-full px-3 py-1">
+											<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
 												<Clock3 className="size-3.5" />
 												{test.timeLimitMinutes ? `${test.timeLimitMinutes} мин` : 'без таймера'}
 											</span>
-											<span className="bg-card inline-flex items-center gap-2 rounded-full px-3 py-1">
+											<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
 												обновлён {formatDate(test.updatedAt)}
 											</span>
 										</div>

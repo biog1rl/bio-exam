@@ -236,8 +236,8 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 							</div>
 						) : assets.length === 0 ? (
 							<div className="flex h-full flex-col items-center justify-center gap-2">
-								<ImageIcon className="text-muted-foreground size-12" />
-								<p className="text-muted-foreground text-sm">Изображения ещё не загружены</p>
+								<ImageIcon className="size-12 text-muted-foreground" />
+								<p className="text-sm text-muted-foreground">Изображения ещё не загружены</p>
 							</div>
 						) : (
 							<>
@@ -259,13 +259,13 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 													e.stopPropagation()
 													handleDeleteClick(asset)
 												}}
-												className="absolute right-1 top-1 cursor-pointer rounded-full bg-black/60 p-1 text-white opacity-0 transition-all hover:bg-red-600 group-hover:opacity-100"
+												className="absolute top-1 right-1 cursor-pointer rounded-full bg-black/60 p-1 text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-red-600"
 												title="Удалить"
 											>
 												<Trash2 className="size-3.5" />
 											</button>
 											{/* Название файла */}
-											<div className="bg-linear-to-t absolute inset-x-0 bottom-0 from-black/60 to-transparent p-1.5">
+											<div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/60 to-transparent p-1.5">
 												<p className="truncate text-xs text-white">{asset.filename}</p>
 											</div>
 										</div>
@@ -292,14 +292,14 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 							onDragLeave={handleDragLeave}
 							onDragOver={handleDragOver}
 							onDrop={handleDrop}
-							className={`border-primary/50 flex h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
+							className={`flex h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/50 transition-colors ${
 								isDragging ? 'bg-primary/10' : 'hover:bg-muted/50'
 							}`}
 							onClick={() => document.getElementById('media-library-file-input')?.click()}
 						>
-							<UploadIcon className="text-muted-foreground mb-4 size-12" />
-							<p className="text-muted-foreground text-sm">Перетащите изображение сюда или кликните для выбора</p>
-							{selectedFile && <p className="text-primary mt-2 text-sm font-medium">{selectedFile.name}</p>}
+							<UploadIcon className="mb-4 size-12 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">Перетащите изображение сюда или кликните для выбора</p>
+							{selectedFile && <p className="mt-2 text-sm font-medium text-primary">{selectedFile.name}</p>}
 						</div>
 
 						{/* Скрытый ввод файла */}

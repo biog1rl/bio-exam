@@ -103,7 +103,7 @@ function BubbleBackground({
 		<div
 			ref={containerRef}
 			data-slot="bubble-background"
-			className={cn('bg-linear-to-br relative size-full overflow-hidden from-yellow-100 to-green-100', className)}
+			className={cn('relative size-full overflow-hidden bg-linear-to-br from-yellow-100 to-green-100', className)}
 			{...props}
 		>
 			<style>
@@ -119,7 +119,7 @@ function BubbleBackground({
           `}
 			</style>
 
-			<svg xmlns="http://www.w3.org/2000/svg" className="absolute left-0 top-0 h-0 w-0">
+			<svg xmlns="http://www.w3.org/2000/svg" className="absolute top-0 left-0 h-0 w-0">
 				<defs>
 					<filter id="goo">
 						<feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur" />
@@ -131,7 +131,7 @@ function BubbleBackground({
 
 			<div className="absolute inset-0" style={{ filter: 'url(#goo) blur(40px)' }}>
 				<motion.div
-					className="absolute left-[10%] top-[10%] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--first-color),0.8)_0%,rgba(var(--first-color),0)_50%)] mix-blend-hard-light"
+					className="absolute top-[10%] left-[10%] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--first-color),0.8)_0%,rgba(var(--first-color),0)_50%)] mix-blend-hard-light"
 					animate={{ y: [-50, 50, -50] }}
 					transition={{ duration: 30, ease: 'easeInOut', repeat: Infinity }}
 					style={{ transform: 'translateZ(0)', willChange: 'transform' }}
@@ -148,7 +148,7 @@ function BubbleBackground({
 					}}
 					style={{ transform: 'translateZ(0)', willChange: 'transform' }}
 				>
-					<div className="left-[10%] top-[10%] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--second-color),0.8)_0%,rgba(var(--second-color),0)_50%)] mix-blend-hard-light" />
+					<div className="top-[10%] left-[10%] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--second-color),0.8)_0%,rgba(var(--second-color),0)_50%)] mix-blend-hard-light" />
 				</motion.div>
 
 				<motion.div
@@ -157,11 +157,11 @@ function BubbleBackground({
 					transition={{ duration: 40, ease: 'linear', repeat: Infinity }}
 					style={{ transform: 'translateZ(0)', willChange: 'transform' }}
 				>
-					<div className="absolute left-[calc(50%-500px)] top-[calc(50%+200px)] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--third-color),0.8)_0%,rgba(var(--third-color),0)_50%)] mix-blend-hard-light" />
+					<div className="absolute top-[calc(50%+200px)] left-[calc(50%-500px)] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--third-color),0.8)_0%,rgba(var(--third-color),0)_50%)] mix-blend-hard-light" />
 				</motion.div>
 
 				<motion.div
-					className="absolute left-[10%] top-[10%] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--fourth-color),0.8)_0%,rgba(var(--fourth-color),0)_50%)] opacity-70 mix-blend-hard-light"
+					className="absolute top-[10%] left-[10%] size-[80%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--fourth-color),0.8)_0%,rgba(var(--fourth-color),0)_50%)] opacity-70 mix-blend-hard-light"
 					animate={{ x: [-50, 50, -50] }}
 					transition={{ duration: 40, ease: 'easeInOut', repeat: Infinity }}
 					style={{ transform: 'translateZ(0)', willChange: 'transform' }}
@@ -173,7 +173,7 @@ function BubbleBackground({
 					transition={{ duration: 20, ease: 'linear', repeat: Infinity }}
 					style={{ transform: 'translateZ(0)', willChange: 'transform' }}
 				>
-					<div className="absolute left-[calc(50%-80%)] top-[calc(50%-80%)] size-[160%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--fifth-color),0.8)_0%,rgba(var(--fifth-color),0)_50%)] mix-blend-hard-light" />
+					<div className="absolute top-[calc(50%-80%)] left-[calc(50%-80%)] size-[160%] rounded-full bg-[radial-gradient(circle_at_center,rgba(var(--fifth-color),0.8)_0%,rgba(var(--fifth-color),0)_50%)] mix-blend-hard-light" />
 				</motion.div>
 
 				{interactive && (

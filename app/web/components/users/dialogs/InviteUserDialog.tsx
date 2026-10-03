@@ -135,7 +135,7 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 							autoComplete="off"
 							inputMode="text"
 						/>
-						<p className="text-muted-foreground mt-1 text-xs">{LOGIN_HINT}</p>
+						<p className="mt-1 text-xs text-muted-foreground">{LOGIN_HINT}</p>
 					</div>
 					<div>
 						<Label>Роль</Label>
@@ -168,7 +168,7 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 						<>
 							<Separator />
 							<div className="space-y-2">
-								<div className="text-muted-foreground text-sm">Отправьте пользователю эту одноразовую ссылку:</div>
+								<div className="text-sm text-muted-foreground">Отправьте пользователю эту одноразовую ссылку:</div>
 								<div className="flex gap-2">
 									<Input ref={inputRef} readOnly value={inviteLink} className="flex-1" />
 									<Button
@@ -181,7 +181,7 @@ export function InviteUserDialog({ open, onOpenChange, onCreated }: Props) {
 										{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
 									</Button>
 								</div>
-								<div className="text-muted-foreground text-xs">Ссылка действует 7 дней и одноразовая.</div>
+								<div className="text-xs text-muted-foreground">Ссылка действует 7 дней и одноразовая.</div>
 							</div>
 						</>
 					)}

@@ -65,7 +65,7 @@ function FormulaField({ rule, update }: RuleBlockProps) {
 					<SelectItem value="tiers">Шкала по числу ошибок (tiers)</SelectItem>
 				</SelectContent>
 			</Select>
-			<p className="text-muted-foreground text-xs">
+			<p className="text-xs text-muted-foreground">
 				`exact_match` - баллы только за 0 ошибок. `one_mistake_partial` - отдельный балл за 1 ошибку. `tiers` - шкала по
 				количеству ошибок.
 			</p>
@@ -95,7 +95,7 @@ function MistakeMetricField({ rule, allowedMetrics, update }: MistakeMetricField
 					))}
 				</SelectContent>
 			</Select>
-			<p className="text-muted-foreground text-xs">{MISTAKE_METRIC_DESCRIPTIONS[rule.mistakeMetric]}</p>
+			<p className="text-xs text-muted-foreground">{MISTAKE_METRIC_DESCRIPTIONS[rule.mistakeMetric]}</p>
 		</div>
 	)
 }
@@ -111,7 +111,7 @@ function CorrectPointsField({ rule, update }: RuleBlockProps) {
 				value={rule.correctPoints}
 				onChange={(e) => update({ correctPoints: e.target.value === '' ? 0 : Number(e.target.value) })}
 			/>
-			<p className="text-muted-foreground text-xs">Максимум, который можно получить за этот тип вопроса.</p>
+			<p className="text-xs text-muted-foreground">Максимум, который можно получить за этот тип вопроса.</p>
 		</div>
 	)
 }
@@ -129,7 +129,7 @@ function OneMistakePointsField({ rule, update }: RuleBlockProps) {
 				value={rule.oneMistakePoints ?? 0}
 				onChange={(e) => update({ oneMistakePoints: e.target.value === '' ? 0 : Number(e.target.value) })}
 			/>
-			<p className="text-muted-foreground text-xs">
+			<p className="text-xs text-muted-foreground">
 				Начисляется только когда ошибок ровно 1. Значение не должно быть больше полного балла.
 			</p>
 		</div>
@@ -156,7 +156,7 @@ function TiersField({ rule, update }: RuleBlockProps) {
 					Добавить tier
 				</Button>
 			</div>
-			<p className="text-muted-foreground text-xs">
+			<p className="text-xs text-muted-foreground">
 				Каждый tier задает порог ошибок и баллы. Пример: `maxMistakes=1, points=1` означает, что при 1 ошибке
 				начисляется 1 балл.
 			</p>
@@ -198,7 +198,7 @@ function TiersField({ rule, update }: RuleBlockProps) {
 								update({ tiers: next })
 							}}
 						>
-							<Trash2 className="text-destructive h-4 w-4" />
+							<Trash2 className="h-4 w-4 text-destructive" />
 						</Button>
 					</div>
 				))}
@@ -210,10 +210,10 @@ function TiersField({ rule, update }: RuleBlockProps) {
 export function QuestionTypeScoringRuleEditorHeader({ uiTemplate }: { uiTemplate: QuestionUiTemplate }) {
 	const templateMeta = TEMPLATE_META[uiTemplate]
 	return (
-		<div className="bg-muted/40 rounded-md border p-2 text-xs">
+		<div className="rounded-md border bg-muted/40 p-2 text-xs">
 			<p className="font-medium">{templateMeta.label}</p>
 			<p className="text-muted-foreground">{templateMeta.description}</p>
-			<p className="text-muted-foreground mt-1">
+			<p className="mt-1 text-muted-foreground">
 				Формат ответа: {templateMeta.answerFormat}. Пример: {templateMeta.example}
 			</p>
 		</div>

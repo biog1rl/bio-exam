@@ -56,7 +56,7 @@ export function WithContextMenu({
 								<ContextMenuSeparator />
 								<ContextMenuItem
 									inset
-									className="text-destructive focus:text-destructive cursor-pointer"
+									className="cursor-pointer text-destructive focus:text-destructive"
 									onClick={(e) => {
 										e.preventDefault()
 										onDelete()

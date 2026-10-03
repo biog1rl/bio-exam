@@ -244,7 +244,35 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 	try {
 		const { topicSlug, testSlug } = req.params as { topicSlug: string; testSlug: string }
 
-			const testRows = await withTransientDbRetry('public test by slug', () =>
+		const testRows = await withTransientDbRetry('public test by slug', () =>
+			db
+				.select({
+					id: tests.id,
+					slug: tests.slug,
+					title: tests.title,
+					description: tests.description,
+					showCorrectAnswer: tests.showCorrectAnswer,
+					timeLimitMinutes: tests.timeLimitMinutes,
+					passingScore: tests.passingScore,
+					topicId: topics.id,
+					topicSlug: topics.slug,
+					topicTitle: topics.title,
+				})
+				.from(tests)
+				.innerJoin(topics, eq(tests.topicId, topics.id))
+				.where(
+					and(
+						eq(topics.slug, topicSlug),
+						eq(topics.isActive, true),
+						eq(tests.slug, testSlug),
+						eq(tests.isPublished, true)
+					)
+				)
+				.limit(1)
+		)
+		let test = testRows[0]
+		if (!test && UUID_RE.test(testSlug)) {
+			const fallbackRows = await withTransientDbRetry('public test by id fallback', () =>
 				db
 					.select({
 						id: tests.id,
@@ -264,42 +292,14 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 						and(
 							eq(topics.slug, topicSlug),
 							eq(topics.isActive, true),
-							eq(tests.slug, testSlug),
+							eq(tests.id, testSlug),
 							eq(tests.isPublished, true)
 						)
 					)
 					.limit(1)
 			)
-			let test = testRows[0]
-			if (!test && UUID_RE.test(testSlug)) {
-				const fallbackRows = await withTransientDbRetry('public test by id fallback', () =>
-					db
-						.select({
-							id: tests.id,
-							slug: tests.slug,
-							title: tests.title,
-							description: tests.description,
-							showCorrectAnswer: tests.showCorrectAnswer,
-							timeLimitMinutes: tests.timeLimitMinutes,
-							passingScore: tests.passingScore,
-							topicId: topics.id,
-							topicSlug: topics.slug,
-							topicTitle: topics.title,
-						})
-						.from(tests)
-						.innerJoin(topics, eq(tests.topicId, topics.id))
-						.where(
-							and(
-								eq(topics.slug, topicSlug),
-								eq(topics.isActive, true),
-								eq(tests.id, testSlug),
-								eq(tests.isPublished, true)
-							)
-						)
-						.limit(1)
-				)
-				test = fallbackRows[0]
-			}
+			test = fallbackRows[0]
+		}
 		if (!test) {
 			return res.status(404).json({ error: 'Test not found' })
 		}
@@ -308,40 +308,40 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 		const userId = req.authUser!.id
 		const isAdmin = req.authUser!.roles?.some((r) => ['admin', 'teacher'].includes(r)) ?? false
 		if (!isAdmin) {
-				const assignment = await withTransientDbRetry('public test assignment check', () =>
-					db
-						.select()
-						.from(testAssignments)
-						.where(and(eq(testAssignments.testId, test.id), eq(testAssignments.userId, userId)))
-						.limit(1)
-				)
-				if (assignment.length === 0) {
-					return res.status(403).json({ error: 'Тест не назначен' })
-				}
+			const assignment = await withTransientDbRetry('public test assignment check', () =>
+				db
+					.select()
+					.from(testAssignments)
+					.where(and(eq(testAssignments.testId, test.id), eq(testAssignments.userId, userId)))
+					.limit(1)
+			)
+			if (assignment.length === 0) {
+				return res.status(403).json({ error: 'Тест не назначен' })
 			}
+		}
 
 		if (req.query.view === 'summary') {
 			return res.json({ test })
 		}
 
-			const questionRows = await withTransientDbRetry('public test questions list', () =>
-				db
-					.select({
-						id: questions.id,
-						type: questions.type,
-						order: questions.order,
-						points: questions.points,
-						options: questions.options,
-						matchingPairs: questions.matchingPairs,
-						promptPath: questions.promptPath,
-					})
-					.from(questions)
-					.where(eq(questions.testId, test.id))
-					.orderBy(asc(questions.order))
-			)
-			const questionTypesMap = await withTransientDbRetry('public test question types', () =>
-				getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
-			)
+		const questionRows = await withTransientDbRetry('public test questions list', () =>
+			db
+				.select({
+					id: questions.id,
+					type: questions.type,
+					order: questions.order,
+					points: questions.points,
+					options: questions.options,
+					matchingPairs: questions.matchingPairs,
+					promptPath: questions.promptPath,
+				})
+				.from(questions)
+				.where(eq(questions.testId, test.id))
+				.orderBy(asc(questions.order))
+		)
+		const questionTypesMap = await withTransientDbRetry('public test question types', () =>
+			getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
+		)
 
 		const questionsWithTexts = await Promise.all(
 			questionRows.map(async (q) => {

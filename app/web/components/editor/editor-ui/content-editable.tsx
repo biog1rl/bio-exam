@@ -20,7 +20,7 @@ export function ContentEditable({ placeholder, className, placeholderClassName }
 				<div
 					className={
 						placeholderClassName ??
-						`text-muted-foreground py-4.5 pointer-events-none absolute left-0 top-0 select-none overflow-hidden text-ellipsis px-8`
+						`pointer-events-none absolute top-0 left-0 overflow-hidden px-8 py-4.5 text-ellipsis text-muted-foreground select-none`
 					}
 				>
 					{placeholder}

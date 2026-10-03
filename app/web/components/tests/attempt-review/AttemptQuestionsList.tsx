@@ -26,7 +26,7 @@ export function AttemptQuestionsList({
 }) {
 	if (questions.length === 0) {
 		return (
-			<section className="border-border/80 bg-card/90 rounded-4xl p-unit-mob tab-sm:p-unit border">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
 				<p className="text-muted-foreground">В выбранном фильтре нет вопросов.</p>
 			</section>
 		)
@@ -45,11 +45,11 @@ export function AttemptQuestionsList({
 					<section
 						key={question.id}
 						id={`question-${index}`}
-						className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit scroll-mt-6 border"
+						className="scroll-mt-6 rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit"
 					>
 						<div className="flex flex-wrap items-center justify-between gap-3">
 							<div className="flex items-center gap-3">
-								<span className="bg-secondary/70 inline-flex size-10 items-center justify-center rounded-full font-serif text-xl">
+								<span className="inline-flex size-10 items-center justify-center rounded-full bg-secondary/70 font-serif text-xl">
 									{index + 1}
 								</span>
 								<span className={cn('rounded-full border px-3 py-1 text-sm', getStatusClass(status))}>
@@ -57,7 +57,7 @@ export function AttemptQuestionsList({
 								</span>
 							</div>
 							{result ? (
-								<span className="bg-secondary/70 text-muted-foreground rounded-full px-3 py-1 text-sm">
+								<span className="rounded-full bg-secondary/70 px-3 py-1 text-sm text-muted-foreground">
 									{result.earnedPoints} / {result.points} балл.
 								</span>
 							) : null}
@@ -66,7 +66,7 @@ export function AttemptQuestionsList({
 						<div className="mt-6">
 							<MdxRenderer
 								source={question.promptText}
-								className="prose prose-p:my-0 prose-p:text-foreground max-w-none text-base font-medium"
+								className="prose max-w-none text-base font-medium prose-p:my-0 prose-p:text-foreground"
 							/>
 						</div>
 
@@ -80,16 +80,16 @@ export function AttemptQuestionsList({
 						/>
 
 						{telemetry ? (
-							<div className="text-muted-foreground mt-5 flex flex-wrap gap-2 text-sm">
-								<span className="bg-secondary/70 inline-flex items-center gap-2 rounded-full px-3 py-1">
+							<div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">
+								<span className="inline-flex items-center gap-2 rounded-full bg-secondary/70 px-3 py-1">
 									<Clock3 className="size-3.5" />
 									{formatDuration(telemetry.timeSpentMs)}
 								</span>
-								<span className="bg-secondary/70 inline-flex items-center gap-2 rounded-full px-3 py-1">
+								<span className="inline-flex items-center gap-2 rounded-full bg-secondary/70 px-3 py-1">
 									<Eye className="size-3.5" />
 									{telemetry.focusLossCount} потерь фокуса
 								</span>
-								<span className="bg-secondary/70 inline-flex items-center gap-2 rounded-full px-3 py-1">
+								<span className="inline-flex items-center gap-2 rounded-full bg-secondary/70 px-3 py-1">
 									<RotateCcw className="size-3.5" />
 									{telemetry.visitCount} посещений
 								</span>

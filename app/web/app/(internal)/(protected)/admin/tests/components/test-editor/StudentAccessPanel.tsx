@@ -43,7 +43,7 @@ export function StudentAccessPanel({
 	)
 
 	return (
-		<div className="tab:grid-cols-2 grid gap-5">
+		<div className="grid gap-5 tab:grid-cols-2">
 			<AdminTestsSectionCard title="Доступ студентов" headerClassName="pb-3">
 				<div className="mb-3">
 					<UserStatusFilter
@@ -53,12 +53,12 @@ export function StudentAccessPanel({
 					/>
 				</div>
 				{!assignmentsLoaded ? (
-					<div className="text-muted-foreground flex items-center gap-2 text-sm">
+					<div className="flex items-center gap-2 text-sm text-muted-foreground">
 						<Loader2 className="size-4 animate-spin" />
 						Загрузка...
 					</div>
 				) : filteredAssignments.length === 0 ? (
-					<p className="text-muted-foreground text-sm">Нет студентов с доступом и выбранным статусом</p>
+					<p className="text-sm text-muted-foreground">Нет студентов с доступом и выбранным статусом</p>
 				) : (
 					<div className="space-y-2">
 						{filteredAssignments.map((assignment) => {
@@ -66,12 +66,12 @@ export function StudentAccessPanel({
 							return (
 								<div
 									key={assignment.userId}
-									className="border-border/70 bg-secondary/55 flex items-center justify-between gap-2 rounded-2xl border px-3 py-2"
+									className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-secondary/55 px-3 py-2"
 								>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium">{displayName}</p>
 										{assignment.login && assignment.name && (
-											<p className="text-muted-foreground text-xs">{assignment.login}</p>
+											<p className="text-xs text-muted-foreground">{assignment.login}</p>
 										)}
 									</div>
 									<Button
@@ -99,12 +99,12 @@ export function StudentAccessPanel({
 					<UserStatusFilter value={statusFilter} onChange={setStatusFilter} />
 				</div>
 				{!usersLoaded ? (
-					<div className="text-muted-foreground flex items-center gap-2 text-sm">
+					<div className="flex items-center gap-2 text-sm text-muted-foreground">
 						<Loader2 className="size-4 animate-spin" />
 						Загрузка пользователей...
 					</div>
 				) : filteredUsers.length === 0 ? (
-					<p className="text-muted-foreground text-sm">Нет студентов для добавления с выбранным статусом</p>
+					<p className="text-sm text-muted-foreground">Нет студентов для добавления с выбранным статусом</p>
 				) : (
 					<div className="max-h-80 space-y-2 overflow-y-auto">
 						{filteredUsers.map((user) => {
@@ -112,12 +112,12 @@ export function StudentAccessPanel({
 							return (
 								<div
 									key={user.id}
-									className="border-border/70 bg-secondary/55 flex items-center justify-between gap-2 rounded-2xl border px-3 py-2"
+									className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-secondary/55 px-3 py-2"
 								>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium">{displayName}</p>
 										{user.login && displayName !== user.login && (
-											<p className="text-muted-foreground text-xs">{user.login}</p>
+											<p className="text-xs text-muted-foreground">{user.login}</p>
 										)}
 									</div>
 									<Button

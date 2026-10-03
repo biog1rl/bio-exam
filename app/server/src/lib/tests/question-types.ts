@@ -118,20 +118,14 @@ export const QuestionTypeDefinitionSchema = z
 			})
 		}
 		if (typeof validation.exactChoiceCount === 'number') {
-			if (
-				typeof validation.minOptions === 'number' &&
-				validation.exactChoiceCount < validation.minOptions
-			) {
+			if (typeof validation.minOptions === 'number' && validation.exactChoiceCount < validation.minOptions) {
 				ctx.addIssue({
 					code: z.ZodIssueCode.custom,
 					path: ['validationSchema', 'exactChoiceCount'],
 					message: 'exactChoiceCount не может быть меньше minOptions',
 				})
 			}
-			if (
-				typeof validation.maxOptions === 'number' &&
-				validation.exactChoiceCount > validation.maxOptions
-			) {
+			if (typeof validation.maxOptions === 'number' && validation.exactChoiceCount > validation.maxOptions) {
 				ctx.addIssue({
 					code: z.ZodIssueCode.custom,
 					path: ['validationSchema', 'exactChoiceCount'],
@@ -230,10 +224,7 @@ export function getAllowedMistakeMetricsForTemplate(template: QuestionUiTemplate
 	return ALLOWED_MISTAKE_METRICS_BY_TEMPLATE[template]
 }
 
-export function isMistakeMetricAllowedForTemplate(
-	template: QuestionUiTemplate,
-	metric: MistakeMetric
-): boolean {
+export function isMistakeMetricAllowedForTemplate(template: QuestionUiTemplate, metric: MistakeMetric): boolean {
 	return ALLOWED_MISTAKE_METRICS_BY_TEMPLATE[template].includes(metric)
 }
 

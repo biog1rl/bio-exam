@@ -47,7 +47,7 @@ profile feature work.
 ## Done criteria
 
 - [ ] `../`, encoded traversal, absolute paths, and foreign storage prefixes
-  cannot delete a file.
+      cannot delete a file.
 - [ ] Ordinary directory response contains only approved minimal fields.
 - [ ] Admin screens retain required details through an admin permission.
 - [ ] `yarn verify` exits 0.
@@ -57,4 +57,3 @@ profile feature work.
 - A production legacy path lies outside the normalized image namespace.
 - A student workflow truly requires a sensitive field; report the exact caller
   rather than expanding the minimal DTO.
-

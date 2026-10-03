@@ -8,11 +8,10 @@
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
+import archiver from 'archiver'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-
-import archiver from 'archiver'
 
 import { isIsolatedEnv } from '../../config/test-database-url.js'
 

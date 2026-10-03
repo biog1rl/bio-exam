@@ -14,7 +14,7 @@ const STACKED_ACCORDION_ITEM_CLASSNAME = cn(
 	'data-[state=closed]:[&:has(+_[data-state=closed])]:rounded-b-none'
 )
 const STACKED_ACCORDION_TRIGGER_CLASSNAME = cn(
-	'px-unit py-unit hover:bg-muted/40 cursor-pointer space-x-2 rounded-lg text-lg transition-all duration-300 hover:no-underline',
+	'cursor-pointer space-x-2 rounded-lg px-unit py-unit text-lg transition-all duration-300 hover:bg-muted/40 hover:no-underline',
 	'data-[state=closed]:rounded-t-none',
 	'data-[state=closed]:rounded-b-none'
 )

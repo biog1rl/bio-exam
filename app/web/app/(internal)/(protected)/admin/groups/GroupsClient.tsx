@@ -82,7 +82,7 @@ export default function GroupsClient() {
 
 							{!isLoading && !data && (
 								<TableRow>
-									<TableCell colSpan={3} className="text-muted-foreground text-center">
+									<TableCell colSpan={3} className="text-center text-muted-foreground">
 										Не удалось загрузить группы. Обновите страницу.
 									</TableCell>
 								</TableRow>
@@ -90,7 +90,7 @@ export default function GroupsClient() {
 
 							{!isLoading && data && filtered.length === 0 && (
 								<TableRow>
-									<TableCell colSpan={3} className="text-muted-foreground text-center">
+									<TableCell colSpan={3} className="text-center text-muted-foreground">
 										{search ? 'Группы не найдены. Попробуйте изменить запрос.' : 'Групп пока нет'}
 									</TableCell>
 								</TableRow>

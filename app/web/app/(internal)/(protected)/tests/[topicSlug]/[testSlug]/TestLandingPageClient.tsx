@@ -36,7 +36,7 @@ function ChartTooltipCustom({ active, payload }: { active?: boolean; payload?: {
 	const d = payload[0].payload
 	const dateLabel = format(new Date(d.date), 'd MMMM yyyy', { locale: ru })
 	return (
-		<div className="bg-background min-w-40 space-y-1 rounded-lg border px-3 py-2 text-sm">
+		<div className="min-w-40 space-y-1 rounded-lg border bg-background px-3 py-2 text-sm">
 			<p className="font-medium">{dateLabel}</p>
 			<p className="text-muted-foreground">Попыток: {d.count}</p>
 			<p className="text-green-600 dark:text-green-400">Лучший: {formatPercent(d.maxScore)}</p>
@@ -140,7 +140,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 	// --- Render ---
 	if (testLoading) {
 		return (
-			<main className="tab-sm:p-6 space-y-6 p-4">
+			<main className="space-y-6 p-4 tab-sm:p-6">
 				<Skeleton className="h-8 w-64" />
 				<Skeleton className="h-70 w-full" />
 				<Skeleton className="h-65 w-full" />
@@ -150,7 +150,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 
 	if (!test) {
 		return (
-			<main className="tab-sm:p-6 p-4">
+			<main className="p-4 tab-sm:p-6">
 				<p className="text-muted-foreground">Тест не найден</p>
 			</main>
 		)
@@ -164,16 +164,16 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 	const points = chartData?.data ?? []
 
 	return (
-		<main className="tab-sm:p-6 space-y-6 p-4">
+		<main className="space-y-6 p-4 tab-sm:p-6">
 			<SetBreadcrumbsLabels labels={labels} />
 
 			{/* Header */}
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div>
 					<h1 className="text-2xl font-semibold">{test.title}</h1>
-					{test.description && <p className="text-muted-foreground mt-1 text-sm">{test.description}</p>}
+					{test.description && <p className="mt-1 text-sm text-muted-foreground">{test.description}</p>}
 				</div>
-				<Button asChild size="lg" className="mob:w-auto w-full">
+				<Button asChild size="lg" className="w-full mob:w-auto">
 					<Link href={`/tests/${topicSlug}/${testSlug}/start/`}>Начать тест</Link>
 				</Button>
 			</div>
@@ -189,7 +189,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 							))}
 						</div>
 					) : total === 0 ? (
-						<div className="text-muted-foreground flex h-full items-center justify-center p-8 text-sm">
+						<div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
 							Ещё нет попыток
 						</div>
 					) : (
@@ -263,7 +263,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 					{chartLoading && points.length === 0 ? (
 						<Skeleton className="h-50 w-full" />
 					) : !chartLoading && points.length === 0 ? (
-						<div className="text-muted-foreground h-50 flex items-center justify-center rounded-md border text-sm">
+						<div className="flex h-50 items-center justify-center rounded-md border text-sm text-muted-foreground">
 							Нет данных за выбранный период
 						</div>
 					) : (

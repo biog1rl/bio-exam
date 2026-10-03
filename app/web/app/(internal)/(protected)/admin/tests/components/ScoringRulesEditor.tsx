@@ -50,7 +50,7 @@ export default function ScoringRulesEditor({ rules, onChange }: Props) {
 					<div key={item.type} className="space-y-2 rounded-md border p-3">
 						<div className="space-y-1">
 							<p className="text-sm font-medium">{item.label}</p>
-							<p className="text-muted-foreground text-xs">{item.description}</p>
+							<p className="text-xs text-muted-foreground">{item.description}</p>
 						</div>
 						<div className="grid gap-2 sm:grid-cols-2">
 							<div className="space-y-1">

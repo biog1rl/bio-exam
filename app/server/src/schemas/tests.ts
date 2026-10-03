@@ -18,11 +18,7 @@ export const MatchingPairsSchema = z.object({
 	right: z.array(z.object({ id: IdSchema, text: z.string() })),
 })
 
-const CorrectAnswerSchema = z.union([
-	IdSchema,
-	z.array(IdSchema),
-	z.record(IdSchema),
-])
+const CorrectAnswerSchema = z.union([IdSchema, z.array(IdSchema), z.record(IdSchema)])
 
 function hasDuplicateIds(values: string[]): boolean {
 	return new Set(values).size !== values.length

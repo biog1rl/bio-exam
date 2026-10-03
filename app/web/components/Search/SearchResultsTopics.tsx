@@ -28,7 +28,7 @@ export function SearchResultsTopics({ topics, onSelect }: Props) {
 					<BookOpenIcon className="size-4" />
 					<div className="ml-2 min-w-0">
 						<div className="truncate">{topic.title}</div>
-						{topic.description && <div className="text-muted-foreground truncate text-xs">{topic.description}</div>}
+						{topic.description && <div className="truncate text-xs text-muted-foreground">{topic.description}</div>}
 					</div>
 				</CommandItem>
 			))}

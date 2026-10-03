@@ -87,9 +87,7 @@ function applyOverride(
 	}
 }
 
-export async function getGlobalQuestionTypes(params?: {
-	includeInactive?: boolean
-}): Promise<RuntimeQuestionType[]> {
+export async function getGlobalQuestionTypes(params?: { includeInactive?: boolean }): Promise<RuntimeQuestionType[]> {
 	const includeInactive = params?.includeInactive === true
 	const rows = await db.query.questionTypes.findMany()
 	const merged = rows.map(toRuntimeFromDb).sort((a, b) => {
@@ -170,10 +168,7 @@ function normalizeCompactAnswer(value: string): string {
 	return value.replace(/\s+/g, '').toLowerCase()
 }
 
-function validateOptionsCount(
-	optionsCount: number,
-	validationSchema: ValidationSchema | null
-): string | null {
+function validateOptionsCount(optionsCount: number, validationSchema: ValidationSchema | null): string | null {
 	const validation = validationSchema ?? EMPTY_VALIDATION_SCHEMA
 	if (typeof validation.minOptions === 'number' && optionsCount < validation.minOptions) {
 		return `Минимум вариантов: ${validation.minOptions}`

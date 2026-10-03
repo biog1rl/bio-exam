@@ -593,11 +593,11 @@
 }
 
 @utility container-wrapper {
-	@apply 3xl:fixed:max-w-[calc(var(--breakpoint-2xl)+2rem)] mx-auto w-full px-2;
+	@apply mx-auto w-full px-2 3xl:fixed:max-w-[calc(var(--breakpoint-2xl)+2rem)];
 }
 
 @utility container {
-	@apply max-w-350 3xl:max-w-screen-2xl mx-auto px-4 lg:px-8;
+	@apply mx-auto max-w-350 px-4 lg:px-8 3xl:max-w-screen-2xl;
 }
 
 @utility no-scrollbar {
@@ -610,7 +610,7 @@
 }
 
 @utility border-ghost {
-	@apply after:border-border relative after:absolute after:inset-0 after:border after:mix-blend-darken dark:after:mix-blend-lighten;
+	@apply relative after:absolute after:inset-0 after:border after:border-border after:mix-blend-darken dark:after:mix-blend-lighten;
 }
 
 @utility step {
@@ -618,7 +618,7 @@
 	@apply relative;
 
 	&:before {
-		@apply text-muted-foreground right-0 mr-2 hidden size-7 items-center justify-center rounded-full text-center -indent-px font-mono text-sm font-medium md:absolute;
+		@apply right-0 mr-2 hidden size-7 items-center justify-center rounded-full text-center -indent-px font-mono text-sm font-medium text-muted-foreground md:absolute;
 		content: counter(step);
 	}
 }

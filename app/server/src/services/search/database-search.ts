@@ -80,7 +80,11 @@ function queryAlt(query: string): string {
 }
 
 function isPrivileged(access: SearchAccess): boolean {
-	return access.roles.includes('admin') || access.permissions.has('tests.write') || access.permissions.has('groups.manage_groups')
+	return (
+		access.roles.includes('admin') ||
+		access.permissions.has('tests.write') ||
+		access.permissions.has('groups.manage_groups')
+	)
 }
 
 function canRunScope(scope: Exclude<SearchScope, 'all'>, access: SearchAccess): boolean {

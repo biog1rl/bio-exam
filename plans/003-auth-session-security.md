@@ -66,4 +66,3 @@ domain changes.
 - A compatibility path would preserve 30-day bearer-token access.
 - Next/Express auth responses cannot be made contract-compatible without a
   separately approved migration.
-

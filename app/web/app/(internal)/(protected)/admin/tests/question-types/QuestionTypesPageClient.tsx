@@ -121,7 +121,7 @@ export default function QuestionTypesPageClient() {
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div>
 					<h1 className="text-2xl font-semibold">Типы вопросов</h1>
-					<p className="text-muted-foreground text-sm">Настройка шаблонов, названий и формул начисления баллов</p>
+					<p className="text-sm text-muted-foreground">Настройка шаблонов, названий и формул начисления баллов</p>
 				</div>
 				<div className="flex gap-2">
 					<Button variant="outline" asChild>
@@ -152,12 +152,12 @@ export default function QuestionTypesPageClient() {
 							<CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
 								<div className="space-y-1">
 									<p className="font-medium">{item.title}</p>
-									<p className="text-muted-foreground text-xs">
+									<p className="text-xs text-muted-foreground">
 										`{item.key}` • {item.uiTemplate}
 										{item.isSystem ? ' • system' : ''}
 										{item.isActive ? '' : ' • disabled'}
 									</p>
-									{item.description ? <p className="text-muted-foreground text-sm">{item.description}</p> : null}
+									{item.description ? <p className="text-sm text-muted-foreground">{item.description}</p> : null}
 								</div>
 								<Button variant="outline" asChild>
 									<Link href={`/admin/tests/question-types/${item.key}`}>
@@ -193,14 +193,14 @@ export default function QuestionTypesPageClient() {
 									}
 									placeholder="my_custom_type"
 								/>
-								<p className="text-muted-foreground text-xs">
+								<p className="text-xs text-muted-foreground">
 									Технический id типа. Используются только `a-z`, `0-9`, `_`. После создания лучше не менять.
 								</p>
 							</div>
 							<div className="space-y-1">
 								<Label>Название</Label>
 								<Input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
-								<p className="text-muted-foreground text-xs">
+								<p className="text-xs text-muted-foreground">
 									Отображаемое название в редакторе и на страницах настройки.
 								</p>
 							</div>
@@ -212,7 +212,7 @@ export default function QuestionTypesPageClient() {
 								onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
 								rows={2}
 							/>
-							<p className="text-muted-foreground text-xs">
+							<p className="text-xs text-muted-foreground">
 								Кратко опишите, как должен отвечать пользователь в этом типе.
 							</p>
 						</div>
@@ -240,14 +240,14 @@ export default function QuestionTypesPageClient() {
 										<SelectItem value="matching">matching</SelectItem>
 									</SelectContent>
 								</Select>
-								<p className="text-muted-foreground text-xs">
+								<p className="text-xs text-muted-foreground">
 									Шаблон определяет формат ответа и доступные метрики ошибок для этого типа.
 								</p>
 							</div>
 							<div className="flex items-center justify-between rounded border p-3">
 								<div>
 									<p className="text-sm font-medium">Активен</p>
-									<p className="text-muted-foreground text-xs">
+									<p className="text-xs text-muted-foreground">
 										Если выключено, тип скрывается в выборе для новых вопросов
 									</p>
 								</div>
@@ -282,7 +282,7 @@ export default function QuestionTypesPageClient() {
 										value={form.validationMinOptions}
 										onChange={(e) => setForm((prev) => ({ ...prev, validationMinOptions: e.target.value }))}
 									/>
-									<p className="text-muted-foreground text-xs">Минимум вариантов ответа (для choice-шаблонов).</p>
+									<p className="text-xs text-muted-foreground">Минимум вариантов ответа (для choice-шаблонов).</p>
 								</div>
 								<div className="space-y-1">
 									<Label>maxOptions</Label>
@@ -292,7 +292,7 @@ export default function QuestionTypesPageClient() {
 										value={form.validationMaxOptions}
 										onChange={(e) => setForm((prev) => ({ ...prev, validationMaxOptions: e.target.value }))}
 									/>
-									<p className="text-muted-foreground text-xs">Максимум вариантов ответа.</p>
+									<p className="text-xs text-muted-foreground">Максимум вариантов ответа.</p>
 								</div>
 								<div className="space-y-1">
 									<Label>exactChoiceCount</Label>
@@ -302,7 +302,7 @@ export default function QuestionTypesPageClient() {
 										value={form.validationExactChoiceCount}
 										onChange={(e) => setForm((prev) => ({ ...prev, validationExactChoiceCount: e.target.value }))}
 									/>
-									<p className="text-muted-foreground text-xs">
+									<p className="text-xs text-muted-foreground">
 										Требует фиксированное количество выбранных вариантов. Пример: `3 из 6`.
 									</p>
 								</div>

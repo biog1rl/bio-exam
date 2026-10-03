@@ -76,8 +76,8 @@ export default function NewQuestionDraftPageClient({ topicSlug, testSlug }: Prop
 	}, [router, topicSlug, testSlug])
 
 	return (
-		<div className="bg-card/90 rounded-4xl border-border/80 flex items-center justify-center border p-12 shadow-sm">
-			<Loader2 className="text-primary size-8 animate-spin" />
+		<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
+			<Loader2 className="size-8 animate-spin text-primary" />
 		</div>
 	)
 }

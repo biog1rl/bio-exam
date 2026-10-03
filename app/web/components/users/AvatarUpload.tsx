@@ -134,7 +134,7 @@ export function AvatarUpload({
 							type="button"
 							size="icon"
 							variant="secondary"
-							className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full shadow-md"
+							className="absolute -right-1 -bottom-1 h-8 w-8 rounded-full shadow-md"
 							onClick={handleClick}
 						>
 							<Camera className="h-4 w-4" />
@@ -145,7 +145,7 @@ export function AvatarUpload({
 								type="button"
 								size="icon"
 								variant="destructive"
-								className="absolute -right-1 -top-1 h-6 w-6 rounded-full shadow-md"
+								className="absolute -top-1 -right-1 h-6 w-6 rounded-full shadow-md"
 								onClick={handleRemoveAvatar}
 							>
 								<X className="h-3 w-3" />

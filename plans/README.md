@@ -6,19 +6,19 @@ read-only audit handoff; implementation is performed through GSD Autonomous.
 
 ## Execution order & status
 
-| Plan | Title | Priority | Effort | Depends on | Status |
-|---|---|---:|---:|---|---|
-| 001 | Establish the project operating baseline | P1 | M | — | TODO |
-| 002 | Remove reachable dependency vulnerabilities | P1 | M | 001 | TODO |
-| 003 | Make authentication revocable and race-safe | P1 | L | 001, 002 | TODO |
-| 004 | Enforce assignment and atomic attempt sessions | P1 | L | 001, 003 | TODO |
-| 005 | Make answer and editor drafts durable | P1 | M | 001, 004 | TODO |
-| 006 | Secure assets and user-directory privacy | P1 | M | 001, 003 | TODO |
-| 007 | Harden frontend API and editor runtime behavior | P2 | L | 001, 002, 003 | TODO |
-| 008 | Remove proven search, storage, editor, and export bottlenecks | P2 | L | 001, 002 | TODO |
-| 009 | Restore Drizzle migration metadata continuity | P1 | M | 001, 002 | TODO |
-| 010 | Decompose the auth and test-domain god modules | P2 | L | 003–009 | TODO |
-| 011 | Deepen modules per architecture review (ADR-0001–0005) | P1 | L | 001 | TODO |
+| Plan | Title                                                         | Priority | Effort | Depends on    | Status |
+| ---- | ------------------------------------------------------------- | -------: | -----: | ------------- | ------ |
+| 001  | Establish the project operating baseline                      |       P1 |      M | —             | TODO   |
+| 002  | Remove reachable dependency vulnerabilities                   |       P1 |      M | 001           | TODO   |
+| 003  | Make authentication revocable and race-safe                   |       P1 |      L | 001, 002      | TODO   |
+| 004  | Enforce assignment and atomic attempt sessions                |       P1 |      L | 001, 003      | TODO   |
+| 005  | Make answer and editor drafts durable                         |       P1 |      M | 001, 004      | TODO   |
+| 006  | Secure assets and user-directory privacy                      |       P1 |      M | 001, 003      | TODO   |
+| 007  | Harden frontend API and editor runtime behavior               |       P2 |      L | 001, 002, 003 | TODO   |
+| 008  | Remove proven search, storage, editor, and export bottlenecks |       P2 |      L | 001, 002      | TODO   |
+| 009  | Restore Drizzle migration metadata continuity                 |       P1 |      M | 001, 002      | TODO   |
+| 010  | Decompose the auth and test-domain god modules                |       P2 |      L | 003–009       | TODO   |
+| 011  | Deepen modules per architecture review (ADR-0001–0005)        |       P1 |      L | 001           | TODO   |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED.
 
@@ -63,4 +63,3 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED | REJECTED.
   architecture are incompatible.
 - GitNexus: removed on 2026-10-02. CodeGraph (`.codegraph/`) is the code
   intelligence tool; plan gates use `codegraph impact` / `codegraph affected`.
-

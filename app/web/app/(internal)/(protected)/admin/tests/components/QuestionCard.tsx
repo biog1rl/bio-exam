@@ -80,31 +80,31 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 		<div
 			ref={setNodeRef}
 			style={style}
-			className="bg-secondary/45 p-unit hover:bg-secondary/70 border-border/70 flex items-center gap-3 rounded-3xl border transition-colors"
+			className="flex items-center gap-3 rounded-3xl border border-border/70 bg-secondary/45 p-unit transition-colors hover:bg-secondary/70"
 		>
 			<button
 				{...attributes}
 				{...listeners}
-				className="bg-card text-muted-foreground hover:text-foreground cursor-grab rounded-2xl p-2 transition-colors active:cursor-grabbing"
+				className="cursor-grab rounded-2xl bg-card p-2 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
 			>
 				<GripVertical className="size-5" />
 			</button>
 
-			<div className="bg-card text-muted-foreground flex size-10 items-center justify-center rounded-2xl font-mono text-sm font-medium">
+			<div className="flex size-10 items-center justify-center rounded-2xl bg-card font-mono text-sm font-medium text-muted-foreground">
 				{index + 1}
 			</div>
 
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-2">
-					<Badge variant="outline" className="bg-card flex items-center gap-1 rounded-full">
+					<Badge variant="outline" className="flex items-center gap-1 rounded-full bg-card">
 						<TypeIcon className="size-3" />
 						{question.questionTypeTitle || typeConfig.label}
 					</Badge>
-					<span className="text-muted-foreground text-xs">
+					<span className="text-xs text-muted-foreground">
 						{optionsCount} • {question.points} б.
 					</span>
 				</div>
-				<p className="text-muted-foreground mt-1 truncate text-sm">
+				<p className="mt-1 truncate text-sm text-muted-foreground">
 					{previewText || 'Пустой вопрос'}
 					{question.promptText.length > 100 && '...'}
 				</p>
@@ -132,7 +132,7 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 					</Button>
 				)}
 				<Button size="sm" variant="ghost" onClick={onDelete} className="rounded-full">
-					<Trash2 className="text-destructive size-4" />
+					<Trash2 className="size-4 text-destructive" />
 				</Button>
 			</div>
 		</div>

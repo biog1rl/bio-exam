@@ -11,12 +11,12 @@ interface TopicEmptyStateProps {
 
 export function TopicEmptyState({ title, description, showCreateAction = false }: TopicEmptyStateProps) {
 	return (
-		<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
-			<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">пусто</p>
+		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+			<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">пусто</p>
 			<h2 className="mt-2 font-serif text-3xl">{title}</h2>
-			<p className="text-muted-foreground mt-3 max-w-2xl text-sm leading-6">{description}</p>
+			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
 			<div className="mt-7 flex flex-wrap gap-2">
-				<Button variant="outline" asChild className="bg-card rounded-full">
+				<Button variant="outline" asChild className="rounded-full bg-card">
 					<Link href="/admin/tests">
 						<ArrowLeft className="size-4" />К темам
 					</Link>

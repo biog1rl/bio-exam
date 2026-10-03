@@ -1,3 +1,5 @@
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { migrate } from 'drizzle-orm/node-postgres/migrator'
 /**
  * Помощники для тестов с базой данных (D-02, D-03, VER-01).
  *
@@ -11,9 +13,6 @@
  */
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { Client, Pool } from 'pg'
 
 import { assertTestDatabaseUrl, withDatabaseName } from '../config/test-database-url.js'

@@ -234,7 +234,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	return (
 		<>
 			<Dialog open={open} onOpenChange={onOpenChange}>
-				<DialogContent aria-modal={true} aria-describedby={title} className="sm:max-w-140 max-h-dvh overflow-y-auto">
+				<DialogContent aria-modal={true} aria-describedby={title} className="max-h-dvh overflow-y-auto sm:max-w-140">
 					<DialogHeader>
 						<DialogTitle>{title}</DialogTitle>
 					</DialogHeader>
@@ -274,7 +274,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								autoComplete="off"
 								inputMode="text"
 							/>
-							<p className="text-muted-foreground mt-1 text-xs">{LOGIN_HINT}</p>
+							<p className="mt-1 text-xs text-muted-foreground">{LOGIN_HINT}</p>
 						</div>
 
 						<div>
@@ -285,7 +285,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								value={birthdate}
 								onAccept={(value) => setBirthdate(value)}
 								placeholder="дд/мм/гггг"
-								className="border-input file:text-foreground placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+								className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
 							/>
 						</div>
 
@@ -307,7 +307,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 									value={phone}
 									onAccept={(value) => setPhone(value)}
 									placeholder="+7 (999) 999-99-99"
-									className="border-input file:text-foreground placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+									className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
 								/>
 							</div>
 						</div>
@@ -320,7 +320,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 						<div className="flex items-center justify-between rounded-md border p-3">
 							<div>
 								<div className="font-medium">Активирован</div>
-								<div className="text-muted-foreground text-xs">Имеет доступ без инвайта</div>
+								<div className="text-xs text-muted-foreground">Имеет доступ без инвайта</div>
 							</div>
 							<Switch checked={isActive} onCheckedChange={setIsActive} />
 						</div>
@@ -375,7 +375,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 						)}
 
 						<div className="flex items-center justify-between">
-							<div className="text-muted-foreground text-sm">Персональные права пользователя</div>
+							<div className="text-sm text-muted-foreground">Персональные права пользователя</div>
 							<TooltipProvider>
 								<Tooltip delayDuration={150}>
 									<TooltipTrigger asChild>
@@ -398,7 +398,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 							</TooltipProvider>
 						</div>
 
-						{error && <p className="text-destructive text-sm">{error}</p>}
+						{error && <p className="text-sm text-destructive">{error}</p>}
 					</div>
 
 					<DialogFooter className="gap-2">
@@ -439,7 +439,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 							Вы уверены, что хотите удалить пользователя{' '}
 							<strong>{user?.login || user?.name || 'этого пользователя'}</strong>?
 						</p>
-						<p className="text-muted-foreground text-xs">
+						<p className="text-xs text-muted-foreground">
 							Это действие нельзя отменить. Все связанные данные (роли, права, участие в проектах) будут удалены.
 						</p>
 					</div>

@@ -148,9 +148,9 @@ export function TopicFormDialog({
 							className={slugError ? 'border-destructive focus-visible:ring-destructive' : ''}
 						/>
 						{slugError ? (
-							<p className="text-destructive text-xs">{slugError}</p>
+							<p className="text-xs text-destructive">{slugError}</p>
 						) : (
-							<p className="text-muted-foreground text-xs">Только латинские буквы, цифры и дефисы</p>
+							<p className="text-xs text-muted-foreground">Только латинские буквы, цифры и дефисы</p>
 						)}
 					</div>
 

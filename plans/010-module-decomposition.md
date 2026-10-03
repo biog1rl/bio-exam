@@ -58,4 +58,3 @@ implementation proven unused.
 - Express route order changes or a route is ambiguous.
 - Extracted hooks require changed timing/submission semantics.
 - An obsolete auth file still has a live caller.
-

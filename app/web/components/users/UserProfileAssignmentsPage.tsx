@@ -81,7 +81,7 @@ function ProfileSectionCard({
 	return (
 		<Card className="rounded-4xl border-border/80 bg-card/90">
 			<CardHeader>
-				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
+				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
 				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
 			</CardHeader>
 			<CardContent>
@@ -98,7 +98,7 @@ function ProfileSectionCard({
 }
 
 function EmptyProfileState({ children }: { children: ReactNode }) {
-	return <div className="bg-secondary/70 p-unit text-muted-foreground rounded-3xl text-sm">{children}</div>
+	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
 }
 
 export default function UserProfileAssignmentsPage({ login }: Props) {
@@ -372,7 +372,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	if (usersLoading) {
 		return (
-			<div className="rounded-4xl border-border/80 bg-card/90 border p-12">
+			<div className="rounded-4xl border border-border/80 bg-card/90 p-12">
 				<Loader2 className="h-8 w-8 animate-spin" />
 			</div>
 		)
@@ -382,7 +382,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	if (!user) {
 		return (
-			<div className="rounded-4xl border-border/80 bg-card/90 text-muted-foreground border p-8 text-center">
+			<div className="rounded-4xl border border-border/80 bg-card/90 p-8 text-center text-muted-foreground">
 				Пользователь не найден
 			</div>
 		)
@@ -402,27 +402,27 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	return (
 		<div className="space-y-6">
-			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
 				<div className="flex items-start justify-between gap-4">
 					<div>
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
 							профиль ученика
 						</p>
 						<div className="mt-2 flex flex-wrap items-center gap-2">
-							<h1 className="text-foreground tab-sm:text-5xl font-serif text-4xl leading-none">{displayName}</h1>
+							<h1 className="font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">{displayName}</h1>
 							{user.groupName && (
 								<Badge variant="secondary" className="rounded-full">
 									{user.groupName}
 								</Badge>
 							)}
 						</div>
-						<p className="text-muted-foreground mt-4 font-mono text-xs uppercase tracking-[0.18em]">{user.login}</p>
+						<p className="mt-4 font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">{user.login}</p>
 					</div>
 					<Button
 						variant="outline"
 						size="icon"
 						onClick={() => setEditOpen(true)}
-						className="border-border/80 hover:border-primary hover:bg-secondary/70 rounded-2xl transition-colors"
+						className="rounded-2xl border-border/80 transition-colors hover:border-primary hover:bg-secondary/70"
 					>
 						<Pencil className="h-4 w-4" />
 					</Button>
@@ -439,8 +439,8 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					{/* Filters */}
 					{attempts.length > 0 && (
 						<div className="flex flex-wrap gap-2">
-							<div className="min-w-45 relative flex-1">
-								<Search className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+							<div className="relative min-w-45 flex-1">
+								<Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 								<Input
 									placeholder="Поиск по тесту..."
 									value={search}
@@ -461,7 +461,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									setVisibleCount(5)
 								}}
 							>
-								<SelectTrigger className="w-45 h-8 text-sm">
+								<SelectTrigger className="h-8 w-45 text-sm">
 									<SelectValue placeholder="Все темы" />
 								</SelectTrigger>
 								<SelectContent>
@@ -487,7 +487,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										<div className="max-h-60 space-y-1 overflow-y-auto">
 											{/* "All" option */}
 											<button
-												className="hover:bg-secondary/70 flex w-full items-center gap-2 rounded-2xl px-2 py-1.5 text-left text-sm transition-colors"
+												className="flex w-full items-center gap-2 rounded-2xl px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70"
 												onClick={() => {
 													void setTestsParam(null)
 													setVisibleCount(5)
@@ -501,7 +501,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											{testOptions.map((t, i) => (
 												<label
 													key={t.id}
-													className="hover:bg-secondary/70 flex cursor-pointer items-center gap-2 rounded-2xl px-2 py-1.5 text-sm transition-colors"
+													className="flex cursor-pointer items-center gap-2 rounded-2xl px-2 py-1.5 text-sm transition-colors hover:bg-secondary/70"
 												>
 													<Checkbox checked={selectedTestIds.has(t.id)} onCheckedChange={() => toggleTest(t.id)} />
 													<span
@@ -562,7 +562,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 								</PopoverContent>
 							</Popover>
 
-							<div className="bg-border h-5 w-px" />
+							<div className="h-5 w-px bg-border" />
 
 							{/* Single day picker */}
 							<Popover open={dayCalendarOpen} onOpenChange={setDayCalendarOpen}>
@@ -609,7 +609,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										if (!active || !payload?.length) return null
 										const dateLabel = format(new Date(label as string), 'd MMMM yyyy', { locale: ru })
 										return (
-											<div className="border-border/80 bg-card/90 min-w-40 space-y-1 rounded-3xl border px-3 py-2 text-sm">
+											<div className="min-w-40 space-y-1 rounded-3xl border border-border/80 bg-card/90 px-3 py-2 text-sm">
 												<p className="font-medium">{dateLabel}</p>
 												{payload.map((entry) => (
 													<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
@@ -643,7 +643,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 					{/* No data message for date range mode */}
 					{!selectedDay && chartData.length === 0 && filteredAttempts.length > 0 && (
-						<div className="border-border/80 bg-secondary/60 text-muted-foreground flex h-32 items-center justify-center rounded-3xl border text-sm">
+						<div className="flex h-32 items-center justify-center rounded-3xl border border-border/80 bg-secondary/60 text-sm text-muted-foreground">
 							Нет данных за выбранный период
 						</div>
 					)}
@@ -651,11 +651,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					{/* Day chart (single day mode) */}
 					{selectedDay && (
 						<div className="space-y-2">
-							<p className="text-muted-foreground text-xs">
+							<p className="text-xs text-muted-foreground">
 								Попытки за {format(new Date(selectedDay), 'd MMMM yyyy', { locale: ru })}
 							</p>
 							{dayChartData.length === 0 ? (
-								<div className="border-border/80 bg-secondary/60 text-muted-foreground flex h-32 items-center justify-center rounded-3xl border text-sm">
+								<div className="flex h-32 items-center justify-center rounded-3xl border border-border/80 bg-secondary/60 text-sm text-muted-foreground">
 									Нет попыток за выбранный день
 								</div>
 							) : (
@@ -668,7 +668,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											content={({ active, payload, label }) => {
 												if (!active || !payload?.length) return null
 												return (
-													<div className="border-border/80 bg-card/90 min-w-40 space-y-1 rounded-3xl border px-3 py-2 text-sm">
+													<div className="min-w-40 space-y-1 rounded-3xl border border-border/80 bg-card/90 px-3 py-2 text-sm">
 														<p className="font-medium">Попытка {label}</p>
 														{payload.map((entry) => (
 															<p key={entry.dataKey as string} style={{ color: entry.color as string }}>
@@ -719,7 +719,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									<Link
 										href={`/admin/attempts/${attempt.attemptId}`}
 										key={attempt.attemptId}
-										className="border-border/70 bg-secondary/60 hover:border-primary/70 hover:bg-secondary/70 flex items-center justify-between gap-3 rounded-3xl border px-3 py-2 transition-colors"
+										className="flex items-center justify-between gap-3 rounded-3xl border border-border/70 bg-secondary/60 px-3 py-2 transition-colors hover:border-primary/70 hover:bg-secondary/70"
 									>
 										<div className="min-w-0 flex-1">
 											<div className="flex items-center gap-1.5">
@@ -731,7 +731,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 												)}
 												<p className="truncate text-sm font-medium">{attempt.testTitle}</p>
 											</div>
-											<p className="text-muted-foreground text-xs">
+											<p className="text-xs text-muted-foreground">
 												{new Date(attempt.submittedAt).toLocaleString('ru-RU')} · {attempt.earnedPoints}/
 												{attempt.totalPoints} · {Math.round(attempt.scorePercentage)}%
 											</p>
@@ -773,18 +773,18 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							{assignments.map((a) => (
 								<div
 									key={a.testId}
-									className="border-border/70 bg-secondary/60 flex items-center justify-between gap-2 rounded-3xl border px-3 py-2"
+									className="flex items-center justify-between gap-2 rounded-3xl border border-border/70 bg-secondary/60 px-3 py-2"
 								>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium">{a.testTitle}</p>
-										<p className="text-muted-foreground text-xs">
+										<p className="text-xs text-muted-foreground">
 											{new Date(a.assignedAt).toLocaleDateString('ru-RU')}
 										</p>
 									</div>
 									<Button
 										size="icon"
 										variant="ghost"
-										className="hover:bg-secondary/70 hover:text-destructive rounded-2xl transition-colors"
+										className="rounded-2xl transition-colors hover:bg-secondary/70 hover:text-destructive"
 										aria-label="Удалить назначение"
 										onClick={() => handleRemove(a.testId)}
 										disabled={removingTestId === a.testId}
@@ -814,7 +814,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							{availableTests.map((t) => (
 								<div
 									key={t.id}
-									className="border-border/70 bg-secondary/60 flex items-center justify-between gap-2 rounded-3xl border px-3 py-2"
+									className="flex items-center justify-between gap-2 rounded-3xl border border-border/70 bg-secondary/60 px-3 py-2"
 								>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium">{t.title}</p>
@@ -827,7 +827,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									<Button
 										size="sm"
 										variant="outline"
-										className="hover:border-primary/70 hover:bg-secondary/70 rounded-2xl transition-colors"
+										className="rounded-2xl transition-colors hover:border-primary/70 hover:bg-secondary/70"
 										onClick={() => handleAssign(t.id)}
 										disabled={assigningTestId === t.id}
 									>

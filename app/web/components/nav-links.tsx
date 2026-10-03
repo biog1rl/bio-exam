@@ -21,12 +21,12 @@ export function NavLinks({
 				{links.map((item) => (
 					<SidebarMenuItem key={item.name}>
 						<Link
-							className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-ring/15 flex flex-col items-center justify-center gap-2 rounded-xl py-3 transition-colors"
+							className="flex flex-col items-center justify-center gap-2 rounded-xl py-3 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-ring/15 hover:text-sidebar-foreground"
 							href={item.url}
 							target={item.target}
 						>
 							<item.icon />
-							<span className="text-center text-xs font-medium leading-tight">{item.name}</span>
+							<span className="text-center text-xs leading-tight font-medium">{item.name}</span>
 						</Link>
 					</SidebarMenuItem>
 				))}

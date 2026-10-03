@@ -1,3 +1,4 @@
+import { config as dotenv } from 'dotenv'
 /**
  * Унифицированная загрузка .env для монорепы.
  * Приоритет: app/server/.env  → cwd/.env → app/.env → repo/.env
@@ -13,8 +14,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-import { config as dotenv } from 'dotenv'
 
 import { DEFAULTS } from '../lib/constants.js'
 import { isIsolatedEnv } from './test-database-url.js'

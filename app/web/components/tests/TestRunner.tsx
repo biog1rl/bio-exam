@@ -663,12 +663,12 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 	const interactionDisabled = frozen || !!submitResult || awaitingStart || sessionStarting
 
 	return (
-		<div className="tab:flex-row flex min-w-0 flex-col gap-4">
+		<div className="flex min-w-0 flex-col gap-4 tab:flex-row">
 			<div className="min-w-0 flex-1">
 				<div className="space-y-2">
 					<h1 className="text-2xl font-semibold">{test.title}</h1>
-					{test.description ? <p className="text-muted-foreground whitespace-pre-wrap">{test.description}</p> : null}
-					<div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
+					{test.description ? <p className="whitespace-pre-wrap text-muted-foreground">{test.description}</p> : null}
+					<div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
 						<span>Тема: {test.topicTitle}</span>
 						{test.timeLimitMinutes ? <span>Лимит: {test.timeLimitMinutes} мин</span> : null}
 						{test.passingScore != null ? <span>Проходной балл: {formatPercent(test.passingScore)}</span> : null}
@@ -700,9 +700,9 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 
 				{showTimeUp ? (
 					<section className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-						<div className="tab-sm:p-8 mx-4 rounded-lg bg-white p-6 text-center shadow-xl">
+						<div className="mx-4 rounded-lg bg-white p-6 text-center shadow-xl tab-sm:p-8">
 							<p className="text-2xl font-semibold">Время вышло</p>
-							<p className="text-muted-foreground mt-2 text-sm">Отправка ответов...</p>
+							<p className="mt-2 text-sm text-muted-foreground">Отправка ответов...</p>
 						</div>
 					</section>
 				) : null}
@@ -717,12 +717,12 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 						<section
 							key={question.id}
 							id={`question-${question.id}`}
-							className="gap-unit-mob tab:gap-unit grid scroll-mt-24"
+							className="grid scroll-mt-24 gap-unit-mob tab:gap-unit"
 						>
 							<p className="text-lg font-medium">{currentIndex + 1}.</p>
-							<div className="bg-secondary flex-1 space-y-4 rounded-lg border p-4">
+							<div className="flex-1 space-y-4 rounded-lg border bg-secondary p-4">
 								<div className="space-y-2">
-									<MdxRenderer source={question.promptText} className="prose max-w-none select-none text-sm" />
+									<MdxRenderer source={question.promptText} className="prose max-w-none text-sm select-none" />
 								</div>
 
 								{!questionResult ? (
@@ -757,7 +757,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 													? 'Частично верно'
 													: 'Неверно'}
 										</p>
-										<p className="text-muted-foreground mt-0.5 text-xs">
+										<p className="mt-0.5 text-xs text-muted-foreground">
 											{questionResult.earnedPoints} / {questionResult.points} баллов
 										</p>
 										<QuestionAnswerReview
@@ -771,7 +771,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 										{questionResult.explanationText ? (
 											<MdxRenderer
 												source={questionResult.explanationText}
-												className="prose mt-2 max-w-none whitespace-normal text-sm"
+												className="prose mt-2 max-w-none text-sm whitespace-normal"
 											/>
 										) : null}
 									</div>
@@ -800,13 +800,13 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 				{attemptsLoading ? (
 					<p role="status">Загрузка истории попыток...</p>
 				) : attempts.length > 0 ? (
-					<Accordion type="single" collapsible className="bg-secondary mt-8 max-w-lg rounded-lg px-4">
+					<Accordion type="single" collapsible className="mt-8 max-w-lg rounded-lg bg-secondary px-4">
 						<AccordionItem className="border-none" value="score">
 							<AccordionTrigger className="cursor-pointer">Мои попытки</AccordionTrigger>
 							<AccordionContent>
 								<ul className="space-y-2 text-sm">
 									{attempts.map((attempt) => (
-										<li key={attempt.id} className="bg-muted/30 rounded border p-2">
+										<li key={attempt.id} className="rounded border bg-muted/30 p-2">
 											{formatDate(attempt.submittedAt)} / {attempt.earnedPoints}/{attempt.totalPoints} /{' '}
 											{formatPercent(attempt.scorePercentage)} / {attempt.passed ? 'пройден' : 'не пройден'}
 										</li>
@@ -819,7 +819,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 			</div>
 
 			{/* Панель навигации по вопросам и прогресс */}
-			<section className="tab:sticky tab:top-4 tab:w-48 h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4">
+			<section className="h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4 tab:sticky tab:top-4 tab:w-48">
 				{secondsLeft !== null && !submitResult && (
 					<div
 						className={cn(
@@ -831,7 +831,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 					</div>
 				)}
 				<div className="space-y-1.5">
-					<p className="text-muted-foreground text-xs">
+					<p className="text-xs text-muted-foreground">
 						Отвечено: {answeredCount} / {orderedQuestions.length}
 					</p>
 					<div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">

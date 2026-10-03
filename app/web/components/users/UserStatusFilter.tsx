@@ -40,7 +40,7 @@ export function UserStatusFilter({
 						<DropdownMenuRadioItem
 							key={option.value}
 							value={option.value}
-							className="[&>span:first-child]:border-primary [&>span:first-child]:rounded-full [&>span:first-child]:border"
+							className="[&>span:first-child]:rounded-full [&>span:first-child]:border [&>span:first-child]:border-primary"
 						>
 							{option.label}
 						</DropdownMenuRadioItem>

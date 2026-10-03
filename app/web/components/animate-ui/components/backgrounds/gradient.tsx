@@ -16,7 +16,7 @@ function GradientBackground({
 	return (
 		<motion.div
 			data-slot="gradient-background"
-			className={cn('bg-linear-to-br bg-size-[400%_400%] size-full from-yellow-100 to-green-100', className)}
+			className={cn('size-full bg-linear-to-br from-yellow-100 to-green-100 bg-size-[400%_400%]', className)}
 			animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
 			transition={transition}
 			{...props}

@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm'
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 /**
  * Регрессия timestamptz (research C3, D-28): столбцы timestamptz из миграций должны читаться
  * через drizzle тем же моментом времени при любом часовом поясе сессии.
@@ -6,9 +8,6 @@
  * Тест работает с базой: запускать через node scripts/with-test-db.mjs -- … или yarn verify.
  */
 import assert from 'node:assert/strict'
-
-import { eq } from 'drizzle-orm'
-import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 

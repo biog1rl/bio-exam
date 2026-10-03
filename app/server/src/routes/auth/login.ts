@@ -1,9 +1,8 @@
-import crypto from 'node:crypto'
-
 import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
+import crypto from 'node:crypto'
 
 import { AUTH_CONFIG } from '../../config/auth.js'
 import { db } from '../../db/index.js'

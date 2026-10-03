@@ -32,15 +32,15 @@ function LoadingTopicPage() {
 	return (
 		<div className="space-y-5">
 			<Skeleton className="h-88 rounded-4xl" />
-			<div className="tab-sm:grid-cols-2 tab:grid-cols-5 grid gap-3">
+			<div className="grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-5">
 				<Skeleton className="h-32 rounded-3xl" />
 				<Skeleton className="h-32 rounded-3xl" />
 				<Skeleton className="h-32 rounded-3xl" />
 				<Skeleton className="h-32 rounded-3xl" />
 				<Skeleton className="h-32 rounded-3xl" />
 			</div>
-			<Skeleton className="rounded-4xl h-40" />
-			<Skeleton className="rounded-4xl h-40" />
+			<Skeleton className="h-40 rounded-4xl" />
+			<Skeleton className="h-40 rounded-4xl" />
 		</div>
 	)
 }
@@ -205,12 +205,12 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 			</section>
 
 			<section className="space-y-3">
-				<div className="tab-sm:flex-row tab-sm:items-end tab-sm:justify-between flex flex-col gap-3">
+				<div className="flex flex-col gap-3 tab-sm:flex-row tab-sm:items-end tab-sm:justify-between">
 					<div>
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">тесты темы</p>
+						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">тесты темы</p>
 						<h2 className="mt-2 font-serif text-3xl">Материалы</h2>
 					</div>
-					<div className="bg-secondary text-muted-foreground inline-flex w-fit rounded-full px-4 py-2 text-sm">
+					<div className="inline-flex w-fit rounded-full bg-secondary px-4 py-2 text-sm text-muted-foreground">
 						{testsLoading || testsError ? '…' : topicTests.length} тестов
 					</div>
 				</div>

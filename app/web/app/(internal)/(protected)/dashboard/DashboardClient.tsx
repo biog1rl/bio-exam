@@ -145,7 +145,7 @@ function dashboardName(firstName?: string | null, login?: string | null) {
 
 function SoftPanel({ children, className = '' }: { children: ReactNode; className?: string }) {
 	return (
-		<section className={`rounded-4xl border-border/80 bg-card/90 border shadow-sm ${className}`}>{children}</section>
+		<section className={`rounded-4xl border border-border/80 bg-card/90 shadow-sm ${className}`}>{children}</section>
 	)
 }
 
@@ -155,16 +155,16 @@ const interactiveCardClass =
 function SectionTitle({ kicker, title, children }: { kicker: string; title: string; children?: ReactNode }) {
 	return (
 		<div>
-			<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
-			<h2 className="text-foreground tab-sm:text-3xl mt-2 font-serif text-2xl">{title}</h2>
-			{children ? <p className="text-muted-foreground mt-3 max-w-2xl text-sm leading-6">{children}</p> : null}
+			<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
+			<h2 className="mt-2 font-serif text-2xl text-foreground tab-sm:text-3xl">{title}</h2>
+			{children ? <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{children}</p> : null}
 		</div>
 	)
 }
 
 function LoadingRow() {
 	return (
-		<div className="tab-sm:grid-cols-3 grid gap-3">
+		<div className="grid gap-3 tab-sm:grid-cols-3">
 			<Skeleton className="h-28 rounded-3xl" />
 			<Skeleton className="h-28 rounded-3xl" />
 			<Skeleton className="h-28 rounded-3xl" />
@@ -173,7 +173,7 @@ function LoadingRow() {
 }
 
 function EmptyPanel({ children }: { children: ReactNode }) {
-	return <div className="bg-secondary/70 p-unit text-muted-foreground rounded-3xl text-sm">{children}</div>
+	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
 }
 
 export default function DashboardClient() {
@@ -289,26 +289,26 @@ export default function DashboardClient() {
 	return (
 		<main className="space-y-5">
 			<section className="grid gap-5 xl:grid-cols-[1.08fr_.92fr]">
-				<SoftPanel className="p-unit-mob tab-sm:p-unit overflow-hidden">
+				<SoftPanel className="overflow-hidden p-unit-mob tab-sm:p-unit">
 					<div className="mb-6 flex flex-wrap gap-2">
-						<span className="border-border bg-secondary text-secondary-foreground inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">
+						<span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-2 text-sm text-secondary-foreground">
 							<Leaf className="size-4" />
 							{dashboardName(me?.firstName, me?.login)}
 						</span>
-						<span className="border-border bg-card text-muted-foreground inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">
+						<span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
 							<ClipboardList className="size-4" />
 							{heroBadgeValue}
 						</span>
 					</div>
 
-					<div className="tab:grid-cols-[1fr_auto] tab:items-end grid gap-6">
+					<div className="grid gap-6 tab:grid-cols-[1fr_auto] tab:items-end">
 						<div>
-							<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">сегодня</p>
-							<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 max-w-3xl font-serif text-3xl leading-[1.02]">
+							<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">сегодня</p>
+							<h1 className="mt-2 max-w-3xl font-serif text-3xl leading-[1.02] text-foreground mob:text-4xl tab-sm:text-5xl">
 								{heroTitle}
 							</h1>
 						</div>
-						<Button asChild size="lg" className="-md mob:w-auto w-full rounded-full transition-all">
+						<Button asChild size="lg" className="-md w-full rounded-full transition-all mob:w-auto">
 							<Link href={heroHref}>
 								{heroCta}
 								<ArrowRight className="size-4" />
@@ -316,7 +316,7 @@ export default function DashboardClient() {
 						</Button>
 					</div>
 
-					<div className="tab-sm:grid-cols-3 mt-8 grid gap-3">
+					<div className="mt-8 grid gap-3 tab-sm:grid-cols-3">
 						{canReadTests ? (
 							adminDashboardQuery.isLoading ? (
 								<LoadingRow />
@@ -328,10 +328,10 @@ export default function DashboardClient() {
 								].map(([label, value, Icon]) => {
 									const TypedIcon = Icon as typeof BookOpenCheck
 									return (
-										<div key={label as string} className="bg-secondary/80 p-unit rounded-3xl">
-											<TypedIcon className="text-primary mb-5 size-5" />
+										<div key={label as string} className="rounded-3xl bg-secondary/80 p-unit">
+											<TypedIcon className="mb-5 size-5 text-primary" />
 											<p className="font-serif text-3xl">{value as string | number}</p>
-											<p className="text-muted-foreground mt-1 text-sm">{label as string}</p>
+											<p className="mt-1 text-sm text-muted-foreground">{label as string}</p>
 										</div>
 									)
 								})
@@ -346,10 +346,10 @@ export default function DashboardClient() {
 							].map(([label, value, Icon]) => {
 								const TypedIcon = Icon as typeof BookOpenCheck
 								return (
-									<div key={label as string} className="bg-secondary/80 p-unit rounded-3xl">
-										<TypedIcon className="text-primary mb-5 size-5" />
+									<div key={label as string} className="rounded-3xl bg-secondary/80 p-unit">
+										<TypedIcon className="mb-5 size-5 text-primary" />
 										<p className="font-serif text-3xl">{value as string | number}</p>
-										<p className="text-muted-foreground mt-1 text-sm">{label as string}</p>
+										<p className="mt-1 text-sm text-muted-foreground">{label as string}</p>
 									</div>
 								)
 							})
@@ -357,7 +357,7 @@ export default function DashboardClient() {
 					</div>
 				</SoftPanel>
 
-				<SoftPanel className="tab-sm:min-h-105 relative min-h-80 overflow-hidden">
+				<SoftPanel className="relative min-h-80 overflow-hidden tab-sm:min-h-105">
 					<Image
 						src="/img/main-bg.jpg"
 						alt="Лесной биологический фон"
@@ -367,9 +367,9 @@ export default function DashboardClient() {
 						priority
 						unoptimized
 					/>
-					<div className="bg-linear-to-b from-foreground/20 via-background/20 to-foreground/55 absolute inset-0" />
-					<div className="bg-card/85 p-unit-mob tab-sm:p-unit tab-sm:inset-x-5 tab-sm:bottom-5 absolute inset-x-3 bottom-3 rounded-3xl border border-white/45 shadow-lg backdrop-blur-md">
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.2em]">
+					<div className="absolute inset-0 bg-linear-to-b from-foreground/20 via-background/20 to-foreground/55" />
+					<div className="absolute inset-x-3 bottom-3 rounded-3xl border border-white/45 bg-card/85 p-unit-mob shadow-lg backdrop-blur-md tab-sm:inset-x-5 tab-sm:bottom-5 tab-sm:p-unit">
+						<p className="font-mono text-[0.6875rem] tracking-[0.2em] text-muted-foreground uppercase">
 							{canReadTests ? 'последняя попытка студента' : 'последняя попытка'}
 						</p>
 						{canReadTests ? (
@@ -380,44 +380,44 @@ export default function DashboardClient() {
 								>
 									<div className="flex items-start justify-between gap-3">
 										<div className="min-w-0">
-											<p className="mob:text-2xl truncate font-serif text-xl">{adminLatestAttempt.studentName}</p>
-											<p className="text-muted-foreground truncate text-sm">{adminLatestAttempt.testTitle}</p>
+											<p className="truncate font-serif text-xl mob:text-2xl">{adminLatestAttempt.studentName}</p>
+											<p className="truncate text-sm text-muted-foreground">{adminLatestAttempt.testTitle}</p>
 										</div>
-										<ArrowRight className="text-primary mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-1" />
+										<ArrowRight className="mt-1 size-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
 									</div>
-									<div className="bg-muted mt-4 h-2 overflow-hidden rounded-full">
+									<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
 										<div
-											className="bg-primary h-full rounded-full"
+											className="h-full rounded-full bg-primary"
 											style={{ width: `${adminLatestAttempt.scorePercentage}%` }}
 										/>
 									</div>
-									<div className="text-muted-foreground mt-3 flex items-center justify-between text-sm">
+									<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
 										<span>{formatDate(adminLatestAttempt.submittedAt)}</span>
 										<span>{formatPercent(adminLatestAttempt.scorePercentage)}</span>
 									</div>
 								</Link>
 							) : (
-								<p className="text-muted-foreground mt-3 text-sm">Попыток студентов пока нет</p>
+								<p className="mt-3 text-sm text-muted-foreground">Попыток студентов пока нет</p>
 							)
 						) : latestAttempt ? (
 							<Link href={latestAttempt.testHref} className={`group mt-3 block rounded-2xl ${interactiveCardClass}`}>
 								<div className="flex items-start justify-between gap-3">
-									<p className="mob:text-2xl truncate font-serif text-xl">{latestAttempt.testTitle}</p>
-									<ArrowRight className="text-primary mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-1" />
+									<p className="truncate font-serif text-xl mob:text-2xl">{latestAttempt.testTitle}</p>
+									<ArrowRight className="mt-1 size-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
 								</div>
-								<div className="bg-muted mt-4 h-2 overflow-hidden rounded-full">
+								<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
 									<div
-										className="bg-primary h-full rounded-full"
+										className="h-full rounded-full bg-primary"
 										style={{ width: `${latestAttempt.scorePercentage}%` }}
 									/>
 								</div>
-								<div className="text-muted-foreground mt-3 flex items-center justify-between text-sm">
+								<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
 									<span>{formatDate(latestAttempt.submittedAt)}</span>
 									<span>{formatPercent(latestAttempt.scorePercentage)}</span>
 								</div>
 							</Link>
 						) : (
-							<p className="text-muted-foreground mt-3 text-sm">Попыток пока нет</p>
+							<p className="mt-3 text-sm text-muted-foreground">Попыток пока нет</p>
 						)}
 					</div>
 				</SoftPanel>
@@ -428,7 +428,7 @@ export default function DashboardClient() {
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<div className="flex flex-wrap items-start justify-between gap-4">
 							<SectionTitle kicker="студент" title="Доступные тесты" />
-							<Button asChild variant="outline" className="-sm bg-card rounded-full transition-all">
+							<Button asChild variant="outline" className="-sm rounded-full bg-card transition-all">
 								<Link href="/tests">Все доступные</Link>
 							</Button>
 						</div>
@@ -443,18 +443,18 @@ export default function DashboardClient() {
 									<Link
 										key={test.id}
 										href={`/tests/${test.topicSlug}/${test.slug}`}
-										className={`border-border bg-card p-unit hover:bg-secondary/45 tab-sm:grid-cols-[1fr_auto] grid gap-4 rounded-3xl border ${interactiveCardClass}`}
+										className={`grid gap-4 rounded-3xl border border-border bg-card p-unit hover:bg-secondary/45 tab-sm:grid-cols-[1fr_auto] ${interactiveCardClass}`}
 									>
 										<div>
-											<p className="text-muted-foreground text-sm">{test.topicTitle}</p>
+											<p className="text-sm text-muted-foreground">{test.topicTitle}</p>
 											<h3 className="mt-1 font-serif text-2xl">{test.title}</h3>
-											<p className="text-muted-foreground mt-2 text-sm">
+											<p className="mt-2 text-sm text-muted-foreground">
 												{test.questionsCount} вопросов
 												{test.timeLimitMinutes ? ` · ${test.timeLimitMinutes} мин` : ''}
 												{test.passingScore != null ? ` · проходной ${formatPercent(test.passingScore)}` : ''}
 											</p>
 										</div>
-										<div className="text-primary flex items-center gap-2">
+										<div className="flex items-center gap-2 text-primary">
 											Открыть
 											<ArrowRight className="size-4" />
 										</div>
@@ -476,22 +476,22 @@ export default function DashboardClient() {
 									<Link
 										key={attempt.id}
 										href={attempt.testHref}
-										className={`bg-secondary/70 p-unit hover:bg-secondary group block rounded-3xl ${interactiveCardClass}`}
+										className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
 									>
 										<div className="flex items-center justify-between gap-3">
 											<p className="truncate font-medium">{attempt.testTitle}</p>
-											<span className="bg-card flex items-center gap-2 rounded-full px-3 py-1 text-sm">
+											<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
 												{formatPercent(attempt.scorePercentage)}
 												<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
 											</span>
 										</div>
-										<div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
+										<div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
 											<div
-												className="bg-primary h-full rounded-full"
+												className="h-full rounded-full bg-primary"
 												style={{ width: `${attempt.scorePercentage}%` }}
 											/>
 										</div>
-										<p className="text-muted-foreground mt-2 text-xs">{formatDate(attempt.submittedAt)}</p>
+										<p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt)}</p>
 									</Link>
 								))
 							)}
@@ -514,19 +514,19 @@ export default function DashboardClient() {
 									<Link
 										key={attempt.attemptId}
 										href={`/admin/attempts/${attempt.attemptId}`}
-										className={`bg-secondary/70 p-unit hover:bg-secondary group block rounded-3xl ${interactiveCardClass}`}
+										className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
 									>
 										<div className="flex items-center justify-between gap-3">
 											<div className="min-w-0">
 												<p className="truncate font-medium">{attempt.studentName}</p>
-												<p className="text-muted-foreground truncate text-xs">{attempt.testTitle}</p>
+												<p className="truncate text-xs text-muted-foreground">{attempt.testTitle}</p>
 											</div>
-											<span className="bg-card flex items-center gap-2 rounded-full px-3 py-1 text-sm">
+											<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
 												{formatPercent(attempt.scorePercentage)}
 												<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
 											</span>
 										</div>
-										<p className="text-muted-foreground mt-2 text-xs">{formatDate(attempt.submittedAt)}</p>
+										<p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt)}</p>
 									</Link>
 								))
 							)}
@@ -538,28 +538,28 @@ export default function DashboardClient() {
 						<div className="mt-6 grid gap-3">
 							<Link
 								href="/tests"
-								className={`bg-secondary/70 p-unit hover:bg-secondary group flex items-center justify-between rounded-3xl ${interactiveCardClass}`}
+								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
 							>
 								<span>Все тесты</span>
 								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
 							</Link>
 							<Link
 								href="/admin/tests"
-								className={`bg-secondary/70 p-unit hover:bg-secondary group flex items-center justify-between rounded-3xl ${interactiveCardClass}`}
+								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
 							>
 								<span>Настройка тестов и тем</span>
 								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
 							</Link>
 							<Link
 								href="/admin/users"
-								className={`bg-secondary/70 p-unit hover:bg-secondary group flex items-center justify-between rounded-3xl ${interactiveCardClass}`}
+								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
 							>
 								<span>Пользователи</span>
 								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
 							</Link>
 							<Link
 								href="/admin/attempts"
-								className={`bg-secondary/70 p-unit hover:bg-secondary group flex items-center justify-between rounded-3xl ${interactiveCardClass}`}
+								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
 							>
 								<span>Попытки</span>
 								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -666,7 +666,7 @@ export default function DashboardClient() {
       </section> */}
 
 			{canReadTests ? (
-				<section className="tab:grid-cols-[23.75rem_1fr] grid gap-5">
+				<section className="grid gap-5 tab:grid-cols-[23.75rem_1fr]">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<SectionTitle kicker="учитель / админ" title="Состояние базы" />
 
@@ -675,8 +675,8 @@ export default function DashboardClient() {
 								<LoadingRow />
 							</div>
 						) : !teacherAllowed ? (
-							<div className="bg-secondary p-unit mt-7 rounded-3xl">
-								<LockKeyhole className="text-muted-foreground mb-5 size-6" />
+							<div className="mt-7 rounded-3xl bg-secondary p-unit">
+								<LockKeyhole className="mb-5 size-6 text-muted-foreground" />
 								<p className="font-serif text-2xl">Нужны права администратора</p>
 							</div>
 						) : (
@@ -689,10 +689,10 @@ export default function DashboardClient() {
 								].map(([label, value, Icon]) => {
 									const TypedIcon = Icon as typeof LibraryBig
 									return (
-										<div key={label as string} className="bg-secondary/70 p-unit flex items-center gap-4 rounded-3xl">
-											<TypedIcon className="text-primary size-5" />
+										<div key={label as string} className="flex items-center gap-4 rounded-3xl bg-secondary/70 p-unit">
+											<TypedIcon className="size-5 text-primary" />
 											<p className="font-serif text-2xl">{value as number}</p>
-											<p className="text-muted-foreground text-sm">{label as string}</p>
+											<p className="text-sm text-muted-foreground">{label as string}</p>
 										</div>
 									)
 								})}
@@ -703,7 +703,7 @@ export default function DashboardClient() {
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<div className="flex flex-wrap items-start justify-between gap-4">
 							<SectionTitle kicker="график" title="Публикации и наполнение" />
-							<Button asChild variant="outline" className="-sm bg-card rounded-full transition-all">
+							<Button asChild variant="outline" className="-sm rounded-full bg-card transition-all">
 								<Link href="/admin/tests">Управление тестами</Link>
 							</Button>
 						</div>

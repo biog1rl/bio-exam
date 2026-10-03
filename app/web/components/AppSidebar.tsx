@@ -86,7 +86,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 								<li key={item.name}>
 									<Link
 										className={cn(
-											'flex min-h-16 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-center text-xs font-medium leading-tight transition-colors',
+											'flex min-h-16 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-center text-xs leading-tight font-medium transition-colors',
 											'border-transparent bg-transparent text-[#5d684f] hover:border-[#d7c7b2] hover:bg-[#f0eadf] hover:text-[#253625] focus-visible:border-[#b9a37f] focus-visible:bg-[#f0eadf] focus-visible:text-[#253625] focus-visible:outline-none',
 											isActive && 'border-[#b9a37f] bg-[#ebe2d3] text-[#243824]'
 										)}

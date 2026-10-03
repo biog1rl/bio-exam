@@ -1,11 +1,11 @@
-export { PERMISSION_DOMAINS } from './domains';
-export type { PermissionDomain, ActionOf, PermissionKey } from './domains';
+export { PERMISSION_DOMAINS } from './domains'
+export type { PermissionDomain, ActionOf, PermissionKey } from './domains'
 
-export { ROLE_REGISTRY, ROLE_KEYS, ROLES_LIST, roleDisplayName } from './roles';
-export type { RoleKey, RoleConfig, RoleGrant } from './roles';
+export { ROLE_REGISTRY, ROLE_KEYS, ROLES_LIST, roleDisplayName } from './roles'
+export type { RoleKey, RoleConfig, RoleGrant } from './roles'
 
-export { buildPermissionSet, can } from './rbac';
-export type { AccessRule, SubjectActionMap } from './access';
+export { buildPermissionSet, can } from './rbac'
+export type { AccessRule, SubjectActionMap } from './access'
 export {
 	normaliseRoleKeys,
 	normaliseUserIdentifiers,
@@ -14,4 +14,4 @@ export {
 	createAccessRule,
 	accessRuleToSerializable,
 	normaliseActionList,
-} from './access';
+} from './access'

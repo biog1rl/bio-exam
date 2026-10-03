@@ -267,7 +267,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div>
 					<h1 className="text-2xl font-semibold">{typeData.questionType.title}</h1>
-					<p className="text-muted-foreground text-sm">
+					<p className="text-sm text-muted-foreground">
 						`{typeData.questionType.key}` • {typeData.questionType.uiTemplate}
 						{typeData.questionType.isSystem ? ' • system' : ''}
 					</p>
@@ -291,7 +291,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 								value={globalForm.title}
 								onChange={(e) => setGlobalForm((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
 							/>
-							<p className="text-muted-foreground text-xs">Отображается в выборе типа вопроса и в настройках.</p>
+							<p className="text-xs text-muted-foreground">Отображается в выборе типа вопроса и в настройках.</p>
 						</div>
 						<div className="space-y-1">
 							<Label>UI шаблон</Label>
@@ -321,7 +321,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 									<SelectItem value="matching">matching</SelectItem>
 								</SelectContent>
 							</Select>
-							<p className="text-muted-foreground text-xs">
+							<p className="text-xs text-muted-foreground">
 								Шаблон определяет формат ответа и допустимую метрику ошибок.
 							</p>
 						</div>
@@ -333,7 +333,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 							onChange={(e) => setGlobalForm((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
 							rows={2}
 						/>
-						<p className="text-muted-foreground text-xs">Используйте описание как инструкцию для составителя тестов.</p>
+						<p className="text-xs text-muted-foreground">Используйте описание как инструкцию для составителя тестов.</p>
 					</div>
 					<Card>
 						<CardHeader>
@@ -359,7 +359,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 									setGlobalForm((prev) => (prev ? { ...prev, validationMinOptions: e.target.value } : prev))
 								}
 							/>
-							<p className="text-muted-foreground text-xs">Нижняя граница количества вариантов ответа.</p>
+							<p className="text-xs text-muted-foreground">Нижняя граница количества вариантов ответа.</p>
 						</div>
 						<div className="space-y-1">
 							<Label>maxOptions</Label>
@@ -371,7 +371,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 									setGlobalForm((prev) => (prev ? { ...prev, validationMaxOptions: e.target.value } : prev))
 								}
 							/>
-							<p className="text-muted-foreground text-xs">Верхняя граница количества вариантов ответа.</p>
+							<p className="text-xs text-muted-foreground">Верхняя граница количества вариантов ответа.</p>
 						</div>
 						<div className="space-y-1">
 							<Label>exactChoiceCount</Label>
@@ -383,7 +383,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 									setGlobalForm((prev) => (prev ? { ...prev, validationExactChoiceCount: e.target.value } : prev))
 								}
 							/>
-							<p className="text-muted-foreground text-xs">
+							<p className="text-xs text-muted-foreground">
 								Фиксированное число правильных выборов. Пример: для задания "выберите 3" укажите `3`.
 							</p>
 						</div>
@@ -391,7 +391,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 					<div className="flex items-center justify-between rounded border p-3">
 						<div>
 							<p className="text-sm font-medium">Активен</p>
-							<p className="text-muted-foreground text-xs">Если выключить, тип нельзя выбрать в новых вопросах</p>
+							<p className="text-xs text-muted-foreground">Если выключить, тип нельзя выбрать в новых вопросах</p>
 						</div>
 						<Switch
 							checked={globalForm.isActive}
@@ -413,7 +413,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 						</Button>
 						{!typeData.questionType.isSystem ? (
 							<Button variant="outline" onClick={removeType} disabled={savingGlobal}>
-								<Trash2 className="text-destructive mr-2 h-4 w-4" />
+								<Trash2 className="mr-2 h-4 w-4 text-destructive" />
 								Отключить тип
 							</Button>
 						) : null}
@@ -477,7 +477,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 									}
 									placeholder="Если пусто, используется глобальное"
 								/>
-								<p className="text-muted-foreground text-xs">
+								<p className="text-xs text-muted-foreground">
 									Позволяет изменить название типа только в выбранном тесте.
 								</p>
 							</div>
@@ -514,13 +514,13 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 										}
 									/>
 								) : (
-									<p className="text-muted-foreground text-sm">Используется глобальная формула начисления баллов.</p>
+									<p className="text-sm text-muted-foreground">Используется глобальная формула начисления баллов.</p>
 								)}
 							</div>
 							<div className="flex items-center justify-between rounded border p-3">
 								<div>
 									<p className="text-sm font-medium">Отключить тип в этом тесте</p>
-									<p className="text-muted-foreground text-xs">
+									<p className="text-xs text-muted-foreground">
 										Если включено, тип нельзя использовать в выбранном тесте
 									</p>
 								</div>
@@ -542,7 +542,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 							</div>
 						</div>
 					) : (
-						<p className="text-muted-foreground text-sm">Выберите тест, чтобы настроить override для этого типа.</p>
+						<p className="text-sm text-muted-foreground">Выберите тест, чтобы настроить override для этого типа.</p>
 					)}
 				</CardContent>
 			</Card>

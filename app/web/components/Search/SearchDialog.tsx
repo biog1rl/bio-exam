@@ -54,7 +54,7 @@ function splitMeta(value: string): string[] {
 
 function MetaPill({ label, value }: { label: string; value: string }) {
 	return (
-		<span className="bg-muted/70 text-muted-foreground inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]">
+		<span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted/70 px-1.5 py-0.5 text-[11px] text-muted-foreground">
 			<span className="text-muted-foreground/70">{label}</span>
 			<span className="truncate">{value}</span>
 		</span>
@@ -87,7 +87,7 @@ function ResultMeta({ item }: { item: SearchResultItem }) {
 		)
 	}
 
-	return <div className="text-muted-foreground truncate text-xs">{item.subtitle}</div>
+	return <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>
 }
 
 function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (href: string | null) => void }) {
@@ -99,14 +99,14 @@ function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (hre
 			onSelect={() => onSelect(item.href)}
 			className="cursor-pointer items-start gap-3 rounded-md px-3 py-3 transition-colors"
 		>
-			<div className="bg-muted text-muted-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md">
+			<div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
 				<Icon className="size-4" />
 			</div>
 			<div className="min-w-0 flex-1">
 				<div className="truncate text-sm font-medium">{item.title}</div>
 				{isAttempt && item.snippetHtml ? (
 					<div
-						className="text-muted-foreground [&_mark]:bg-primary/20 [&_mark]:text-foreground truncate text-xs [&_mark]:rounded-[2px]"
+						className="truncate text-xs text-muted-foreground [&_mark]:rounded-[2px] [&_mark]:bg-primary/20 [&_mark]:text-foreground"
 						dangerouslySetInnerHTML={{ __html: item.snippetHtml }}
 					/>
 				) : (
@@ -114,7 +114,7 @@ function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (hre
 				)}
 				{!isAttempt && item.snippetHtml && (
 					<div
-						className="text-muted-foreground [&_mark]:bg-primary/20 [&_mark]:text-foreground mt-1 line-clamp-2 text-xs leading-relaxed [&_mark]:rounded-[2px]"
+						className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground [&_mark]:rounded-[2px] [&_mark]:bg-primary/20 [&_mark]:text-foreground"
 						dangerouslySetInnerHTML={{ __html: item.snippetHtml }}
 					/>
 				)}
@@ -244,11 +244,11 @@ export default function SearchDialog() {
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogContent
 				forceMount
-				className="tab-sm:p-0 [&>button]:bg-background/90 [&>button]:ring-border [&>button]:hover:bg-background w-[min(920px,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden rounded-2xl border-none bg-transparent p-0 shadow-2xl [&>button]:right-3 [&>button]:top-3 [&>button]:z-20 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:opacity-100 [&>button]:shadow-sm [&>button]:ring-1"
+				className="w-[min(920px,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden rounded-2xl border-none bg-transparent p-0 shadow-2xl tab-sm:p-0 [&>button]:top-3 [&>button]:right-3 [&>button]:z-20 [&>button]:rounded-full [&>button]:bg-background/90 [&>button]:p-1.5 [&>button]:opacity-100 [&>button]:shadow-sm [&>button]:ring-1 [&>button]:ring-border [&>button]:hover:bg-background"
 			>
 				<Command
 					shouldFilter={false}
-					className="bg-background/95 h-[min(720px,calc(100dvh-2rem))] rounded-2xl border shadow-[0_24px_90px_rgba(34,45,24,0.22)] backdrop-blur-xl"
+					className="h-[min(720px,calc(100dvh-2rem))] rounded-2xl border bg-background/95 shadow-[0_24px_90px_rgba(34,45,24,0.22)] backdrop-blur-xl"
 				>
 					<DialogTitle>
 						<VisuallyHidden>Поиск</VisuallyHidden>
@@ -257,13 +257,13 @@ export default function SearchDialog() {
 						<VisuallyHidden>Начните печатать. ↑/↓ — навигация, Enter — открыть, Esc — закрыть.</VisuallyHidden>
 					</DialogDescription>
 
-					<div className="border-border/70 border-b px-4 pb-3 pt-4 sm:px-5">
+					<div className="border-b border-border/70 px-4 pt-4 pb-3 sm:px-5">
 						<div className="mb-3 flex items-center justify-between gap-4 pr-8">
 							<div>
 								<div className="text-sm font-semibold">Поиск</div>
-								<div className="text-muted-foreground text-xs">Тесты, вопросы, пользователи и попытки</div>
+								<div className="text-xs text-muted-foreground">Тесты, вопросы, пользователи и попытки</div>
 							</div>
-							{loading && <div className="text-muted-foreground animate-pulse text-xs">Ищем…</div>}
+							{loading && <div className="animate-pulse text-xs text-muted-foreground">Ищем…</div>}
 						</div>
 						<div className="[&_[cmdk-input-wrapper]]:rounded-xl [&_[cmdk-input-wrapper]]:border [&_[cmdk-input-wrapper]]:bg-white/70 [&_[cmdk-input-wrapper]]:shadow-inner [&_[cmdk-input]]:h-11">
 							<CommandInput placeholder="Введите запрос" value={query} onValueChange={setQuery} />
@@ -271,7 +271,7 @@ export default function SearchDialog() {
 					</div>
 
 					<div className="grid min-h-0 flex-1 grid-cols-1 sm:grid-cols-[210px_minmax(0,1fr)]">
-						<aside className="border-border/70 overflow-x-auto border-b p-2 sm:overflow-visible sm:border-b-0 sm:border-r sm:p-3">
+						<aside className="overflow-x-auto border-b border-border/70 p-2 sm:overflow-visible sm:border-r sm:border-b-0 sm:p-3">
 							<div className="flex gap-1 sm:flex-col">
 								{visibleTabs.map((scope) => {
 									const Icon = SCOPE_ICONS[scope]
@@ -293,7 +293,7 @@ export default function SearchDialog() {
 											{loading && scope === 'all' ? (
 												<span className="animate-pulse text-xs">…</span>
 											) : count > 0 ? (
-												<span className="bg-background/80 rounded-md px-1.5 py-0.5 text-[11px] tabular-nums">
+												<span className="rounded-md bg-background/80 px-1.5 py-0.5 text-[11px] tabular-nums">
 													{count}
 												</span>
 											) : null}

@@ -60,20 +60,20 @@ function formatDateRange(range: DateRange | undefined) {
 
 function StatTile({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof FileText }) {
 	return (
-		<div className="border-border/70 bg-secondary/65 rounded-3xl border p-4">
-			<Icon className="text-primary mb-4 size-5" />
+		<div className="rounded-3xl border border-border/70 bg-secondary/65 p-4">
+			<Icon className="mb-4 size-5 text-primary" />
 			<p className="font-serif text-3xl leading-none">{value}</p>
-			<p className="text-muted-foreground mt-2 text-sm">{label}</p>
+			<p className="mt-2 text-sm text-muted-foreground">{label}</p>
 		</div>
 	)
 }
 
 function AttemptsEmptyState({ filtered }: { filtered: boolean }) {
 	return (
-		<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
-			<FileText className="text-primary size-7" />
+		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
+			<FileText className="size-7 text-primary" />
 			<h2 className="mt-5 font-serif text-3xl">{filtered ? 'Ничего не найдено' : 'Попыток пока нет'}</h2>
-			<p className="text-muted-foreground mt-3 max-w-2xl text-sm leading-6">
+			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
 				{filtered
 					? 'Измените поиск, тему, студента или дату, чтобы расширить выборку.'
 					: 'Когда студенты начнут проходить тесты, здесь появится журнал результатов.'}
@@ -88,12 +88,12 @@ function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
 	return (
 		<Link
 			href={`/admin/attempts/${attempt.attemptId}`}
-			className="border-border/80 bg-card/90 hover:border-primary/45 hover:bg-secondary/45 focus-visible:border-primary block rounded-3xl border px-4 py-3 outline-none transition-colors"
+			className="block rounded-3xl border border-border/80 bg-card/90 px-4 py-3 transition-colors outline-none hover:border-primary/45 hover:bg-secondary/45 focus-visible:border-primary"
 		>
-			<div className="tab-sm:grid-cols-[minmax(0,1fr)_10.625rem_7.1875rem_1.5rem] tab-sm:items-center grid gap-3">
+			<div className="grid gap-3 tab-sm:grid-cols-[minmax(0,1fr)_10.625rem_7.1875rem_1.5rem] tab-sm:items-center">
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
-						<span className="text-muted-foreground font-mono text-[0.625rem] uppercase tracking-[0.18em]">
+						<span className="font-mono text-[0.625rem] tracking-[0.18em] text-muted-foreground uppercase">
 							{attempt.topicTitle}
 						</span>
 						<span
@@ -106,25 +106,25 @@ function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
 							{attempt.passed ? 'Пройден' : 'Не пройден'}
 						</span>
 					</div>
-					<h2 className="mob:text-2xl tab-sm:truncate mt-1 line-clamp-2 font-serif text-xl leading-tight">
+					<h2 className="mt-1 line-clamp-2 font-serif text-xl leading-tight mob:text-2xl tab-sm:truncate">
 						{attempt.testTitle}
 					</h2>
-					<p className="text-muted-foreground mt-1 truncate text-sm">{attempt.studentName}</p>
+					<p className="mt-1 truncate text-sm text-muted-foreground">{attempt.studentName}</p>
 				</div>
 
-				<p className="text-muted-foreground tab-sm:text-right text-sm">{formatDate(attempt.submittedAt)}</p>
+				<p className="text-sm text-muted-foreground tab-sm:text-right">{formatDate(attempt.submittedAt)}</p>
 
-				<div className="tab-sm:justify-end flex items-center gap-2">
+				<div className="flex items-center gap-2 tab-sm:justify-end">
 					<ResultIcon className={attempt.passed ? 'size-4 text-green-600' : 'size-4 text-red-600'} />
 					<div className="tab-sm:text-right">
 						<p className="font-serif text-2xl leading-none">{Math.round(attempt.scorePercentage)}%</p>
-						<p className="text-muted-foreground mt-1 text-xs">
+						<p className="mt-1 text-xs text-muted-foreground">
 							{attempt.earnedPoints}/{attempt.totalPoints}
 						</p>
 					</div>
 				</div>
 
-				<ArrowRight className="text-primary tab-sm:block hidden size-5 shrink-0" />
+				<ArrowRight className="hidden size-5 shrink-0 text-primary tab-sm:block" />
 			</div>
 		</Link>
 	)
@@ -188,28 +188,28 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 
 	return (
 		<main className="space-y-4">
-			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
-				<div className="tab:grid-cols-[1fr_13.75rem] grid gap-6">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
+				<div className="grid gap-6 tab:grid-cols-[1fr_13.75rem]">
 					<div>
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
 							администрирование
 						</p>
-						<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 max-w-3xl font-serif text-3xl leading-none">
+						<h1 className="mt-2 max-w-3xl font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">
 							Попытки студентов
 						</h1>
-						<p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-6">
+						<p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
 							Компактный журнал прохождений с фильтрами по теме, студенту, дате и быстрым поиском.
 						</p>
 					</div>
 
-					<div className="border-border/70 bg-secondary/55 rounded-3xl border p-4">
-						<CheckCircle2 className="text-primary size-6" />
+					<div className="rounded-3xl border border-border/70 bg-secondary/55 p-4">
+						<CheckCircle2 className="size-6 text-primary" />
 						<p className="mt-5 font-serif text-4xl leading-none">{averageScore}%</p>
-						<p className="text-muted-foreground mt-2 text-sm">средний результат</p>
+						<p className="mt-2 text-sm text-muted-foreground">средний результат</p>
 					</div>
 				</div>
 
-				<div className="tab-sm:grid-cols-4 mt-6 grid gap-3">
+				<div className="mt-6 grid gap-3 tab-sm:grid-cols-4">
 					<StatTile label="всего в базе" value={total} icon={FileText} />
 					<StatTile label="показано" value={filteredRows.length} icon={Clock3} />
 					<StatTile label="пройдено" value={passedCount} icon={CheckCircle2} />
@@ -217,7 +217,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 				</div>
 			</section>
 
-			<section className="rounded-4xl border-border/80 bg-card/90 tab-sm:p-4 border p-3">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-3 tab-sm:p-4">
 				<div className="mb-3 max-w-xs">
 					<UserStatusFilter
 						value={statusFilter}
@@ -227,20 +227,20 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 						}}
 					/>
 				</div>
-				<div className="tab:grid-cols-[minmax(13.75rem,1fr)_13.125rem_13.125rem_13.125rem_auto] grid gap-3">
+				<div className="grid gap-3 tab:grid-cols-[minmax(13.75rem,1fr)_13.125rem_13.125rem_13.125rem_auto]">
 					<label className="relative block">
-						<Search className="text-muted-foreground pointer-events-none absolute left-3 top-3 size-4" />
+						<Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" />
 						<Input
 							type="search"
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
 							placeholder="Поиск по студенту, тесту, теме"
-							className="border-border/70 bg-secondary/40 placeholder:text-muted-foreground hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary h-10 rounded-full pl-9 pr-4 text-sm transition-colors"
+							className="h-10 rounded-full border-border/70 bg-secondary/40 pr-4 pl-9 text-sm transition-colors placeholder:text-muted-foreground hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary"
 						/>
 					</label>
 
 					<Select value={topicSlug} onValueChange={setTopicSlug}>
-						<SelectTrigger className="border-border/70 bg-secondary/40 hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary h-10 rounded-full px-4 transition-colors">
+						<SelectTrigger className="h-10 rounded-full border-border/70 bg-secondary/40 px-4 transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary">
 							<SelectValue placeholder="Все темы" />
 						</SelectTrigger>
 						<SelectContent>
@@ -254,7 +254,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 					</Select>
 
 					<Select value={studentId} onValueChange={setStudentId}>
-						<SelectTrigger className="border-border/70 bg-secondary/40 hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary h-10 rounded-full px-4 transition-colors">
+						<SelectTrigger className="h-10 rounded-full border-border/70 bg-secondary/40 px-4 transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary">
 							<SelectValue placeholder="Все студенты" />
 						</SelectTrigger>
 						<SelectContent>
@@ -271,9 +271,9 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 						<PopoverTrigger asChild>
 							<button
 								type="button"
-								className="border-border/70 bg-secondary/40 hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary flex h-10 w-full items-center justify-start rounded-full border px-4 text-left text-sm transition-colors focus-visible:outline-none"
+								className="flex h-10 w-full items-center justify-start rounded-full border border-border/70 bg-secondary/40 px-4 text-left text-sm transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary focus-visible:outline-none"
 							>
-								<CalendarIcon className="text-muted-foreground mr-2 size-4" />
+								<CalendarIcon className="mr-2 size-4 text-muted-foreground" />
 								<span className="truncate">{formatDateRange(dateRange)}</span>
 							</button>
 						</PopoverTrigger>
@@ -298,7 +298,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 							setDateRange(undefined)
 						}}
 						disabled={!hasFilters}
-						className="border-border/70 bg-card hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary h-10 rounded-full border px-4 text-sm transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+						className="h-10 rounded-full border border-border/70 bg-card px-4 text-sm transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
 					>
 						Сбросить
 					</button>

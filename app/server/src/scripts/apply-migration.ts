@@ -1,8 +1,7 @@
-import { join } from 'path'
-
 import { config as loadDotenv } from 'dotenv'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
+import { join } from 'path'
 import pg from 'pg'
 
 import { isIsolatedEnv, resolveIsolatedDatabaseUrl } from '../config/test-database-url.js'

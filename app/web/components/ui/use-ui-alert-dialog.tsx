@@ -101,7 +101,7 @@ export function useUiAlertDialog() {
 						<AlertDialogAction
 							className={
 								dialogState?.destructive
-									? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+									? 'text-destructive-foreground bg-destructive hover:bg-destructive/90'
 									: undefined
 							}
 							onClick={() => closeDialog(true)}

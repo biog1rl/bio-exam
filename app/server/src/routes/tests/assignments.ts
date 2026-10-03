@@ -53,10 +53,7 @@ assignmentsRouter.post(
 			}
 			const { userId } = parsed.data
 			const adminId = req.authUser!.id
-			await db
-				.insert(testAssignments)
-				.values({ testId, userId, assignedBy: adminId })
-				.onConflictDoNothing()
+			await db.insert(testAssignments).values({ testId, userId, assignedBy: adminId }).onConflictDoNothing()
 			res.json({ ok: true })
 		} catch (err) {
 			next(err)

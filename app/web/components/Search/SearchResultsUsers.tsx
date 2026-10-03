@@ -37,7 +37,7 @@ export function SearchResultsUsers({ users, onSelect }: Props) {
 					</Avatar>
 					<div className="ml-2 min-w-0">
 						<div className="truncate">{user.name}</div>
-						<div className="text-muted-foreground flex gap-2 text-xs">{user.login && <span>@{user.login}</span>}</div>
+						<div className="flex gap-2 text-xs text-muted-foreground">{user.login && <span>@{user.login}</span>}</div>
 					</div>
 				</CommandItem>
 			))}

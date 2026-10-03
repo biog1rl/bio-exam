@@ -111,10 +111,10 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 			<div className="grid gap-6 lg:grid-cols-2">
 				{/* Left column */}
 				<div className="space-y-2">
-					<Label className="text-muted-foreground text-xs">Левая часть</Label>
+					<Label className="text-xs text-muted-foreground">Левая часть</Label>
 					{pairs.left.map((item, index) => (
 						<div key={item.id} className="flex items-center gap-2">
-							<span className="text-muted-foreground w-6 text-sm">{index + 1}.</span>
+							<span className="w-6 text-sm text-muted-foreground">{index + 1}.</span>
 							<Input
 								ref={(el) => {
 									leftRefs.current[index] = el
@@ -132,7 +132,7 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 								onClick={() => handleRemoveLeft(item.id)}
 								disabled={pairs.left.length <= 2}
 							>
-								<Trash2 className="text-destructive h-4 w-4" />
+								<Trash2 className="h-4 w-4 text-destructive" />
 							</Button>
 						</div>
 					))}
@@ -140,10 +140,10 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 
 				{/* Right column */}
 				<div className="space-y-2">
-					<Label className="text-muted-foreground text-xs">Правая часть</Label>
+					<Label className="text-xs text-muted-foreground">Правая часть</Label>
 					{pairs.right.map((item, index) => (
 						<div key={item.id} className="flex items-center gap-2">
-							<span className="text-muted-foreground w-6 text-sm">{String.fromCharCode(65 + index)}.</span>
+							<span className="w-6 text-sm text-muted-foreground">{String.fromCharCode(65 + index)}.</span>
 							<Input
 								ref={(el) => {
 									rightRefs.current[index] = el
@@ -161,7 +161,7 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 								onClick={() => handleRemoveRight(item.id)}
 								disabled={pairs.right.length <= 2}
 							>
-								<Trash2 className="text-destructive h-4 w-4" />
+								<Trash2 className="h-4 w-4 text-destructive" />
 							</Button>
 						</div>
 					))}
@@ -171,15 +171,15 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 			{/* Mappings */}
 			<div className="space-y-2">
 				<Label>Правильные соответствия</Label>
-				<div className="bg-muted/50 space-y-2 rounded-lg p-4">
+				<div className="space-y-2 rounded-lg bg-muted/50 p-4">
 					{pairs.left.map((leftItem, index) => (
 						<div key={leftItem.id} className="flex items-center gap-2">
-							<span className="text-muted-foreground min-w-25 truncate text-sm">
+							<span className="min-w-25 truncate text-sm text-muted-foreground">
 								{index + 1}. {leftItem.text || 'Элемент'}
 							</span>
-							<ArrowRight className="text-muted-foreground h-4 w-4" />
+							<ArrowRight className="h-4 w-4 text-muted-foreground" />
 							<Select value={correct[leftItem.id] || ''} onValueChange={(v) => handleMapping(leftItem.id, v || null)}>
-								<SelectTrigger className="mob:w-50 w-full">
+								<SelectTrigger className="w-full mob:w-50">
 									<SelectValue placeholder="Выберите..." />
 								</SelectTrigger>
 								<SelectContent>
@@ -193,7 +193,7 @@ export default function MatchingEditor({ pairs, correct, onChange }: Props) {
 						</div>
 					))}
 				</div>
-				<p className="text-muted-foreground text-xs">
+				<p className="text-xs text-muted-foreground">
 					Укажите, какой элемент слева соответствует какому элементу справа
 				</p>
 			</div>

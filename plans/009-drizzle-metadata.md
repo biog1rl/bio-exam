@@ -13,8 +13,7 @@
 
 ## Why this matters
 
-The Drizzle journal reaches migration 0020, but the latest committed snapshot is
-0015. Future generation can re-emit already-applied objects or produce unsafe
+The Drizzle journal reaches migration 0020, but the latest committed snapshot is 0015. Future generation can re-emit already-applied objects or produce unsafe
 diffs. Metadata must be reconciled against a disposable database, never guessed.
 
 ## Current state
@@ -53,4 +52,3 @@ migrations, using production credentials.
 - Live schema state is required to resolve ambiguity.
 - Tooling proposes drop/recreate or changes an already-applied migration.
 - No disposable PostgreSQL environment is available.
-

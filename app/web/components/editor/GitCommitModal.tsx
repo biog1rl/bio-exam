@@ -130,7 +130,7 @@ export function GitCommitModal({ open, onOpenChange, documentPath, documentTitle
 
 					{history.length > 0 && (
 						<div className="grid gap-2">
-							<Label className="text-muted-foreground text-xs">Недавние сообщения:</Label>
+							<Label className="text-xs text-muted-foreground">Недавние сообщения:</Label>
 							<div className="flex flex-wrap gap-2">
 								{history.map((msg, idx) => (
 									<Button
@@ -148,25 +148,25 @@ export function GitCommitModal({ open, onOpenChange, documentPath, documentTitle
 						</div>
 					)}
 
-					<div className="text-muted-foreground flex items-start gap-2 rounded-md border p-3 text-xs">
+					<div className="flex items-start gap-2 rounded-md border p-3 text-xs text-muted-foreground">
 						<div className="mt-0.5">💡</div>
 						<div>
 							<strong>Шаблоны:</strong>
 							<div className="mt-1 flex flex-wrap gap-1">
 								<code
-									className="bg-muted cursor-pointer rounded px-1 py-0.5"
+									className="cursor-pointer rounded bg-muted px-1 py-0.5"
 									onClick={() => setCommitMessage(`Update: ${documentTitle}`)}
 								>
 									Update: название
 								</code>
 								<code
-									className="bg-muted cursor-pointer rounded px-1 py-0.5"
+									className="cursor-pointer rounded bg-muted px-1 py-0.5"
 									onClick={() => setCommitMessage(`Fix: ${documentTitle}`)}
 								>
 									Fix: название
 								</code>
 								<code
-									className="bg-muted cursor-pointer rounded px-1 py-0.5"
+									className="cursor-pointer rounded bg-muted px-1 py-0.5"
 									onClick={() => setCommitMessage(`Add: ${documentTitle}`)}
 								>
 									Add: название

@@ -110,7 +110,7 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 									onClick={() => handleRemoveOption(option.id)}
 									disabled={options.length <= 2}
 								>
-									<Trash2 className="text-destructive h-4 w-4" />
+									<Trash2 className="h-4 w-4 text-destructive" />
 								</Button>
 							</div>
 						))}
@@ -140,14 +140,14 @@ export default function OptionsEditor({ mode, options, correct, onChange }: Prop
 								onClick={() => handleRemoveOption(option.id)}
 								disabled={options.length <= 2}
 							>
-								<Trash2 className="text-destructive h-4 w-4" />
+								<Trash2 className="h-4 w-4 text-destructive" />
 							</Button>
 						</div>
 					))
 				)}
 			</div>
 
-			<p className="text-muted-foreground text-xs">
+			<p className="text-xs text-muted-foreground">
 				{isRadio ? 'Выберите один правильный ответ' : 'Отметьте все правильные ответы'}
 			</p>
 		</div>

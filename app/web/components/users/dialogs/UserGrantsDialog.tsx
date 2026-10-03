@@ -113,7 +113,7 @@ export function UserGrantsDialog({ open, onOpenChange, userId }: Props) {
 							<RbacSwitchesRow label="Пользователь" state={state} onToggle={toggle} loading={isLoading || saving} />
 						</TableBody>
 					</Table>
-					<p className="text-muted-foreground text-xs">
+					<p className="text-xs text-muted-foreground">
 						Персональные права **имеют приоритет** над ролью: включение добавляет доступ, выключение может отключить
 						даже права, пришедшие от роли.
 					</p>

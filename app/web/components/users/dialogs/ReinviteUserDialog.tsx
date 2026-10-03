@@ -94,7 +94,7 @@ export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props
 
 				<div className="space-y-3">
 					{!waitingActivation && (
-						<p className="text-muted-foreground text-sm">
+						<p className="text-sm text-muted-foreground">
 							Пользователь уже активирован. Создание новой ссылки не требуется.
 						</p>
 					)}
@@ -115,12 +115,12 @@ export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props
 							</div>
 						</div>
 					) : (
-						<p className="text-muted-foreground text-sm">
+						<p className="text-sm text-muted-foreground">
 							Сгенерируйте новую одноразовую ссылку для активации аккаунта.
 						</p>
 					)}
 
-					{error && <p className="text-destructive text-sm">{error}</p>}
+					{error && <p className="text-sm text-destructive">{error}</p>}
 				</div>
 
 				<DialogFooter className="gap-2">

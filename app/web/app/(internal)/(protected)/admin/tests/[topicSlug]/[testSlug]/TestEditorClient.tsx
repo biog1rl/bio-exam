@@ -23,8 +23,8 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 	if (model.isLoading) {
 		return (
-			<div className="rounded-4xl border-border/80 bg-card/90 flex items-center justify-center border p-12 shadow-sm">
-				<Loader2 className="text-primary size-8 animate-spin" />
+			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
+				<Loader2 className="size-8 animate-spin text-primary" />
 			</div>
 		)
 	}
@@ -41,7 +41,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 			<div className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
 				<TestSettingsPanel {...model.settingsPanelProps} />
 				{model.questionsLoading ? (
-					<Skeleton className="rounded-4xl h-96" aria-label="Загрузка вопросов" />
+					<Skeleton className="h-96 rounded-4xl" aria-label="Загрузка вопросов" />
 				) : model.questionsError ? (
 					<p role="alert">Не удалось загрузить вопросы</p>
 				) : (

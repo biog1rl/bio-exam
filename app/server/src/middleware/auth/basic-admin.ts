@@ -1,7 +1,6 @@
-import { timingSafeEqual } from 'node:crypto'
-
 import bcrypt from 'bcryptjs'
 import type { Request, Response, NextFunction } from 'express'
+import { timingSafeEqual } from 'node:crypto'
 
 // Расширяем тип Request — без any
 declare module 'express-serve-static-core' {

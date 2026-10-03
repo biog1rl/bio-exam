@@ -1,14 +1,13 @@
+import cors from 'cors'
+import express from 'express'
+import type { ErrorRequestHandler, Request } from 'express'
+import helmet from 'helmet'
 /**
  * Express приложение без запуска сервера.
  * Используется как для локальной разработки (src/index.ts),
  * так и для Vercel Serverless Functions (api/index.ts).
  */
 import path from 'node:path'
-
-import cors from 'cors'
-import express from 'express'
-import type { ErrorRequestHandler, Request } from 'express'
-import helmet from 'helmet'
 
 import './lib/patchExpressAsyncErrors.js'
 import './config/env.js'

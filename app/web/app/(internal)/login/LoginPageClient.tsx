@@ -162,13 +162,13 @@ export default function LoginPage() {
 								type="button"
 								aria-label={showPassword ? 'Hide password' : 'Show password'}
 								onClick={() => setShowPassword((v) => !v)}
-								className="text-muted-foreground absolute inset-y-0 right-2 cursor-pointer px-1"
+								className="absolute inset-y-0 right-2 cursor-pointer px-1 text-muted-foreground"
 							>
 								{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
 							</button>
 						</div>
 
-						{error && <p className="text-destructive text-sm">{error}</p>}
+						{error && <p className="text-sm text-destructive">{error}</p>}
 
 						<Button type="submit" className="w-full" disabled={submitting}>
 							{submitting ? <LoaderComponent className="mr-2 size-4" /> : 'Войти'}

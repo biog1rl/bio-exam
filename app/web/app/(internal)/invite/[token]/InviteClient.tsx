@@ -118,7 +118,7 @@ export default function InviteClient({ token }: { token: string }) {
 							autoComplete="off"
 							inputMode="text"
 						/>
-						<p className="text-muted-foreground mt-1 text-xs">{LOGIN_HINT}</p>
+						<p className="mt-1 text-xs text-muted-foreground">{LOGIN_HINT}</p>
 					</div>
 
 					<div className="grid grid-cols-2 gap-3">
@@ -141,7 +141,7 @@ export default function InviteClient({ token }: { token: string }) {
 						<Input type="password" value={pass2} onChange={(e) => setPass2(e.target.value)} />
 					</div>
 
-					{msg && <div className="text-muted-foreground text-sm">{msg}</div>}
+					{msg && <div className="text-sm text-muted-foreground">{msg}</div>}
 					<Button onClick={accept}>Сохранить</Button>
 				</CardContent>
 			</Card>

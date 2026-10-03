@@ -16,7 +16,6 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 const require = createRequire(import.meta.url)

@@ -54,7 +54,7 @@ function ProfilePanel({
 	return (
 		<Card className={`rounded-4xl border-border/80 bg-card/90 ${className}`}>
 			<CardHeader>
-				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">{kicker}</p>
+				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
 				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
 				{description ? <CardDescription>{description}</CardDescription> : null}
 			</CardHeader>
@@ -66,7 +66,7 @@ function ProfilePanel({
 function FormField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
 	return (
 		<div className="space-y-2">
-			<Label htmlFor={id} className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.16em]">
+			<Label htmlFor={id} className="font-mono text-[0.6875rem] tracking-[0.16em] text-muted-foreground uppercase">
 				{label}
 			</Label>
 			{children}
@@ -227,17 +227,17 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 
 	return (
 		<div className="space-y-6">
-			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border">
-				<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">профиль</p>
-				<h1 className="text-foreground tab-sm:text-5xl mob:text-4xl mt-2 font-serif text-3xl leading-none">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
+				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">профиль</p>
+				<h1 className="mt-2 font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">
 					Личный кабинет
 				</h1>
-				<p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-6">
+				<p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
 					Настройте публичные данные, аватар и параметры доступа к аккаунту.
 				</p>
 			</section>
 
-			<div className="tab:grid-cols-2 grid gap-6">
+			<div className="grid gap-6 tab:grid-cols-2">
 				{isAdmin && (
 					<div className="space-y-6">
 						<ProfilePanel
@@ -245,7 +245,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 							title="Аватар"
 							description="Загрузите фото или настройте инициалы и цвет аватара"
 						>
-							<div className="bg-secondary/70 p-unit-mob tab-sm:p-unit flex justify-center rounded-3xl">
+							<div className="flex justify-center rounded-3xl bg-secondary/70 p-unit-mob tab-sm:p-unit">
 								<AvatarEditor
 									firstName={profileData.firstName}
 									lastName={profileData.lastName}
@@ -269,10 +269,10 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 					</div>
 				)}
 
-				<div className={`space-y-6 ${!isAdmin ? 'tab:col-span-2 max-w-xl' : ''}`}>
+				<div className={`space-y-6 ${!isAdmin ? 'max-w-xl tab:col-span-2' : ''}`}>
 					<ProfilePanel kicker="данные" title="Основная информация" description="Редактируйте свои данные">
 						<div className="space-y-4">
-							<div className="mob:grid-cols-2 grid gap-4">
+							<div className="grid gap-4 mob:grid-cols-2">
 								<FormField id="firstName" label="Имя">
 									<Input
 										id="firstName"
@@ -299,8 +299,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 								/>
 							</FormField>
 							{myGroup && (
-								<div className="bg-secondary/70 flex flex-wrap items-center gap-2 rounded-3xl px-4 py-3">
-									<span className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.16em]">
+								<div className="flex flex-wrap items-center gap-2 rounded-3xl bg-secondary/70 px-4 py-3">
+									<span className="font-mono text-[0.6875rem] tracking-[0.16em] text-muted-foreground uppercase">
 										Группа
 									</span>
 									<Badge variant="secondary" className="rounded-full">
@@ -350,7 +350,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 					</ProfilePanel>
 
 					<ProfilePanel kicker="сессия" title="Выход из аккаунта" description="Завершить текущую сессию">
-						<div className="bg-secondary/60 p-unit-mob rounded-3xl">
+						<div className="rounded-3xl bg-secondary/60 p-unit-mob">
 							<Button onClick={handleLogout} variant="destructive" className="w-full">
 								Выйти из аккаунта
 							</Button>

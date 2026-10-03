@@ -1,9 +1,10 @@
-import { Router } from 'express'
 import { eq } from 'drizzle-orm'
+import { Router } from 'express'
+
 import { db } from '../../db/index.js'
 import { sidebarItems } from '../../db/schema.js'
-import { sessionRequired } from '../../middleware/auth/session.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
+import { sessionRequired } from '../../middleware/auth/session.js'
 
 const router = Router()
 

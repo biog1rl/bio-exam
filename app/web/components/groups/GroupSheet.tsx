@@ -133,7 +133,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 				<div className="space-y-4 px-4 py-4">
 					{/* Group name */}
 					<div className="space-y-1">
-						<Label htmlFor="group-name" className="text-muted-foreground text-sm">
+						<Label htmlFor="group-name" className="text-sm text-muted-foreground">
 							Название группы
 						</Label>
 						<Input
@@ -156,7 +156,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 					{/* Combobox user picker */}
 					{(!group || !membersLoading) && (
 						<div className="space-y-2">
-							<Label className="text-muted-foreground text-sm">Участники: {selectedIds.length}</Label>
+							<Label className="text-sm text-muted-foreground">Участники: {selectedIds.length}</Label>
 							<UserStatusFilter value={statusFilter} onChange={setStatusFilter} label="Статус участников" />
 							<Popover open={comboOpen} onOpenChange={setComboOpen}>
 								<PopoverTrigger asChild>
@@ -181,7 +181,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 															className={cn('mr-2 h-4 w-4', selectedIds.includes(u.id) ? 'opacity-100' : 'opacity-0')}
 														/>
 														{displayName(u)}
-														{u.login && <span className="text-muted-foreground ml-1 text-xs">@{u.login}</span>}
+														{u.login && <span className="ml-1 text-xs text-muted-foreground">@{u.login}</span>}
 													</CommandItem>
 												))}
 											</CommandGroup>
@@ -215,7 +215,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 						{saving ? 'Сохранение...' : 'Сохранить'}
 					</Button>
 					<span
-						className="text-muted-foreground cursor-pointer text-center text-sm"
+						className="cursor-pointer text-center text-sm text-muted-foreground"
 						onClick={() => onOpenChange(false)}
 					>
 						Отмена

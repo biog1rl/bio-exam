@@ -29,7 +29,7 @@ export function SearchResultsFiles({ files, onSelect }: Props) {
 					<div className="ml-2 min-w-0">
 						<div className="truncate">{file.title}</div>
 						<div
-							className="text-muted-foreground line-clamp-2 text-xs"
+							className="line-clamp-2 text-xs text-muted-foreground"
 							dangerouslySetInnerHTML={{ __html: file.snippet }}
 						/>
 					</div>

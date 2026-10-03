@@ -481,15 +481,15 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (isLoading || (isDraftMode && questionDraftLoading && !isDraftHydratedRef.current)) {
 		return (
-			<div className="bg-card/90 rounded-4xl border-border/80 flex items-center justify-center border p-12 shadow-sm">
-				<Loader2 className="text-primary size-8 animate-spin" />
+			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
+				<Loader2 className="size-8 animate-spin text-primary" />
 			</div>
 		)
 	}
 
 	if (error || questionDraftError || !testData) {
 		return (
-			<div className="rounded-4xl border-border/80 bg-card/90 p-unit border shadow-sm">
+			<div className="rounded-4xl border border-border/80 bg-card/90 p-unit shadow-sm">
 				<p className="text-sm text-red-600">
 					{error instanceof Error
 						? error.message
@@ -506,7 +506,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (!currentQuestion) {
 		return (
-			<div className="rounded-4xl border-border/80 bg-card/90 p-unit border shadow-sm">
+			<div className="rounded-4xl border border-border/80 bg-card/90 p-unit shadow-sm">
 				<p className="text-sm text-red-600">
 					{isEditingExistingQuestion ? 'Вопрос не найден' : 'Черновик вопроса не найден'}
 				</p>

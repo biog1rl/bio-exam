@@ -87,7 +87,7 @@ export function QuestionInput({
 					className="bg-white"
 				/>
 				{template === 'sequence_digits' ? (
-					<p className="text-muted-foreground text-xs">Последовательность вводится цифрами без пробелов.</p>
+					<p className="text-xs text-muted-foreground">Последовательность вводится цифрами без пробелов.</p>
 				) : null}
 			</div>
 		)
@@ -98,14 +98,14 @@ export function QuestionInput({
 		return (
 			<div className="space-y-3">
 				{question.matchingPairs.left.map((left) => (
-					<div key={left.id} className="tab-sm:grid-cols-[1fr_13.75rem] tab-sm:items-center grid gap-2">
+					<div key={left.id} className="grid gap-2 tab-sm:grid-cols-[1fr_13.75rem] tab-sm:items-center">
 						<div>{left.text}</div>
 						<Select
 							value={selected[left.id] || undefined}
 							onValueChange={(value) => onSelectMatching(question.id, left.id, value)}
 							disabled={disabled}
 						>
-							<SelectTrigger className="tab-sm:w-55 w-full">
+							<SelectTrigger className="w-full tab-sm:w-55">
 								<SelectValue placeholder="Выберите вариант" />
 							</SelectTrigger>
 							<SelectContent>

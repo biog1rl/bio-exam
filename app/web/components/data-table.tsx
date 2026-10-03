@@ -103,9 +103,9 @@ function DragHandle({ id }: { id: number }) {
 			{...listeners}
 			variant="ghost"
 			size="icon"
-			className="text-muted-foreground size-7 hover:bg-transparent"
+			className="size-7 text-muted-foreground hover:bg-transparent"
 		>
-			<GripVerticalIcon className="text-muted-foreground size-3" />
+			<GripVerticalIcon className="size-3 text-muted-foreground" />
 			<span className="sr-only">Drag to reorder</span>
 		</Button>
 	)
@@ -153,7 +153,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
 		header: 'Section Type',
 		cell: ({ row }) => (
 			<div className="w-32">
-				<Badge variant="outline" className="text-muted-foreground px-1.5">
+				<Badge variant="outline" className="px-1.5 text-muted-foreground">
 					{row.original.type}
 				</Badge>
 			</div>
@@ -163,7 +163,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
 		accessorKey: 'status',
 		header: 'Status',
 		cell: ({ row }) => (
-			<Badge variant="outline" className="text-muted-foreground flex gap-1 px-1.5 [&_svg]:size-3">
+			<Badge variant="outline" className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3">
 				{row.original.status === 'Done' ? (
 					<CheckCircle2Icon className="text-green-500 dark:text-green-400" />
 				) : (
@@ -191,7 +191,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
 					Target
 				</Label>
 				<Input
-					className="hover:bg-input/30 focus-visible:bg-background h-8 w-16 border-transparent bg-transparent text-right shadow-none focus-visible:border"
+					className="h-8 w-16 border-transparent bg-transparent text-right shadow-none hover:bg-input/30 focus-visible:border focus-visible:bg-background"
 					defaultValue={row.original.target}
 					id={`${row.original.id}-target`}
 				/>
@@ -216,7 +216,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
 					Limit
 				</Label>
 				<Input
-					className="hover:bg-input/30 focus-visible:bg-background h-8 w-16 border-transparent bg-transparent text-right shadow-none focus-visible:border"
+					className="h-8 w-16 border-transparent bg-transparent text-right shadow-none hover:bg-input/30 focus-visible:border focus-visible:bg-background"
 					defaultValue={row.original.limit}
 					id={`${row.original.id}-limit`}
 				/>
@@ -256,7 +256,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
 		cell: () => (
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
-					<Button variant="ghost" className="text-muted-foreground data-[state=open]:bg-muted flex size-8" size="icon">
+					<Button variant="ghost" className="flex size-8 text-muted-foreground data-[state=open]:bg-muted" size="icon">
 						<MoreVerticalIcon />
 						<span className="sr-only">Open menu</span>
 					</Button>
@@ -354,7 +354,7 @@ export function DataTable({ data: initialData }: { data: z.infer<typeof schema>[
 					View
 				</Label>
 				<Select defaultValue="outline">
-					<SelectTrigger className="@4xl/main:hidden flex w-fit" id="view-selector">
+					<SelectTrigger className="flex w-fit @4xl/main:hidden" id="view-selector">
 						<SelectValue placeholder="Select a view" />
 					</SelectTrigger>
 					<SelectContent>
@@ -364,13 +364,13 @@ export function DataTable({ data: initialData }: { data: z.infer<typeof schema>[
 						<SelectItem value="focus-documents">Focus Documents</SelectItem>
 					</SelectContent>
 				</Select>
-				<TabsList className="@4xl/main:flex hidden">
+				<TabsList className="hidden @4xl/main:flex">
 					<TabsTrigger value="outline">Outline</TabsTrigger>
 					<TabsTrigger value="past-performance" className="gap-1">
 						Past Performance{' '}
 						<Badge
 							variant="secondary"
-							className="bg-muted-foreground/30 flex h-5 w-5 items-center justify-center rounded-full"
+							className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/30"
 						>
 							3
 						</Badge>
@@ -379,7 +379,7 @@ export function DataTable({ data: initialData }: { data: z.infer<typeof schema>[
 						Key Personnel{' '}
 						<Badge
 							variant="secondary"
-							className="bg-muted-foreground/30 flex h-5 w-5 items-center justify-center rounded-full"
+							className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/30"
 						>
 							2
 						</Badge>
@@ -430,7 +430,7 @@ export function DataTable({ data: initialData }: { data: z.infer<typeof schema>[
 						id={sortableId}
 					>
 						<Table>
-							<TableHeader className="bg-muted sticky top-0 z-10">
+							<TableHeader className="sticky top-0 z-10 bg-muted">
 								{table.getHeaderGroups().map((headerGroup) => (
 									<TableRow key={headerGroup.id}>
 										{headerGroup.headers.map((header) => {
@@ -464,7 +464,7 @@ export function DataTable({ data: initialData }: { data: z.infer<typeof schema>[
 					</DndContext>
 				</div>
 				<div className="flex items-center justify-between px-4">
-					<div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
+					<div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
 						{table.getFilteredSelectedRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s)
 						selected.
 					</div>
@@ -577,7 +577,7 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
 	return (
 		<Sheet>
 			<SheetTrigger asChild>
-				<Button variant="link" className="text-foreground w-fit px-0 text-left">
+				<Button variant="link" className="w-fit px-0 text-left text-foreground">
 					{item.header}
 				</Button>
 			</SheetTrigger>
@@ -628,7 +628,7 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
 							</ChartContainer>
 							<Separator />
 							<div className="grid gap-2">
-								<div className="flex gap-2 font-medium leading-none">
+								<div className="flex gap-2 leading-none font-medium">
 									Trending up by 5.2% this month <TrendingUpIcon className="size-4" />
 								</div>
 								<div className="text-muted-foreground">

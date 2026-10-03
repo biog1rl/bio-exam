@@ -157,11 +157,7 @@ function countSequenceMistakes(userAnswer: unknown, correctAnswer: unknown): num
 		}
 	}
 
-	if (
-		correctSequence.length > 3 &&
-		userSequence.length === correctSequence.length &&
-		mismatchedIndexes.length === 2
-	) {
+	if (correctSequence.length > 3 && userSequence.length === correctSequence.length && mismatchedIndexes.length === 2) {
 		const [firstIndex, secondIndex] = mismatchedIndexes
 		const isSingleAdjacentSwap =
 			secondIndex === firstIndex + 1 &&

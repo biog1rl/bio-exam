@@ -18,8 +18,8 @@ export default function NotFound() {
 	}
 
 	return (
-		<div className="bg-background fixed left-0 top-0 flex h-screen w-full items-center justify-center">
-			<div className="pointer-events-none absolute left-0 top-0 z-0 h-screen w-screen bg-[url('/img/noise.png')]" />
+		<div className="fixed top-0 left-0 flex h-screen w-full items-center justify-center bg-background">
+			<div className="pointer-events-none absolute top-0 left-0 z-0 h-screen w-screen bg-[url('/img/noise.png')]" />
 
 			<div className="flex flex-col items-center gap-y-4 text-center">
 				<h1 className="animate-delay-1000 animate-[levitate_15s_ease_infinite] text-8xl font-bold">404-error</h1>
@@ -44,7 +44,7 @@ export default function NotFound() {
 				/>
 
 				<MorphBlob
-					className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45"
+					className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45"
 					height={700}
 					width={1000}
 				/>

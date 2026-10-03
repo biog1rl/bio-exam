@@ -609,7 +609,7 @@ export function MentionsPlugin(): JSX.Element | null {
 			menuRenderFn={(anchorElementRef, { selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }) => {
 				return anchorElementRef.current && results.length
 					? createPortal(
-							<div className="w-50 fixed z-10 rounded-md shadow-md">
+							<div className="fixed z-10 w-50 rounded-md shadow-md">
 								<Command
 									onKeyDown={(e) => {
 										if (e.key === 'ArrowUp') {

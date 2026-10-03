@@ -110,7 +110,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 		if (!filteredRows.length) {
 			return (
 				<TableRow>
-					<TableCell colSpan={cols} className="text-muted-foreground h-24 text-center">
+					<TableCell colSpan={cols} className="h-24 text-center text-muted-foreground">
 						{searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
 					</TableCell>
 				</TableRow>
@@ -134,7 +134,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 		<>
 			<div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3">
 				<div className="relative">
-					<Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+					<Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						type="text"
 						placeholder="Поиск..."
@@ -146,11 +146,11 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				<UserStatusFilter value={statusFilter} onChange={setStatusFilter} label="Статус пользователей" />
 			</div>
 
-			<div className="tab-sm:hidden space-y-3">
+			<div className="space-y-3 tab-sm:hidden">
 				{isLoading ? (
 					Array.from({ length: 5 }).map((_, i) => <Skeleton key={`mobile-sk-${i}`} className="h-36 rounded-3xl" />)
 				) : filteredRows.length === 0 ? (
-					<div className="text-muted-foreground rounded-3xl border p-4 text-center text-sm">
+					<div className="rounded-3xl border p-4 text-center text-sm text-muted-foreground">
 						{searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
 					</div>
 				) : (
@@ -163,13 +163,13 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 						const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
 
 						return (
-							<article key={user.id} className="bg-card rounded-3xl border p-4">
+							<article key={user.id} className="rounded-3xl border bg-card p-4">
 								<div className="flex items-start justify-between gap-3">
 									<div className="min-w-0">
 										<Link href={profileHref} className="truncate font-medium hover:underline">
 											{loginDisplay}
 										</Link>
-										<p className="text-muted-foreground mt-1 truncate text-sm">{nameDisplay}</p>
+										<p className="mt-1 truncate text-sm text-muted-foreground">{nameDisplay}</p>
 									</div>
 									<Badge variant={active ? 'default' : 'outline'}>{active ? 'Активен' : 'Неактивен'}</Badge>
 								</div>
@@ -182,11 +182,11 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 											</Badge>
 										))
 									) : (
-										<span className="text-muted-foreground text-sm">Роли не назначены</span>
+										<span className="text-sm text-muted-foreground">Роли не назначены</span>
 									)}
 								</div>
 
-								<div className="text-muted-foreground mt-4 grid gap-2 text-sm">
+								<div className="mt-4 grid gap-2 text-sm text-muted-foreground">
 									<p>Группа: {user.groupName ?? '—'}</p>
 									<p>Создан: {formatDateTime(user.createdAt)}</p>
 									<p>Кем создан: {user.createdByName ?? '—'}</p>
@@ -210,7 +210,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				)}
 			</div>
 
-			<div className="tab-sm:block hidden w-0 min-w-full overflow-hidden rounded-md border">
+			<div className="hidden w-0 min-w-full overflow-hidden rounded-md border tab-sm:block">
 				<div className="[&>div]:overflow-x-auto">
 					<Table className="min-w-245">
 						<TableHeader className="bg-muted/50">

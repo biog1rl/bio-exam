@@ -4,7 +4,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils/cn'
 
-const widgetVariants = cva('relative flex flex-col whitespace-nowrap rounded-xl border', {
+const widgetVariants = cva('relative flex flex-col rounded-xl border whitespace-nowrap', {
 	variants: {
 		size: {
 			square: 'size-48',
@@ -45,7 +45,7 @@ WidgetHeader.displayName = 'WidgetHeader'
 
 const WidgetTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
 	({ className, ...props }, ref) => (
-		<h5 ref={ref} className={cn('font-semibold leading-none tracking-tight', className)} {...props} />
+		<h5 ref={ref} className={cn('leading-none font-semibold tracking-tight', className)} {...props} />
 	)
 )
 WidgetTitle.displayName = 'WidgetTitle'

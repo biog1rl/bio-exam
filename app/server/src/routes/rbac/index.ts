@@ -41,7 +41,8 @@ router.get('/roles', sessionRequired(), requirePerm('rbac', 'read'), async (_req
 router.post('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
 	try {
 		const parsed = GrantSchema.safeParse(req.body)
-		if (!parsed.success) return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		if (!parsed.success)
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		const { roleKey, domain, action, allow } = parsed.data
 
 		if (roleKey === 'admin') return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_GRANTS_IMMUTABLE })
@@ -66,7 +67,8 @@ router.post('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (re
 router.delete('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
 	try {
 		const parsed = DeleteGrantSchema.safeParse(req.body)
-		if (!parsed.success) return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		if (!parsed.success)
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		const { roleKey, domain, action } = parsed.data
 
 		if (roleKey === 'admin') return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_GRANTS_IMMUTABLE })
@@ -86,57 +88,65 @@ router.delete('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (
 
 // ---------- User grants (user overrides have priority over role)
 
-router.get('/user/:id/grants', validateUUID('id'), sessionRequired(), requirePerm('rbac', 'read'), async (req, res, next) => {
-	try {
-		const userId = req.params.id as string
+router.get(
+	'/user/:id/grants',
+	validateUUID('id'),
+	sessionRequired(),
+	requirePerm('rbac', 'read'),
+	async (req, res, next) => {
+		try {
+			const userId = req.params.id as string
 
-		// роли пользователя
-		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
-		const roles = rs.map((r) => r.role as RoleKey)
+			// роли пользователя
+			const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
+			const roles = rs.map((r) => r.role as RoleKey)
 
-		// права по ролям (с учётом role-overrides allow/deny)
-		const rolePerms = await buildPermissionSet(roles)
-		const roleKeys = Array.from(rolePerms.values())
+			// права по ролям (с учётом role-overrides allow/deny)
+			const rolePerms = await buildPermissionSet(roles)
+			const roleKeys = Array.from(rolePerms.values())
 
-		// пользовательские overrides (allow/deny)
-		const userRows = await db.select().from(rbacUserGrants).where(eq(rbacUserGrants.userId, userId))
-		const userOverrides = userRows.map((r) => ({
-			domain: r.domain,
-			action: r.action,
-			allow: Boolean(r.allow),
-		}))
+			// пользовательские overrides (allow/deny)
+			const userRows = await db.select().from(rbacUserGrants).where(eq(rbacUserGrants.userId, userId))
+			const userOverrides = userRows.map((r) => ({
+				domain: r.domain,
+				action: r.action,
+				allow: Boolean(r.allow),
+			}))
 
-		// Эффективность: старт с rolePerms, затем применить userOverrides (allow=add, deny=delete)
-		const eff = new Set<string>(roleKeys)
-		for (const o of userOverrides) {
-			const k = `${o.domain}.${o.action}`
-			if (o.allow) eff.add(k)
-			else eff.delete(k)
+			// Эффективность: старт с rolePerms, затем применить userOverrides (allow=add, deny=delete)
+			const eff = new Set<string>(roleKeys)
+			for (const o of userOverrides) {
+				const k = `${o.domain}.${o.action}`
+				if (o.allow) eff.add(k)
+				else eff.delete(k)
+			}
+
+			res.json({
+				roles,
+				roleKeys,
+				userOverrides, // [{domain, action, allow}]
+				effective: Array.from(eff),
+			})
+		} catch (e) {
+			next(e)
 		}
-
-		res.json({
-			roles,
-			roleKeys,
-			userOverrides, // [{domain, action, allow}]
-			effective: Array.from(eff),
-		})
-	} catch (e) {
-		next(e)
 	}
-})
+)
 
 // upsert персонального override (allow=true|false)
 router.post('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
 	try {
 		const parsed = UserGrantSchema.safeParse(req.body)
-		if (!parsed.success) return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		if (!parsed.success)
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		const { userId, domain, action, allow } = parsed.data
 
 		if (!isValidAction(domain, action)) return res.status(400).json({ error: ERROR_MESSAGES.UNKNOWN_DOMAIN_ACTION })
 
 		// если пользователь — admin, не даём трогать
 		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
-		if (rs.some((r) => r.role === 'admin')) return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_USER_GRANTS_IMMUTABLE })
+		if (rs.some((r) => r.role === 'admin'))
+			return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_USER_GRANTS_IMMUTABLE })
 
 		await db
 			.insert(rbacUserGrants)
@@ -157,7 +167,8 @@ router.post('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), asyn
 router.delete('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
 	try {
 		const parsed = DeleteUserGrantSchema.safeParse(req.body)
-		if (!parsed.success) return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		if (!parsed.success)
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		const { userId, domain, action } = parsed.data
 
 		await db
@@ -187,7 +198,8 @@ router.get('/pages', sessionRequired(), requirePerm('rbac', 'read'), async (_req
 router.post('/pages', sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
 	try {
 		const parsed = PageRuleSchema.safeParse(req.body)
-		if (!parsed.success) return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		if (!parsed.success)
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		const { pattern, domain, action, exact, enabled } = parsed.data
 		await db.insert(rbacPageRules).values({ pattern, domain, action, exact, enabled })
 		res.json({ ok: true })
@@ -196,26 +208,39 @@ router.post('/pages', sessionRequired(), requirePerm('rbac', 'write'), async (re
 	}
 })
 
-router.patch('/pages/:id', validateUUID('id'), sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
-	try {
-		const id = req.params.id as string
-		const parsed = PatchPageRuleSchema.safeParse(req.body)
-		if (!parsed.success) return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
-		await db.update(rbacPageRules).set(parsed.data).where(eq(rbacPageRules.id, id))
-		res.json({ ok: true })
-	} catch (e) {
-		next(e)
+router.patch(
+	'/pages/:id',
+	validateUUID('id'),
+	sessionRequired(),
+	requirePerm('rbac', 'write'),
+	async (req, res, next) => {
+		try {
+			const id = req.params.id as string
+			const parsed = PatchPageRuleSchema.safeParse(req.body)
+			if (!parsed.success)
+				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+			await db.update(rbacPageRules).set(parsed.data).where(eq(rbacPageRules.id, id))
+			res.json({ ok: true })
+		} catch (e) {
+			next(e)
+		}
 	}
-})
+)
 
-router.delete('/pages/:id', validateUUID('id'), sessionRequired(), requirePerm('rbac', 'write'), async (req, res, next) => {
-	try {
-		const id = req.params.id as string
-		await db.delete(rbacPageRules).where(eq(rbacPageRules.id, id))
-		res.json({ ok: true })
-	} catch (e) {
-		next(e)
+router.delete(
+	'/pages/:id',
+	validateUUID('id'),
+	sessionRequired(),
+	requirePerm('rbac', 'write'),
+	async (req, res, next) => {
+		try {
+			const id = req.params.id as string
+			await db.delete(rbacPageRules).where(eq(rbacPageRules.id, id))
+			res.json({ ok: true })
+		} catch (e) {
+			next(e)
+		}
 	}
-})
+)
 
 export default router

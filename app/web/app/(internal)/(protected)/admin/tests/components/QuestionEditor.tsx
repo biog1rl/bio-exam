@@ -116,14 +116,14 @@ export default function QuestionEditor({
 	return (
 		<div className="flex flex-col gap-5">
 			{/* Header */}
-			<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
-				<div className="tab:flex-row tab:items-end tab:justify-between flex flex-col gap-5">
+			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+				<div className="flex flex-col gap-5 tab:flex-row tab:items-end tab:justify-between">
 					<div>
-						<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">вопрос</p>
-						<h1 className="text-foreground tab-sm:text-5xl mt-2 font-serif text-4xl leading-none">
+						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">вопрос</p>
+						<h1 className="mt-2 font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">
 							{question.id ? 'Редактирование' : 'Новый вопрос'}
 						</h1>
-						<p className="text-muted-foreground mt-3 max-w-2xl text-sm">
+						<p className="mt-3 max-w-2xl text-sm text-muted-foreground">
 							Настройте формулировку, варианты ответа и правила проверки.
 						</p>
 					</div>
@@ -135,7 +135,7 @@ export default function QuestionEditor({
 						<Button className="relative rounded-full" onClick={handleSave}>
 							<span className={isSaving ? 'invisible' : ''}>Сохранить вопрос</span>
 							{isSaving && (
-								<Loader2 className="absolute left-1/2 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
+								<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
 							)}
 						</Button>
 					</div>
@@ -182,14 +182,14 @@ export default function QuestionEditor({
 						</SelectContent>
 					</Select>
 					{availableQuestionTypes.length === 0 ? (
-						<p className="text-muted-foreground text-xs">
+						<p className="text-xs text-muted-foreground">
 							Типы вопросов не загружены из БД. Проверьте настройки в разделе типов вопросов.
 						</p>
 					) : null}
 				</div>
 
 				{!activeTemplate ? (
-					<p className="text-muted-foreground text-sm">
+					<p className="text-sm text-muted-foreground">
 						Тип вопроса не настроен в БД. Выберите корректный тип в списке выше.
 					</p>
 				) : activeTemplate === 'matching' ? (
@@ -209,7 +209,7 @@ export default function QuestionEditor({
 					<div className="flex flex-col gap-3">
 						<div>
 							<Label>Допустимые правильные ответы</Label>
-							<p className="text-muted-foreground mt-1 text-xs">
+							<p className="mt-1 text-xs text-muted-foreground">
 								Укажите минимум два варианта. Регистр и пробелы при проверке не учитываются.
 							</p>
 						</div>
@@ -272,7 +272,7 @@ export default function QuestionEditor({
 							onChange={(e) => setForm((prev) => ({ ...prev, correct: e.target.value }))}
 							placeholder={activeTemplate === 'sequence_digits' ? 'Например: 2314' : 'Введите правильный ответ'}
 						/>
-						<p className="text-muted-foreground text-xs">
+						<p className="text-xs text-muted-foreground">
 							{activeTemplate === 'sequence_digits'
 								? 'Используйте только цифры без пробелов.'
 								: 'Ответ сравнивается как строка (без учета регистра и пробелов).'}

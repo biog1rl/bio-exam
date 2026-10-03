@@ -206,7 +206,7 @@ export default function ScoringSettingsPageClient() {
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div className="space-y-1">
 					<h1 className="text-2xl font-semibold">Настройка баллов</h1>
-					<p className="text-muted-foreground text-sm">Глобально или для отдельного теста по каждому типу вопроса</p>
+					<p className="text-sm text-muted-foreground">Глобально или для отдельного теста по каждому типу вопроса</p>
 				</div>
 				<div className="flex gap-2">
 					<Button variant="outline" asChild>
@@ -244,7 +244,7 @@ export default function ScoringSettingsPageClient() {
 								<SelectItem value="test">Только для выбранного теста</SelectItem>
 							</SelectContent>
 						</Select>
-						<p className="text-muted-foreground text-xs">
+						<p className="text-xs text-muted-foreground">
 							В глобальном режиме вы задаете базовую формулу для всех тестов. В режиме теста можно переопределить только
 							отдельные типы.
 						</p>
@@ -287,7 +287,7 @@ export default function ScoringSettingsPageClient() {
 										))}
 									</SelectContent>
 								</Select>
-								<p className="text-muted-foreground text-xs">
+								<p className="text-xs text-muted-foreground">
 									Выберите тест, чтобы включать/отключать override по каждому типу вопроса.
 								</p>
 							</div>
@@ -306,12 +306,12 @@ export default function ScoringSettingsPageClient() {
 				</CardHeader>
 				<CardContent className="space-y-3">
 					{loadingRules ? (
-						<div className="text-muted-foreground flex items-center gap-2 text-sm">
+						<div className="flex items-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
 							Загрузка правил...
 						</div>
 					) : scope === 'test' && !selectedTestId ? (
-						<p className="text-muted-foreground text-sm">Выберите тест, чтобы настроить override.</p>
+						<p className="text-sm text-muted-foreground">Выберите тест, чтобы настроить override.</p>
 					) : (
 						<Accordion type="multiple" className="space-y-2">
 							{types.map((type) => (
@@ -319,7 +319,7 @@ export default function ScoringSettingsPageClient() {
 									<AccordionTrigger className="hover:no-underline">
 										<div className="pr-4 text-left">
 											<p className="font-medium">{type.title}</p>
-											<p className="text-muted-foreground text-xs">
+											<p className="text-xs text-muted-foreground">
 												{type.key} | {type.uiTemplate}
 												{type.isSystem ? ' | system' : ''}
 											</p>
@@ -327,14 +327,14 @@ export default function ScoringSettingsPageClient() {
 									</AccordionTrigger>
 									<AccordionContent className="space-y-3 pb-3">
 										<div>
-											<p className="text-muted-foreground text-xs">{TEMPLATE_META[type.uiTemplate].description}</p>
-											<p className="text-muted-foreground text-xs">Пример: {TEMPLATE_META[type.uiTemplate].example}</p>
+											<p className="text-xs text-muted-foreground">{TEMPLATE_META[type.uiTemplate].description}</p>
+											<p className="text-xs text-muted-foreground">Пример: {TEMPLATE_META[type.uiTemplate].example}</p>
 										</div>
 										{scope === 'test' ? (
 											<div className="flex items-center justify-between rounded-md border p-2">
 												<div>
 													<p className="text-sm font-medium">Override для этого теста</p>
-													<p className="text-muted-foreground text-xs">
+													<p className="text-xs text-muted-foreground">
 														Если выключено, используется глобальная формула.
 													</p>
 												</div>
@@ -350,7 +350,7 @@ export default function ScoringSettingsPageClient() {
 											</div>
 										) : null}
 										{scope === 'test' && !overrideEnabled[type.key] ? (
-											<p className="text-muted-foreground text-sm">Используется глобальная формула для этого типа.</p>
+											<p className="text-sm text-muted-foreground">Используется глобальная формула для этого типа.</p>
 										) : (
 											<QuestionTypeScoringRuleEditorFields
 												rule={type.scoringRule}

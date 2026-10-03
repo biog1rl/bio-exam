@@ -58,4 +58,3 @@ without cardinality evidence, behavior/format changes.
 - Streaming is unsupported by the deployed adapter; report a bounded spill-to-
   disk/object-storage alternative.
 - Lazy loading changes editor serialization or toolbar availability.
-

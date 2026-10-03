@@ -125,7 +125,7 @@ function LazyImage({
 function BrokenImage(): JSX.Element {
 	return (
 		<div className="flex items-center justify-center opacity-20" style={{ width: 200, height: 200 }}>
-			<span className="text-muted-foreground text-sm">Broken Image</span>
+			<span className="text-sm text-muted-foreground">Broken Image</span>
 		</div>
 	)
 }
@@ -148,8 +148,8 @@ function ImageLoadingSkeleton({
 				maxWidth: '100%',
 			}}
 		>
-			<Skeleton className="border-border bg-muted absolute inset-0 rounded-md border shadow-inner" />
-			<Loader2 className="text-primary relative size-7 animate-spin drop-shadow-sm" />
+			<Skeleton className="absolute inset-0 rounded-md border border-border bg-muted shadow-inner" />
+			<Loader2 className="relative size-7 animate-spin text-primary drop-shadow-sm" />
 		</div>
 	)
 }
@@ -419,7 +419,7 @@ export default function ImageComponent({
 							<LazyImage
 								className={`max-w-full cursor-default ${
 									isFocused
-										? `${$isNodeSelection(selection) ? 'draggable cursor-grab active:cursor-grabbing' : ''} focused ring-primary ring-2 ring-offset-2`
+										? `${$isNodeSelection(selection) ? 'draggable cursor-grab active:cursor-grabbing' : ''} focused ring-2 ring-primary ring-offset-2`
 										: null
 								}`}
 								src={resolvedSrc}
@@ -435,14 +435,14 @@ export default function ImageComponent({
 				</div>
 
 				{showCaption && (
-					<div className="image-caption-container min-w-25 absolute bottom-1 left-0 right-0 m-0 block overflow-hidden border-t bg-white/90 p-0">
+					<div className="image-caption-container absolute right-0 bottom-1 left-0 m-0 block min-w-25 overflow-hidden border-t bg-white/90 p-0">
 						<LexicalNestedComposer initialEditor={caption} initialNodes={[RootNode, TextNode, ParagraphNode]}>
 							<AutoFocusPlugin />
 							<HistoryPlugin />
 							<RichTextPlugin
 								contentEditable={
 									<ContentEditable
-										className="ImageNode__contentEditable user-select-text word-break-break-word caret-primary relative block min-h-5 w-[calc(100%-20px)] cursor-text resize-none whitespace-pre-wrap border-0 p-2.5 text-sm outline-none"
+										className="ImageNode__contentEditable user-select-text word-break-break-word relative block min-h-5 w-[calc(100%-20px)] cursor-text resize-none border-0 p-2.5 text-sm whitespace-pre-wrap caret-primary outline-none"
 										placeholderClassName="ImageNode__placeholder text-sm text-muted-foreground overflow-hidden absolute top-2.5 left-2.5 pointer-events-none text-ellipsis user-select-none whitespace-nowrap inline-block"
 										placeholder="Enter a caption..."
 									/>

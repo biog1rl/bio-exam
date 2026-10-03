@@ -19,7 +19,7 @@ const Tiles: FC<TilesProps> = ({ items }) => {
 	return (
 		<>
 			{items.map((item, index) => (
-				<Button asChild key={index} className="bg-background text-primary w-fit hover:text-white" variant="default">
+				<Button asChild key={index} className="w-fit bg-background text-primary hover:text-white" variant="default">
 					<Link href={item.href as Route}>
 						<ArrowRightIcon className="mr-2 h-4 w-4" />
 						<span>{item.name}</span>

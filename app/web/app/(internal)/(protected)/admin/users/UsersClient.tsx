@@ -45,7 +45,7 @@ export default function UsersClient() {
 			{allGroups.length > 0 && (
 				<div className="flex items-center gap-2">
 					<Select value={groupFilter} onValueChange={setGroupFilter}>
-						<SelectTrigger className="mob:w-48 w-full">
+						<SelectTrigger className="w-full mob:w-48">
 							<SelectValue placeholder="Все группы" />
 						</SelectTrigger>
 						<SelectContent>

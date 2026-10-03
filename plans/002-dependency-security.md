@@ -61,4 +61,3 @@ audit results without a documented reachability decision.
 - The only available release is a breaking major without a bounded adapter.
 - MDX safety cannot be proved with a regression test.
 - A native Sharp release does not install in the target runtime.
-

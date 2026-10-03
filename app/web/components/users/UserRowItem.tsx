@@ -66,7 +66,7 @@ export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditCl
 				{user.groupName ? (
 					<span className="text-sm">{user.groupName}</span>
 				) : (
-					<span className="text-muted-foreground text-sm">—</span>
+					<span className="text-sm text-muted-foreground">—</span>
 				)}
 			</TableCell>
 

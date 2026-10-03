@@ -56,11 +56,10 @@ feature expansion.
 - [ ] Concurrent/retried submits produce one attempt and stable response.
 - [ ] Concurrent answer+telemetry PATCHes preserve all fields.
 - [ ] `yarn verify` passes; `codegraph affected` over the diff lists only
-  expected tests.
+      expected tests.
 
 ## STOP conditions
 
 - Existing production duplicate/open-session data cannot be migrated
   deterministically; report counts and propose a cleanup policy.
 - Atomicity requires changing scoring semantics.
-

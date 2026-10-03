@@ -1,13 +1,13 @@
 {
 	"name": "bio-exam",
 	"version": "1.0.0",
-	"type": "module",
 	"private": true,
 	"workspaces": [
 		"packages/*",
 		"app/web",
 		"app/server"
 	],
+	"type": "module",
 	"scripts": {
 		"build": "turbo run build",
 		"dev": "turbo run dev",

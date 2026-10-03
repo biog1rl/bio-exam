@@ -49,7 +49,7 @@ export function TestSettingsPanel({
 	onSave,
 }: TestSettingsPanelProps) {
 	return (
-		<AdminTestsSectionCard title="Настройки теста" className="top-unit sticky h-fit" headerClassName="pb-3">
+		<AdminTestsSectionCard title="Настройки теста" className="sticky top-unit h-fit" headerClassName="pb-3">
 			<div className="space-y-4 pr-3">
 				<ScrollArea>
 					<div className="space-y-2">
@@ -60,7 +60,7 @@ export function TestSettingsPanel({
 							<p role="alert">Не удалось загрузить темы</p>
 						) : topics.length === 0 ? (
 							<div className="space-y-2">
-								<p className="text-muted-foreground text-sm">Нет доступных тем. Создайте первую тему.</p>
+								<p className="text-sm text-muted-foreground">Нет доступных тем. Создайте первую тему.</p>
 								<Button type="button" variant="outline" className="w-full rounded-full" onClick={onCreateTopic}>
 									<FolderPlus className="mr-2 size-4" />
 									Создать тему
@@ -120,9 +120,9 @@ export function TestSettingsPanel({
 							className={testSlugError ? 'border-destructive focus-visible:ring-destructive' : ''}
 						/>
 						{testSlugError ? (
-							<p className="text-destructive text-xs">{testSlugError}</p>
+							<p className="text-xs text-destructive">{testSlugError}</p>
 						) : (
-							<p className="text-muted-foreground text-xs">Только латинские буквы, цифры и дефисы</p>
+							<p className="text-xs text-muted-foreground">Только латинские буквы, цифры и дефисы</p>
 						)}
 					</div>
 
@@ -151,7 +151,7 @@ export function TestSettingsPanel({
 							placeholder="Без лимита"
 						/>
 						{(form.timeLimitMinutes ?? 0) > 60 && (
-							<p className="text-muted-foreground text-xs">
+							<p className="text-xs text-muted-foreground">
 								{Math.floor(form.timeLimitMinutes! / 60)} ч{' '}
 								{form.timeLimitMinutes! % 60 > 0 ? `${form.timeLimitMinutes! % 60} мин` : ''}
 							</p>
@@ -252,7 +252,7 @@ export function TestSettingsPanel({
 								</Button>
 							</div>
 						) : (
-							<p className="text-muted-foreground text-sm">Сохраните тест, чтобы настроить баллы для него отдельно.</p>
+							<p className="text-sm text-muted-foreground">Сохраните тест, чтобы настроить баллы для него отдельно.</p>
 						)}
 					</div>
 
@@ -264,7 +264,7 @@ export function TestSettingsPanel({
 						/>
 					</div>
 					{isCreateMode && form.isPublished && form.questions.length === 0 ? (
-						<p className="text-muted-foreground text-xs">
+						<p className="text-xs text-muted-foreground">
 							Первое сохранение создаст черновик. Опубликовать тест можно после добавления хотя бы одного вопроса.
 						</p>
 					) : null}

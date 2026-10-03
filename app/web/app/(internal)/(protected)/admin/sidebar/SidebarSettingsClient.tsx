@@ -87,10 +87,10 @@ function SortableItem({
 		<div
 			ref={setNodeRef}
 			style={style}
-			className="bg-card hover:bg-accent/50 flex items-center gap-2 rounded-lg border p-3"
+			className="flex items-center gap-2 rounded-lg border bg-card p-3 hover:bg-accent/50"
 		>
 			<button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
-				<GripVertical className="text-muted-foreground h-5 w-5" />
+				<GripVertical className="h-5 w-5 text-muted-foreground" />
 			</button>
 
 			<div className="flex flex-1 items-center gap-3">
@@ -98,9 +98,9 @@ function SortableItem({
 				<div className="flex-1">
 					<div className="flex items-center gap-2">
 						<span className="font-medium">{item.title}</span>
-						{item.target === '_blank' && <ExternalLink className="text-muted-foreground h-3 w-3" />}
+						{item.target === '_blank' && <ExternalLink className="h-3 w-3 text-muted-foreground" />}
 					</div>
-					<span className="text-muted-foreground text-sm">{item.url}</span>
+					<span className="text-sm text-muted-foreground">{item.url}</span>
 				</div>
 			</div>
 
@@ -112,7 +112,7 @@ function SortableItem({
 					Изменить
 				</Button>
 				<Button size="sm" variant="ghost" onClick={() => onDelete(item.id)}>
-					<Trash2 className="text-destructive h-4 w-4" />
+					<Trash2 className="h-4 w-4 text-destructive" />
 				</Button>
 			</div>
 		</div>
@@ -383,7 +383,7 @@ export function SidebarSettingsClient() {
 				</DndContext>
 
 				{items.length === 0 && (
-					<div className="text-muted-foreground py-12 text-center">Нет пунктов меню. Добавьте первый!</div>
+					<div className="py-12 text-center text-muted-foreground">Нет пунктов меню. Добавьте первый!</div>
 				)}
 			</Card>
 
@@ -464,7 +464,7 @@ export function SidebarSettingsClient() {
 					<div className="space-y-4">
 						<div className="space-y-2">
 							<div className="relative">
-								<Search className="text-muted-foreground absolute left-2 top-2.5 h-4 w-4" />
+								<Search className="absolute top-2.5 left-2 h-4 w-4 text-muted-foreground" />
 								<Input
 									placeholder="Поиск иконок..."
 									value={iconSearch}
@@ -473,7 +473,7 @@ export function SidebarSettingsClient() {
 								/>
 							</div>
 							{iconSearch.trim().length >= 2 && searchResults.length > 0 && (
-								<p className="text-muted-foreground text-xs">
+								<p className="text-xs text-muted-foreground">
 									Показано: {filteredIcons.length} из {searchResults.length}
 								</p>
 							)}
@@ -481,7 +481,7 @@ export function SidebarSettingsClient() {
 
 						<ScrollArea className="h-100">
 							{filteredIcons.length === 0 ? (
-								<div className="text-muted-foreground p-8 text-center text-sm">
+								<div className="p-8 text-center text-sm text-muted-foreground">
 									{iconSearch.trim().length < 2 ? 'Введите минимум 2 символа для поиска' : 'Иконки не найдены'}
 								</div>
 							) : (

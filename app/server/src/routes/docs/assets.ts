@@ -1,10 +1,9 @@
 import crypto from 'crypto'
-import fs from 'fs'
-import path from 'path'
-
 import { Router } from 'express'
 import { fileTypeFromBuffer } from 'file-type'
+import fs from 'fs'
 import multer from 'multer'
+import path from 'path'
 import sharp from 'sharp'
 
 import { sessionRequired } from '../../middleware/auth/session.js'
@@ -18,7 +17,9 @@ const LOCAL_UPLOAD_ROOT = path.join(process.cwd(), '../web/public/uploads')
 const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 function isSafeStoragePath(filePath: string): boolean {
-	return Boolean(filePath) && !filePath.startsWith('/') && !filePath.includes('\0') && !filePath.split('/').includes('..')
+	return (
+		Boolean(filePath) && !filePath.startsWith('/') && !filePath.includes('\0') && !filePath.split('/').includes('..')
+	)
 }
 
 function buildProxyUrl(filePath: string): string {

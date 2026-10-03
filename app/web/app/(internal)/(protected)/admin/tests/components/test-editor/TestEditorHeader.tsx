@@ -24,16 +24,16 @@ export function TestEditorHeader({
 	onExport,
 }: TestEditorHeaderProps) {
 	return (
-		<section className="rounded-4xl border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit border shadow-sm">
-			<div className="tab:flex-row tab:items-end tab:justify-between flex flex-col gap-5">
+		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+			<div className="flex flex-col gap-5 tab:flex-row tab:items-end tab:justify-between">
 				<div>
-					<p className="text-muted-foreground font-mono text-[0.6875rem] uppercase tracking-[0.22em]">
+					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
 						{isEditingExisting ? 'редактор теста' : 'создание теста'}
 					</p>
-					<h1 className="text-foreground tab-sm:text-5xl mt-2 max-w-3xl font-serif text-4xl leading-none">
+					<h1 className="mt-2 max-w-3xl font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">
 						{title || (isEditingExisting ? 'Редактирование теста' : 'Новый тест')}
 					</h1>
-					<p className="text-muted-foreground mt-3 text-sm">
+					<p className="mt-3 text-sm text-muted-foreground">
 						{questionCount} вопросов · {isPublished ? 'опубликован' : 'черновик'}
 						{timeLimitMinutes ? ` · ${timeLimitMinutes} мин` : ' · без таймера'}
 					</p>

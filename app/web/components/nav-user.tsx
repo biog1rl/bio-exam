@@ -72,7 +72,7 @@ export function NavUser() {
 					<DropdownMenuTrigger asChild>
 						<SidebarMenuButton
 							size="lg"
-							className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer transition-all group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:hover:scale-110 group-data-[collapsible=icon]:data-[state=open]:scale-110"
+							className="cursor-pointer transition-all group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:hover:scale-110 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:data-[state=open]:scale-110"
 						>
 							<Avatar className="h-8 w-8 rounded-lg">
 								<AvatarImage src={avatar || undefined} className="rounded-full" />
@@ -82,7 +82,7 @@ export function NavUser() {
 							</Avatar>
 							<div className="grid flex-1 text-left text-sm leading-tight">
 								<span className="truncate font-medium">{displayName}</span>
-								<span className="text-muted-foreground truncate text-xs">{displayEmail}</span>
+								<span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
 							</div>
 							<MoreVerticalIcon className="ml-auto size-4" />
 						</SidebarMenuButton>
@@ -97,7 +97,7 @@ export function NavUser() {
 							<div className="flex items-center gap-2 px-2 py-1.5 text-left text-sm">
 								<div className="grid flex-1 text-left text-sm leading-tight">
 									<span className="truncate font-medium">{displayName}</span>
-									<span className="text-muted-foreground truncate text-xs">{displayEmail}</span>
+									<span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
 								</div>
 							</div>
 						</DropdownMenuLabel>
@@ -110,7 +110,7 @@ export function NavUser() {
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
-							className="data-highlighted:bg-destructive text-destructive hover:bg-destructive cursor-pointer"
+							className="cursor-pointer text-destructive hover:bg-destructive data-highlighted:bg-destructive"
 							onClick={handleLogout}
 						>
 							<LogOutIcon />

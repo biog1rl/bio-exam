@@ -58,4 +58,3 @@ editor redesign.
 
 - A caller intentionally handles 401 differently; keep it explicit and test it.
 - Fixing a generated/vendor editor module requires a wholesale vendor update.
-

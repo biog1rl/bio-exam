@@ -31,7 +31,7 @@ function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: n
 				minWidth: width ? undefined : 240,
 			}}
 		>
-			<Loader2 className="text-primary size-7 animate-spin drop-shadow-sm" />
+			<Loader2 className="size-7 animate-spin text-primary drop-shadow-sm" />
 		</span>
 	)
 }

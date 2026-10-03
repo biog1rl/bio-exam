@@ -425,5 +425,4 @@ test('radio: неверный вариант', () => {
 	})
 	assert.equal(radioWrong.earnedPoints, 0)
 	assert.equal(radioWrong.isCorrect, false)
-
 })

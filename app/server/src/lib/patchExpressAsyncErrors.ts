@@ -35,4 +35,3 @@ if (!Layer.prototype.__bioExamAsyncPatchApplied) {
 
 	Layer.prototype.__bioExamAsyncPatchApplied = true
 }
-

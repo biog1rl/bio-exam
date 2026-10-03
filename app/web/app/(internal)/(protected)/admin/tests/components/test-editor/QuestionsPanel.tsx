@@ -60,7 +60,7 @@ export function QuestionsPanel({
 					{questionDrafts.map((draft) => (
 						<div
 							key={draft.id}
-							className="border-border/70 bg-secondary/55 flex items-center justify-between gap-2 rounded-2xl border px-3 py-2"
+							className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-secondary/55 px-3 py-2"
 						>
 							<Link
 								className="min-w-0 flex-1 truncate text-sm hover:underline"
@@ -68,7 +68,7 @@ export function QuestionsPanel({
 							>
 								{getQuestionDraftLabel(draft)}
 							</Link>
-							<div className="text-muted-foreground text-xs">{new Date(draft.updatedAt).toLocaleString('ru-RU')}</div>
+							<div className="text-xs text-muted-foreground">{new Date(draft.updatedAt).toLocaleString('ru-RU')}</div>
 							<Button
 								size="icon"
 								variant="ghost"
@@ -97,12 +97,12 @@ export function QuestionsPanel({
 				}
 			>
 				{questions.length === 0 ? (
-					<div className="text-muted-foreground py-12 text-center">
+					<div className="py-12 text-center text-muted-foreground">
 						Нет вопросов. Нажмите &quot;Добавить вопрос&quot; чтобы начать.
 					</div>
 				) : (
 					<ScrollArea className="rounded-xl">
-						<div className="tab:max-h-[calc(100dvh-22rem)] pr-3">
+						<div className="pr-3 tab:max-h-[calc(100dvh-22rem)]">
 							<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
 								<SortableContext
 									items={questions.map((q) => q.id || `new-${q.order}`)}

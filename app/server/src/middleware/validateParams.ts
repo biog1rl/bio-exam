@@ -4,8 +4,9 @@
  */
 
 import type { Request, Response, NextFunction } from 'express'
-import { ApiError } from '../lib/errors.js'
+
 import { ERROR_MESSAGES } from '../lib/constants.js'
+import { ApiError } from '../lib/errors.js'
 
 /**
  * Регулярное выражение для UUID v4

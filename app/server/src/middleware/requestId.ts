@@ -1,6 +1,5 @@
-import crypto from 'node:crypto'
-
 import { RequestHandler } from 'express'
+import crypto from 'node:crypto'
 
 // Middleware to ensure every request has an id and response header
 export const requestId: RequestHandler = (req, res, next) => {
