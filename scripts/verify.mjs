@@ -3,9 +3,11 @@
  *
  * Шаги идут строго по порядку и останавливаются на первом ненулевом коде выхода:
  *   1. lockfile             node scripts/check-lockfile.mjs
- *   2. lint-typecheck-test  yarn turbo run lint typecheck test (все три воркспейса)
- *   3. migrations           node scripts/check-migrations.mjs
- *   4. script-tests         node --test scripts/**\/*.test.mjs
+ *   2. env-contract         node scripts/check-env-contract.mjs (.env.example совпадают с кодом, без секретов)
+ *   3. docs-commands        node scripts/check-docs-commands.mjs (команды yarn в README и AGENTS.md существуют)
+ *   4. lint-typecheck-test  yarn turbo run lint typecheck test (все три воркспейса)
+ *   5. migrations           node scripts/check-migrations.mjs
+ *   6. script-tests         node --test scripts/**\/*.test.mjs
  * Новые шаги добавляются в массив STEPS, порядок задаётся только им.
  *
  * Все шаги работают с одноразовой PostgreSQL 17, которую поднимает withTestDatabase (или с
@@ -47,6 +49,8 @@ function collectScriptTests(dir = SCRIPTS_DIR) {
 /** Порядок шагов задан здесь и только здесь */
 export const STEPS = [
 	{ name: 'lockfile', cmd: process.execPath, args: ['scripts/check-lockfile.mjs'] },
+	{ name: 'env-contract', cmd: process.execPath, args: ['scripts/check-env-contract.mjs'] },
+	{ name: 'docs-commands', cmd: process.execPath, args: ['scripts/check-docs-commands.mjs'] },
 	{ name: 'lint-typecheck-test', cmd: 'yarn', args: ['turbo', 'run', 'lint', 'typecheck', 'test'] },
 	{ name: 'migrations', cmd: process.execPath, args: ['scripts/check-migrations.mjs'] },
 	{

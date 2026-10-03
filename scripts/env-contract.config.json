@@ -1,0 +1,27 @@
+{
+	"workspaces": {
+		"app/server": {
+			"sources": ["src", "api", "drizzle.config.ts"]
+		},
+		"app/web": {
+			"sources": ["."],
+			"zodFile": "lib/env/server.ts"
+		}
+	},
+	"allowlist": {
+		"app/server": [
+			{ "key": "NODE_ENV", "reason": "задаётся окружением запуска (node, Vercel), а не файлом настроек" },
+			{ "key": "VERCEL", "reason": "задаётся платформой Vercel" },
+			{ "key": "E2E_SEED_FILE", "reason": "задаётся только скриптом scripts/e2e.mjs для сида e2e" },
+			{
+				"key": "BIO_EXAM_ISOLATED_ENV",
+				"reason": "читается через константу ISOLATED_ENV_FLAG в config/test-database-url.ts, а не как process.env.NAME"
+			},
+			{
+				"key": "TEST_DATABASE_URL",
+				"reason": "читается как env.TEST_DATABASE_URL в resolveIsolatedDatabaseUrl через параметр; задают скрипты тестов и e2e"
+			}
+		],
+		"app/web": [{ "key": "NODE_ENV", "reason": "задаётся Next.js и окружением запуска, а не файлом настроек" }]
+	}
+}

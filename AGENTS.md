@@ -15,3 +15,37 @@ When `.codegraph/` is missing, say so and work from `rg` and direct reads; `code
 
 - Architecture decisions live in `docs/adr/`. Read the relevant ADR before changing auth, the exam domain, file storage, or module structure.
 - Implementation plans and their order: `plans/README.md`.
+
+## Project commands
+
+Run everything from the repository root. Node 24 (`.nvmrc`), Yarn 4.12 through Corepack, PostgreSQL 17 for anything that touches a database.
+
+- `yarn install`: install dependencies. `yarn.lock` is the only lockfile.
+- `yarn dev`: run web (`:3000`) and the Express API (`:4000`) through Turbo.
+- `yarn verify`: the single repository gate (lockfile, env contract, docs commands, lint, typecheck, tests, migrations, script tests). It starts its own disposable PostgreSQL 17 and ends with `yarn verify: OK` or `yarn verify: FAILED at <step>`.
+- `yarn e2e`: isolated Playwright run (first `yarn playwright install chromium`). It is not part of `yarn verify`.
+- `yarn lint`, `yarn typecheck`, `yarn test`: the same Turbo tasks `yarn verify` runs, for a quicker loop.
+- `yarn format` / `yarn format:check`: oxfmt over the repository.
+- `node scripts/with-test-db.mjs <command>`: run any command against a fresh guarded `test_*` database, for example `node scripts/with-test-db.mjs yarn workspace @bio-exam/server test`.
+
+## Scope and safety
+
+- Database-touching work (tests, migrations, scripts) runs only against a local disposable `test_*` database through `TEST_DATABASE_URL` with `BIO_EXAM_ISOLATED_ENV=1`. The guard in `app/server/src/config/test-database-url.ts` accepts hosts `localhost` and `127.0.0.1` and names matching `^test_[a-z0-9_]+$`. The `DATABASE_URL` in a developer's `.env` may point at live data: never use it for tests or migration experiments.
+- Never edit an applied Drizzle migration in `app/server/drizzle/`; add a new one. `yarn verify` checks the chain from an empty database.
+- Env examples (`app/server/.env.example`, `app/web/.env.example`) hold placeholders only. When code starts reading a new environment key, add it to the matching example; `scripts/check-env-contract.mjs` fails otherwise. Never copy a real value into an example, a doc or a log.
+- Docs: README files and env example comments are in Russian; identifiers, commands and paths stay as they are. A `yarn ...` command written in a doc must exist (`scripts/check-docs-commands.mjs`).
+- `yarn verify` must be green before a phase or change is considered done. A zero-test run counts as a failure.
+- Formatting-only changes go in their own commit, separate from behavior changes, so the commit hash can be listed in `.git-blame-ignore-revs`.
+
+## Routing
+
+| Area                                                | Where                                                                 | Read first                                             |
+| --------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
+| Web client (Next.js)                                | `app/web`                                                             | `docs/adr/0001-express-owns-data-and-access-policy.md` |
+| API, auth, access policy                            | `app/server/src/routes`, `app/server/src/middleware`, `packages/rbac` | `docs/adr/0001-express-owns-data-and-access-policy.md` |
+| Exam domain (question templates, scoring, attempts) | `app/server/src/lib/tests`, `app/server/src/routes/tests`             | `docs/adr/0002-shared-exam-core-package.md`            |
+| File storage                                        | `app/server/src/services/storage`                                     | `docs/adr/0004-storage-port-two-adapters.md`           |
+| Schema and migrations                               | `app/server/src/db`, `app/server/drizzle`                             | `docs/adr/0003-verification-before-refactoring.md`     |
+| Module structure and decomposition                  | `app/server/src`, `app/web`                                           | `docs/adr/0005-decompose-by-concept.md`                |
+| Verification, e2e, repository checks                | `scripts`, `e2e`, `turbo.json`                                        | `docs/adr/0003-verification-before-refactoring.md`     |
+| Work order and plans                                | `plans`                                                               | `plans/README.md`                                      |
