@@ -2,6 +2,14 @@ const CALLBACK_BASE = 'http://callback.invalid'
 
 export const DEFAULT_CALLBACK_PATH = '/dashboard'
 
+const LOGGED_OUT_PARAM = 'loggedOut'
+
+export const LOGGED_OUT_PATH = `/login?${LOGGED_OUT_PARAM}=1`
+
+export function isLoggedOutNotice(params: { get(name: string): string | null }): boolean {
+	return params.get(LOGGED_OUT_PARAM) === '1'
+}
+
 export function buildLoginRedirect(callbackPath: string): string {
 	const searchParams = new URLSearchParams({ callbackUrl: callbackPath })
 	return `/login?${searchParams.toString()}`

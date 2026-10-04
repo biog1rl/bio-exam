@@ -1,9 +1,10 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Eye, EyeOff } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 
 import LoaderComponent from '@/components/LoaderComponent'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -20,7 +21,7 @@ import {
 	TOO_MANY_LATER_TEXT,
 	TOO_MANY_WAIT_TEXT,
 } from '@/lib/session/login-errors'
-import { safeCallbackPath } from '@/lib/session/redirect'
+import { isLoggedOutNotice, safeCallbackPath } from '@/lib/session/redirect'
 import { formatWait } from '@/lib/session/wait-format'
 
 type LoginError =
@@ -42,6 +43,14 @@ export default function LoginPage() {
 	const { me } = useAuth()
 
 	const callbackUrl = useMemo(() => safeCallbackPath(searchParams.get('callbackUrl')), [searchParams])
+	const loggedOutShown = useRef(false)
+
+	useEffect(() => {
+		if (loggedOutShown.current || !isLoggedOutNotice(searchParams)) return
+		loggedOutShown.current = true
+		toast.success('Вы вышли из аккаунта')
+		router.replace('/login')
+	}, [router, searchParams])
 
 	const [showPassword, setShowPassword] = useState(false)
 	const [error, setError] = useState<LoginError>(NO_ERROR)
