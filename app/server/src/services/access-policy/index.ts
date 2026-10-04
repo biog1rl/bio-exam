@@ -43,14 +43,43 @@ export async function hasPermission(req: Request, key: PermissionKey): Promise<b
 }
 
 export {
+	canAssign,
+	canAssignMany,
+	canAssistSignIn,
+	canManageCatalog,
+	canManageGroup,
+	canManageStudent,
 	canReadTest,
 	canReadUser,
 	canReviewAttempt,
 	canWriteTest,
 	canWriteTopic,
 	createAccessScope,
+	groupScope,
+	hasGlobalZone,
 	testScope,
+	userScope,
 	type AccessScope,
+	type AssignPredicate,
+	type GroupScope,
 	type PermissionCheck,
 	type TestScope,
+	type UserScope,
+	type ZoneLoader,
 } from './scope.js'
+export { createDrizzleZoneLoader, createInMemoryZoneLoader, type ZoneSnapshot } from './zone-loader.js'
+export {
+	groupOwners,
+	ineligibleTeacherGroupMembers,
+	isZoneOwnerCandidate,
+	nonStudentUserIds,
+	releaseZone,
+	setGroupOwner,
+	setTopicTeachers,
+	studentOnlyFilter,
+	topicTeachers,
+	zoneOwnerCandidates,
+	type ZoneExecutor,
+	type ZonePerson,
+} from './zone-store.js'
+export { loadRoleTraits, roleTraits, type RoleTraits } from './role-traits.js'
