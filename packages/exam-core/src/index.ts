@@ -34,6 +34,15 @@ export type { ValidateQuestionForSaveInput } from './authoring'
 export {
 	AnswerValueSchema,
 	ATTEMPT_GRACE_PERIOD_MINUTES,
+	AttemptFactsSchema,
+	AttemptQuestionViewSchema,
+	AttemptViewSchema,
+	LegacyAttemptResultItemSchema,
+	LegacyAttemptResultsSchema,
+	QuestionStatusSchema,
+	questionStatus,
+	QuestionVerdictsSchema,
+	ScoredQuestionFactSchema,
 	SUBMIT_ERROR_CODES,
 	SubmitAttemptErrorSchema,
 	SubmitAttemptRequestSchema,
@@ -42,6 +51,12 @@ export {
 } from './attempt-result'
 export type {
 	AnswerValue,
+	AttemptFacts,
+	AttemptQuestionView,
+	AttemptView,
+	LegacyAttemptResultItem,
+	QuestionStatus,
+	ScoredQuestionFact,
 	SubmitAttemptError,
 	SubmitAttemptRequest,
 	SubmitResult,
@@ -93,7 +108,20 @@ export {
 } from './review'
 export type { ComputeVerdictsInput } from './review'
 export { pluralRu } from './plural'
-export { countMistakes, MISTAKES_UNSCORABLE, normalizeScoringRule, scoreByRule, scoreQuestionByType } from './scoring'
-export type { RuntimeQuestionTypeConfig, ScoreQuestionByTypeInput, ScoreQuestionResult } from './scoring'
+export {
+	countMistakes,
+	MISTAKES_UNSCORABLE,
+	normalizeScoringRule,
+	scoreByRule,
+	scoreQuestionByType,
+	scoreQuestionFacts,
+} from './scoring'
+export type {
+	RuntimeQuestionTypeConfig,
+	ScoreQuestionByTypeInput,
+	ScoreQuestionFactsInput,
+	ScoreQuestionFactsResult,
+	ScoreQuestionResult,
+} from './scoring'
 export { mergeTelemetryMaps, QuestionTelemetrySchema, TelemetryMapSchema } from './telemetry'
 export type { QuestionTelemetry, TelemetryMap } from './telemetry'

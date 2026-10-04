@@ -178,7 +178,7 @@ describe('POST submit: сдача и повтор', () => {
 			[attemptId]
 		)
 		assert.deepEqual(attempt.rows, [
-			{ session_id: sessionId, client_attempt_id: body.clientAttemptId, results_version: 1 },
+			{ session_id: sessionId, client_attempt_id: body.clientAttemptId, results_version: 2 },
 		])
 	})
 

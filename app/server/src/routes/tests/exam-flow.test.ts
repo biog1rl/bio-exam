@@ -299,6 +299,7 @@ describe('сквозной путь через app.ts', () => {
 			.select({
 				id: schema.testAttempts.id,
 				results: schema.testAttempts.results,
+				resultsVersion: schema.testAttempts.resultsVersion,
 				sessionId: schema.testAttempts.sessionId,
 			})
 			.from(schema.testAttempts)
@@ -308,9 +309,15 @@ describe('сквозной путь через app.ts', () => {
 		assert.ok(attempt)
 		assert.equal(attempt.id, reply.body.attemptId)
 		assert.equal(attempt.sessionId, sessionId)
-		const stored = findResult({ results: attempt.results }, questionId)
+		assert.equal(attempt.resultsVersion, 2)
+		const stored = findResult({ results: attempt.results }, questionId) as ResultItem & {
+			key: unknown
+			keyVersion: unknown
+		}
 		assert.equal(stored.earnedPoints, 2)
 		assert.equal(stored.isCorrect, true)
+		assert.equal(stored.key, '2314')
+		assert.equal(stored.keyVersion, 1)
 	})
 })
 

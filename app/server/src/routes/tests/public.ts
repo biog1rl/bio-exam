@@ -3,18 +3,17 @@
  */
 import {
 	AnswerValueSchema,
-	scoreQuestionByType,
 	SUBMIT_ERROR_CODES,
 	SubmitAttemptRequestSchema,
 	TelemetryMapSchema,
 } from '@bio-exam/exam-core'
 
-import { and, asc, count, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { Router, type Response } from 'express'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import { answerKeys, appSettings, questions, testAttempts, tests, topics } from '../../db/schema.js'
+import { appSettings, questions, testAttempts, tests, topics } from '../../db/schema.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -30,7 +29,7 @@ import {
 	visibleTestsFilter,
 	type SessionCloseReason,
 } from '../../services/attempt-sessions/index.js'
-import { readSubmittedResult } from '../../services/scored-attempt/index.js'
+import { readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
 import { storageService } from '../../services/storage/storage.js'
 
 const router = Router()
@@ -619,6 +618,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 		const test = access.test
+		const viewer = { kind: 'student' as const, showCorrectAnswer: test.showCorrectAnswer }
 
 		const precheck = await precheckSubmit({
 			testId,
@@ -629,7 +629,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		})
 		if (precheck.kind === 'not_found') return sessionNotFound(res)
 		if (precheck.kind === 'submitted') {
-			if (precheck.sameClient && precheck.attemptId) return res.json(await readSubmittedResult(precheck.attemptId))
+			if (precheck.sameClient && precheck.attemptId) return res.json(await readAttemptView(precheck.attemptId, viewer))
 			return attemptAlreadySubmitted(res, precheck.attemptId)
 		}
 		if (precheck.kind === 'closed') return rejectClosedSession(res, precheck.reason)
@@ -638,80 +638,29 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			return timeExpired(res)
 		}
 
-		const questionTypesMap = await getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
-
-		const questionRows = await db.select().from(questions).where(eq(questions.testId, test.id))
-		const questionIds = questionRows.map((q) => q.id)
-		if (questionIds.length === 0) {
-			return res.status(404).json({ error: 'Questions not found' })
+		const scored = await scoreSubmission({
+			testId,
+			answers: userAnswers,
+			passingScore: test.passingScore,
+			readExplanation: (q) =>
+				q.explanationPath
+					? readFirstMarkdown(
+							buildQuestionMarkdownCandidates({
+								storedPath: q.explanationPath,
+								topicSlug: test.topicSlug,
+								testSlug: test.slug,
+								testId,
+								questionId: q.id,
+								fileName: 'explanation.md',
+							})
+						).then((text) => text || null)
+					: Promise.resolve(null),
+		})
+		if (!scored.ok) {
+			if (scored.reason === 'no_questions') return res.status(404).json({ error: 'Questions not found' })
+			return res.status(500).json({ error: `Question type is not configured: ${scored.type}` })
 		}
-
-		const correctAnswers = await db
-			.select()
-			.from(answerKeys)
-			.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
-
-		const correctAnswersMap = new Map(correctAnswers.map((ak) => [ak.questionId, ak.correctAnswer]))
-
-		let totalPoints = 0
-		let earnedPoints = 0
-		const results: Array<{
-			questionId: string
-			isCorrect: boolean
-			points: number
-			earnedPoints: number
-			userAnswer: unknown
-			correctAnswer: unknown
-			explanationText: string | null
-		}> = []
-
-		for (const q of questionRows) {
-			const typeConfig = questionTypesMap[q.type]
-			if (!typeConfig) {
-				return res.status(500).json({ error: `Question type is not configured: ${q.type}` })
-			}
-			const correctAnswer = correctAnswersMap.get(q.id)
-			const userAnswer = userAnswers[q.id] ?? null
-			const score = scoreQuestionByType({
-				questionType: q.type,
-				userAnswer,
-				correctAnswer,
-				fallbackMaxPoints: Number(q.points ?? 0),
-				questionTypesMap,
-			})
-			const points = score.maxPoints
-			const questionEarnedPoints = score.earnedPoints
-			const isCorrect = score.isCorrect
-
-			totalPoints += points
-			earnedPoints += questionEarnedPoints
-
-			const explanationText = q.explanationPath
-				? (await readFirstMarkdown(
-						buildQuestionMarkdownCandidates({
-							storedPath: q.explanationPath,
-							topicSlug: test.topicSlug,
-							testSlug: test.slug,
-							testId: test.id,
-							questionId: q.id,
-							fileName: 'explanation.md',
-						})
-					)) || null
-				: null
-
-			results.push({
-				questionId: q.id,
-				isCorrect,
-				points,
-				earnedPoints: questionEarnedPoints,
-				userAnswer,
-				correctAnswer: isCorrect || !test.showCorrectAnswer ? null : correctAnswer,
-				explanationText,
-			})
-		}
-
-		const scorePercentage = totalPoints > 0 ? (earnedPoints / totalPoints) * 100 : 0
-		const passed = test.passingScore == null ? true : scorePercentage >= Number(test.passingScore)
+		const { facts, earnedPoints, totalPoints, scorePercentage, passed } = scored
 
 		const outcome = await submitAttempt({
 			testId,
@@ -720,12 +669,12 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			clientAttemptId,
 			answers: userAnswers,
 			telemetry,
-			scored: { results, resultsVersion: 1, earnedPoints, totalPoints, scorePercentage, passed },
+			scored: { results: facts, resultsVersion: 2, earnedPoints, totalPoints, scorePercentage, passed },
 		})
 		if (outcome.kind === 'not_found') return sessionNotFound(res)
 		if (outcome.kind === 'conflict') return attemptAlreadySubmitted(res, outcome.attemptId)
 		if (outcome.kind === 'closed') return rejectClosedSession(res, outcome.reason)
-		res.json(await readSubmittedResult(outcome.attemptId))
+		res.json(await readAttemptView(outcome.attemptId, viewer))
 	} catch (e) {
 		next(e)
 	}
