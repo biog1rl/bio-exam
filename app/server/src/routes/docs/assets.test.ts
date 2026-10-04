@@ -62,9 +62,14 @@ const TRAVERSAL_INPUTS = [
 	'images/a\u0000.webp',
 ]
 
+const ASSET_IN_USE = 'Изображение используется в вопросах'
+const INDEX_INCOMPLETE = 'Удаление недоступно: ссылки на изображения ещё не проиндексированы'
+
 let ctx: AuthApp
 let mem: MemoryStorageAdapter
 let tinyPng: Buffer
+let adminId = ''
+let topicCounter = 0
 const jars = new Map<Exclude<Profile, 'anonymous'>, CookieJar>()
 
 function jarOf(profile: Profile): CookieJar | undefined {
@@ -132,6 +137,7 @@ beforeAll(async () => {
 	for (const profile of PROFILES) {
 		const username = `assets_${profile.name}`
 		const userId = await seedUser(ctx, { login: username, roles: profile.roles, password: PASSWORD })
+		if (profile.name === 'admin') adminId = userId
 		if (profile.allow !== null) {
 			await db.insert(schema.rbacUserGrants).values({ userId, domain: 'tests', action: 'write', allow: profile.allow })
 		}
@@ -215,6 +221,124 @@ describe('DELETE /api/docs/assets: только images/<имя>', () => {
 			assert.deepEqual(mem.keys(), before)
 		})
 	}
+})
+
+async function testWithPrompt(promptText: string): Promise<string> {
+	topicCounter += 1
+	const slug = `assets-usage-${topicCounter}`
+	const topic = await call(ctx, 'POST', '/api/tests/topics', {
+		cookies: jarOf('admin'),
+		body: { slug, title: `Тема ${slug}` },
+	})
+	assert.equal(topic.status, 201, JSON.stringify(topic.body))
+	const saved = await call(ctx, 'POST', '/api/tests/save', {
+		cookies: jarOf('admin'),
+		body: {
+			topicId: (topic.body.topic as Json).id,
+			title: `Тест ${slug}`,
+			slug: `${slug}-test`,
+			isPublished: true,
+			questions: [
+				{
+					type: 'radio',
+					order: 0,
+					promptText,
+					options: [
+						{ id: 'a', text: 'Клетка' },
+						{ id: 'b', text: 'Ткань' },
+					],
+					correct: 'a',
+					points: 1,
+				},
+			],
+		},
+	})
+	assert.equal(saved.status, 201, JSON.stringify(saved.body))
+	return (saved.body.test as Json).id as string
+}
+
+async function deleteAsset(key: string): Promise<Reply> {
+	return call(ctx, 'DELETE', '/api/docs/assets', { cookies: jarOf('admin'), body: { path: key } })
+}
+
+describe('DELETE /api/docs/assets: используемая картинка (D-16)', () => {
+	test('картинка из промпта вопроса: 409 с usage, объект на месте', async () => {
+		const key = imageKey()
+		mem.put(key, bytesOf('used'), 'image/webp')
+		await testWithPrompt(`Что на рисунке?\n\n![](${key})`)
+		const reply = await deleteAsset(key)
+		assert.equal(reply.status, 409)
+		assert.deepEqual(reply.body, { error: ASSET_IN_USE, usage: { questions: 1, drafts: 0 } })
+		assert.ok(mem.get(key))
+	})
+
+	test('картинка из черновика вопроса: 409 с usage.drafts = 1, объект на месте', async () => {
+		const key = imageKey()
+		mem.put(key, bytesOf('draft'), 'image/webp')
+		const testId = await testWithPrompt('Вопрос без картинки')
+		await ctx.db
+			.insert(ctx.schema.questionDrafts)
+			.values({ testId, ownerId: adminId, payload: { promptText: `<img src="/uploads/${key}">` } })
+		const reply = await deleteAsset(key)
+		assert.equal(reply.status, 409)
+		assert.deepEqual(reply.body, { error: ASSET_IN_USE, usage: { questions: 0, drafts: 1 } })
+		assert.ok(mem.get(key))
+	})
+
+	test('_ и % в ключе не работают как шаблон LIKE', async () => {
+		const name = randomBytes(16).toString('hex')
+		const testId = await testWithPrompt('Вопрос без картинки')
+		await ctx.db
+			.insert(ctx.schema.questionDrafts)
+			.values({ testId, ownerId: adminId, payload: { promptText: `![](images/${name}.webp)` } })
+		const underscore = `images/${name}_webp`
+		mem.put(underscore, bytesOf('underscore'), 'image/webp')
+		const first = await deleteAsset(underscore)
+		assert.equal(first.status, 200, JSON.stringify(first.body))
+		assert.equal(mem.get(underscore), null)
+		const percent = await deleteAsset('images/%')
+		assert.equal(percent.status, 200, JSON.stringify(percent.body))
+
+		const other = randomBytes(16).toString('hex')
+		await ctx.db
+			.insert(ctx.schema.questionDrafts)
+			.values({ testId, ownerId: adminId, payload: { promptText: `![](images/${other}_webp)` } })
+		const dotted = `images/${other}.webp`
+		mem.put(dotted, bytesOf('dotted'), 'image/webp')
+		const second = await deleteAsset(dotted)
+		assert.equal(second.status, 200, JSON.stringify(second.body))
+		assert.equal(mem.get(dotted), null)
+	})
+
+	test('пока у вопроса assets_indexed = false, любое удаление отклоняется', async () => {
+		const testId = await testWithPrompt('Вопрос без картинки')
+		const { rows } = await ctx.pgPool.query<{ id: string }>(
+			'INSERT INTO questions (test_id, type, "order") VALUES ($1, \'radio\', 1) RETURNING id',
+			[testId]
+		)
+		const questionId = rows[0]?.id
+		assert.ok(questionId)
+		const key = imageKey()
+		mem.put(key, bytesOf('unindexed'), 'image/webp')
+		try {
+			const reply = await deleteAsset(key)
+			assert.equal(reply.status, 409)
+			assert.deepEqual(reply.body, { error: INDEX_INCOMPLETE })
+			assert.ok(mem.get(key))
+		} finally {
+			await ctx.pgPool.query('DELETE FROM questions WHERE id = $1', [questionId])
+		}
+	})
+
+	test('неиспользуемая картинка при полном индексе: 200 { success: true }, объекта нет', async () => {
+		await testWithPrompt(`![](${imageKey()})`)
+		const key = imageKey()
+		mem.put(key, bytesOf('unused'), 'image/webp')
+		const reply = await deleteAsset(key)
+		assert.equal(reply.status, 200)
+		assert.deepEqual(reply.body, { success: true })
+		assert.equal(mem.get(key), null)
+	})
 })
 
 describe('GET /api/docs/assets/proxy: только картинки в пространствах имён', () => {

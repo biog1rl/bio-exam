@@ -25,7 +25,7 @@ type Asset = { filename: string; path: string; signedUrl: string; size: number; 
 const PASSWORD = 'assets-char-password-1'
 const ASSET_KEYS = ['createdAt', 'filename', 'path', 'signedUrl', 'size']
 
-const KNOWN_DEFECTS = new Set<string>(['STOR-delete-used-asset'])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function defectTest(id: string, title: string, fn: () => Promise<void>, timeout?: number): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test

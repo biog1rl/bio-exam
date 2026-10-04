@@ -169,6 +169,13 @@
       "when": 1791111589181,
       "tag": "0023_attempt_results_version",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791121706458,
+      "tag": "0024_question_asset_refs",
+      "breakpoints": true
     }
   ]
 }

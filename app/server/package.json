@@ -16,6 +16,7 @@
 		"drizzle:studio": "drizzle-kit studio --config=drizzle.config.ts",
 		"seed": "tsx src/db/seed.ts",
 		"search:backfill": "tsx src/scripts/backfill-question-search.ts",
+		"assets:refs": "tsx src/scripts/asset-refs.ts",
 		"bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts"
 	},
 	"dependencies": {

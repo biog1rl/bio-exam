@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import sharp from 'sharp'
 
 import { ApiError } from '../../lib/errors.js'
+import { assetUsage, isAssetIndexComplete, type AssetUsage } from '../question-content/asset-index.js'
 import {
 	isMediaLibraryKey,
 	isServableImageKey,
@@ -15,6 +16,10 @@ import { resolveImageLink } from '../storage/links.js'
 
 export const IMAGE_TYPE_ERROR = 'Поддерживаются только JPEG, PNG и WebP'
 
+export const ASSET_IN_USE_MESSAGE = 'Изображение используется в вопросах'
+
+export const ASSET_INDEX_INCOMPLETE_MESSAGE = 'Удаление недоступно: ссылки на изображения ещё не проиндексированы'
+
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MEDIA_PREFIX = 'images'
 const MAX_DIMENSION = 1920
@@ -26,6 +31,16 @@ export type MediaAsset = {
 	signedUrl: string
 	size: number
 	createdAt: string
+}
+
+export class AssetInUseError extends ApiError {
+	readonly usage: AssetUsage
+
+	constructor(usage: AssetUsage) {
+		super(409, ASSET_IN_USE_MESSAGE)
+		this.name = 'AssetInUseError'
+		this.usage = usage
+	}
 }
 
 function requirePath(input: unknown): string {
@@ -72,6 +87,9 @@ export async function listImages(options: { limit: number; offset: number }): Pr
 export async function deleteImage(input: unknown): Promise<void> {
 	const path = requirePath(input)
 	if (!isMediaLibraryKey(path)) throw invalidPath()
+	if (!(await isAssetIndexComplete())) throw new ApiError(409, ASSET_INDEX_INCOMPLETE_MESSAGE)
+	const usage = await assetUsage(path)
+	if (usage.questions > 0 || usage.drafts > 0) throw new AssetInUseError(usage)
 	await storage().remove([path])
 }
 

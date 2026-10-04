@@ -8,10 +8,10 @@
  *
  * Пишет в базу роли, активных пользователей (bcrypt-хэши тестового пароля), роли
  * пользователей, тему, тесты, вопросы, ключи ответов версии 1 и назначения, а в локальное
- * хранилище — prompt.md каждого вопроса (как обработчик создания теста).
+ * хранилище — промпт каждого вопроса через модуль содержимого.
  * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n>
  */
-import { eq } from 'drizzle-orm'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 
 import { isIsolatedEnv } from '../config/test-database-url.js'
@@ -69,12 +69,31 @@ async function main(): Promise<void> {
 	const { answerKeys, questions, roles, testAssignments, tests, topics, userRoles, users } =
 		await import('../db/schema.js')
 	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
-	const { storageService } = await import('../services/storage/storage.js')
-	const { upsertQuestionSearchDocument } = await import('../services/search/question-documents.js')
+	const { syncQuestionDerived, writeContentFiles } = await import('../services/question-content/index.js')
 
 	try {
 		const passwordHash = await bcrypt.hash(seed.password, 10)
 		const projects = Object.values(seed.projects)
+
+		const planned = new Map<SeedQuestion, { id: string; promptPath: string; explanationPath: string | null }>()
+		for (const project of projects) {
+			for (const seedTestItem of project.tests) {
+				for (const item of seedTestItem.questions) {
+					const builtin = getBuiltinQuestionTypeByKey(item.type)
+					if (!builtin || builtin.uiTemplate !== item.template) {
+						throw new Error(`seed question ${item.key}: type ${item.type} is not a builtin ${item.template} type`)
+					}
+					const id = crypto.randomUUID()
+					const files = await writeContentFiles({
+						topicSlug: seed.topic.slug,
+						testSlug: seedTestItem.slug,
+						questionId: id,
+						promptText: item.prompt,
+					})
+					planned.set(item, { id, promptPath: files.promptPath, explanationPath: files.explanationPath })
+				}
+			}
+		}
 
 		const result = await db.transaction(async (tx) => {
 			await tx
@@ -107,7 +126,7 @@ async function main(): Promise<void> {
 				.values({ slug: seed.topic.slug, title: seed.topic.title, description: seed.topic.description })
 				.returning()
 
-			const prompts: { path: string; text: string; question: SeedQuestion; questionId: string; testId: string }[] = []
+			let questionCount = 0
 			let testCount = 0
 			let order = 0
 			for (const project of projects) {
@@ -133,39 +152,39 @@ async function main(): Promise<void> {
 
 					for (const [index, item] of seedTestItem.questions.entries()) {
 						const builtin = getBuiltinQuestionTypeByKey(item.type)
-						if (!builtin || builtin.uiTemplate !== item.template) {
-							throw new Error(`seed question ${item.key}: type ${item.type} is not a builtin ${item.template} type`)
-						}
-						const [question] = await tx
-							.insert(questions)
-							.values({
-								testId: test.id,
-								type: item.type,
-								order: index,
-								points: builtin.scoringRule.correctPoints,
-								options: item.options ?? null,
-								matchingPairs: item.matchingPairs ?? null,
-							})
-							.returning({ id: questions.id })
-
-						// Путь как у обработчика создания: topics/<тема>/<тест>/questions/<id>/prompt.md
-						const promptPath = storageService.getQuestionPath(topic.slug, test.slug, question.id) + '/prompt.md'
-						await tx.update(questions).set({ promptPath }).where(eq(questions.id, question.id))
+						const content = planned.get(item)
+						if (!builtin || !content) throw new Error(`seed question ${item.key}: content is not planned`)
+						await tx.insert(questions).values({
+							id: content.id,
+							testId: test.id,
+							type: item.type,
+							order: index,
+							points: builtin.scoringRule.correctPoints,
+							options: item.options ?? null,
+							matchingPairs: item.matchingPairs ?? null,
+							promptPath: content.promptPath,
+							explanationPath: content.explanationPath,
+						})
 
 						await tx.insert(answerKeys).values({
-							questionId: question.id,
+							questionId: content.id,
 							version: 1,
 							correctAnswer: item.correct,
 							isActive: true,
 							createdBy: authorId,
 						})
-						prompts.push({
-							path: promptPath,
-							text: item.prompt,
-							question: item,
-							questionId: question.id,
+
+						await syncQuestionDerived(tx, {
+							questionId: content.id,
 							testId: test.id,
+							topicId: topic.id,
+							type: item.type,
+							promptText: item.prompt,
+							explanationText: null,
+							options: item.options,
+							matchingPairs: item.matchingPairs,
 						})
+						questionCount++
 					}
 
 					for (const login of seedTestItem.assignedTo) {
@@ -176,27 +195,11 @@ async function main(): Promise<void> {
 				}
 			}
 
-			return { topicId: topic.id, users: userIds.size, tests: testCount, prompts }
+			return { users: userIds.size, tests: testCount, questions: questionCount }
 		})
 
-		// Файлы пишутся после успешной транзакции, как в обработчике создания теста
-		let written = 0
-		for (const prompt of result.prompts) {
-			await storageService.writeFile(prompt.path, prompt.text)
-			written++
-			await upsertQuestionSearchDocument({
-				questionId: prompt.questionId,
-				testId: prompt.testId,
-				topicId: result.topicId,
-				type: prompt.question.type,
-				promptText: prompt.text,
-				options: prompt.question.options,
-				matchingPairs: prompt.question.matchingPairs,
-			})
-		}
-
 		console.log(
-			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.prompts.length} prompts=${written}`
+			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size}`
 		)
 	} finally {
 		await pgPool.end()

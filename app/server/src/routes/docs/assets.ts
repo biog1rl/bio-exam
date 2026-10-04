@@ -4,6 +4,7 @@ import multer from 'multer'
 import { isApiError } from '../../lib/errors.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { AssetInUseError } from '../../services/assets/images.js'
 import {
 	deleteImage,
 	IMAGE_TYPE_ERROR,
@@ -51,6 +52,7 @@ router.delete('/', sessionRequired(), requirePerm('tests', 'write'), async (req,
 		await deleteImage(req.body?.path)
 		return res.json({ success: true })
 	} catch (error) {
+		if (error instanceof AssetInUseError) return res.status(409).json({ error: error.message, usage: error.usage })
 		return replyError(res, error, 'Error deleting asset', 'Не удалось удалить изображение')
 	}
 })

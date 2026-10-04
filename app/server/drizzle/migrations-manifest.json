@@ -192,6 +192,14 @@
       "sha256": "722a4d18bfd1583941abfbc655c9f9115aacefe4f04d0746f07b1708b5584c0a",
       "when": 1791111589181,
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "tag": "0024_question_asset_refs",
+      "file": "0024_question_asset_refs.sql",
+      "sha256": "caa886d35aaa04844dd65d142dd71cb12c13929e3ef92785f385a211ce2755d3",
+      "when": 1791121706458,
+      "breakpoints": true
     }
   ]
 }

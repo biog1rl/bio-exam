@@ -392,6 +392,7 @@ export const questions = pgTable(
 		matchingPairs: jsonb('matching_pairs'), // для matching: {left: [], right: []}
 		promptPath: text('prompt_path'), // путь к prompt.md в Storage
 		explanationPath: text('explanation_path'), // путь к explanation.md в Storage
+		assetsIndexed: boolean('assets_indexed').notNull().default(false),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		updatedAt: timestamp('updated_at').notNull().defaultNow(),
 	},
@@ -429,6 +430,24 @@ export const questionSearchDocuments = pgTable(
 			'gin',
 			t.searchText.op('gin_trgm_ops')
 		),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
+export const questionAssetRefs = pgTable(
+	'question_asset_refs',
+	{
+		questionId: uuid('question_id').notNull(),
+		assetKey: text('asset_key').notNull(),
+	},
+	(t) => ({
+		pk: primaryKey({ name: 'question_asset_refs_pkey', columns: [t.questionId, t.assetKey] }),
+		questionIdFk: foreignKey({
+			name: 'question_asset_refs_question_id_fkey',
+			columns: [t.questionId],
+			foreignColumns: [questions.id],
+		}).onDelete('cascade'),
+		assetKeyIdx: index('idx_question_asset_refs_asset_key').on(t.assetKey),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

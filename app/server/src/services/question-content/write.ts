@@ -10,6 +10,7 @@ import { getQuestionTypeMapForTest, validateQuestionWithType } from '../../lib/t
 import type { SaveQuestionSchema, SaveTestSchema } from '../../schemas/tests.js'
 import { upsertQuestionSearchDocument } from '../search/question-documents.js'
 import { storage } from '../storage/index.js'
+import { indexQuestionAssets } from './asset-index.js'
 import { insertAt, lockTest, resequenceQuestions, type LockedTest, type Tx } from './order.js'
 import { contentKey, newRevision } from './paths.js'
 
@@ -31,6 +32,7 @@ export type QuestionDerivedInput = {
 	topicId: string
 	type: string
 	promptText: string
+	explanationText?: string | null
 	options?: unknown
 	matchingPairs?: unknown
 }
@@ -125,6 +127,7 @@ export async function syncQuestionDerived(tx: Tx, input: QuestionDerivedInput): 
 		},
 		tx
 	)
+	await indexQuestionAssets(tx, input.questionId, [input.promptText, input.explanationText])
 }
 
 async function readTopicSlug(tx: Tx, topicId: string, share: boolean): Promise<string | null> {
@@ -249,6 +252,7 @@ export async function updateQuestion(params: {
 				topicId: locked.topicId,
 				type: data.type,
 				promptText: data.promptText,
+				explanationText: data.explanationText,
 				options: data.options,
 				matchingPairs: data.matchingPairs,
 			})
@@ -327,6 +331,7 @@ export async function createQuestion(params: {
 				topicId: locked.topicId,
 				type: data.type,
 				promptText: data.promptText,
+				explanationText: data.explanationText,
 				options: data.options,
 				matchingPairs: data.matchingPairs,
 			})
@@ -432,6 +437,7 @@ export async function createTestWithQuestions(params: {
 					topicId: topic.id,
 					type: question.type,
 					promptText: question.promptText,
+					explanationText: question.explanationText,
 					options: question.options,
 					matchingPairs: question.matchingPairs,
 				})

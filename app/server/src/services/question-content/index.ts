@@ -1,4 +1,17 @@
-export { extractAssetRefs } from './asset-refs.js'
+export {
+	assetUsage,
+	indexQuestionAssets,
+	isAssetIndexComplete,
+	type AssetIndexExecutor,
+	type AssetUsage,
+} from './asset-index.js'
+export {
+	extractAssetLinks,
+	extractAssetRefs,
+	type AssetLink,
+	type AssetLinkForm,
+	type AssetLinkSource,
+} from './asset-refs.js'
 export {
 	ARCHIVE_TOO_LARGE_MESSAGE,
 	ZIP_RESPONSE_LIMIT_BYTES,
