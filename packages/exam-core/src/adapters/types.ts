@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 
 import type { AnswerValue } from '../attempt-result'
-import type { MistakeMetric, QuestionUiTemplate } from '../registry'
+import type { MistakeMetric, QuestionTypeValidation, QuestionUiTemplate } from '../registry'
 
 export const MISTAKES_UNSCORABLE = Number.MAX_SAFE_INTEGER
 
@@ -52,6 +52,20 @@ export type VerdictsInput = {
 	content: QuestionContent
 }
 
+export type TemplateConfig = {
+	uiTemplate: QuestionUiTemplate
+	mistakeMetric: MistakeMetric
+	validationSchema?: QuestionTypeValidation | null
+}
+
+export type KeyShape = 'option_id' | 'option_ids' | 'pairs' | 'text' | 'text_variants' | 'digits'
+
+export type AuthoringInput = {
+	config: TemplateConfig
+	content: QuestionContent
+	key: unknown
+}
+
 export interface TemplateAdapter<TAnswer extends AnswerValue = AnswerValue> {
 	template: QuestionUiTemplate
 	metrics: readonly MistakeMetric[]
@@ -61,4 +75,6 @@ export interface TemplateAdapter<TAnswer extends AnswerValue = AnswerValue> {
 	verdicts(input: VerdictsInput): QuestionVerdicts
 	isAnswered(answer: unknown, content: QuestionContent): boolean
 	readKey(raw: unknown, metric: MistakeMetric): AnswerValue | null
+	validateAuthoring(input: AuthoringInput): string | null
+	keyShape(metric: MistakeMetric): KeyShape
 }

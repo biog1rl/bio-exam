@@ -1,7 +1,9 @@
 import { z } from 'zod'
 
+import { AUTHORING_MESSAGES } from '../authoring-messages'
 import { normalizeIdValue } from '../normalize'
 import { ALLOWED_MISTAKE_METRICS_BY_TEMPLATE } from '../registry'
+import { validateChoiceOptions } from './authoring-rules'
 import type { TemplateAdapter } from './types'
 import { choiceOptionVerdicts, resolveMistakes } from './verdicts'
 
@@ -35,5 +37,16 @@ export const singleChoiceAdapter: TemplateAdapter<string> = {
 	readKey(raw, metric) {
 		if (metric !== 'boolean_correct') return null
 		return normalizeIdValue(raw)
+	},
+	validateAuthoring({ config, content, key }) {
+		const checked = validateChoiceOptions(content.options, config.validationSchema)
+		if ('error' in checked) return checked.error
+		if (typeof key !== 'string' || key.length === 0 || !checked.optionIds.includes(key)) {
+			return AUTHORING_MESSAGES.singleKeyMissing
+		}
+		return null
+	},
+	keyShape() {
+		return 'option_id'
 	},
 }

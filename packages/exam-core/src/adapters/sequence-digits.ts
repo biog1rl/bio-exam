@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { AUTHORING_MESSAGES } from '../authoring-messages'
 import { normalizeCompactString, normalizeDigitsSequence, normalizeIdValue } from '../normalize'
 import { ALLOWED_MISTAKE_METRICS_BY_TEMPLATE } from '../registry'
 import { MISTAKES_UNSCORABLE, type SequencePositionVerdict, type TemplateAdapter } from './types'
@@ -90,5 +91,12 @@ export const sequenceDigitsAdapter: TemplateAdapter<string> = {
 	readKey(raw, metric) {
 		if (metric !== 'hamming_digits') return null
 		return normalizeIdValue(raw)
+	},
+	validateAuthoring({ key }) {
+		if (typeof key !== 'string' || !/^\d+$/.test(key.replace(/\s+/g, ''))) return AUTHORING_MESSAGES.sequenceDigitsOnly
+		return null
+	},
+	keyShape() {
+		return 'digits'
 	},
 }

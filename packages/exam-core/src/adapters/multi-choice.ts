@@ -1,7 +1,9 @@
 import { z } from 'zod'
 
+import { AUTHORING_MESSAGES, exactChoiceCountMessage } from '../authoring-messages'
 import { normalizeIdArray } from '../normalize'
 import { ALLOWED_MISTAKE_METRICS_BY_TEMPLATE } from '../registry'
+import { validateChoiceOptions } from './authoring-rules'
 import { MISTAKES_UNSCORABLE, type TemplateAdapter } from './types'
 import { choiceOptionVerdicts, resolveMistakes } from './verdicts'
 
@@ -46,5 +48,24 @@ export const multiChoiceAdapter: TemplateAdapter<string[]> = {
 	readKey(raw, metric) {
 		if (metric !== 'set_distance') return null
 		return normalizeIdArray(raw)
+	},
+	validateAuthoring({ config, content, key }) {
+		const checked = validateChoiceOptions(content.options, config.validationSchema)
+		if ('error' in checked) return checked.error
+		if (!Array.isArray(key) || key.length === 0 || key.some((item) => typeof item !== 'string')) {
+			return AUTHORING_MESSAGES.multiKeyMissing
+		}
+		const selected = key as string[]
+		if (selected.some((item) => !checked.optionIds.includes(item)) || new Set(selected).size !== selected.length) {
+			return AUTHORING_MESSAGES.multiKeyUnknown
+		}
+		const exactChoiceCount = config.validationSchema?.exactChoiceCount
+		if (typeof exactChoiceCount === 'number' && selected.length !== exactChoiceCount) {
+			return exactChoiceCountMessage(exactChoiceCount)
+		}
+		return null
+	},
+	keyShape() {
+		return 'option_ids'
 	},
 }

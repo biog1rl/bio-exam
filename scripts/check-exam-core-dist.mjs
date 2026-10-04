@@ -8,6 +8,7 @@ const REQUIRED_FILES = ['index.js', 'index.cjs', 'index.d.ts', 'index.d.cts']
 
 const EXPECTED_EXPORTS = [
 	'ALLOWED_MISTAKE_METRICS_BY_TEMPLATE',
+	'AUTHORING_MESSAGES',
 	'AnswerValueSchema',
 	'BUILTIN_QUESTION_TYPES',
 	'MISTAKES_UNSCORABLE',
@@ -34,13 +35,17 @@ const EXPECTED_EXPORTS = [
 	'createDefaultScoringRuleForTemplate',
 	'defaultMistakeMetricForTemplate',
 	'errorUnits',
+	'exactChoiceCountMessage',
 	'getAllowedMistakeMetricsForTemplate',
 	'getBuiltinQuestionTypeByKey',
 	'getTemplateAdapter',
 	'isAnswered',
 	'isMistakeMetricAllowedForTemplate',
+	'keyShapeFor',
 	'matchingAdapter',
+	'maxOptionsMessage',
 	'mergeTelemetryMaps',
+	'minOptionsMessage',
 	'multiChoiceAdapter',
 	'normalizeCompactString',
 	'normalizeDigitsSequence',
@@ -49,6 +54,7 @@ const EXPECTED_EXPORTS = [
 	'normalizeIdValue',
 	'normalizeKeyValue',
 	'normalizeScoringRule',
+	'pluralRu',
 	'readKey',
 	'scoreByRule',
 	'scoreQuestionByType',
@@ -56,6 +62,8 @@ const EXPECTED_EXPORTS = [
 	'shortTextAdapter',
 	'singleChoiceAdapter',
 	'templateForMetric',
+	'toCanonicalKey',
+	'validateQuestionForSave',
 ]
 
 function diffNames(label, actual) {

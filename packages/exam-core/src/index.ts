@@ -8,7 +8,9 @@ export {
 	TEMPLATE_ADAPTERS,
 } from './adapters/index'
 export type {
+	AuthoringInput,
 	ChoiceOptionVerdict,
+	KeyShape,
 	MatchingPairVerdict,
 	QuestionContent,
 	QuestionContentItem,
@@ -16,8 +18,19 @@ export type {
 	SequencePositionVerdict,
 	ShortTextVerdict,
 	TemplateAdapter,
+	TemplateConfig,
 	VerdictsInput,
 } from './adapters/types'
+export {
+	AUTHORING_MESSAGES,
+	exactChoiceCountMessage,
+	keyShapeFor,
+	maxOptionsMessage,
+	minOptionsMessage,
+	toCanonicalKey,
+	validateQuestionForSave,
+} from './authoring'
+export type { ValidateQuestionForSaveInput } from './authoring'
 export { AnswerValueSchema, SubmitResultItemSchema, SubmitResultSchema } from './attempt-result'
 export type { AnswerValue, SubmitResult, SubmitResultItem } from './attempt-result'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
@@ -65,6 +78,7 @@ export {
 	readKey,
 } from './review'
 export type { ComputeVerdictsInput } from './review'
+export { pluralRu } from './plural'
 export { countMistakes, MISTAKES_UNSCORABLE, normalizeScoringRule, scoreByRule, scoreQuestionByType } from './scoring'
 export type { RuntimeQuestionTypeConfig, ScoreQuestionByTypeInput, ScoreQuestionResult } from './scoring'
 export { mergeTelemetryMaps, QuestionTelemetrySchema, TelemetryMapSchema } from './telemetry'
