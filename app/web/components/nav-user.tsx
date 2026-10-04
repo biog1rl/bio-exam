@@ -36,11 +36,7 @@ export function NavUser() {
 	const backgroundColor = avatarColor || '#3B82F6'
 
 	const handleLogout = async () => {
-		if (await logout()) {
-			toast.success('Вы вышли из аккаунта')
-			return
-		}
-		toast.error(LOGOUT_FAILED_MESSAGE)
+		if (!(await logout())) toast.error(LOGOUT_FAILED_MESSAGE)
 	}
 
 	const handleProfileClick = () => {

@@ -1,5 +1,6 @@
 import { TEMPLATE_ADAPTERS } from './adapters/index'
-import { MISTAKES_UNSCORABLE } from './adapters/types'
+import { MISTAKES_UNSCORABLE, type QuestionContent, type QuestionVerdicts } from './adapters/types'
+import type { AnswerValue } from './attempt-result'
 import {
 	QuestionTypeScoringRuleSchema,
 	createDefaultScoringRuleForTemplate,
@@ -9,6 +10,7 @@ import {
 	type QuestionTypeScoringRule,
 	type QuestionUiTemplate,
 } from './registry'
+import { computeVerdicts, readKey } from './review'
 
 export { MISTAKES_UNSCORABLE }
 
@@ -101,5 +103,52 @@ export function scoreQuestionByType(input: ScoreQuestionByTypeInput): ScoreQuest
 		earnedPoints,
 		isCorrect: mistakesCount === 0,
 		mistakesCount,
+	}
+}
+
+export type ScoreQuestionFactsInput = {
+	typeConfig: RuntimeQuestionTypeConfig
+	rawKey: unknown
+	userAnswer: unknown
+	fallbackMaxPoints: number
+	content: QuestionContent
+}
+
+export type ScoreQuestionFactsResult = {
+	template: QuestionUiTemplate
+	metric: MistakeMetric
+	points: number
+	earnedPoints: number
+	isCorrect: boolean
+	mistakes: number | null
+	key: AnswerValue | null
+	verdicts: QuestionVerdicts | null
+}
+
+export function scoreQuestionFacts(input: ScoreQuestionFactsInput): ScoreQuestionFactsResult {
+	const { typeConfig, rawKey, userAnswer, fallbackMaxPoints, content } = input
+	const template = typeConfig.uiTemplate
+	const metric = normalizeScoringRule({ rule: typeConfig.scoringRule, template, fallbackMaxPoints }).mistakeMetric
+	const score = scoreQuestionByType({
+		questionType: typeConfig.key,
+		userAnswer,
+		correctAnswer: rawKey,
+		fallbackMaxPoints,
+		questionTypesMap: { [typeConfig.key]: typeConfig },
+	})
+	const base = {
+		template,
+		metric,
+		points: score.maxPoints,
+		earnedPoints: score.earnedPoints,
+		isCorrect: score.isCorrect,
+	}
+	if (rawKey == null) return { ...base, mistakes: null, key: null, verdicts: null }
+	const verdicts = computeVerdicts({ template, metric, key: rawKey, answer: userAnswer, content })
+	return {
+		...base,
+		mistakes: verdicts.mistakes,
+		key: readKey({ template, metric, raw: rawKey }),
+		verdicts,
 	}
 }

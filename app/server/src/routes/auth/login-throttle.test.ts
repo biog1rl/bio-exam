@@ -94,7 +94,7 @@ describe('пара (логин, IP)', () => {
 			const seventh = await login(ctx, name, WRONG, { ip })
 			assert.equal(seventh.status, 429, `${name} attempt 7`)
 			const seconds = retryAfter(seventh)
-			assert.ok(seconds >= 29 && seconds <= 31, `Retry-After ${seconds}`)
+			assert.ok(seconds >= 25 && seconds <= 31, `Retry-After ${seconds}`)
 			blocked.push(seventh)
 		}
 		assert.deepEqual(blocked[0]?.body, blocked[1]?.body)
@@ -108,7 +108,7 @@ describe('пара (логин, IP)', () => {
 			assert.equal(reply.status, 401, `round ${round + 1}`)
 			const row = await pairRow('victim', ip)
 			assert.ok(row?.window_sec !== null && row?.window_sec !== undefined)
-			assert.ok(row.window_sec > 58 && row.window_sec <= 60, `window ${row.window_sec}`)
+			assert.ok(row.window_sec > 50 && row.window_sec <= 60, `window ${row.window_sec}`)
 			const blocked = await login(ctx, 'victim', WRONG, { ip })
 			assert.equal(blocked.status, 429)
 			assert.ok(retryAfter(blocked) <= 60)

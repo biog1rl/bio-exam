@@ -63,7 +63,8 @@ async function openUserMenu(page: Page, testInfo: TestInfo, login: string): Prom
 async function logOut(page: Page, testInfo: TestInfo, login: string): Promise<void> {
 	await openUserMenu(page, testInfo, login)
 	await page.getByRole('menuitem', { name: 'Выйти' }).click()
-	await expect(page).toHaveURL(/\/login(\?|$)/)
+	await expect(page.getByText('Вы вышли из аккаунта')).toHaveCount(1)
+	await expect(page).toHaveURL(/\/login$/)
 	await expect(page.getByPlaceholder('Login')).toBeVisible()
 }
 

@@ -1,14 +1,13 @@
-import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
+import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
 import {
 	formatDuration,
-	getQuestionStatus,
+	getQuestionView,
 	getStatusDotClass,
 	NAV_FILTERS,
 	scrollToAttemptSection,
 	type NavFilter,
-	type QuestionResult,
 } from './attempt-review-utils'
 
 export function AttemptReviewNav({
@@ -20,7 +19,7 @@ export function AttemptReviewNav({
 }: {
 	attempt: AttemptReviewData
 	questions: PublicTestQuestion[]
-	results: QuestionResult[]
+	results: AttemptQuestionView[]
 	navFilter: NavFilter
 	onNavFilterChange: (filter: NavFilter) => void
 }) {
@@ -49,7 +48,7 @@ export function AttemptReviewNav({
 
 			<div className="mt-6 max-h-[48dvh] space-y-1 overflow-auto pr-1">
 				{questions.map((question, index) => {
-					const status = getQuestionStatus(question.id, results)
+					const status = getQuestionView(question.id, results)?.status ?? null
 					if (navFilter !== 'all' && status !== navFilter) return null
 					const timeMs = attempt.telemetry?.[question.id]?.timeSpentMs ?? 0
 

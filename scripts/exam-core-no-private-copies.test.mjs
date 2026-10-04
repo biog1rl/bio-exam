@@ -120,6 +120,25 @@ const PRIVATE_COPY_NAMES = [
 	{ positions: 'D-17 п. 15', names: ['isAnswered'] },
 	{ positions: 'D-17 п. 16', names: ['answerIdList', 'normalizeKeyValue'] },
 	{ positions: 'D-17 п. 17', names: ['computeVerdicts', 'allPartsCorrect', 'errorUnits', 'readKey'] },
+	{
+		positions: 'Phase 5 D-16',
+		names: [
+			'SubmitAttemptRequestSchema',
+			'SubmitAttemptErrorSchema',
+			'SUBMIT_ERROR_CODES',
+			'ATTEMPT_GRACE_PERIOD_MINUTES',
+			'QuestionVerdictsSchema',
+			'QuestionStatusSchema',
+			'ScoredQuestionFactSchema',
+			'AttemptFactsSchema',
+			'LegacyAttemptResultItemSchema',
+			'LegacyAttemptResultsSchema',
+			'AttemptQuestionViewSchema',
+			'AttemptViewSchema',
+			'AdminAttemptViewSchema',
+			'scoreQuestionFacts',
+		],
+	},
 ]
 
 const PRIVATE_COPY_PATTERNS = [

@@ -1,160 +1,121 @@
-import { computeVerdicts, type SequencePositionVerdict } from '@bio-exam/exam-core'
+import type { SequencePositionVerdict } from '@bio-exam/exam-core'
 
 import { ArrowLeftRight, Check, Minus, X, type LucideIcon } from 'lucide-react'
 
-import type { PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
 import {
-	answerIds,
-	formatAnswerLines,
-	getChoiceOptionReviewRows,
-	getSequenceReview,
+	getChoiceReview,
+	getCorrectLines,
+	getMatchingReview,
+	getTextReview,
 	sequencePositionLabel,
+	type ChoiceReviewModel,
+	type MatchingReviewModel,
+	type ReviewInput,
+	type TextReviewModel,
 } from './attempt-review-utils'
 
-type Props = {
-	question: PublicTestQuestion
-	studentAnswer: unknown
-	correctAnswer: unknown
-	isCorrect: boolean
-	earnedPoints: number
-	showCorrectAnswer: boolean
+type Props = ReviewInput
+
+const CHOICE_ROW_CLASS: Record<ChoiceReviewModel['rows'][number]['tone'], string> = {
+	correct: 'border-green-500/40 bg-green-50/80 text-green-900',
+	missed: 'border-amber-500/50 bg-amber-50/60 text-amber-950',
+	wrong: 'border-red-500/40 bg-red-50/80 text-red-900',
+	neutral: 'border-border/70 bg-secondary/45 text-foreground',
 }
 
-function choiceLabel(isSelected: boolean, correct: boolean, missed: boolean, wrong: boolean): string | null {
-	if (missed) return 'Верный ответ · пропущен'
-	if (correct) return 'Выбран · верно'
-	if (wrong) return 'Выбран · неверно'
-	return isSelected ? 'Выбран' : null
+const CHOICE_LABEL_CLASS: Record<ChoiceReviewModel['rows'][number]['tone'], string | null> = {
+	correct: 'bg-green-100 text-green-900',
+	missed: 'bg-amber-100 text-amber-900',
+	wrong: 'bg-red-100 text-red-900',
+	neutral: null,
 }
 
-function ChoiceAnswerReview({ question, studentAnswer, correctAnswer, isCorrect, showCorrectAnswer }: Props) {
-	const selected = answerIds(studentAnswer)
-	const rows = getChoiceOptionReviewRows(question, studentAnswer, correctAnswer)
-	const keyVisible = correctAnswer != null || (showCorrectAnswer && isCorrect)
-	const selectedCorrect = isCorrect
-		? selected.size
-		: rows.filter((row) => selected.has(row.id) && row.status === 'correct').length
-	const missedCorrect = keyVisible ? rows.filter((row) => !selected.has(row.id) && row.status === 'correct').length : 0
+function CorrectAnswerCard({ lines, className }: { lines: string[]; className?: string }) {
+	return (
+		<div className={cn('rounded-2xl border border-green-500/40 bg-green-50/80 p-4 text-sm', className)}>
+			<p className="mb-2 font-medium">Правильный ответ</p>
+			{lines.map((line, index) => (
+				<p key={index}>{line}</p>
+			))}
+		</div>
+	)
+}
+
+function KeyCard(props: Props) {
+	const lines = getCorrectLines(props.question, props.view)
+	return lines ? <CorrectAnswerCard lines={lines} className="mt-4" /> : null
+}
+
+function ChoiceAnswerReview(props: Props) {
+	const review = getChoiceReview(props)
 
 	return (
 		<div className="mt-4 space-y-2">
-			<p className="text-sm text-muted-foreground">
-				Выбрано: {selected.size}
-				{keyVisible ? ` · из них верно: ${selectedCorrect} · неверно: ${selected.size - selectedCorrect}` : null}
-				{missedCorrect > 0 ? ` · пропущено верных: ${missedCorrect}` : null}
-			</p>
+			<p className="text-sm text-muted-foreground">{review.summary}</p>
 			<div className="space-y-2" role="list">
-				{rows.map((row) => {
-					const isSelected = selected.has(row.id)
-					const correct = keyVisible && (row.status === 'correct' || (isCorrect && isSelected))
-					const missed = correct && !isSelected
-					const wrong = keyVisible && isSelected && !correct
-					const label = choiceLabel(isSelected, correct, missed, wrong)
-					return (
-						<div
-							key={row.id}
-							role="listitem"
-							className={cn(
-								'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm',
-								correct && isSelected && 'border-green-500/40 bg-green-50/80 text-green-900',
-								missed && 'border-amber-500/50 bg-amber-50/60 text-amber-950',
-								wrong && 'border-red-500/40 bg-red-50/80 text-red-900',
-								!correct && !wrong && 'border-border/70 bg-secondary/45 text-foreground'
-							)}
-						>
-							{isSelected ? (
-								<span
-									className={cn(
-										'flex size-4 shrink-0 items-center justify-center rounded-sm',
-										correct ? 'bg-green-700' : wrong ? 'bg-red-700' : 'bg-foreground'
-									)}
-									aria-hidden="true"
-								>
-									<Check className="size-3 text-white" />
-								</span>
-							) : (
-								<span className="size-4 shrink-0 rounded-sm border border-muted-foreground/50" aria-hidden="true" />
-							)}
-							<span className="min-w-0 flex-1">{row.text}</span>
-							{label ? (
-								<span
-									className={cn(
-										'max-w-[45%] rounded-full px-3 py-1 text-right text-xs font-medium',
-										missed && 'bg-amber-100 text-amber-900',
-										correct && isSelected && 'bg-green-100 text-green-900',
-										wrong && 'bg-red-100 text-red-900'
-									)}
-								>
-									{label}
-								</span>
-							) : null}
-						</div>
-					)
-				})}
+				{review.rows.map((row) => (
+					<div
+						key={row.id}
+						role="listitem"
+						className={cn('flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm', CHOICE_ROW_CLASS[row.tone])}
+					>
+						{row.selected ? (
+							<span
+								className={cn(
+									'flex size-4 shrink-0 items-center justify-center rounded-sm',
+									row.tone === 'correct' ? 'bg-green-700' : row.tone === 'wrong' ? 'bg-red-700' : 'bg-foreground'
+								)}
+								aria-hidden="true"
+							>
+								<Check className="size-3 text-white" />
+							</span>
+						) : (
+							<span className="size-4 shrink-0 rounded-sm border border-muted-foreground/50" aria-hidden="true" />
+						)}
+						<span className="min-w-0 flex-1">{row.text}</span>
+						{row.label ? (
+							<span
+								className={cn(
+									'max-w-[45%] rounded-full px-3 py-1 text-right text-xs font-medium',
+									CHOICE_LABEL_CLASS[row.tone]
+								)}
+							>
+								{row.label}
+							</span>
+						) : null}
+					</div>
+				))}
 			</div>
 		</div>
 	)
 }
 
-function answerMap(value: unknown): Record<string, unknown> {
-	return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+const MATCHING_ROW_CLASS: Record<MatchingReviewModel['rows'][number]['tone'], string> = {
+	correct: 'border-green-500/40 bg-green-50/80',
+	wrong: 'border-red-500/40 bg-red-50/80',
+	neutral: 'border-border/70 bg-secondary/45',
 }
 
-function MatchingAnswerReview({ question, studentAnswer, correctAnswer, isCorrect, showCorrectAnswer }: Props) {
-	const pairs = question.matchingPairs
-	if (!pairs) return null
-	const selected = answerMap(studentAnswer)
-	const correct = answerMap(correctAnswer)
-	const keyVisible = correctAnswer != null || (showCorrectAnswer && isCorrect)
-	const rightText = (value: unknown) => pairs.right.find((item) => item.id === String(value))?.text ?? 'Нет ответа'
-	const verdicts = computeVerdicts({
-		template: 'matching',
-		key: correctAnswer ?? null,
-		answer: studentAnswer,
-		content: { matchingPairs: pairs },
-	})
-	const correctLeftIds = new Set(
-		verdicts.template === 'matching'
-			? verdicts.parts.filter((part) => part.kind === 'correct').map((part) => part.leftId)
-			: []
-	)
-	const matched = isCorrect ? pairs.left.length : pairs.left.filter((left) => correctLeftIds.has(left.id)).length
+function MatchingAnswerReview(props: Props) {
+	const review = getMatchingReview(props)
+	if (!review) return null
 
 	return (
 		<div className="mt-4 space-y-2">
-			{keyVisible ? (
-				<p className="text-sm text-muted-foreground">
-					Верных пар: {matched} / {pairs.left.length}
-				</p>
-			) : null}
+			{review.summary != null ? <p className="text-sm text-muted-foreground">{review.summary}</p> : null}
 			<div className="space-y-2" role="list">
-				{pairs.left.map((left) => {
-					const chosen = selected[left.id]
-					const pairCorrect = keyVisible && (isCorrect || correctLeftIds.has(left.id))
-					return (
-						<div
-							key={left.id}
-							role="listitem"
-							className={cn(
-								'rounded-2xl border px-4 py-3 text-sm',
-								pairCorrect && 'border-green-500/40 bg-green-50/80',
-								keyVisible && !pairCorrect && 'border-red-500/40 bg-red-50/80',
-								!keyVisible && 'border-border/70 bg-secondary/45'
-							)}
-						>
-							<p>
-								{left.text} → {rightText(chosen)}
-							</p>
-							{keyVisible ? (
-								<p className="mt-1 text-xs">
-									{pairCorrect ? 'Верно' : `Неверно · правильная пара: ${rightText(correct[left.id])}`}
-								</p>
-							) : null}
-						</div>
-					)
-				})}
+				{review.rows.map((row) => (
+					<div
+						key={row.leftId}
+						role="listitem"
+						className={cn('rounded-2xl border px-4 py-3 text-sm', MATCHING_ROW_CLASS[row.tone])}
+					>
+						<p>{row.text}</p>
+						{row.verdictText != null ? <p className="mt-1 text-xs">{row.verdictText}</p> : null}
+					</div>
+				))}
 			</div>
 		</div>
 	)
@@ -192,58 +153,49 @@ function SequencePositionCells({ parts, keyVisible }: { parts: SequencePositionV
 	)
 }
 
-function TextAnswerReview({ question, studentAnswer, correctAnswer, isCorrect, earnedPoints }: Props) {
-	const studentLines = formatAnswerLines(question, studentAnswer)
-	const correctLines = correctAnswer == null ? [] : formatAnswerLines(question, correctAnswer)
-	const sequenceReview =
-		question.questionUiTemplate === 'sequence_digits'
-			? getSequenceReview({ studentAnswer, correctAnswer, isCorrect })
-			: null
+const STUDENT_TONE_CLASS: Record<TextReviewModel['studentTone'], string> = {
+	correct: 'border-green-500/40 bg-green-50/80',
+	neutral: 'border-border/70 bg-secondary/55',
+	partial: 'border-amber-500/40 bg-amber-50/80',
+	wrong: 'border-red-500/40 bg-red-50/80',
+}
+
+function TextAnswerReview(props: Props) {
+	const review = getTextReview(props)
 
 	return (
 		<div className="mt-4 grid gap-3 sm:grid-cols-2">
-			<div
-				className={cn(
-					'rounded-2xl border p-4 text-sm',
-					isCorrect
-						? 'border-green-500/40 bg-green-50/80'
-						: correctAnswer == null
-							? 'border-border/70 bg-secondary/55'
-							: earnedPoints > 0
-								? 'border-amber-500/40 bg-amber-50/80'
-								: 'border-red-500/40 bg-red-50/80'
-				)}
-			>
-				<p className="mb-2 font-medium">
-					Ответ студента
-					{isCorrect ? ' · верно' : correctAnswer == null ? '' : earnedPoints > 0 ? ' · частично' : ' · неверно'}
-				</p>
-				{studentLines.map((line, index) => (
+			<div className={cn('rounded-2xl border p-4 text-sm', STUDENT_TONE_CLASS[review.studentTone])}>
+				<p className="mb-2 font-medium">{review.studentTitle}</p>
+				{review.studentLines.map((line, index) => (
 					<p key={index}>{line}</p>
 				))}
-				{sequenceReview?.summaryText != null ? <p className="mt-2 text-xs">{sequenceReview.summaryText}</p> : null}
-				{sequenceReview?.summaryText != null && sequenceReview.hasSwap ? (
-					<p className="mt-1 text-xs">Соседняя перестановка считается одной ошибкой.</p>
-				) : null}
-				{sequenceReview?.showCells ? (
-					<SequencePositionCells parts={sequenceReview.parts} keyVisible={correctAnswer != null} />
-				) : null}
+				{review.summaryText != null ? <p className="mt-2 text-xs">{review.summaryText}</p> : null}
+				{review.swapHint ? <p className="mt-1 text-xs">Соседняя перестановка считается одной ошибкой.</p> : null}
+				{review.cells ? <SequencePositionCells parts={review.cells} keyVisible={review.cellsKeyVisible} /> : null}
 			</div>
-			{correctAnswer != null && !isCorrect ? (
-				<div className="rounded-2xl border border-green-500/40 bg-green-50/80 p-4 text-sm">
-					<p className="mb-2 font-medium">Правильный ответ</p>
-					{correctLines.map((line, index) => (
-						<p key={index}>{line}</p>
-					))}
-				</div>
-			) : null}
+			{review.correctLines ? <CorrectAnswerCard lines={review.correctLines} /> : null}
 		</div>
 	)
 }
 
 export function QuestionAnswerReview(props: Props) {
 	const template = props.question.questionUiTemplate
-	if (template === 'single_choice' || template === 'multi_choice') return <ChoiceAnswerReview {...props} />
-	if (template === 'matching') return <MatchingAnswerReview {...props} />
+	if (template === 'single_choice' || template === 'multi_choice') {
+		return (
+			<>
+				<ChoiceAnswerReview {...props} />
+				<KeyCard {...props} />
+			</>
+		)
+	}
+	if (template === 'matching') {
+		return (
+			<>
+				<MatchingAnswerReview {...props} />
+				<KeyCard {...props} />
+			</>
+		)
+	}
 	return <TextAnswerReview {...props} />
 }

@@ -150,6 +150,7 @@ async function createTest(options: { showCorrectAnswer?: boolean } = {}): Promis
 		})
 		.returning({ id: schema.tests.id })
 	assert.ok(created)
+	await dbModule.db.insert(schema.testAssignments).values({ testId: created.id, userId: studentId })
 	return created.id
 }
 
@@ -160,8 +161,22 @@ async function createQuestion(testId: string, payload: Json): Promise<string> {
 	return reply.body.questionId as string
 }
 
+async function startSessionId(testId: string): Promise<string> {
+	const started = await request('POST', `/api/tests/public/tests/${testId}/start`, {}, studentCookie)
+	assert.equal(started.status, 200)
+	assert.equal(typeof started.body.sessionId, 'string')
+	return started.body.sessionId as string
+}
+
 async function submit(testId: string, payload: Json): Promise<Reply> {
-	return request('POST', `/api/tests/public/tests/${testId}/submit`, payload, studentCookie)
+	const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : await startSessionId(testId)
+	const clientAttemptId = typeof payload.clientAttemptId === 'string' ? payload.clientAttemptId : crypto.randomUUID()
+	return request(
+		'POST',
+		`/api/tests/public/tests/${testId}/submit`,
+		{ ...payload, sessionId, clientAttemptId },
+		studentCookie
+	)
 }
 
 function findResult(body: Json, questionId: string): ResultItem {
@@ -271,7 +286,8 @@ describe('сквозной путь через app.ts', () => {
 			1
 		)
 
-		const reply = await submit(testId, { answers: { [questionId]: '2314' } })
+		const sessionId = await startSessionId(testId)
+		const reply = await submit(testId, { sessionId, answers: { [questionId]: '2314' } })
 		assert.equal(reply.status, 200)
 		const result = findResult(reply.body, questionId)
 		assert.equal(result.isCorrect, true)
@@ -280,16 +296,28 @@ describe('сквозной путь через app.ts', () => {
 		assert.equal(result.correctAnswer, null)
 
 		const attempts = await dbModule.db
-			.select({ id: schema.testAttempts.id, results: schema.testAttempts.results })
+			.select({
+				id: schema.testAttempts.id,
+				results: schema.testAttempts.results,
+				resultsVersion: schema.testAttempts.resultsVersion,
+				sessionId: schema.testAttempts.sessionId,
+			})
 			.from(schema.testAttempts)
 			.where(and(eq(schema.testAttempts.testId, testId), eq(schema.testAttempts.userId, studentId)))
 		assert.equal(attempts.length, 1)
 		const [attempt] = attempts
 		assert.ok(attempt)
 		assert.equal(attempt.id, reply.body.attemptId)
-		const stored = findResult({ results: attempt.results }, questionId)
+		assert.equal(attempt.sessionId, sessionId)
+		assert.equal(attempt.resultsVersion, 2)
+		const stored = findResult({ results: attempt.results }, questionId) as ResultItem & {
+			key: unknown
+			keyVersion: unknown
+		}
 		assert.equal(stored.earnedPoints, 2)
 		assert.equal(stored.isCorrect, true)
+		assert.equal(stored.key, '2314')
+		assert.equal(stored.keyVersion, 1)
 	})
 })
 
@@ -899,14 +927,16 @@ describe('идемпотентность submit по clientAttemptId', () => {
 		const testId = await createTest()
 		const questionId = await createQuestion(testId, validQuestion('sequence'))
 		const clientAttemptId = crypto.randomUUID()
-		const payload = { answers: { [questionId]: '2315' }, clientAttemptId }
+		const sessionId = await startSessionId(testId)
+		const payload = { sessionId, answers: { [questionId]: '2315' }, clientAttemptId }
 		const first = await submit(testId, payload)
 		const second = await submit(testId, payload)
 		assert.equal(first.status, 200)
 		assert.equal(second.status, 200)
 		assert.equal(second.body.attemptId, first.body.attemptId)
-		assert.deepEqual(second.body.results, first.body.results)
+		assert.deepEqual(second.body, first.body)
 		assert.equal(await countRows(schema.testAttempts, eq(schema.testAttempts.clientAttemptId, clientAttemptId)), 1)
+		assert.equal(await countRows(schema.testAttempts, eq(schema.testAttempts.sessionId, sessionId)), 1)
 	})
 })
 
@@ -945,15 +975,17 @@ describe('черновик и телеметрия', () => {
 		})
 
 		const reply = await submit(testId, {
+			sessionId: String(sessionId),
 			answers: { [questionId]: '2314' },
 			telemetry: { [questionId]: { timeSpentMs: 300, focusLossCount: 0, visitCount: 2 } },
 		})
 		assert.equal(reply.status, 200)
 		const [attempt] = await dbModule.db
-			.select({ telemetry: schema.testAttempts.telemetry })
+			.select({ telemetry: schema.testAttempts.telemetry, sessionId: schema.testAttempts.sessionId })
 			.from(schema.testAttempts)
 			.where(eq(schema.testAttempts.id, String(reply.body.attemptId)))
 		assert.ok(attempt)
+		assert.equal(attempt.sessionId, sessionId)
 		assert.deepEqual(attempt.telemetry, {
 			[questionId]: { timeSpentMs: 300, focusLossCount: 3, visitCount: 2 },
 		})

@@ -8,7 +8,7 @@ import { AttemptQuestionsList } from './attempt-review/AttemptQuestionsList'
 import { AttemptReviewHero } from './attempt-review/AttemptReviewHero'
 import { AttemptReviewNav } from './attempt-review/AttemptReviewNav'
 import { AttemptReviewSummary } from './attempt-review/AttemptReviewSummary'
-import { type NavFilter, type QuestionResult, getQuestionStatus } from './attempt-review/attempt-review-utils'
+import { type NavFilter, filterQuestionsByStatus } from './attempt-review/attempt-review-utils'
 
 type Props = {
 	attempt: AttemptReviewData
@@ -17,13 +17,13 @@ type Props = {
 
 export default function AttemptReview({ attempt, questions }: Props) {
 	const orderedQuestions = useMemo(() => [...questions].sort((a, b) => a.order - b.order), [questions])
-	const results = useMemo(() => (attempt.results as QuestionResult[]) ?? [], [attempt.results])
+	const results = attempt.results
 	const [navFilter, setNavFilter] = useState<NavFilter>('all')
 
-	const visibleQuestions = useMemo(() => {
-		if (navFilter === 'all') return orderedQuestions
-		return orderedQuestions.filter((question) => getQuestionStatus(question.id, results) === navFilter)
-	}, [navFilter, orderedQuestions, results])
+	const visibleQuestions = useMemo(
+		() => filterQuestionsByStatus(orderedQuestions, results, navFilter),
+		[navFilter, orderedQuestions, results]
+	)
 
 	return (
 		<div className="space-y-5">

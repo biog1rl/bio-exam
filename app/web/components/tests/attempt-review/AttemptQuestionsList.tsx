@@ -1,16 +1,18 @@
-import { Clock3, Eye, RotateCcw } from 'lucide-react'
+import { Clock3, Eye, KeyRound, RotateCcw } from 'lucide-react'
 
 import MdxRenderer from '@/components/tests/MdxRenderer'
-import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
+import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
 import { QuestionAnswerReview } from './QuestionAnswerReview'
 import {
+	ADMIN_REVIEW_NOTES,
+	emptyQuestionView,
 	formatDuration,
-	getQuestionStatus,
+	getAdminReviewNote,
+	getQuestionView,
 	getStatusClass,
 	getStatusLabel,
-	type QuestionResult,
 } from './attempt-review-utils'
 
 export function AttemptQuestionsList({
@@ -22,7 +24,7 @@ export function AttemptQuestionsList({
 	attempt: AttemptReviewData
 	questions: PublicTestQuestion[]
 	allQuestions: PublicTestQuestion[]
-	results: QuestionResult[]
+	results: AttemptQuestionView[]
 }) {
 	if (questions.length === 0) {
 		return (
@@ -36,8 +38,9 @@ export function AttemptQuestionsList({
 		<div className="space-y-3">
 			{questions.map((question) => {
 				const index = allQuestions.findIndex((item) => item.id === question.id)
-				const result = results.find((item) => item.questionId === question.id)
-				const status = getQuestionStatus(question.id, results)
+				const view = getQuestionView(question.id, results)
+				const status = view?.status ?? null
+				const note = getAdminReviewNote(view)
 				const telemetry = attempt.telemetry?.[question.id]
 				const studentAnswer = attempt.answers[question.id]
 
@@ -56,9 +59,9 @@ export function AttemptQuestionsList({
 									{getStatusLabel(status)}
 								</span>
 							</div>
-							{result ? (
+							{view ? (
 								<span className="rounded-full bg-secondary/70 px-3 py-1 text-sm text-muted-foreground">
-									{result.earnedPoints} / {result.points} балл.
+									{view.earnedPoints} / {view.points} балл.
 								</span>
 							) : null}
 						</div>
@@ -73,11 +76,18 @@ export function AttemptQuestionsList({
 						<QuestionAnswerReview
 							question={question}
 							studentAnswer={studentAnswer}
-							correctAnswer={result?.correctAnswer}
-							isCorrect={result?.isCorrect ?? false}
-							earnedPoints={result?.earnedPoints ?? 0}
-							showCorrectAnswer={true}
+							view={view ?? emptyQuestionView(question.id)}
 						/>
+
+						{note ? (
+							<p
+								role="note"
+								className="mt-4 flex items-start gap-2 rounded-2xl border border-dashed border-border/70 bg-secondary/45 px-4 py-3 text-sm text-muted-foreground"
+							>
+								<KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+								<span>{ADMIN_REVIEW_NOTES[note]}</span>
+							</p>
+						) : null}
 
 						{telemetry ? (
 							<div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">

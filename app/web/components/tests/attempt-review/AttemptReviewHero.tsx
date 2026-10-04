@@ -1,14 +1,9 @@
 import { CheckCircle2, Clock3, FileText, Trophy, XCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
+import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 
-import {
-	formatAttemptDate,
-	formatDuration,
-	getAttemptTelemetryStats,
-	type QuestionResult,
-} from './attempt-review-utils'
+import { formatAttemptDate, formatDuration, getAttemptTelemetryStats, getQuestionView } from './attempt-review-utils'
 
 function MetricTile({ label, value, icon: Icon }: { label: string; value: string | number; icon: LucideIcon }) {
 	return (
@@ -27,13 +22,12 @@ export function AttemptReviewHero({
 }: {
 	attempt: AttemptReviewData
 	questions: PublicTestQuestion[]
-	results: QuestionResult[]
+	results: AttemptQuestionView[]
 }) {
 	const telemetryStats = getAttemptTelemetryStats(attempt.telemetry, questions)
-	const correctCount = questions.filter((question) => {
-		const result = results.find((item) => item.questionId === question.id)
-		return result && result.points > 0 && result.isCorrect
-	}).length
+	const correctCount = questions.filter(
+		(question) => getQuestionView(question.id, results)?.status === 'correct'
+	).length
 	const ResultIcon = attempt.passed ? CheckCircle2 : XCircle
 
 	return (

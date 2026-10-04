@@ -7,6 +7,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { sessionClient, type AuthMe, type LoadMeOutcome } from '@/lib/session/client'
 import { createKeepAlive, type KeepAlive } from '@/lib/session/keep-alive'
+import { LOGGED_OUT_PATH } from '@/lib/session/redirect'
 
 type Me = AuthMe
 
@@ -115,7 +116,7 @@ export function AuthProvider({
 		setMe(null)
 		localStorage.setItem('logout', Date.now().toString())
 		localStorage.removeItem('logout')
-		window.location.assign('/login')
+		window.location.assign(LOGGED_OUT_PATH)
 		return true
 	}, [])
 

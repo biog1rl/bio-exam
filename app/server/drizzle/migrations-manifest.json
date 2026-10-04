@@ -176,6 +176,22 @@
       "sha256": "df9b6078490ce592c2632dc9eda949e8ba59aa3692e893cf0b23509521399314",
       "when": 1791095839799,
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "tag": "0022_attempt_sessions",
+      "file": "0022_attempt_sessions.sql",
+      "sha256": "e4b1dea5874d20b1a09bc5c95e9b7656deb73ba0d655fc88ec0dee2a3c2293b9",
+      "when": 1791111490563,
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "tag": "0023_attempt_results_version",
+      "file": "0023_attempt_results_version.sql",
+      "sha256": "722a4d18bfd1583941abfbc655c9f9115aacefe4f04d0746f07b1708b5584c0a",
+      "when": 1791111589181,
+      "breakpoints": true
     }
   ]
 }

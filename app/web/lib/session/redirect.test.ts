@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 
-import { buildLoginRedirect, safeCallbackPath } from './redirect'
+import { buildLoginRedirect, isLoggedOutNotice, LOGGED_OUT_PATH, safeCallbackPath } from './redirect'
+
+describe('уведомление о выходе', () => {
+	test('после выхода ведёт на страницу входа с меткой', () => {
+		assert.equal(LOGGED_OUT_PATH, '/login?loggedOut=1')
+		assert.equal(isLoggedOutNotice(new URLSearchParams(LOGGED_OUT_PATH.split('?')[1])), true)
+	})
+
+	test('без метки уведомления нет', () => {
+		assert.equal(isLoggedOutNotice(new URLSearchParams('')), false)
+		assert.equal(isLoggedOutNotice(new URLSearchParams('callbackUrl=%2Fprofile')), false)
+		assert.equal(isLoggedOutNotice(new URLSearchParams('loggedOut=0')), false)
+	})
+})
 
 describe('buildLoginRedirect', () => {
 	test('кодирует путь возврата в callbackUrl', () => {

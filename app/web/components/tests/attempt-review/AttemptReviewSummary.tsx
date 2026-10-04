@@ -1,14 +1,12 @@
 import { Clock3, Eye, RotateCcw } from 'lucide-react'
 
-import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
+import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion, QuestionStatus } from '@/lib/tests/types'
 
 import {
 	formatDuration,
 	getAttemptTelemetryStats,
-	getQuestionStatus,
+	getQuestionView,
 	scrollToAttemptSection,
-	type QuestionResult,
-	type QuestionStatus,
 } from './attempt-review-utils'
 
 function SummaryColumn({
@@ -22,7 +20,7 @@ function SummaryColumn({
 	status: QuestionStatus
 	count: number
 	questions: PublicTestQuestion[]
-	results: QuestionResult[]
+	results: AttemptQuestionView[]
 }) {
 	return (
 		<div className="rounded-3xl border border-border/70 bg-secondary/55 p-unit">
@@ -30,8 +28,8 @@ function SummaryColumn({
 			<p className="mt-2 text-sm text-muted-foreground">{label}</p>
 			<div className="mt-5 space-y-1">
 				{questions.map((question, index) => {
-					if (getQuestionStatus(question.id, results) !== status) return null
-					const result = results.find((item) => item.questionId === question.id)
+					const result = getQuestionView(question.id, results)
+					if (!result || result.status !== status) return null
 					return (
 						<button
 							key={question.id}
@@ -41,7 +39,7 @@ function SummaryColumn({
 						>
 							<span>Вопрос {index + 1}</span>
 							<span>
-								{result?.earnedPoints ?? 0}/{result?.points ?? 0}
+								{result.earnedPoints}/{result.points}
 							</span>
 						</button>
 					)
@@ -58,11 +56,11 @@ export function AttemptReviewSummary({
 }: {
 	attempt: AttemptReviewData
 	questions: PublicTestQuestion[]
-	results: QuestionResult[]
+	results: AttemptQuestionView[]
 }) {
 	const counts = questions.reduce(
 		(acc, question) => {
-			const status = getQuestionStatus(question.id, results)
+			const status = getQuestionView(question.id, results)?.status
 			if (status === 'correct') acc.correct += 1
 			if (status === 'partial') acc.partial += 1
 			if (status === 'wrong') acc.wrong += 1

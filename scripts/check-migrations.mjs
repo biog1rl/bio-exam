@@ -5,7 +5,7 @@
  *  1. manifest — журнал, app/server/drizzle/migrations-manifest.json и файлы *.sql совпадают:
  *     одно и то же число записей, те же теги в том же порядке, sha256 каждого файла как в манифесте,
  *     when и breakpoints каждой записи журнала как в манифесте; when в журнале строго возрастает.
- *  2. chain-vs-schema (DRZ-01) — цепочка 0000-0021 и schema.ts описывают одну и ту же базу:
+ *  2. chain-vs-schema (DRZ-01) — цепочка 0000-0023 и schema.ts описывают одну и ту же базу:
  *     сторона миграций — настоящий раннер (yarn workspace @bio-exam/server drizzle:migrate) в
  *     изолированном окружении против test_migchk_chain; сторона schema.ts — DDL от drizzle-kit
  *     generate во временный каталог, выполненный одной транзакцией в test_migchk_decl (перед ним

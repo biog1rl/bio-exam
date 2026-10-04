@@ -18,6 +18,9 @@ import {
 	real,
 	jsonb,
 	pgPolicy,
+	check,
+	smallint,
+	type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 import type { TestScoringRules } from '../lib/tests/scoring.js'
@@ -468,6 +471,8 @@ export const testAttempts = pgTable(
 		submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
 		clientAttemptId: text('client_attempt_id'), // optional idempotency key from client
 		telemetry: jsonb('telemetry').$type<TelemetryMap>(), // per-question telemetry: questionId -> { timeSpentMs, focusLossCount, visitCount }
+		sessionId: uuid('session_id').references((): AnyPgColumn => testSessions.id, { onDelete: 'set null' }),
+		resultsVersion: smallint('results_version').notNull().default(1),
 	},
 	(t) => ({
 		testIdIdx: index('idx_test_attempts_test_id').on(t.testId),
@@ -476,6 +481,10 @@ export const testAttempts = pgTable(
 		userClientAttemptUniq: uniqueIndex('test_attempts_user_client_attempt_idx')
 			.on(t.userId, t.clientAttemptId)
 			.where(sql`${t.clientAttemptId} IS NOT NULL`),
+		sessionUniq: uniqueIndex('test_attempts_session_id_uniq')
+			.on(t.sessionId)
+			.where(sql`${t.sessionId} IS NOT NULL`),
+		resultsVersionCheck: check('test_attempts_results_version_check', sql`${t.resultsVersion} IN (1, 2)`),
 		// Имена внешних ключей из миграции 0004 (REFERENCES без имени даёт *_fkey)
 		testIdFk: foreignKey({
 			name: 'test_attempts_test_id_fkey',
@@ -509,9 +518,15 @@ export const testSessions = pgTable(
 		draftLastQuestionId: text('draft_last_question_id'), // последний открытый вопрос
 		draftTelemetry: jsonb('draft_telemetry').$type<TelemetryMap>(),
 		draftUpdatedAt: timestamp('draft_updated_at'), // когда последний раз сохранялся черновик
+		closedAt: timestamp('closed_at', { withTimezone: true }),
+		closeReason: text('close_reason'),
 	},
 	(t) => ({
 		testUserIdx: index('test_sessions_test_user_idx').on(t.testId, t.userId),
+		openSessionUniq: uniqueIndex('test_sessions_open_uniq')
+			.on(t.testId, t.userId)
+			.where(sql`${t.submittedAt} IS NULL AND ${t.closedAt} IS NULL`),
+		closeReasonCheck: check('test_sessions_close_reason_check', sql`${t.closeReason} IN ('expired', 'superseded')`),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

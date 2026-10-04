@@ -1,20 +1,9 @@
 /**
- * D-14 flow 3: разбор отправленной попытки студентом и администратором, плюс известный дефект
- * D1 как ожидаемое падение (test.fail).
+ * D-14 flow 3: разбор отправленной попытки студентом и администратором.
  *
  * Отдельной страницы разбора для студента в приложении нет: разбор по вопросам студент видит
  * в TestRunner сразу после отправки (кнопки номеров вопросов остаются активными). Администратор
  * открывает ту же попытку на /admin/attempts/<id>.
- *
- * Известный дефект D1 (D-14), сценарий в test.describe.serial:
- * - вся подготовка (прохождение, чтение разбора, правка ключа) идёт в обычном тесте `setup`,
- *   первом в блоке. test.fail() засчитывает любое падение как ожидаемое, в том числе ошибку
- *   хука beforeAll (проверено пробой: ошибка в beforeAll у test.fail остаётся «ожидаемой»), а
- *   упавший обычный тест красный всегда. Сломанный вход, старт, отправка или загрузка разбора
- *   поэтому валят прогон, а не растворяются в дефекте. После упавшего setup следующий
- *   test.fail тест не запускается (serial);
- * - в помеченной test.fail проверке остаётся одно утверждение о правильном поведении, и только
- *   оно, как сказано в комментарии над проверкой, ожидаемо падает сегодня.
  */
 import { type BrowserContext, type Page } from '@playwright/test'
 
@@ -224,18 +213,14 @@ test.describe.serial('D2: two sequence error counts', () => {
 	})
 })
 
-test.describe.serial('known defect D1: admin review follows the current answer key', () => {
+test.describe.serial('D1: admin review keeps the answer key of the submission', () => {
 	let student: BrowserContext | undefined
 	let admin: BrowserContext | undefined
 	let adminPage: Page | undefined
 	let attemptId = ''
 	let before: string[] = []
 
-	// Подготовка (обычный тест, сбой красный): правильная попытка студента, разбор администратора до правки,
-	// правка ключа. Правильный ответ нужен намеренно: сервер хранит correctAnswer в результате только у неверных
-	// ответов, а у верных разбор администратора подставляет ТЕКУЩИЙ ключ, поэтому правка ключа меняет
-	// разбор старой попытки.
-	test('D1 setup: student answers correctly, admin records the review and corrects the key @known-defect', async ({
+	test('D1 setup: student answers correctly, admin records the review and corrects the key', async ({
 		browser,
 	}, testInfo) => {
 		const reviewTest = seedTest(projectKey(testInfo), 'review-d1')
@@ -297,15 +282,9 @@ test.describe.serial('known defect D1: admin review follows the current answer k
 		await admin?.close()
 	})
 
-	// Ожидаемо падает единственное утверждение ниже: после исправления ключа разбор старой попытки
-	// у администратора меняется (у варианта «Углекислый газ» появляется «Верный ответ · пропущен»),
-	// хотя попытка уже оценена и должна читаться с ключом, действовавшим при сдаче.
-	test.fail(
-		'D1 — fixed in Phase 5 (SCORE-03): admin review of an earlier attempt is unchanged @known-defect',
-		async () => {
-			const reviewTest = seedTest(projectKey(test.info()), 'review-d1')
-			const after = await adminReviewSections(adminPage!, attemptId, reviewTest.questions.length)
-			expect(after, 'admin review of an earlier attempt after the answer key was corrected').toEqual(before)
-		}
-	)
+	test('D1: admin review of an earlier attempt is unchanged', async () => {
+		const reviewTest = seedTest(projectKey(test.info()), 'review-d1')
+		const after = await adminReviewSections(adminPage!, attemptId, reviewTest.questions.length)
+		expect(after, 'admin review of an earlier attempt after the answer key was corrected').toEqual(before)
+	})
 })

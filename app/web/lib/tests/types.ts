@@ -1,4 +1,9 @@
-import type { AnswerValue as TestAnswerValue, QuestionTelemetry, QuestionUiTemplate } from '@bio-exam/exam-core'
+import type {
+	AdminAttemptView,
+	AnswerValue as TestAnswerValue,
+	QuestionTelemetry,
+	QuestionUiTemplate,
+} from '@bio-exam/exam-core'
 
 export type TestQuestionType = string
 
@@ -52,10 +57,11 @@ export type PublicTestQuestion = {
 
 export type {
 	AnswerValue as TestAnswerValue,
+	AttemptQuestionView,
+	AttemptView,
+	QuestionStatus,
 	QuestionTelemetry,
 	QuestionUiTemplate,
-	SubmitResult,
-	SubmitResultItem,
 } from '@bio-exam/exam-core'
 
 export type TestAttemptSummary = {
@@ -75,17 +81,4 @@ export type SessionInfo = {
 	draftTelemetry?: Record<string, QuestionTelemetry> | null
 }
 
-// Shape mirrors testAttempts row returned by GET /api/tests/admin/attempts/:id
-export type AttemptReviewData = {
-	id: string
-	testId: string
-	userId: string
-	answers: Record<string, unknown>
-	results: unknown[]
-	earnedPoints: number
-	totalPoints: number
-	scorePercentage: number
-	passed: boolean
-	submittedAt: string
-	telemetry: Record<string, QuestionTelemetry> | null
-}
+export type AttemptReviewData = AdminAttemptView

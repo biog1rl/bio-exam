@@ -1,3 +1,5 @@
+import { computeVerdicts } from '@bio-exam/exam-core'
+
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
@@ -40,12 +42,23 @@ const multiChoiceQuestion = {
 } as PublicTestQuestion
 
 test('getChoiceOptionReviewRows: размечает варианты вопроса с несколькими ответами', () => {
-	assert.deepEqual(getChoiceOptionReviewRows(multiChoiceQuestion, ['1', '3'], ['1', '2']), [
-		{ id: '1', text: 'Первый вариант', status: 'correct' },
-		{ id: '2', text: 'Второй вариант', status: 'correct' },
-		{ id: '3', text: 'Третий вариант', status: 'incorrect-selected' },
-		{ id: '4', text: 'Четвёртый вариант', status: 'neutral' },
-	])
+	assert.deepEqual(
+		getChoiceOptionReviewRows(
+			multiChoiceQuestion,
+			computeVerdicts({
+				template: 'multi_choice',
+				key: ['1', '2'],
+				answer: ['1', '3'],
+				content: { options: multiChoiceQuestion.options },
+			})
+		),
+		[
+			{ id: '1', text: 'Первый вариант', status: 'correct' },
+			{ id: '2', text: 'Второй вариант', status: 'correct' },
+			{ id: '3', text: 'Третий вариант', status: 'incorrect-selected' },
+			{ id: '4', text: 'Четвёртый вариант', status: 'neutral' },
+		]
+	)
 })
 
 test('getChoiceOptionReviewRows: размечает варианты вопроса с одним ответом', () => {
@@ -54,10 +67,21 @@ test('getChoiceOptionReviewRows: размечает варианты вопро�
 		questionUiTemplate: 'single_choice',
 	} as PublicTestQuestion
 
-	assert.deepEqual(getChoiceOptionReviewRows(singleChoiceQuestion, '2', '1'), [
-		{ id: '1', text: 'Первый вариант', status: 'correct' },
-		{ id: '2', text: 'Второй вариант', status: 'incorrect-selected' },
-		{ id: '3', text: 'Третий вариант', status: 'neutral' },
-		{ id: '4', text: 'Четвёртый вариант', status: 'neutral' },
-	])
+	assert.deepEqual(
+		getChoiceOptionReviewRows(
+			singleChoiceQuestion,
+			computeVerdicts({
+				template: 'single_choice',
+				key: '1',
+				answer: '2',
+				content: { options: singleChoiceQuestion.options },
+			})
+		),
+		[
+			{ id: '1', text: 'Первый вариант', status: 'correct' },
+			{ id: '2', text: 'Второй вариант', status: 'incorrect-selected' },
+			{ id: '3', text: 'Третий вариант', status: 'neutral' },
+			{ id: '4', text: 'Четвёртый вариант', status: 'neutral' },
+		]
+	)
 })
