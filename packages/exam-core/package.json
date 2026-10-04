@@ -1,0 +1,39 @@
+{
+	"name": "@bio-exam/exam-core",
+	"version": "0.0.1",
+	"private": true,
+	"files": [
+		"dist"
+	],
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"build": "tsdown",
+		"clean": "rimraf dist",
+		"watch": "tsdown --watch",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"lint": "oxlint -c ../../.oxlintrc.json src"
+	},
+	"dependencies": {
+		"zod": "^3.24.3"
+	},
+	"devDependencies": {
+		"oxlint": "1.86.0",
+		"rimraf": "^5.0.5",
+		"tsdown": "0.23.0",
+		"typescript": "^5.6.3",
+		"vite": "8.3.2",
+		"vitest": "5.0.3"
+	}
+}
