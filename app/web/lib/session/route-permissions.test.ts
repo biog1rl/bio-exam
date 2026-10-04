@@ -22,6 +22,10 @@ test.each<[string, Section | null]>([
 	['/admin', 'admin'],
 	['/admin/tests', 'tests'],
 	['/admin/tests/biology/cell', 'tests'],
+	['/admin/tests/question-types', 'catalog'],
+	['/admin/tests/question-types/radio', 'catalog'],
+	['/admin/tests/scoring', 'catalog'],
+	['/admin/tests/scoring-x', 'tests'],
 	['/admin/attempts/1', 'attempts'],
 	['/admin/users', 'users'],
 	['/admin/users/abc', 'users'],
@@ -41,6 +45,26 @@ test.each<[string, Section | null]>([
 test('набор прав роли admin из ROLE_REGISTRY открывает все разделы', () => {
 	const perms = rolePerms('admin')
 	for (const section of ALL_SECTIONS) assert.equal(canAccessSection(perms, section), true, section)
+})
+
+test('набор прав роли teacher из ROLE_REGISTRY открывает admin, tests, attempts, users и groups', () => {
+	const perms = rolePerms('teacher')
+	const open = ALL_SECTIONS.filter((section) => canAccessSection(perms, section)).sort()
+	assert.deepEqual(open, ['admin', 'attempts', 'groups', 'tests', 'users'])
+	for (const section of ['settings', 'rbac', 'sidebar', 'catalog'] as const) {
+		assert.equal(canAccessSection(perms, section), false, section)
+	}
+})
+
+test('раздел catalog открывает только zone.all', () => {
+	assert.equal(canAccessSection(new Set<PermissionKey>(['zone.all']), 'catalog'), true)
+	assert.equal(canAccessSection(new Set<PermissionKey>(['tests.read', 'tests.write']), 'catalog'), false)
+})
+
+test('только users.read открывает users и admin', () => {
+	const perms = new Set<PermissionKey>(['users.read'])
+	const open = ALL_SECTIONS.filter((section) => canAccessSection(perms, section)).sort()
+	assert.deepEqual(open, ['admin', 'users'])
 })
 
 test('роль user без прав не открывает ни один раздел', () => {

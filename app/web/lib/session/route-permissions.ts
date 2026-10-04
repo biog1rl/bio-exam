@@ -1,22 +1,25 @@
 import { can, type PermissionKey } from '@bio-exam/rbac'
 
-export type Section = 'admin' | 'tests' | 'attempts' | 'users' | 'groups' | 'rbac' | 'settings' | 'sidebar'
+export type Section = 'admin' | 'tests' | 'catalog' | 'attempts' | 'users' | 'groups' | 'rbac' | 'settings' | 'sidebar'
 
 export const SECTION_PERMISSIONS: Readonly<Record<Section, readonly PermissionKey[]>> = {
 	tests: ['tests.read'],
+	catalog: ['zone.all'],
 	attempts: ['tests.read'],
-	users: ['users.edit'],
+	users: ['users.read', 'users.edit'],
 	groups: ['groups.manage_groups'],
 	rbac: ['rbac.read'],
 	settings: ['settings.manage'],
 	sidebar: ['settings.manage'],
-	admin: ['tests.read', 'users.edit', 'groups.manage_groups', 'rbac.read', 'settings.manage'],
+	admin: ['tests.read', 'users.read', 'users.edit', 'groups.manage_groups', 'rbac.read', 'settings.manage'],
 }
 
 const SECTION_PREFIXES: ReadonlyArray<readonly [string, Section]> = (
 	[
 		['/admin', 'admin'],
 		['/admin/tests', 'tests'],
+		['/admin/tests/question-types', 'catalog'],
+		['/admin/tests/scoring', 'catalog'],
 		['/admin/attempts', 'attempts'],
 		['/admin/users', 'users'],
 		['/admin/groups', 'groups'],
