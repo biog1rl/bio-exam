@@ -196,7 +196,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 				const error = await response.json()
 				throw new Error(error.error || 'Ошибка при смене пароля')
 			}
-			toast.success('Пароль успешно изменен')
+			toast.success('Пароль успешно изменен', { description: 'На других устройствах нужно войти заново.' })
 			setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Ошибка при смене пароля')

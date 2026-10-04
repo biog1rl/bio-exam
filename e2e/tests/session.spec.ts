@@ -1,4 +1,4 @@
-import { type Browser, type BrowserContext, type TestInfo } from '@playwright/test'
+import { type Browser, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
 
 import { E2E_PASSWORD, loginAccount, sessionAccount, type RoleKey } from '../fixtures/accounts'
 import { expect, projectKey, test } from '../fixtures/exam'
@@ -137,4 +137,95 @@ test('role user does not see the /admin/users section @session', async ({ studen
 	expect(await page.locator('header').count()).toBeGreaterThanOrEqual(1)
 	await expect(page.getByRole('heading', { name: 'Пользователи' })).toHaveCount(0)
 	await expect(page.locator('table')).toHaveCount(0)
+})
+
+test('login page shows the 429 wait and re-enables on login change @session', async ({ page }, testInfo) => {
+	const ghost = `ghost-${projectKey(testInfo)}-${Math.random().toString(36).slice(2, 10)}`
+	await page.goto('/login')
+	const statuses = await page.evaluate(async (username) => {
+		const result: number[] = []
+		for (let attempt = 0; attempt < 6; attempt++) {
+			const response = await fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ username, password: 'wrong-password-1' }),
+			})
+			result.push(response.status)
+		}
+		return result
+	}, ghost)
+	expect(statuses, `failed logins of ${ghost}`).toEqual([401, 401, 401, 401, 401, 401])
+
+	await page.getByPlaceholder('Login').fill(ghost)
+	await page.getByPlaceholder('Пароль').fill('wrong-password-1')
+	const submit = page.getByRole('button', { name: 'Войти' })
+	await submit.click()
+
+	const waitLine = page.getByText(/^Слишком много неудачных попыток входа\. Попробуйте через /).first()
+	await expect(waitLine).toBeVisible()
+	await expect(submit).toBeDisabled()
+
+	await page.getByPlaceholder('Пароль').fill('another-password-1')
+	await expect(waitLine).toBeVisible()
+	await expect(submit).toBeDisabled()
+
+	await page.getByPlaceholder('Login').fill(`${ghost}-x`)
+	await expect(page.getByText(/Слишком много неудачных попыток входа/)).toHaveCount(0)
+	await expect(submit).toBeEnabled()
+})
+
+async function openUserCard(page: Page, login: string): Promise<void> {
+	await page.getByPlaceholder('Поиск...').fill(login)
+	const container = page.locator('tr, article').filter({ has: page.getByRole('link', { name: login, exact: true }) })
+	const editButton = container.locator('button:visible').filter({ has: page.locator('svg.lucide-pencil') })
+	await expect(editButton).toHaveCount(1)
+	await editButton.click()
+	await expect(page.getByRole('heading', { name: `Редактировать пользователя: ${login}` })).toBeVisible()
+}
+
+test('admin sees session actions in the user card @session', async ({ adminPage: page }, testInfo) => {
+	const key = projectKey(testInfo)
+	const student = loginAccount(key, 'user').login
+	const self = sessionAccount(key, 'admin').login
+	const revokeRequests: string[] = []
+	const clearRequests: string[] = []
+	page.on('request', (request) => {
+		if (request.url().includes('/sessions/revoke')) revokeRequests.push(request.url())
+		if (request.url().includes('/login-throttle')) clearRequests.push(request.method())
+	})
+
+	await page.goto('/admin/users')
+	await openUserCard(page, student)
+
+	await expect(page.getByText('Сеансы и вход', { exact: true })).toBeVisible()
+	const revokeButton = page.getByRole('button', { name: 'Завершить все сеансы', exact: true })
+	const clearButton = page.getByRole('button', { name: 'Снять ограничение входа', exact: true })
+	await expect(revokeButton).toBeEnabled()
+	await expect(clearButton).toBeEnabled()
+
+	await clearButton.click()
+	const clearConfirm = page.getByRole('alertdialog')
+	await expect(clearConfirm.getByRole('heading', { name: 'Снять ограничение входа?' })).toBeVisible()
+	await clearConfirm.getByRole('button', { name: 'Снять ограничение', exact: true }).click()
+	await expect(page.getByText(`Ограничение входа для «${student}» снято`).first()).toBeVisible()
+	expect(clearRequests, 'requests to /login-throttle').toEqual(['DELETE'])
+	await expect(page.getByRole('alertdialog')).toHaveCount(0)
+	await expect(page.getByRole('heading', { name: `Редактировать пользователя: ${student}` })).toBeVisible()
+
+	await revokeButton.click()
+	const revokeConfirm = page.getByRole('alertdialog')
+	await expect(revokeConfirm.getByRole('heading', { name: 'Завершить все сеансы пользователя?' })).toBeVisible()
+	await expect(revokeConfirm.getByText(`«${student}»`)).toBeVisible()
+	await revokeConfirm.getByRole('button', { name: 'Отмена', exact: true }).click()
+	await expect(page.getByRole('alertdialog')).toHaveCount(0)
+	await expect(page.getByRole('heading', { name: `Редактировать пользователя: ${student}` })).toBeVisible()
+	expect(revokeRequests, 'requests to /sessions/revoke after cancel').toEqual([])
+
+	await page.keyboard.press('Escape')
+	await expect(page.getByRole('heading', { name: `Редактировать пользователя: ${student}` })).toHaveCount(0)
+
+	await openUserCard(page, self)
+	await expect(page.getByRole('button', { name: 'Завершить все сеансы', exact: true })).toBeDisabled()
+	await expect(page.getByRole('button', { name: 'Снять ограничение входа', exact: true })).toBeEnabled()
 })

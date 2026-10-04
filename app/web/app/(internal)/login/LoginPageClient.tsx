@@ -11,7 +11,30 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { normalizeLogin } from '@/lib/auth/validators'
+import {
+	EMPTY_CREDENTIALS_TEXT,
+	loginErrorText,
+	NETWORK_ERROR_TEXT,
+	parseRetryAfter,
+	READY_AGAIN_TEXT,
+	TOO_MANY_LATER_TEXT,
+	TOO_MANY_WAIT_TEXT,
+} from '@/lib/session/login-errors'
 import { safeCallbackPath } from '@/lib/session/redirect'
+import { formatWait } from '@/lib/session/wait-format'
+
+type LoginError =
+	| { kind: 'none' }
+	| { kind: 'text'; text: string }
+	| { kind: 'wait'; until: number; initial: number; login: string }
+	| { kind: 'later' }
+	| { kind: 'ready' }
+
+const NO_ERROR: LoginError = { kind: 'none' }
+
+function secondsLeft(until: number): number {
+	return Math.ceil((until - Date.now()) / 1000)
+}
 
 export default function LoginPage() {
 	const router = useRouter()
@@ -21,15 +44,45 @@ export default function LoginPage() {
 	const callbackUrl = useMemo(() => safeCallbackPath(searchParams.get('callbackUrl')), [searchParams])
 
 	const [showPassword, setShowPassword] = useState(false)
-	const [error, setError] = useState('')
+	const [error, setError] = useState<LoginError>(NO_ERROR)
+	const [remaining, setRemaining] = useState(0)
 	const [submitting, setSubmitting] = useState(false)
 
 	useEffect(() => {
 		if (me) router.replace(callbackUrl)
 	}, [me, router, callbackUrl])
 
+	const waitUntil = error.kind === 'wait' ? error.until : null
+
+	useEffect(() => {
+		if (waitUntil === null) return
+		const tick = () => {
+			const left = secondsLeft(waitUntil)
+			if (left <= 0) {
+				setError({ kind: 'ready' })
+				return
+			}
+			setRemaining(left)
+		}
+		const timer = window.setInterval(tick, 1000)
+		return () => window.clearInterval(timer)
+	}, [waitUntil])
+
+	const handleLoginChange = (value: string) => {
+		setError((current) => {
+			if (current.kind === 'none') return current
+			if (current.kind === 'wait' && normalizeLogin(value) === current.login) return current
+			return NO_ERROR
+		})
+	}
+
+	const handlePasswordChange = () => {
+		setError((current) => (current.kind === 'wait' || current.kind === 'none' ? current : NO_ERROR))
+	}
+
 	const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
+		if (error.kind === 'wait') return
 		const formData = new FormData(e.currentTarget)
 		const usernameRaw = (formData.get('username') ?? '').toString()
 		const passwordValue = (formData.get('password') ?? '').toString()
@@ -37,12 +90,12 @@ export default function LoginPage() {
 		const usernameValue = normalizeLogin(usernameRaw)
 
 		if (!usernameValue || !passwordValue) {
-			setError('Пожалуйста, введите логин и пароль')
+			setError({ kind: 'text', text: EMPTY_CREDENTIALS_TEXT })
 			return
 		}
 
 		setSubmitting(true)
-		setError('')
+		setError(NO_ERROR)
 
 		try {
 			const r = await fetch('/api/auth/login', {
@@ -52,17 +105,25 @@ export default function LoginPage() {
 				body: JSON.stringify({ username: usernameValue, password: passwordValue }),
 			})
 
+			if (r.status === 429) {
+				const retryAfter = parseRetryAfter(r.headers.get('Retry-After'))
+				if (retryAfter === null) {
+					setError({ kind: 'later' })
+				} else {
+					setRemaining(retryAfter)
+					setError({ kind: 'wait', until: Date.now() + retryAfter * 1000, initial: retryAfter, login: usernameValue })
+				}
+				return
+			}
+
 			if (!r.ok) {
-				const json: unknown = await r.json().catch(() => null)
-				const obj = typeof json === 'object' && json !== null ? (json as Record<string, unknown>) : null
-				const errMsg = obj && typeof obj['error'] === 'string' ? (obj['error'] as string) : 'Неверный логин или пароль'
-				setError(errMsg)
+				setError({ kind: 'text', text: loginErrorText(r.status) })
 				return
 			}
 
 			window.location.assign(callbackUrl)
 		} catch {
-			setError('Не удалось связаться с сервером')
+			setError({ kind: 'text', text: NETWORK_ERROR_TEXT })
 		} finally {
 			setSubmitting(false)
 		}
@@ -90,7 +151,7 @@ export default function LoginPage() {
 							placeholder="Login"
 							autoComplete="username"
 							required
-							onChange={() => setError('')}
+							onChange={(event) => handleLoginChange(event.target.value)}
 						/>
 
 						<div className="relative">
@@ -101,12 +162,12 @@ export default function LoginPage() {
 								autoComplete="current-password"
 								required
 								className="pr-10"
-								onChange={() => setError('')}
+								onChange={handlePasswordChange}
 								placeholder="Пароль"
 							/>
 							<button
 								type="button"
-								aria-label={showPassword ? 'Hide password' : 'Show password'}
+								aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
 								onClick={() => setShowPassword((v) => !v)}
 								className="absolute inset-y-0 right-2 cursor-pointer px-1 text-muted-foreground"
 							>
@@ -114,10 +175,39 @@ export default function LoginPage() {
 							</button>
 						</div>
 
-						{error && <p className="text-sm text-destructive">{error}</p>}
+						{error.kind === 'text' && (
+							<p role="alert" className="text-sm text-destructive">
+								{error.text}
+							</p>
+						)}
+						{error.kind === 'later' && (
+							<p role="alert" className="text-sm text-destructive">
+								{TOO_MANY_LATER_TEXT}
+							</p>
+						)}
+						{error.kind === 'wait' && (
+							<p className="text-sm text-destructive">
+								<span aria-hidden="true">{TOO_MANY_WAIT_TEXT(formatWait(remaining))}</span>
+								<span role="alert" className="sr-only">
+									{TOO_MANY_WAIT_TEXT(formatWait(error.initial))}
+								</span>
+							</p>
+						)}
+						{error.kind === 'ready' && (
+							<span role="status" className="sr-only">
+								{READY_AGAIN_TEXT}
+							</span>
+						)}
 
-						<Button type="submit" className="w-full" disabled={submitting}>
-							{submitting ? <LoaderComponent className="mr-2 size-4" /> : 'Войти'}
+						<Button type="submit" className="w-full" disabled={submitting || error.kind === 'wait'}>
+							{submitting ? (
+								<>
+									<LoaderComponent className="mr-2 size-4" />
+									<span className="sr-only">Вход…</span>
+								</>
+							) : (
+								'Войти'
+							)}
 						</Button>
 					</form>
 				</CardContent>

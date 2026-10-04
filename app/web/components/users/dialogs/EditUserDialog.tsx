@@ -2,13 +2,25 @@
 
 import { ROLES_LIST, ROLE_KEYS, roleDisplayName, type RoleKey } from '@bio-exam/rbac'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 
-import { ChevronDownIcon, ShieldCheck, Trash2 } from 'lucide-react'
+import { ChevronDownIcon, LockKeyholeOpen, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import useSWR, { useSWRConfig } from 'swr'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -27,9 +39,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { UserGrantsDialog } from '@/components/users/dialogs/UserGrantsDialog'
-import { apiFetch } from '@/lib/api-fetch'
+import { AuthExpiredError, apiFetch } from '@/lib/api-fetch'
 import { LOGIN_PATTERN, LOGIN_HINT } from '@/lib/auth/validators'
 import type { UserRow } from '@/types/users'
+
+import {
+	actionErrorText,
+	clearConfirmText,
+	clearSuccessText,
+	revokeConfirmText,
+	revokeSuccessText,
+	sessionActionsState,
+	type SessionActionKind,
+} from '../session-actions'
 
 type Props = {
 	open: boolean
@@ -49,8 +71,22 @@ type Group = { id: string; name: string }
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
+function withLoginBreak(text: string, login: string) {
+	const quoted = `«${login}»`
+	const index = text.indexOf(quoted)
+	if (!login || index < 0) return text
+	return (
+		<>
+			{text.slice(0, index)}
+			<span className="break-all">{quoted}</span>
+			{text.slice(index + quoted.length)}
+		</>
+	)
+}
+
 export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const { mutate } = useSWRConfig()
+	const { me, can } = useAuth()
 
 	const [firstName, setFirstName] = useState<string>('')
 	const [lastName, setLastName] = useState<string>('')
@@ -76,6 +112,19 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 
 	// модалка кастомных прав
 	const [grantsOpen, setGrantsOpen] = useState(false)
+
+	const [confirmAction, setConfirmAction] = useState<SessionActionKind | null>(null)
+	const [pendingAction, setPendingAction] = useState<SessionActionKind | null>(null)
+	const revokeButtonRef = useRef<HTMLButtonElement>(null)
+	const clearButtonRef = useRef<HTMLButtonElement>(null)
+	const sessionActions = sessionActionsState({
+		meId: me?.id ?? null,
+		user: user ? { id: user.id, login: user.login } : null,
+		canEdit: can('users', 'edit'),
+		pending: pendingAction !== null,
+	})
+	const actionPending = pendingAction !== null
+	const savedLogin = user?.login ?? ''
 
 	// грузим информацию о персональных override'ах пользователя, чтобы показать предупреждение
 	const enabled = open && !!user?.id
@@ -225,6 +274,40 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		} finally {
 			setDeleting(false)
 			setDeleteConfirmOpen(false)
+		}
+	}
+
+	async function runSessionAction(kind: SessionActionKind) {
+		if (!user) return
+		const actionLogin = user.login ?? ''
+		setPendingAction(kind)
+		try {
+			const res = await apiFetch(
+				kind === 'revoke' ? `/api/users/${user.id}/sessions/revoke` : `/api/users/${user.id}/login-throttle`,
+				{ method: kind === 'revoke' ? 'POST' : 'DELETE' }
+			)
+			if (res.ok) {
+				toast.success(kind === 'revoke' ? revokeSuccessText(actionLogin) : clearSuccessText(actionLogin))
+			} else {
+				toast.error(actionErrorText(kind, res.status))
+			}
+		} catch (e) {
+			if (!(e instanceof AuthExpiredError)) toast.error(actionErrorText(kind, 0))
+		} finally {
+			setPendingAction(null)
+			setConfirmAction(null)
+		}
+	}
+
+	function onConfirmOpenChange(next: boolean) {
+		if (!next && !actionPending) setConfirmAction(null)
+	}
+
+	function returnFocus(kind: SessionActionKind) {
+		return (event: Event) => {
+			event.preventDefault()
+			const target = kind === 'revoke' ? revokeButtonRef.current : clearButtonRef.current
+			target?.focus()
 		}
 	}
 
@@ -398,6 +481,46 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 							</TooltipProvider>
 						</div>
 
+						{sessionActions.visible && (
+							<div className="rounded-md border p-3">
+								<div className="font-medium">Сеансы и вход</div>
+								<div className="mt-1 text-xs text-muted-foreground">
+									Сеансы завершаются и при снятии отметки «Активирован».
+								</div>
+								<div className="mt-3 flex flex-wrap gap-2">
+									<TooltipProvider>
+										<Tooltip delayDuration={150}>
+											<TooltipTrigger asChild>
+												<span className="w-full mob:w-auto">
+													<Button
+														ref={revokeButtonRef}
+														variant="outline"
+														className="w-full mob:w-auto"
+														onClick={() => setConfirmAction('revoke')}
+														disabled={sessionActions.revokeDisabled || submitting || deleting}
+													>
+														<LogOut aria-hidden="true" />
+														Завершить все сеансы
+													</Button>
+												</span>
+											</TooltipTrigger>
+											{sessionActions.revokeHint && <TooltipContent>{sessionActions.revokeHint}</TooltipContent>}
+										</Tooltip>
+									</TooltipProvider>
+									<Button
+										ref={clearButtonRef}
+										variant="outline"
+										className="w-full mob:w-auto"
+										onClick={() => setConfirmAction('clear')}
+										disabled={sessionActions.clearDisabled || submitting || deleting}
+									>
+										<LockKeyholeOpen aria-hidden="true" />
+										Снять ограничение входа
+									</Button>
+								</div>
+							</div>
+						)}
+
 						{error && <p className="text-sm text-destructive">{error}</p>}
 					</div>
 
@@ -406,7 +529,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 							<Button
 								variant="destructive"
 								onClick={() => setDeleteConfirmOpen(true)}
-								disabled={submitting || deleting || !user}
+								disabled={submitting || deleting || actionPending || !user}
 								className="gap-2"
 							>
 								<Trash2 className="h-4 w-4" />
@@ -416,7 +539,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								<Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting || deleting}>
 									Отмена
 								</Button>
-								<Button onClick={onSubmit} disabled={submitting || deleting || !user || !selectedRole}>
+								<Button onClick={onSubmit} disabled={submitting || deleting || actionPending || !user || !selectedRole}>
 									Сохранить
 								</Button>
 							</div>
@@ -427,6 +550,49 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 
 			{/* Модалка прав пользователя */}
 			{user && <UserGrantsDialog open={grantsOpen} onOpenChange={setGrantsOpen} userId={user.id} />}
+
+			<AlertDialog open={confirmAction === 'revoke'} onOpenChange={onConfirmOpenChange}>
+				<AlertDialogContent onCloseAutoFocus={returnFocus('revoke')}>
+					<AlertDialogHeader>
+						<AlertDialogTitle className="font-medium">Завершить все сеансы пользователя?</AlertDialogTitle>
+						<AlertDialogDescription>{withLoginBreak(revokeConfirmText(savedLogin), savedLogin)}</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={actionPending}>Отмена</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={(event) => {
+								event.preventDefault()
+								void runSessionAction('revoke')
+							}}
+							disabled={actionPending}
+							className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+						>
+							{pendingAction === 'revoke' ? 'Завершаем…' : 'Завершить сеансы'}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog open={confirmAction === 'clear'} onOpenChange={onConfirmOpenChange}>
+				<AlertDialogContent onCloseAutoFocus={returnFocus('clear')}>
+					<AlertDialogHeader>
+						<AlertDialogTitle className="font-medium">Снять ограничение входа?</AlertDialogTitle>
+						<AlertDialogDescription>{withLoginBreak(clearConfirmText(savedLogin), savedLogin)}</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={actionPending}>Отмена</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={(event) => {
+								event.preventDefault()
+								void runSessionAction('clear')
+							}}
+							disabled={actionPending}
+						>
+							{pendingAction === 'clear' ? 'Снимаем…' : 'Снять ограничение'}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			{/* Модалка подтверждения удаления */}
 			<Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
