@@ -1,4 +1,10 @@
-import type { AttemptSession, SaveAttemptDraftRequest, TelemetryMap } from '@bio-exam/exam-core'
+import type {
+	AttemptSession,
+	AttemptView,
+	SaveAttemptDraftRequest,
+	SubmitAttemptRequest,
+	TelemetryMap,
+} from '@bio-exam/exam-core'
 
 import { vi } from 'vitest'
 
@@ -100,8 +106,34 @@ export function sessionOf(
 	}
 }
 
-export function requestError(status: number, code: string | null = null): AttemptRequestError {
-	return new AttemptRequestError(status, code, null)
+export function requestError(
+	status: number,
+	code: string | null = null,
+	attemptId: string | null = null
+): AttemptRequestError {
+	return new AttemptRequestError(status, code, attemptId)
+}
+
+export const ATTEMPT_ID = '44444444-4444-4444-8444-444444444444'
+
+export function attemptViewOf(attemptId: string = ATTEMPT_ID): AttemptView {
+	return {
+		attemptId,
+		submittedAt: '2026-10-04T10:05:00.000Z',
+		earnedPoints: 1,
+		totalPoints: 3,
+		scorePercentage: 33,
+		passed: false,
+		results: [],
+	}
+}
+
+export function sequentialIds(prefix = 'client'): () => string {
+	let counter = 0
+	return () => {
+		counter += 1
+		return `${prefix}-${counter}`
+	}
 }
 
 export const OK: AttemptDraftSaveResult = { kind: 'response', status: 200 }
@@ -113,10 +145,12 @@ export function response(status: number): AttemptDraftSaveResult {
 
 type StartStep = AttemptSession | Error
 type SaveStep = AttemptDraftSaveResult | Deferred<AttemptDraftSaveResult>
+type SubmitStep = AttemptView | Error | Deferred<AttemptView | Error>
 
 export function fakeAttemptApi(starts: StartStep[] = []) {
 	const startQueue: StartStep[] = [...starts]
 	const saveQueue: SaveStep[] = []
+	const submitQueue: SubmitStep[] = []
 	const state: { saveDefault: AttemptDraftSaveResult } = { saveDefault: OK }
 	const start = vi.fn(async (_testId: string): Promise<AttemptSession> => {
 		const next = startQueue.length > 1 ? startQueue.shift() : startQueue[0]
@@ -137,8 +171,12 @@ export function fakeAttemptApi(starts: StartStep[] = []) {
 			return next
 		}
 	)
-	const submit = vi.fn(async () => {
-		throw new Error('unexpected submit')
+	const submit = vi.fn(async (_testId: string, _request: SubmitAttemptRequest): Promise<AttemptView> => {
+		const next = submitQueue.shift()
+		if (!next) throw new Error('unexpected submit')
+		const value = 'promise' in next ? await next.promise : next
+		if (value instanceof Error) throw value
+		return value
 	})
 	const api: AttemptLifecycleApi = { start, saveDraft, submit }
 	return {
@@ -152,6 +190,12 @@ export function fakeAttemptApi(starts: StartStep[] = []) {
 		},
 		queueSave(...steps: SaveStep[]) {
 			saveQueue.push(...steps)
+		},
+		queueSubmit(...steps: SubmitStep[]) {
+			submitQueue.push(...steps)
+		},
+		submitRequests(): SubmitAttemptRequest[] {
+			return submit.mock.calls.map((call) => call[1])
 		},
 		setSaveDefault(result: AttemptDraftSaveResult) {
 			state.saveDefault = result
@@ -174,6 +218,7 @@ export function setupLifecycle(
 		api?: ReturnType<typeof fakeAttemptApi>
 		visibility?: ReturnType<typeof fakeVisibility>
 		timeLimitMinutes?: number | null
+		createId?: () => string
 	} = {}
 ) {
 	const storage = input.storage ?? memoryStorage()
@@ -189,6 +234,7 @@ export function setupLifecycle(
 		api: fakeApi.api,
 		visibility: page.visibility,
 		clock: realClock,
+		createId: input.createId ?? sequentialIds(),
 		onNotice,
 	}
 	const lifecycle = createAttemptLifecycle(options)
@@ -197,4 +243,42 @@ export function setupLifecycle(
 
 export async function settle(): Promise<void> {
 	await vi.advanceTimersByTimeAsync(0)
+}
+
+export type AttemptKeyName = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
+
+export function presentKeys(storage: MemoryStorage): AttemptKeyName[] {
+	const names: AttemptKeyName[] = ['session', 'wal', 'frozen', 'clientAttemptId']
+	return names.filter((name) => storage.data.has(KEYS[name]))
+}
+
+export function seededStorage(
+	input: {
+		session?: { sessionId: string; startedAt?: string }
+		clientAttempt?: { sessionId: string; clientAttemptId: string }
+		wal?: { sessionId: string | null; answers: Record<string, unknown>; pending?: string[] }
+		frozen?: boolean
+	} = {}
+): MemoryStorage {
+	const initial: Record<string, string> = {}
+	if (input.session) {
+		initial[KEYS.session] = JSON.stringify({
+			sessionId: input.session.sessionId,
+			startedAt: input.session.startedAt ?? STARTED_AT,
+		})
+	}
+	if (input.clientAttempt) initial[KEYS.clientAttemptId] = JSON.stringify(input.clientAttempt)
+	if (input.wal) {
+		initial[KEYS.wal] = JSON.stringify({
+			v: 2,
+			sessionId: input.wal.sessionId,
+			answers: input.wal.answers,
+			pending: input.wal.pending ?? Object.keys(input.wal.answers),
+			position: null,
+			telemetry: {},
+			telemetryPending: false,
+		})
+	}
+	if (input.frozen) initial[KEYS.frozen] = '1'
+	return memoryStorage(initial)
 }

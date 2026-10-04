@@ -1,17 +1,18 @@
-import type {
-	AnswerValue,
-	AttemptSession,
-	AttemptView,
-	SaveAttemptDraftRequest,
-	SubmitAttemptRequest,
-	TelemetryMap,
+import {
+	ATTEMPT_GRACE_PERIOD_MINUTES,
+	type AnswerValue,
+	type AttemptSession,
+	type AttemptView,
+	type SaveAttemptDraftRequest,
+	type SubmitAttemptRequest,
+	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
 import { createSaveQueue, type SaveOutcome, type SaveQueue, type SaveQueueState } from '@/lib/drafts/save-queue'
 import type { AttemptDraftSaveResult } from '@/lib/tests/api'
 
-import { classifyStartFailure } from '../attempt-submit-flow'
-import type { ClientAttemptStorage } from '../client-attempt-id'
+import { classifyStartFailure, classifySubmitFailure, type SubmitFailure } from '../attempt-submit-flow'
+import { resolveClientAttemptId, storedClientAttemptId, type ClientAttemptStorage } from '../client-attempt-id'
 import { resolveRestoredDraft, type RestoredDraft } from './restore'
 import { saveIndicatorDueAt, saveIndicatorKind, type SaveIndicatorInput } from './save-indicator'
 import {
@@ -107,6 +108,7 @@ export type AttemptLifecycle = {
 export const ATTEMPT_SAVE_DEBOUNCE_MS = 600
 export const ATTEMPT_SAVE_MAX_WAIT_MS = 5000
 export const TELEMETRY_QUEUE_KEY = '#telemetry'
+export const TIME_UP_PAUSE_MS = 1500
 
 type QueueValue = AnswerValue | TelemetryMap
 
@@ -118,7 +120,14 @@ const IDLE_QUEUE: SaveQueueState = {
 	oldestPendingSince: null,
 }
 
-const DISABLED_PHASES: ReadonlySet<AttemptPhase> = new Set(['awaitingStart', 'starting', 'blocked'])
+const DISABLED_PHASES: ReadonlySet<AttemptPhase> = new Set([
+	'awaitingStart',
+	'starting',
+	'submitting',
+	'autoSubmitting',
+	'submitted',
+	'blocked',
+])
 
 export function toSaveOutcome(result: AttemptDraftSaveResult): SaveOutcome {
 	if (result.kind !== 'response') return { kind: 'retry' }
@@ -129,7 +138,7 @@ export function toSaveOutcome(result: AttemptDraftSaveResult): SaveOutcome {
 }
 
 export function createAttemptLifecycle(options: AttemptLifecycleOptions): AttemptLifecycle {
-	const { testId, userId, questionIds, timeLimitMinutes, storage, api, visibility, onNotice } = options
+	const { testId, userId, questionIds, timeLimitMinutes, storage, api, visibility, onNotice, createId } = options
 	const {
 		now = () => Date.now(),
 		setTimer = (callback: () => void, ms: number) => setTimeout(callback, ms),
@@ -154,6 +163,13 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let unsubscribeVisibility: (() => void) | null = null
 	let snapshot: AttemptSnapshot | null = null
 	let indicatorTimer: unknown = null
+	let submitFailed = false
+	let alreadySubmittedAttemptId: string | null = null
+	let result: AttemptView | null = null
+	let showTimeUp = false
+	let timeUpPause: { handle: unknown; resolve: () => void } | null = null
+	let restoreCandidate: CachedSession | null = null
+	let closedSession: CachedSession | null = null
 
 	function indicatorInput(): SaveIndicatorInput {
 		return {
@@ -306,7 +322,9 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		blockReason = 'start-not-assigned'
 	}
 
-	async function runStart(cached: CachedSession | null): Promise<void> {
+	type StartMode = { retake?: boolean; candidate?: boolean; frozen?: boolean }
+
+	async function runStart(cached: CachedSession | null, mode: StartMode = {}): Promise<void> {
 		const gen = generation
 		let server: AttemptSession
 		try {
@@ -314,8 +332,9 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		} catch (error) {
 			if (gen !== generation) return
 			if (classifyStartFailure(error) === 'not-assigned') {
+				if (mode.candidate) restoreCandidate = null
 				blockStart(cached)
-			} else if (cached) {
+			} else if (cached && !mode.candidate) {
 				session = cached
 				phase = 'active'
 				enqueuePending()
@@ -324,14 +343,224 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 				notice({ kind: 'start-failed' })
 			} else {
 				phase = 'active'
+				if (mode.retake) notice({ kind: 'retake-start-failed' })
 			}
 			emit()
 			return
 		}
 		if (gen !== generation) return
-		applyServerSession(server, cached)
+		if (mode.candidate) restoreCandidate = null
+		const known = mode.candidate && cached?.sessionId !== server.sessionId ? null : cached
+		applyServerSession(server, known)
+		if (mode.frozen) {
+			if (session && known && session.sessionId === known.sessionId) {
+				await resubmit(session, true)
+				return
+			}
+			removeFrozen()
+		}
 		phase = 'active'
 		enqueuePending()
+		emit()
+	}
+
+	async function resubmit(current: CachedSession, auto: boolean): Promise<void> {
+		const gen = generation
+		beginSubmit(auto)
+		const outcome = await sendSubmit(current, auto)
+		if (outcome !== 'retry' || gen !== generation) return
+		phase = 'starting'
+		emit()
+		await runStart(current)
+	}
+
+	function isAbandonedExpired(cached: CachedSession): boolean {
+		if (!timeLimitMinutes) return false
+		const startedMs = Date.parse(cached.startedAt)
+		if (Number.isNaN(startedMs)) return false
+		return clock.now() > startedMs + (timeLimitMinutes + ATTEMPT_GRACE_PERIOD_MINUTES) * 60_000
+	}
+
+	function clearDraftState(): void {
+		answers = {}
+		pending = new Set()
+		position = questionIds[0] ?? null
+		telemetry = {}
+		telemetryPending = false
+	}
+
+	function hasFrozen(): boolean {
+		try {
+			return storage.getItem(keys.frozen) !== null
+		} catch {
+			return false
+		}
+	}
+
+	function writeFrozen(): void {
+		try {
+			storage.setItem(keys.frozen, '1')
+		} catch {
+			return
+		}
+	}
+
+	function removeFrozen(): void {
+		safeRemove(storage, keys.frozen)
+	}
+
+	function pauseTimeUp(): Promise<void> {
+		return new Promise((resolve) => {
+			const handle = clock.setTimer(() => {
+				timeUpPause = null
+				resolve()
+			}, TIME_UP_PAUSE_MS)
+			timeUpPause = { handle, resolve }
+		})
+	}
+
+	function cancelTimeUpPause(): void {
+		if (!timeUpPause) return
+		const { handle, resolve } = timeUpPause
+		timeUpPause = null
+		clock.clearTimer(handle)
+		resolve()
+	}
+
+	function beginSubmit(auto: boolean): void {
+		submitFailed = false
+		if (auto) writeFrozen()
+		phase = auto ? 'autoSubmitting' : 'submitting'
+		emit()
+	}
+
+	function failSubmit(auto: boolean): void {
+		if (auto) removeFrozen()
+		phase = 'active'
+		submitFailed = true
+	}
+
+	async function startForSubmit(auto: boolean): Promise<CachedSession | null> {
+		const gen = generation
+		let server: AttemptSession
+		try {
+			server = await api.start(testId)
+		} catch (error) {
+			if (gen !== generation) return null
+			if (classifyStartFailure(error) === 'not-assigned') {
+				if (auto) removeFrozen()
+				blockStart(null)
+			} else {
+				failSubmit(auto)
+			}
+			emit()
+			return null
+		}
+		if (gen !== generation) return null
+		session = { sessionId: server.sessionId, startedAt: server.startedAt }
+		writeCachedSession(storage, keys.session, session)
+		persistAll(session.sessionId)
+		return session
+	}
+
+	async function sendSubmit(current: CachedSession, auto: boolean): Promise<'settled' | 'retry' | 'stale'> {
+		const gen = generation
+		const clientAttemptId = resolveClientAttemptId(storage, keys.clientAttemptId, current.sessionId, createId)
+		let view: AttemptView
+		try {
+			view = await api.submit(testId, { sessionId: current.sessionId, clientAttemptId, answers, telemetry })
+		} catch (error) {
+			if (gen !== generation) return 'stale'
+			return applySubmitFailure(classifySubmitFailure(error), current, auto)
+		}
+		if (gen !== generation) return 'stale'
+		queue?.discard()
+		clearAttemptKeys(storage, keys, 'success')
+		closedSession = current
+		session = null
+		pending = new Set()
+		telemetryPending = false
+		if (auto) {
+			showTimeUp = true
+			emit()
+			await pauseTimeUp()
+			if (gen !== generation) return 'stale'
+			showTimeUp = false
+		}
+		result = view
+		phase = 'submitted'
+		emit()
+		notice({ kind: 'submitted', result: view })
+		return 'settled'
+	}
+
+	function applySubmitFailure(failure: SubmitFailure, current: CachedSession, auto: boolean): 'settled' | 'retry' {
+		if (failure.kind === 'retry') {
+			if (auto) removeFrozen()
+			return 'retry'
+		}
+		if (failure.kind === 'already-submitted' || failure.kind === 'time-expired') {
+			queue?.discard()
+			clearAttemptKeys(storage, keys, failure.kind)
+			closedSession = current
+			session = null
+			pending = new Set()
+			telemetryPending = false
+			alreadySubmittedAttemptId = failure.kind === 'already-submitted' ? failure.attemptId : null
+		} else if (failure.kind === 'not-found') {
+			if (auto) removeFrozen()
+			clearAttemptKeys(storage, keys, 'not-found')
+			const wal = readWal(storage, keys.wal, current.sessionId)
+			if (wal && (wal.sessionId === null || wal.sessionId === current.sessionId)) {
+				detachWal(storage, keys.wal, current.sessionId)
+			}
+			queue?.discard()
+			session = null
+			pending = new Set(Object.keys(answers))
+			telemetryPending = Object.keys(telemetry).length > 0
+		} else {
+			if (auto) removeFrozen()
+			clearAttemptKeys(storage, keys, 'submit-not-assigned')
+		}
+		phase = 'blocked'
+		blockReason = failure.kind === 'not-assigned' ? 'submit-not-assigned' : failure.kind
+		emit()
+		return 'settled'
+	}
+
+	function reset(): void {
+		restoreCandidate = session ?? closedSession
+		closedSession = null
+		generation += 1
+		queue?.discard()
+		cancelTimeUpPause()
+		clearIndicatorTimer()
+		clearAttemptKeys(storage, keys, 'success')
+		session = null
+		blockReason = null
+		alreadySubmittedAttemptId = null
+		submitFailed = false
+		result = null
+		showTimeUp = false
+		clearDraftState()
+		if (timeLimitMinutes) {
+			phase = 'awaitingStart'
+			emit()
+			return
+		}
+		phase = 'starting'
+		emit()
+		void runStart(restoreCandidate, { retake: true, candidate: true })
+	}
+
+	async function runSubmit(auto: boolean): Promise<void> {
+		const gen = generation
+		beginSubmit(auto)
+		const current = session ?? (await startForSubmit(auto))
+		if (!current || gen !== generation) return
+		const outcome = await sendSubmit(current, auto)
+		if (outcome !== 'retry') return
+		failSubmit(auto)
 		emit()
 	}
 
@@ -346,14 +575,14 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		return {
 			phase,
 			blockReason,
-			alreadySubmittedAttemptId: null,
-			submitFailed: false,
+			alreadySubmittedAttemptId,
+			submitFailed,
 			answers,
 			currentQuestionId: position,
 			startedAt: session?.startedAt ?? null,
 			secondsLeft: null,
-			result: null,
-			showTimeUp: false,
+			result,
+			showTimeUp,
 			saveIndicator: saveIndicatorKind(indicatorInput()),
 			interactionDisabled: DISABLED_PHASES.has(phase),
 		}
@@ -365,24 +594,47 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			initialized = true
 			generation += 1
 			blockReason = null
+			alreadySubmittedAttemptId = null
+			submitFailed = false
+			result = null
+			showTimeUp = false
 			queue = createQueue()
 			unsubscribeVisibility = visibility.subscribe(onVisibility)
 			const cached = readCachedSession(storage, keys.session)
+			const frozen = hasFrozen()
 			session = null
-			loadLocal(cached)
-			if (cached || !timeLimitMinutes) {
-				phase = 'starting'
-				void runStart(cached)
-			} else {
-				phase = 'awaitingStart'
+			if (!cached) {
+				if (frozen) removeFrozen()
+				loadLocal(null)
+				phase = timeLimitMinutes ? 'awaitingStart' : 'starting'
+				emit()
+				if (!timeLimitMinutes) void runStart(null)
+				return
 			}
+			if (storedClientAttemptId(storage, keys.clientAttemptId, cached.sessionId) !== null) {
+				loadLocal(cached)
+				session = cached
+				void resubmit(cached, frozen)
+				return
+			}
+			if (isAbandonedExpired(cached)) {
+				removeFrozen()
+				restoreCandidate = cached
+				clearDraftState()
+				phase = 'awaitingStart'
+				emit()
+				return
+			}
+			loadLocal(cached)
+			phase = 'starting'
 			emit()
+			void runStart(cached, { frozen })
 		},
 		async confirmStart() {
 			if (!initialized || phase !== 'awaitingStart') return
 			phase = 'starting'
 			emit()
-			await runStart(null)
+			await runStart(restoreCandidate, { candidate: true })
 		},
 		answer(questionId, value) {
 			if (!initialized || phase !== 'active' || !knownQuestions.has(questionId)) return
@@ -401,11 +653,13 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			}
 			emit()
 		},
-		async submit() {
-			return
+		async submit(submitOptions) {
+			if (!initialized || phase !== 'active') return
+			await runSubmit(submitOptions?.auto === true)
 		},
 		retake() {
-			return
+			if (!initialized) return
+			reset()
 		},
 		dispose() {
 			if (!initialized) return
@@ -417,6 +671,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			unsubscribeVisibility = null
 			clearIndicatorTimer()
 			generation += 1
+			cancelTimeUpPause()
 		},
 		subscribe(listener) {
 			listeners.add(listener)
