@@ -69,6 +69,52 @@ Express API платформы тестирования Bio-Exam: данные, 
   DELETE FROM login_throttle WHERE login = '<логин в нижнем регистре>';
   ```
 
+### Попытка теста
+
+- Проходить опубликованный тест в активной теме может пользователь, которому тест назначен (`test_assignments`), или
+  пользователь с правом `tests.read`. Правило проверяют `canReadTest` и `testScope` из
+  `src/services/access-policy/scope.ts`, назначение читает `src/services/attempt-sessions`. Маршруты
+  `/api/tests/public/...` не проверяют назначение и права сами. Тест не опубликован или тема неактивна — 404, тест не
+  назначен — 403. Списки тестов (`GET /api/tests/public/tests`, `GET /api/tests/public/topics/:slug/tests`) содержат
+  только доступные пользователю тесты.
+- Разбор попытки `GET /api/tests/admin/attempts/:attemptId` требует право `tests.read` и проверку `canReviewAttempt`
+  из того же модуля.
+- `POST /api/tests/public/tests/:id/start` возвращает открытую сессию пары (тест, пользователь) или открывает новую
+  (`test_sessions`). У пары открыта не больше одной сессии: частичный уникальный индекс `test_sessions_open_uniq` по
+  строкам без `submitted_at` и `closed_at`. Ответ: `sessionId`, `startedAt` и черновик.
+- `PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers` сохраняет ответ и телеметрию в черновик открытой
+  сессии под блокировкой строки. Сданная или закрытая сессия — 404.
+- Сессия теста с `time_limit_minutes` просрочена, когда `now()` базы позже `started_at` плюс лимит плюс 2 минуты
+  (`ATTEMPT_GRACE_PERIOD_MINUTES` в `@bio-exam/exam-core`). Срок проверяется на момент прихода submit, до оценки:
+  долгая оценка не превращает принятую отправку в 422. Просроченная сессия закрывается с `close_reason = 'expired'` при
+  submit или при `start`, который затем открывает новую сессию. `close_reason = 'superseded'` у лишних открытых сессий
+  пары, закрытых миграцией 0022 (открытой осталась самая поздняя).
+- `POST /api/tests/public/tests/:id/submit`, тело `{ sessionId, clientAttemptId, answers, telemetry? }`
+  (`SubmitAttemptRequestSchema`). `sessionId` и `clientAttemptId` — обязательные UUID, `clientAttemptId` создаёт
+  клиент один раз на отправку. Ответы:
+  - 400 — тело не прошло схему;
+  - 403 — тест не назначен;
+  - 404 — тест не виден, сессии нет у пары или она закрыта как `superseded`;
+  - 409 `{ error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId }` — сессия уже сдана с другим `clientAttemptId`;
+  - 422 `{ error: 'TIME_EXPIRED' }` — сессия просрочена или закрыта как `expired`;
+  - 200 — вид попытки. Повтор с теми же `sessionId` и `clientAttemptId` отвечает 200 с видом уже сохранённой попытки
+    и новой не создаёт. На сессию приходится не больше одной попытки: уникальный индекс
+    `test_attempts_session_id_uniq`.
+- Попытка с `results_version = 2` хранит в `test_attempts.results` факты оценки по вопросу
+  (`ScoredQuestionFactSchema`): баллы, `isCorrect`, ответ, ключ на момент сдачи и его версию, вердикты по частям, число
+  ошибок и пояснение. Факты считает `scoreSubmission` из `src/services/scored-attempt`.
+- Ответ submit и разбор строятся из сохранённой строки: `readAttemptView` для студента (`AttemptViewSchema`) и
+  `readAdminAttemptView` для администратора (`AdminAttemptViewSchema`). Вид вопроса содержит статус (`ungraded` при 0
+  баллов, `correct`, `partial`, `wrong`), `keyVisible`, `correctAnswer`, `verdicts` и `mistakes`. Студент видит ключ,
+  вердикты и число ошибок, когда у теста включён `show_correct_answer`; при выключенном — только вердикты верно
+  отвеченного вопроса. Администратор видит ключ всегда, а также ответы и телеметрию. Web берёт статус и ключ только из
+  вида, `test_attempts.results` читает только `src/services/scored-attempt`.
+- Попытка с `results_version = 1` (значение столбца по умолчанию) хранит `results` в прежней форме
+  (`LegacyAttemptResultsSchema`) и читается без перезаписи строки. Ключ берётся из сохранённого `correctAnswer`, иначе
+  из версии `answer_keys`, созданной не позже `submitted_at` попытки. Без ключа вопрос показывается без ключа и
+  вердиктов. Вердикты пересчитываются, только если пересчёт совпал с сохранёнными баллами и `isCorrect`. Строка, не
+  прошедшая схему своей версии, даёт ошибку `AttemptResultsShapeError`.
+
 ## Шаблоны вопросов
 
 Тип вопроса задаётся одним из пяти шаблонов интерфейса, у каждого своя метрика ошибок. Реестр шаблонов, метрик и встроенных типов и оценка ответа находятся в пакете `packages/exam-core` (`@bio-exam/exam-core`), сервер импортирует их оттуда:
