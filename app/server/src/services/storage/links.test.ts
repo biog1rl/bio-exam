@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { avatarUrl, ownStorageKey, parseStorageLink, resolveImageLink, storedAvatarValue } from './links.js'
 import { StorageKeyError } from './port.js'
 
-function proxyPrefix(key: string): string {
-	return `/api/docs/assets/proxy?path=${encodeURIComponent(key)}&cacheNonce=`
+function proxyUrl(key: string): string {
+	return `/api/docs/assets/proxy?path=${encodeURIComponent(key)}`
 }
 
 beforeEach(() => {
@@ -90,6 +90,27 @@ describe('parseStorageLink', () => {
 		})
 	})
 
+	test('абсолютный URL маршрута proxy на любом хосте даёт ключ из path', () => {
+		assert.deepEqual(
+			parseStorageLink('https://bio.example.com/api/docs/assets/proxy?path=images%2Fx.webp&cacheNonce=1'),
+			{
+				kind: 'key',
+				key: 'images/x.webp',
+			}
+		)
+		assert.deepEqual(parseStorageLink('http://localhost:3000/api/docs/assets/proxy?path=avatars%2Fu%2Fa.png'), {
+			kind: 'key',
+			key: 'avatars/u/a.png',
+		})
+	})
+
+	test('абсолютный URL маршрута proxy без path или с traversal — некорректный', () => {
+		assert.deepEqual(parseStorageLink('https://bio.example.com/api/docs/assets/proxy?cacheNonce=1'), {
+			kind: 'invalid',
+		})
+		assert.deepEqual(parseStorageLink('https://bio.example.com/api/docs/assets/proxy?path=..%2Fx'), { kind: 'invalid' })
+	})
+
 	test('URL маршрута proxy без path или с traversal — некорректный', () => {
 		assert.deepEqual(parseStorageLink('/api/docs/assets/proxy?cacheNonce=1'), { kind: 'invalid' })
 		assert.deepEqual(parseStorageLink('/api/docs/assets/proxy?path=..%2Fx'), { kind: 'invalid' })
@@ -114,12 +135,12 @@ describe('parseStorageLink', () => {
 
 describe('resolveImageLink', () => {
 	test('ключ картинки даёт URL маршрута proxy', () => {
-		assert.ok(resolveImageLink('images/a.webp').startsWith(proxyPrefix('images/a.webp')))
-		assert.ok(resolveImageLink('topics/t/s/assets/b.png').startsWith(proxyPrefix('topics/t/s/assets/b.png')))
+		assert.equal(resolveImageLink('images/a.webp'), proxyUrl('images/a.webp'))
+		assert.equal(resolveImageLink('topics/t/s/assets/b.png'), proxyUrl('topics/t/s/assets/b.png'))
 	})
 
 	test('устаревшая ссылка разрешается через ключ', () => {
-		assert.ok(resolveImageLink('/uploads/tests/t/s/assets/b.png').startsWith(proxyPrefix('topics/t/s/assets/b.png')))
+		assert.equal(resolveImageLink('/uploads/tests/t/s/assets/b.png'), proxyUrl('topics/t/s/assets/b.png'))
 	})
 
 	test('внешний URL возвращается как есть', () => {
@@ -145,7 +166,7 @@ describe('avatarUrl', () => {
 	})
 
 	test('ключ даёт URL по правилу модуля', () => {
-		assert.ok(avatarUrl('avatars/u/a.png')?.startsWith(proxyPrefix('avatars/u/a.png')))
+		assert.equal(avatarUrl('avatars/u/a.png'), proxyUrl('avatars/u/a.png'))
 	})
 
 	test('посторонний URL возвращается как есть', () => {
@@ -169,18 +190,21 @@ describe('ownStorageKey', () => {
 describe('storedAvatarValue', () => {
 	test('URL своего хранилища в avatars/ даёт ключ', () => {
 		assert.equal(
-			storedAvatarValue('https://x.supabase.co/storage/v1/object/public/main/avatars/u/a.png'),
+			storedAvatarValue('https://x.supabase.co/storage/v1/object/public/main/avatars/u/a.png', 'u'),
 			'avatars/u/a.png'
 		)
-		assert.equal(storedAvatarValue('/api/docs/assets/proxy?path=avatars%2Fu%2Fa.png&cacheNonce=1'), 'avatars/u/a.png')
+		assert.equal(
+			storedAvatarValue('/api/docs/assets/proxy?path=avatars%2Fu%2Fa.png&cacheNonce=1', 'u'),
+			'avatars/u/a.png'
+		)
 	})
 
 	test('посторонний URL сохраняется как есть', () => {
-		assert.equal(storedAvatarValue('https://example.com/a.png'), 'https://example.com/a.png')
+		assert.equal(storedAvatarValue('https://example.com/a.png', 'u'), 'https://example.com/a.png')
 	})
 
 	test('пустое значение даёт null', () => {
-		assert.equal(storedAvatarValue(''), null)
-		assert.equal(storedAvatarValue(null), null)
+		assert.equal(storedAvatarValue('', 'u'), null)
+		assert.equal(storedAvatarValue(null, 'u'), null)
 	})
 })

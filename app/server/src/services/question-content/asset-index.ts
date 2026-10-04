@@ -88,12 +88,17 @@ async function insertRefs(executor: AssetIndexExecutor, questionId: string, keys
 	`)
 }
 
+export async function lockAssetKey(executor: AssetIndexExecutor, key: string): Promise<void> {
+	await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${key}))`)
+}
+
 export async function indexQuestionAssets(
 	tx: Tx,
 	questionId: string,
 	texts: Array<string | null | undefined>
 ): Promise<string[]> {
 	const keys = collectKeys(texts)
+	for (const key of keys) await lockAssetKey(tx, key)
 	await tx.execute(sql`DELETE FROM question_asset_refs WHERE question_id = ${questionId}`)
 	await insertRefs(tx, questionId, keys)
 	await tx.execute(sql`UPDATE questions SET assets_indexed = true WHERE id = ${questionId}`)

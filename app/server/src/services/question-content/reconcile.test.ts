@@ -281,6 +281,43 @@ describe('удаление по флагам (D-27, T-7-46)', () => {
 		assert.equal(present(fresh), false)
 	})
 
+	test('граница возраста: за 1 мс до minAgeMs сирота свежая, ровно в minAgeMs удаляется', async () => {
+		const fixture = await createFixture('boundary', [radio('Вопрос', 0)])
+		const [questionId] = fixture.questionIds
+		assert.ok(questionId)
+		const orphan = `${questionDir(fixture, questionId)}/prompt-${crypto.randomBytes(6).toString('hex')}.md`
+		mem.put(orphan, 'сирота на границе', 'text/markdown')
+		const created = Date.parse(mem.get(orphan)?.createdAt ?? '')
+		assert.ok(Number.isFinite(created))
+
+		const before = await rc.reconcileStorage({ deleteOrphans: true, now: () => created + HOUR - 1 })
+		assert.ok(before.recentOrphans.includes(orphan))
+		assert.ok(!before.deleted.orphans.includes(orphan))
+		assert.equal(present(orphan), true)
+
+		const at = await rc.reconcileStorage({ deleteOrphans: true, now: () => created + HOUR })
+		assert.ok(at.orphans.includes(orphan))
+		assert.ok(at.deleted.orphans.includes(orphan))
+		assert.equal(present(orphan), false)
+	})
+
+	test('сирота с пустым createdAt считается свежей и не удаляется', async () => {
+		const fixture = await createFixture('no-created-at', [radio('Вопрос', 0)])
+		const [questionId] = fixture.questionIds
+		assert.ok(questionId)
+		const orphan = `${questionDir(fixture, questionId)}/prompt-${crypto.randomBytes(6).toString('hex')}.md`
+		mem.put(orphan, 'сирота без даты', 'text/markdown')
+		const original = mem.list.bind(mem)
+		vi.spyOn(mem, 'list').mockImplementation(async (prefix, options) =>
+			(await original(prefix, options)).map((object) => (object.key === orphan ? { ...object, createdAt: '' } : object))
+		)
+		const report = await rc.reconcileStorage({ deleteOrphans: true, now: () => Date.now() + 100 * HOUR })
+		assert.ok(report.recentOrphans.includes(orphan))
+		assert.ok(!report.orphans.includes(orphan))
+		assert.ok(!report.deleted.orphans.includes(orphan))
+		assert.equal(present(orphan), true)
+	})
+
 	test('свежая сирота при minAgeMs 0 удаляется', async () => {
 		const fixture = await createFixture('recent-zero', [radio('Вопрос', 0)])
 		const [questionId] = fixture.questionIds

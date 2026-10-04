@@ -299,6 +299,28 @@ describe('удаление теста и темы', () => {
 		assert.equal(await count('SELECT count(*) AS count FROM questions WHERE test_id = $1', [testId]), 0)
 	})
 
+	test('slug темы или теста «assets»: удаление теста убирает его промпты, assets/ теста на месте', async () => {
+		const existing = await ctx.pgPool.query<{ id: string }>("SELECT id FROM topics WHERE slug = 'assets'")
+		const assetsTopicId = existing.rows[0]?.id ?? (await createTopic('assets'))
+		const inAssetsTopic = nextSlug('in-assets-topic')
+		const firstId = await saveTest(assetsTopicId, inAssetsTopic, [radio('В теме assets', { order: 0 })])
+		const ownAsset = `topics/assets/${inAssetsTopic}/assets/a.png`
+		mem.put(ownAsset, 'png', 'image/png')
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const secondId = await saveTest(topicId, 'assets', [radio('Тест assets', { order: 0 })])
+		for (const [testId, prefix] of [
+			[firstId, `topics/assets/${inAssetsTopic}/questions`],
+			[secondId, `topics/${topicSlug}/assets/questions`],
+		] as const) {
+			assert.equal(mem.keys(prefix).length, 1)
+			const reply = await deleteTestCall(testId)
+			assert.equal(reply.status, 200, JSON.stringify(reply.body))
+			assert.deepEqual(mem.keys(prefix), [])
+		}
+		assert.equal(stored(ownAsset), 'png')
+	})
+
 	test('удаление темы: содержимое каждого теста и указатели вне префикса удалены, assets и images на месте', async () => {
 		const topicSlug = nextSlug('topic')
 		const topicId = await createTopic(topicSlug)
@@ -570,6 +592,54 @@ describe('перенос вопроса', () => {
 			assert.equal(reply.status, 400, JSON.stringify(reply.body))
 			assert.equal(reply.body.error, SAME_TARGET)
 		}
+	})
+
+	test('общий легаси prompt.md вопросов без указателя: перенос одного не удаляет файл, оставшийся вопрос читает его', async () => {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const slug = nextSlug('legacy-shared')
+		const targetId = await saveTest(topicId, nextSlug('legacy-target'), [radio('Цель', { order: 0 })])
+		const testId = await saveTest(topicId, slug, [radio('Q1', { order: 0 }), radio('Q2', { order: 1 })])
+		const rows = await questionRows(testId)
+		for (const row of rows) if (row.prompt_path) await mem.remove([row.prompt_path])
+		await ctx.pgPool.query('UPDATE questions SET prompt_path = NULL WHERE test_id = $1', [testId])
+		const legacy = `${questionDir(topicSlug, slug, testId)}/prompt.md`
+		mem.put(legacy, 'Общий легаси', 'text/markdown')
+		const [moving, staying] = rows
+		assert.ok(moving && staying)
+		const reply = await moveCall(testId, moving.id, { targetTestId: targetId })
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		assert.equal(stored(legacy), 'Общий легаси')
+		const moved = (await questionRows(targetId)).find((row) => row.id === moving.id)
+		assert.equal(stored(moved?.prompt_path), 'Общий легаси')
+		const [left] = await questionRows(testId)
+		assert.equal(left?.id, staying.id)
+		assert.equal(left?.prompt_path, null)
+		const read = await qc.readQuestionMarkdown({
+			storedPath: null,
+			topicSlug,
+			testSlug: slug,
+			testId,
+			questionId: staying.id,
+			kind: 'prompt',
+		})
+		assert.equal(read, 'Общий легаси')
+	})
+
+	test('несуществующий targetTestId вместе с targetTopicId: 404, вопрос на месте, тест в теме не создан', async () => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const otherTopicId = await createTopic(nextSlug('other'))
+		const testId = await saveTest(topicId, nextSlug('stay'), [
+			radio('Остаюсь', { order: 0 }),
+			radio('Тоже', { order: 1 }),
+		])
+		const before = await questionRows(testId)
+		const [row] = before
+		assert.ok(row)
+		const reply = await moveCall(testId, row.id, { targetTestId: MISSING_ID, targetTopicId: otherTopicId })
+		assert.equal(reply.status, 404, JSON.stringify(reply.body))
+		assert.deepEqual(await questionRows(testId), before)
+		assert.deepEqual(await testsOfTopic(otherTopicId), [])
 	})
 
 	test('параллельно перенос в тест B и создание вопроса в B: порядок B 0…n-1 без повторов', async () => {

@@ -81,7 +81,7 @@ async function setAvatar(userId: string, avatar: string | null, cropped: string 
 }
 
 function proxyUrlOf(key: string): string {
-	return `/api/docs/assets/proxy?path=${encodeURIComponent(key)}&`
+	return `/api/docs/assets/proxy?path=${encodeURIComponent(key)}`
 }
 
 function supabaseUrlOf(key: string): string {
@@ -130,8 +130,8 @@ describe('POST /api/users/avatar без файла: только кроп', () =
 		assert.equal(after.avatar_crop_rotation, 90)
 		assert.deepEqual(mem.keys(`avatars/${user.id}`), [after.avatar, after.avatar_cropped].sort())
 		assert.equal(mem.get(before.avatar_cropped), null)
-		assert.ok(String(reply.body.avatarUrl).startsWith(proxyUrlOf(before.avatar)))
-		assert.ok(String(reply.body.avatarCroppedUrl).startsWith(proxyUrlOf(String(after.avatar_cropped))))
+		assert.equal(String(reply.body.avatarUrl), proxyUrlOf(before.avatar))
+		assert.equal(String(reply.body.avatarCroppedUrl), proxyUrlOf(String(after.avatar_cropped)))
 		const meta = await sharp(mem.get(String(after.avatar_cropped))?.data).metadata()
 		assert.equal(meta.width, 256)
 		assert.equal(meta.height, 256)
@@ -146,12 +146,53 @@ describe('POST /api/users/avatar без файла: только кроп', () =
 		assert.deepEqual(mem.keys(`avatars/${user.id}`), [])
 	})
 
+	test('в БД ключ чужого аватара: 400 про отсутствие аватара, чужой объект не читается', async () => {
+		const user = await account()
+		const other = await account()
+		const foreignKey = `avatars/${other.id}/orig.png`
+		mem.put(foreignKey, tinyPng, 'image/png')
+		await setAvatar(user.id, foreignKey)
+		const read = vi.spyOn(mem, 'read')
+		const reply = await postAvatar(user.jar, CROP, false)
+		assert.equal(reply.status, 400)
+		assert.equal(reply.body.error, 'Нет загруженного аватара для редактирования')
+		assert.equal(read.mock.calls.length, 0)
+		assert.deepEqual(mem.keys(`avatars/${user.id}`), [])
+		read.mockRestore()
+	})
+
 	test('в БД посторонний URL: 400 про отсутствие аватара', async () => {
 		const user = await account()
 		await setAvatar(user.id, 'https://example.com/a.png')
 		const reply = await postAvatar(user.jar, CROP, false)
 		assert.equal(reply.status, 400)
 		assert.equal(reply.body.error, 'Нет загруженного аватара для редактирования')
+	})
+})
+
+describe('POST /api/users/avatar: нечисловые поля кропа', () => {
+	for (const field of ['cropX', 'cropRotation', 'cropZoom', 'cropViewX', 'cropWidth']) {
+		test(`${field}=abc: 400, аватар и поля кропа в БД не меняются, объекты не пишутся`, async () => {
+			const user = await account()
+			const reply = await postAvatar(user.jar, { ...CROP, [field]: 'abc' }, true)
+			assert.equal(reply.status, 400, JSON.stringify(reply.body))
+			const row = await avatarRow(user.id)
+			assert.equal(row.avatar, null)
+			assert.equal(row.avatar_crop_x, null)
+			assert.deepEqual(mem.keys(`avatars/${user.id}`), [])
+		})
+	}
+
+	test('cropZoom=abc при перекропе: 400, zoom в БД не NaN', async () => {
+		const user = await account()
+		assert.equal((await postAvatar(user.jar, CROP, true)).status, 200)
+		const reply = await postAvatar(user.jar, { ...CROP, cropZoom: 'abc' }, false)
+		assert.equal(reply.status, 400)
+		const { rows } = await ctx.pgPool.query<{ zoom: string | null }>(
+			'SELECT avatar_crop_zoom::text AS zoom FROM users WHERE id = $1',
+			[user.id]
+		)
+		assert.equal(rows[0]?.zoom, '1')
 	})
 })
 
@@ -194,7 +235,7 @@ describe('POST /api/users/avatar с файлом: прежние объекты'
 			const reply = await postAvatar(user.jar, CROP, true)
 			assert.equal(reply.status, 200)
 			const row = await avatarRow(user.id)
-			assert.ok(String(reply.body.avatarUrl).startsWith(proxyUrlOf(String(row.avatar))))
+			assert.equal(String(reply.body.avatarUrl), proxyUrlOf(String(row.avatar)))
 			assert.ok(warn.mock.calls.some((args) => args[0] === '[assets] orphan objects'))
 		} finally {
 			warn.mockRestore()
@@ -242,7 +283,23 @@ describe('PATCH /api/users/profile: avatar', () => {
 		assert.equal(reply.status, 200)
 		assert.equal((await avatarRow(user.id)).avatar, key)
 		const body = reply.body.user as Json
-		assert.ok(String(body.avatar).startsWith(proxyUrlOf(key)))
+		assert.equal(String(body.avatar), proxyUrlOf(key))
+	})
+
+	test('URL proxy своего аватара из /api/auth/me сохраняется обратно ключом', async () => {
+		const user = await account()
+		const key = `avatars/${user.id}/a.png`
+		await setAvatar(user.id, key)
+		const me = await call(ctx, 'GET', '/api/auth/me', { cookies: user.jar })
+		const avatar = String((me.body.user as Json).avatar)
+		assert.equal(avatar, proxyUrlOf(key))
+		const reply = await call(ctx, 'PATCH', '/api/users/profile', {
+			cookies: user.jar,
+			body: { firstName: 'Имя', avatar },
+		})
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		assert.equal((await avatarRow(user.id)).avatar, key)
+		assert.equal((reply.body.user as Json).avatar, proxyUrlOf(key))
 	})
 
 	test('посторонний URL записывается как есть', async () => {
@@ -272,13 +329,38 @@ describe('PATCH /api/users/profile: avatar', () => {
 		const reply = await call(ctx, 'PATCH', '/api/users/profile', { cookies: user.jar, body: { firstName: 'Имя' } })
 		assert.equal(reply.status, 200)
 		assert.equal((await avatarRow(user.id)).avatar, key)
-		assert.ok(String((reply.body.user as Json).avatar).startsWith(proxyUrlOf(key)))
+		assert.equal(String((reply.body.user as Json).avatar), proxyUrlOf(key))
 	})
 
 	test('storedAvatarValue: URL своего бакета → ключ, посторонний URL как есть, пусто → null', () => {
-		assert.equal(storedAvatarValue(supabaseUrlOf('avatars/u/a.png')), 'avatars/u/a.png')
-		assert.equal(storedAvatarValue('https://example.com/a.png'), 'https://example.com/a.png')
-		assert.equal(storedAvatarValue(''), null)
+		assert.equal(storedAvatarValue(supabaseUrlOf('avatars/u/a.png'), 'u'), 'avatars/u/a.png')
+		assert.equal(storedAvatarValue('https://example.com/a.png', 'u'), 'https://example.com/a.png')
+		assert.equal(storedAvatarValue('', 'u'), null)
+	})
+
+	test('storedAvatarValue: ключ хранилища вне avatars/<userId>/ отклоняется с 400', () => {
+		for (const key of ['avatars/v/a.png', 'avatars/uu/a.png', 'images/a.webp', 'topics/x/y/answer_keys.json']) {
+			assert.throws(
+				() => storedAvatarValue(supabaseUrlOf(key), 'u'),
+				(error: unknown) => (error as { statusCode?: number }).statusCode === 400,
+				key
+			)
+		}
+	})
+
+	test('URL чужого аватара или не аватара: 400, значение в БД не меняется', async () => {
+		const user = await account()
+		const other = await account()
+		const own = `avatars/${user.id}/own.png`
+		await setAvatar(user.id, own)
+		for (const key of [`avatars/${other.id}/orig.png`, 'topics/x/y/answer_keys.json', 'images/a.webp']) {
+			const reply = await call(ctx, 'PATCH', '/api/users/profile', {
+				cookies: user.jar,
+				body: { avatar: supabaseUrlOf(key) },
+			})
+			assert.equal(reply.status, 400, key)
+			assert.equal((await avatarRow(user.id)).avatar, own)
+		}
 	})
 })
 
@@ -295,16 +377,16 @@ describe('GET /api/auth/me: avatar', () => {
 		const croppedKey = `avatars/${user.id}/a_cropped.png`
 		await setAvatar(user.id, key, croppedKey)
 		const body = await me(user.jar)
-		assert.ok(String(body.avatar).startsWith(proxyUrlOf(key)))
-		assert.ok(String(body.avatarCropped).startsWith(proxyUrlOf(croppedKey)))
+		assert.equal(String(body.avatar), proxyUrlOf(key))
+		assert.equal(String(body.avatarCropped), proxyUrlOf(croppedKey))
 	})
 
 	test('публичный URL своего бакета и /uploads/avatars/… → URL по правилу модуля', async () => {
 		const user = await account()
 		await setAvatar(user.id, supabaseUrlOf(`avatars/${user.id}/a.png`), '/uploads/avatars/legacy.png')
 		const body = await me(user.jar)
-		assert.ok(String(body.avatar).startsWith(proxyUrlOf(`avatars/${user.id}/a.png`)))
-		assert.ok(String(body.avatarCropped).startsWith(proxyUrlOf('avatars/legacy.png')))
+		assert.equal(String(body.avatar), proxyUrlOf(`avatars/${user.id}/a.png`))
+		assert.equal(String(body.avatarCropped), proxyUrlOf('avatars/legacy.png'))
 	})
 
 	test('посторонний URL → как есть', async () => {

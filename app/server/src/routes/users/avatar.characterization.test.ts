@@ -126,12 +126,8 @@ describe('POST /api/users/avatar', () => {
 		const row = await avatarRow(user.id)
 		assert.equal(row.avatar, original)
 		assert.equal(row.avatar_cropped, cropped)
-		assert.ok(
-			(reply.body.avatarUrl as string).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(original)}&`)
-		)
-		assert.ok(
-			(reply.body.avatarCroppedUrl as string).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(cropped)}&`)
-		)
+		assert.equal(reply.body.avatarUrl, `/api/docs/assets/proxy?path=${encodeURIComponent(original)}`)
+		assert.equal(reply.body.avatarCroppedUrl, `/api/docs/assets/proxy?path=${encodeURIComponent(cropped)}`)
 	})
 
 	test('без файла у пользователя без аватара: 400 и текст про отсутствие аватара', async () => {

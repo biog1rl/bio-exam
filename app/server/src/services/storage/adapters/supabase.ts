@@ -63,6 +63,10 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function urlPath(key: string): string {
+	return key.split('/').map(encodeURIComponent).join('/')
+}
+
 function compareKeys(a: StorageObject, b: StorageObject): number {
 	return a.key < b.key ? -1 : a.key > b.key ? 1 : 0
 }
@@ -164,7 +168,7 @@ export function createSupabaseAdapter({
 
 		async write(key: string, data: Buffer | string, options: WriteOptions): Promise<void> {
 			await request('json', async () => {
-				const { error } = await files().upload(key, data, {
+				const { error } = await files().upload(urlPath(key), data, {
 					contentType: options.contentType,
 					upsert: options.upsert !== false,
 					...(options.cacheControl ? { cacheControl: options.cacheControl } : {}),
@@ -177,7 +181,7 @@ export function createSupabaseAdapter({
 			return request<StorageReadResult | null>(
 				'download',
 				async () => {
-					const { data, error } = await files().download(key)
+					const { data, error } = await files().download(urlPath(key))
 					if (error) throw error
 					return {
 						data: Buffer.from(await data.arrayBuffer()),
@@ -190,7 +194,7 @@ export function createSupabaseAdapter({
 
 		async exists(key: string): Promise<boolean> {
 			return request('download', async () => {
-				const { data } = await files().exists(key)
+				const { data } = await files().exists(urlPath(key))
 				return data === true
 			})
 		},

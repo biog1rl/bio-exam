@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 
-import { extractAssetRefs } from './asset-refs.js'
+import { extractAssetLinks, extractAssetRefs } from './asset-refs.js'
 
 beforeEach(() => {
 	vi.stubEnv('SUPABASE_URL', '')
@@ -60,6 +60,24 @@ describe('extractAssetRefs', () => {
 			'images/a.webp',
 			'images/z.webp',
 		])
+	})
+
+	test('alt с ] и абсолютный URL proxy находятся', () => {
+		assert.deepEqual(extractAssetRefs('![a]b](images/x.webp)'), ['images/x.webp'])
+		assert.deepEqual(
+			extractAssetRefs('<img src="https://bio.example.com/api/docs/assets/proxy?path=images%2Fp.webp&cacheNonce=1">'),
+			['images/p.webp']
+		)
+		assert.deepEqual(
+			extractAssetLinks('![](https://bio.example.com/api/docs/assets/proxy?path=images%2Fq.webp)').map(
+				(link) => link.form
+			),
+			['proxy-url']
+		)
+	})
+
+	test('alt с ] не склеивает две картинки в одну', () => {
+		assert.deepEqual(extractAssetRefs('![a](images/x.webp) и ](images/y.webp)'), ['images/x.webp'])
 	})
 
 	test('пустой текст и текст без картинок', () => {

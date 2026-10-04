@@ -5,7 +5,7 @@ import type { z } from 'zod'
 import { db } from '../../db/index.js'
 import { answerKeys, questions, tests, topics } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { ApiError } from '../../lib/errors.js'
+import { ApiError, isUniqueViolation } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest, validateQuestionWithType } from '../../lib/tests/question-type-resolver.js'
 import type { SaveQuestionSchema, SaveTestSchema } from '../../schemas/tests.js'
 import { upsertQuestionSearchDocument } from '../search/question-documents.js'
@@ -402,6 +402,10 @@ export async function createTestWithQuestions(params: {
 					updatedBy: userId,
 				})
 				.returning()
+				.catch((error: unknown) => {
+					if (isUniqueViolation(error)) throw new ApiError(409, ERROR_MESSAGES.TEST_SLUG_EXISTS)
+					throw error
+				})
 			if (!newTest) throw new Error('createTestWithQuestions: test row was not returned')
 
 			for (const [index, { question, id }] of planned.entries()) {

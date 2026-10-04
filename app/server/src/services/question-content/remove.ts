@@ -30,7 +30,8 @@ type IdRow = { id: string }
 const CONTENT_NAMESPACE = 'topics/'
 
 function isProtected(key: string): boolean {
-	return !key.startsWith(CONTENT_NAMESPACE) || key.split('/').includes('assets')
+	if (!key.startsWith(CONTENT_NAMESPACE)) return true
+	return key.split('/')[3] === 'assets'
 }
 
 function isValidKey(key: string): boolean {

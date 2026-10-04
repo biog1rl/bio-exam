@@ -2,8 +2,9 @@ import { fileTypeFromBuffer } from 'file-type'
 import crypto from 'node:crypto'
 import sharp from 'sharp'
 
+import { db } from '../../db/index.js'
 import { ApiError } from '../../lib/errors.js'
-import { assetUsage, isAssetIndexComplete, type AssetUsage } from '../question-content/asset-index.js'
+import { assetUsage, isAssetIndexComplete, lockAssetKey, type AssetUsage } from '../question-content/asset-index.js'
 import {
 	isMediaLibraryKey,
 	isServableImageKey,
@@ -88,9 +89,12 @@ export async function deleteImage(input: unknown): Promise<void> {
 	const path = requirePath(input)
 	if (!isMediaLibraryKey(path)) throw invalidPath()
 	if (!(await isAssetIndexComplete())) throw new ApiError(409, ASSET_INDEX_INCOMPLETE_MESSAGE)
-	const usage = await assetUsage(path)
-	if (usage.questions > 0 || usage.drafts > 0) throw new AssetInUseError(usage)
-	await storage().remove([path])
+	await db.transaction(async (tx) => {
+		await lockAssetKey(tx, path)
+		const usage = await assetUsage(path, tx)
+		if (usage.questions > 0 || usage.drafts > 0) throw new AssetInUseError(usage)
+		await storage().remove([path])
+	})
 }
 
 export async function readServableImage(input: unknown): Promise<StorageReadResult> {

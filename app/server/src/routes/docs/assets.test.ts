@@ -285,6 +285,77 @@ describe('DELETE /api/docs/assets: используемая картинка (D-
 		assert.ok(mem.get(key))
 	})
 
+	async function testWithQuestions(questions: Array<{ promptText: string; explanationText?: string }>) {
+		topicCounter += 1
+		const slug = `assets-usage-${topicCounter}`
+		const topic = await call(ctx, 'POST', '/api/tests/topics', {
+			cookies: jarOf('admin'),
+			body: { slug, title: `Тема ${slug}` },
+		})
+		assert.equal(topic.status, 201, JSON.stringify(topic.body))
+		const saved = await call(ctx, 'POST', '/api/tests/save', {
+			cookies: jarOf('admin'),
+			body: {
+				topicId: (topic.body.topic as Json).id,
+				title: `Тест ${slug}`,
+				slug: `${slug}-test`,
+				isPublished: true,
+				questions: questions.map((question, order) => ({
+					type: 'radio',
+					order,
+					...question,
+					options: [
+						{ id: 'a', text: 'Клетка' },
+						{ id: 'b', text: 'Ткань' },
+					],
+					correct: 'a',
+					points: 1,
+				})),
+			},
+		})
+		assert.equal(saved.status, 201, JSON.stringify(saved.body))
+		const testId = (saved.body.test as Json).id as string
+		const { rows } = await ctx.pgPool.query<{ id: string }>(
+			'SELECT id FROM questions WHERE test_id = $1 ORDER BY "order", id',
+			[testId]
+		)
+		return { testId, questionIds: rows.map((row) => row.id) }
+	}
+
+	test('картинка только в пояснении одного вопроса, в промпте второго и в черновике: 409, usage считает всех', async () => {
+		const key = imageKey()
+		mem.put(key, bytesOf('everywhere'), 'image/webp')
+		const { testId } = await testWithQuestions([
+			{ promptText: 'Без картинки в промпте', explanationText: `Пояснение ![](${key})` },
+			{ promptText: `Промпт <img src="/api/docs/assets/proxy?path=${encodeURIComponent(key)}">` },
+		])
+		await ctx.db
+			.insert(ctx.schema.questionDrafts)
+			.values({ testId, ownerId: adminId, payload: { promptText: `![](${key})` } })
+		const reply = await deleteAsset(key)
+		assert.equal(reply.status, 409)
+		assert.deepEqual(reply.body, { error: ASSET_IN_USE, usage: { questions: 2, drafts: 1 } })
+		assert.ok(mem.get(key))
+	})
+
+	test('после удаления одного из двух вопросов с общей картинкой удаление картинки всё ещё 409', async () => {
+		const key = imageKey()
+		mem.put(key, bytesOf('shared'), 'image/webp')
+		const { testId, questionIds } = await testWithQuestions([
+			{ promptText: `Первый ![](${key})` },
+			{ promptText: `Второй ![](${key})` },
+		])
+		const [first] = questionIds
+		assert.ok(first)
+		const removed = await call(ctx, 'DELETE', `/api/tests/${testId}/questions/${first}`, { cookies: jarOf('admin') })
+		assert.equal(removed.status, 200, JSON.stringify(removed.body))
+		assert.ok(mem.get(key))
+		const reply = await deleteAsset(key)
+		assert.equal(reply.status, 409)
+		assert.deepEqual(reply.body, { error: ASSET_IN_USE, usage: { questions: 1, drafts: 0 } })
+		assert.ok(mem.get(key))
+	})
+
 	test('_ и % в ключе не работают как шаблон LIKE', async () => {
 		const name = randomBytes(16).toString('hex')
 		const testId = await testWithPrompt('Вопрос без картинки')
@@ -384,7 +455,7 @@ describe('GET /api/docs/assets/signed: разрешение ссылки', () =>
 		test(`user получает URL для ${key}`, async () => {
 			const reply = await call(ctx, 'GET', signedPath(key), { cookies: jarOf('user') })
 			assert.equal(reply.status, 200)
-			assert.ok((reply.body.signedUrl as string).startsWith(`${proxyPath(key)}&cacheNonce=`))
+			assert.equal(reply.body.signedUrl, proxyPath(key))
 		})
 	}
 
@@ -424,7 +495,7 @@ describe('GET /api/docs/assets/signed: разрешение ссылки', () =>
 			const reply = await call(ctx, 'GET', signedPath(input), { cookies: jarOf('user') })
 			assert.equal(reply.status, 200)
 			const signedUrl = reply.body.signedUrl as string
-			assert.ok(signedUrl.startsWith(`${proxyPath(key)}&cacheNonce=`))
+			assert.equal(signedUrl, proxyPath(key))
 			const served = await fetchRaw(signedUrl, jarOf('user'))
 			assert.equal(served.status, 200)
 			assert.ok(served.bytes.equals(mem.get(key)?.data ?? Buffer.alloc(0)))

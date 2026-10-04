@@ -176,7 +176,9 @@ export async function recropAvatar(input: { userId: string; crop: AvatarCrop }):
 	const { userId, crop } = input
 	const previous = await currentAvatar(userId)
 	const originalKey = ownStorageKey(previous?.avatar)
-	if (!previous?.avatar || originalKey === null) throw new ApiError(400, NO_AVATAR_ERROR)
+	if (!previous?.avatar || originalKey === null || !originalKey.startsWith(userPrefix(userId))) {
+		throw new ApiError(400, NO_AVATAR_ERROR)
+	}
 	const original = await storage().read(originalKey)
 	if (original === null) throw new ApiError(400, NO_AVATAR_ERROR)
 

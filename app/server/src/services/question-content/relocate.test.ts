@@ -47,9 +47,10 @@ function questionDir(topicSlug: string, testSlug: string, questionId: string): s
 	return `${testPrefix(topicSlug, testSlug)}/questions/${questionId}`
 }
 
-function base(key: string | null): string {
+function assertRevisionKey(key: string | null | undefined, dir: string, kind: 'prompt' | 'explanation') {
 	assert.ok(key)
-	return key.slice(key.lastIndexOf('/') + 1)
+	assert.ok(key.startsWith(`${dir}/`), key)
+	assert.match(key.slice(dir.length + 1), new RegExp(`^${kind}-[0-9a-f]{12}\\.md$`))
 }
 
 async function createTopic(slug: string): Promise<string> {
@@ -170,15 +171,11 @@ describe('переименование теста', () => {
 		assert.equal((reply.body.test as Json).topicSlug, topicSlug)
 		assert.equal(await testSlugInDb(testId), newSlug)
 		const after = await questionRows(testId)
-		for (const [index, row] of after.entries()) {
-			const prior = before[index]
-			assert.ok(prior)
-			assert.equal(row.prompt_path, `${questionDir(topicSlug, newSlug, row.id)}/${base(prior.prompt_path)}`)
+		assert.equal(after.length, before.length)
+		for (const row of after) {
+			assertRevisionKey(row.prompt_path, questionDir(topicSlug, newSlug, row.id), 'prompt')
 		}
-		assert.equal(
-			after[0]?.explanation_path,
-			`${questionDir(topicSlug, newSlug, after[0]?.id ?? '')}/${base(before[0]?.explanation_path ?? null)}`
-		)
+		assertRevisionKey(after[0]?.explanation_path, questionDir(topicSlug, newSlug, after[0]?.id ?? ''), 'explanation')
 		assert.equal(after[1]?.explanation_path, null)
 		assert.deepEqual(
 			after.map((row) => stored(row.prompt_path)),
@@ -203,7 +200,7 @@ describe('переименование теста', () => {
 		const reply = await patchSettings(testId, settingsBody(topicId, newSlug))
 		assert.equal(reply.status, 200, JSON.stringify(reply.body))
 		const [after] = await questionRows(testId)
-		assert.equal(after?.prompt_path, `${questionDir(topicSlug, newSlug, row.id)}/prompt.md`)
+		assertRevisionKey(after?.prompt_path, questionDir(topicSlug, newSlug, row.id), 'prompt')
 		assert.equal(stored(after?.prompt_path), 'Устаревший')
 		assert.equal(mem.get(legacy), null)
 	})
@@ -223,7 +220,7 @@ describe('переименование теста', () => {
 		const reply = await patchSettings(testId, settingsBody(topicId, newSlug))
 		assert.equal(reply.status, 200, JSON.stringify(reply.body))
 		const [after] = await questionRows(testId)
-		assert.equal(after?.prompt_path, `${questionDir(topicSlug, newSlug, row.id)}/prompt.md`)
+		assertRevisionKey(after?.prompt_path, questionDir(topicSlug, newSlug, row.id), 'prompt')
 		assert.equal(stored(after?.prompt_path), 'Без указателя')
 		assert.equal(mem.get(fallback), null)
 	})
@@ -423,6 +420,222 @@ describe('гонки с переименованием теста', () => {
 		assert.ok(created)
 		assert.equal(stored(created.prompt_path), 'Появился')
 		assert.equal(rows.length, 2)
+	})
+})
+
+describe('устаревшее чтение настроек теста', () => {
+	function beforeTopicRead(action: () => Promise<unknown>) {
+		const topicsQuery = ctx.db.query.topics
+		const original = topicsQuery.findFirst.bind(topicsQuery)
+		let fired = false
+		vi.spyOn(topicsQuery, 'findFirst').mockImplementation(((...args: Parameters<typeof original>) => {
+			if (fired) return original(...args)
+			fired = true
+			return Promise.resolve(action()).then(() => original(...args))
+		}) as typeof original)
+		return { fired: () => fired }
+	}
+
+	test('сохранение без смены slug после параллельного переименования: 409, slug переименования не откатывается', async () => {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const oldSlug = nextSlug('stale')
+		const newSlug = nextSlug('stale-new')
+		const testId = await saveTest(topicId, oldSlug, [radio('Один', { order: 0 })])
+		let renamed: Awaited<ReturnType<typeof patchSettings>> | null = null
+		const race = beforeTopicRead(async () => {
+			renamed = await patchSettings(testId, settingsBody(topicId, newSlug))
+		})
+		const error = await qc
+			.updateTestSettings({
+				testId,
+				data: settingsBody(topicId, oldSlug, { title: 'Устаревшее название' }) as never,
+				userId: null,
+			})
+			.then(
+				() => null,
+				(rejection: unknown) => rejection as { statusCode?: number; message?: string }
+			)
+		assert.equal(race.fired(), true)
+		assert.equal(renamed!.status, 200, JSON.stringify(renamed!.body))
+		assert.equal(error?.statusCode, 409)
+		assert.equal(error?.message, CONTENT_CHANGED)
+		assert.equal(await testSlugInDb(testId), newSlug)
+		const [row] = await questionRows(testId)
+		assert.ok(row?.prompt_path?.startsWith(`${questionDir(topicSlug, newSlug, row.id)}/`))
+		assert.equal(stored(row?.prompt_path), 'Один')
+	})
+
+	test('переименование после параллельной публикации: 409, версия публикации не откатывается', async () => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const slug = nextSlug('draft')
+		const testId = await saveTest(topicId, slug, [radio('Черновик', { order: 0 })])
+		const unpublished = await patchSettings(testId, settingsBody(topicId, slug, { isPublished: false }))
+		assert.equal(unpublished.status, 200, JSON.stringify(unpublished.body))
+		const versionOf = async () =>
+			(await ctx.pgPool.query<{ version: number }>('SELECT version FROM tests WHERE id = $1', [testId])).rows[0]
+				?.version
+		const before = await versionOf()
+		let published: Awaited<ReturnType<typeof patchSettings>> | null = null
+		const race = beforeTopicRead(async () => {
+			published = await patchSettings(testId, settingsBody(topicId, slug, { isPublished: true }))
+		})
+		const error = await qc
+			.updateTestSettings({
+				testId,
+				data: settingsBody(topicId, nextSlug('draft-new'), { isPublished: false }) as never,
+				userId: null,
+			})
+			.then(
+				() => null,
+				(rejection: unknown) => rejection as { statusCode?: number; message?: string }
+			)
+		assert.equal(race.fired(), true)
+		assert.equal(published!.status, 200, JSON.stringify(published!.body))
+		assert.equal(error?.statusCode, 409)
+		assert.equal(await testSlugInDb(testId), slug)
+		assert.equal(await versionOf(), (before ?? 0) + 1)
+	})
+})
+
+describe('два одинаковых переноса подряд не удаляют живые объекты', () => {
+	function missingPointers(rows: QuestionRow[]): string[] {
+		return rows
+			.flatMap((row) => [row.prompt_path, row.explanation_path])
+			.filter((key): key is string => typeof key === 'string' && mem.get(key) === null)
+	}
+
+	test('второе переименование во время копирования первого: первое 409, указатели второго читаются', async () => {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const oldSlug = nextSlug('twin')
+		const newSlug = nextSlug('twin-new')
+		const testId = await saveTest(topicId, oldSlug, [
+			radio('Первый', { order: 0, explanationText: 'Пояснение первого' }),
+			radio('Второй', { order: 1 }),
+		])
+		let second: Awaited<ReturnType<typeof patchSettings>> | null = null
+		const race = afterCopies(1, async () => {
+			second = await patchSettings(testId, settingsBody(topicId, newSlug))
+		})
+		const first = await patchSettings(testId, settingsBody(topicId, newSlug))
+		assert.equal(race.fired(), true)
+		assert.equal(second!.status, 200, JSON.stringify(second!.body))
+		assert.equal(first.status, 409)
+		assert.equal(await testSlugInDb(testId), newSlug)
+		const rows = await questionRows(testId)
+		assert.deepEqual(missingPointers(rows), [])
+		assert.deepEqual(
+			rows.map((row) => stored(row.prompt_path)),
+			['Первый', 'Второй']
+		)
+		assert.equal(stored(rows[0]?.explanation_path), 'Пояснение первого')
+	})
+
+	test('второе переименование во время первой пачки копий, вторая пачка первого падает: 503, указатели второго читаются', async () => {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const oldSlug = nextSlug('batch')
+		const newSlug = nextSlug('batch-new')
+		const testId = await saveTest(
+			topicId,
+			oldSlug,
+			Array.from({ length: 9 }, (_, index) => radio(`Вопрос ${index}`, { order: index }))
+		)
+		let second: Awaited<ReturnType<typeof patchSettings>> | null = null
+		const race = afterCopies(1, async () => {
+			second = await patchSettings(testId, settingsBody(topicId, newSlug))
+		})
+		const first = await patchSettings(testId, settingsBody(topicId, newSlug))
+		assert.equal(race.fired(), true)
+		assert.equal(second!.status, 200, JSON.stringify(second!.body))
+		assert.equal(first.status, 503)
+		assert.equal(first.body.error, ROLLBACK_ERROR)
+		const rows = await questionRows(testId)
+		assert.equal(rows.length, 9)
+		assert.deepEqual(missingPointers(rows), [])
+		assert.deepEqual(
+			rows.map((row) => stored(row.prompt_path)),
+			Array.from({ length: 9 }, (_, index) => `Вопрос ${index}`)
+		)
+	})
+
+	test('второе переименование темы во время копирования первого: указатели читаются', async () => {
+		const oldTopic = nextSlug('twin-topic')
+		const newTopic = nextSlug('twin-topic-new')
+		const topicId = await createTopic(oldTopic)
+		const testId = await saveTest(topicId, nextSlug('t'), [radio('Т1', { order: 0 }), radio('Т2', { order: 1 })])
+		let second: Awaited<ReturnType<typeof patchTopic>> | null = null
+		const race = afterCopies(1, async () => {
+			second = await patchTopic(topicId, { slug: newTopic })
+		})
+		const first = await patchTopic(topicId, { slug: newTopic })
+		assert.equal(race.fired(), true)
+		assert.equal(second!.status, 200, JSON.stringify(second!.body))
+		assert.equal(first.status, 409)
+		const rows = await questionRows(testId)
+		assert.deepEqual(missingPointers(rows), [])
+		assert.deepEqual(
+			rows.map((row) => stored(row.prompt_path)),
+			['Т1', 'Т2']
+		)
+	})
+
+	test('два одновременных PATCH с одинаковым slug: указатели читаются', async () => {
+		for (let round = 0; round < 3; round += 1) {
+			const topicId = await createTopic(nextSlug('topic'))
+			const newSlug = nextSlug('pair-new')
+			const testId = await saveTest(topicId, nextSlug('pair'), [radio('А', { order: 0 }), radio('Б', { order: 1 })])
+			const replies = await Promise.all([
+				patchSettings(testId, settingsBody(topicId, newSlug)),
+				patchSettings(testId, settingsBody(topicId, newSlug)),
+			])
+			assert.ok(replies.some((reply) => reply.status === 200))
+			assert.equal(await testSlugInDb(testId), newSlug)
+			assert.deepEqual(missingPointers(await questionRows(testId)), [])
+		}
+	})
+})
+
+describe('гонка одинакового slug при переименовании', () => {
+	test('два теста темы переименовываются в один slug: проигравший получает 409 «slug занят», не 500', async () => {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const target = nextSlug('same-target')
+		const firstId = await saveTest(topicId, nextSlug('first'), [radio('Первый', { order: 0 })])
+		const secondId = await saveTest(topicId, nextSlug('second'), [radio('Второй', { order: 0 })])
+		const before = await questionRows(firstId)
+		let second: Awaited<ReturnType<typeof patchSettings>> | null = null
+		const race = afterCopies(1, async () => {
+			second = await patchSettings(secondId, settingsBody(topicId, target))
+		})
+		const first = await patchSettings(firstId, settingsBody(topicId, target))
+		assert.equal(race.fired(), true)
+		assert.equal(second!.status, 200, JSON.stringify(second!.body))
+		assert.equal(first.status, 409, JSON.stringify(first.body))
+		assert.equal(first.body.error, 'Test with this slug already exists in this topic')
+		assert.deepEqual(await questionRows(firstId), before)
+		assert.equal(stored(before[0]?.prompt_path), 'Первый')
+	})
+
+	test('две темы переименовываются в один slug: проигравшая получает 409 «slug занят», не 500', async () => {
+		const target = nextSlug('topic-target')
+		const firstTopic = await createTopic(nextSlug('topic-a'))
+		const secondTopic = await createTopic(nextSlug('topic-b'))
+		const testId = await saveTest(firstTopic, nextSlug('a'), [radio('А', { order: 0 })])
+		await saveTest(secondTopic, nextSlug('b'), [radio('Б', { order: 0 })])
+		const before = await questionRows(testId)
+		let second: Awaited<ReturnType<typeof patchTopic>> | null = null
+		const race = afterCopies(1, async () => {
+			second = await patchTopic(secondTopic, { slug: target })
+		})
+		const first = await patchTopic(firstTopic, { slug: target })
+		assert.equal(race.fired(), true)
+		assert.equal(second!.status, 200, JSON.stringify(second!.body))
+		assert.equal(first.status, 409, JSON.stringify(first.body))
+		assert.equal(first.body.error, 'Topic with this slug already exists')
+		assert.deepEqual(await questionRows(testId), before)
+		assert.equal(stored(before[0]?.prompt_path), 'А')
 	})
 })
 

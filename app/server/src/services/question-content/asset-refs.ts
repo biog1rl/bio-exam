@@ -1,6 +1,6 @@
 import { parseStorageLink, type StorageLink } from '../storage/links.js'
 
-const MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*(?:<([^>]*)>|([^\s)]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g
+const MARKDOWN_IMAGE = /!\[[^[]*?\]\(\s*(?:<([^>]*)>|([^\s)]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g
 const HTML_IMAGE =
 	/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*"([^"]*)"\s*\}|\{\s*'([^']*)'\s*\}|\{\s*`([^`$]*)`\s*\})/gi
 
@@ -80,11 +80,22 @@ function uploadsForm(rest: string): AssetLinkForm {
 	return 'uploads-other'
 }
 
+function isProxyUrl(value: string): boolean {
+	try {
+		return new URL(value).pathname === PROXY_PATH
+	} catch {
+		return false
+	}
+}
+
 function linkForm(src: string, link: StorageLink): AssetLinkForm {
 	if (link.kind === 'invalid') return 'invalid'
 	if (link.kind === 'external') return 'external'
 	const value = src.trim()
-	if (HTTP_URL.test(value)) return SUPABASE_PUBLIC_PATH.test(value) ? 'supabase-public' : 'supabase-sign'
+	if (HTTP_URL.test(value)) {
+		if (isProxyUrl(value)) return 'proxy-url'
+		return SUPABASE_PUBLIC_PATH.test(value) ? 'supabase-public' : 'supabase-sign'
+	}
 	if (value.startsWith(PROXY_PATH)) return 'proxy-url'
 	if (value.startsWith('/uploads/')) return uploadsForm(value.slice('/uploads/'.length))
 	if (value.startsWith('uploads/')) return uploadsForm(value.slice('uploads/'.length))

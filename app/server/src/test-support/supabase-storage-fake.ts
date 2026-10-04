@@ -72,6 +72,15 @@ async function bodyJson<T>(body: unknown): Promise<T> {
 	return JSON.parse((await bodyBuffer(body)).toString('utf8')) as T
 }
 
+function decodePathKey(raw: string | undefined): string | undefined {
+	if (raw === undefined) return undefined
+	try {
+		return raw.split('/').map(decodeURIComponent).join('/')
+	} catch {
+		return raw
+	}
+}
+
 function hasPrefix(key: string, prefix: string): boolean {
 	return prefix === '' || key === prefix || key.startsWith(`${prefix}/`)
 }
@@ -161,7 +170,7 @@ export function createSupabaseStorageFake(): SupabaseStorageFake {
 		const objectMatch = /^\/object\/([^/]+)(?:\/(.+))?$/.exec(path)
 		if (!objectMatch) return json(404, { statusCode: '404', error: 'not_found', message: 'Route not found' })
 		const bucket = objectMatch[1] ?? ''
-		const key = objectMatch[2]
+		const key = decodePathKey(objectMatch[2])
 
 		if (method === 'DELETE' && key === undefined) {
 			const body = await bodyJson<{ prefixes: string[] }>(init?.body)

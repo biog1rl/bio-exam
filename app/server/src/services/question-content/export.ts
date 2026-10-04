@@ -6,6 +6,7 @@ import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { ApiError } from '../../lib/errors.js'
 import { parseTestScoringRules, resolveEffectiveScoringRules, type TestScoringRules } from '../../lib/tests/scoring.js'
 import type { TestScope } from '../access-policy/scope.js'
+import { isServableImageKey } from '../storage/index.js'
 import { buildZip, type ZipEntry } from '../storage/zip.js'
 import { extractAssetRefs } from './asset-refs.js'
 import { questionMarkdownCandidates, testPrefix } from './paths.js'
@@ -20,6 +21,10 @@ export type ArchiveResult = { buffer: Buffer; filename: string }
 type TestRow = typeof tests.$inferSelect
 type TopicRow = typeof topics.$inferSelect
 type QuestionRow = typeof questions.$inferSelect
+
+function isExportableAsset(key: string): boolean {
+	return isServableImageKey(key) && !key.startsWith('avatars/')
+}
 
 type TestParts = {
 	entries: ZipEntry[]
@@ -118,7 +123,7 @@ async function collectTestParts(
 				continue
 			}
 			entries.push({ name: `questions/${question.id}/${file.fileName}`, buffer: Buffer.from(found.text) })
-			for (const key of extractAssetRefs(found.text)) refs.add(key)
+			for (const key of extractAssetRefs(found.text)) if (isExportableAsset(key)) refs.add(key)
 		}
 	}
 

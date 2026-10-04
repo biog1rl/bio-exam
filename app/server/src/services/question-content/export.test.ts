@@ -170,6 +170,29 @@ describe('ZIP теста', () => {
 		assert.equal(text(reply.entries, 'missing-files.txt'), `${missing}\n`)
 	})
 
+	test('ссылки на answer_keys.json, промпт чужого теста и аватар в ZIP не попадают', async () => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const slug = nextSlug('foreign')
+		const answers = `topics/${nextSlug('other')}/s/answer_keys.json`
+		const prompt = `topics/${nextSlug('other')}/s/questions/q/prompt-0a1b2c3d4e5f.md`
+		const avatar = `avatars/${randomBytes(6).toString('hex')}/a.png`
+		const image = imageKey('kept')
+		mem.put(answers, '{"secret":"KEY-123"}', 'application/json')
+		mem.put(prompt, 'чужой промпт', 'text/markdown')
+		mem.put(avatar, randomBytes(32), 'image/png')
+		mem.put(image, randomBytes(32), 'image/webp')
+		const testId = await saveTest(topicId, slug, [
+			radio(`![](${answers}) ![](${prompt}) ![](${avatar}) ![](${image})`, { order: 0 }),
+		])
+		const [row] = await questionRows(testId)
+		assert.ok(row)
+
+		const reply = await download(`/api/tests/${testId}/export`)
+		assert.equal(reply.status, 200)
+		assert.deepEqual([...reply.entries.keys()], ['settings.json', `questions/${row.id}/prompt.md`, image])
+		assert.equal(reply.buffer.includes('KEY-123'), false)
+	})
+
 	test('settings.json сгенерирован из БД, updatedAt = tests.updated_at; без пропусков missing-files.txt нет', async () => {
 		const topicId = await createTopic(nextSlug('topic'))
 		const slug = nextSlug('settings')

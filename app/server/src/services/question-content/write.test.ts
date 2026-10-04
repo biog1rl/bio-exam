@@ -440,6 +440,41 @@ describe('правка вопроса', () => {
 	})
 })
 
+describe('гонка одинакового slug при создании теста', () => {
+	test('второй POST /save с тем же slug во время записи файлов первого: первый 409 «slug занят», не 500, его файлы удалены', async () => {
+		const slug = nextSlug('dup')
+		const original = mem.write.bind(mem)
+		let fired = false
+		let second: Awaited<ReturnType<typeof call>> | null = null
+		vi.spyOn(mem, 'write').mockImplementation(async (key, data, options) => {
+			await original(key, data, options)
+			if (!fired) {
+				fired = true
+				second = await call(ctx, 'POST', '/api/tests/save', {
+					cookies: adminJar,
+					body: { topicId, title: `Тест ${slug}`, slug, isPublished: true, questions: [radio('Второй', { order: 0 })] },
+				})
+			}
+		})
+		const first = await call(ctx, 'POST', '/api/tests/save', {
+			cookies: adminJar,
+			body: { topicId, title: `Тест ${slug}`, slug, isPublished: true, questions: [radio('Первый', { order: 0 })] },
+		})
+		assert.equal(fired, true)
+		assert.equal(second!.status, 201, JSON.stringify(second!.body))
+		assert.equal(first.status, 409, JSON.stringify(first.body))
+		assert.equal(first.body.error, 'Test with this slug already exists in this topic')
+		const testId = (second!.body.test as Json).id as string
+		const rows = await questionRows(testId)
+		assert.equal(rows.length, 1)
+		assert.equal(stored(rows[0]?.prompt_path), 'Второй')
+		assert.deepEqual(
+			mem.keys(`topics/${TOPIC_SLUG}/${slug}`).filter((key) => key !== rows[0]?.prompt_path),
+			[]
+		)
+	})
+})
+
 describe('доступ к записи через scope.ts', () => {
 	test('студент: /save, создание и правка вопроса → 403, в БД и хранилище ничего не меняется', async () => {
 		const testSlug = nextSlug('student')

@@ -156,13 +156,5 @@ export function storage(): StorageModule {
 }
 
 export function storageUrl(key: string): string {
-	const normalized = normalizeKey(key)
-	if (normalized.startsWith('avatars/')) {
-		const module = storage()
-		if (module.kind === 'supabase') {
-			const url = module.publicUrl(normalized)
-			if (url) return url
-		}
-	}
-	return `/api/docs/assets/proxy?path=${encodeURIComponent(normalized)}&cacheNonce=${Date.now()}`
+	return `/api/docs/assets/proxy?path=${encodeURIComponent(normalizeKey(key))}`
 }

@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { db } from '../../db/index.js'
 import { questions, tests, topics } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { ApiError } from '../../lib/errors.js'
+import { ApiError, isUniqueViolation } from '../../lib/errors.js'
 import { updateQuestionSearchDocumentLocation } from '../search/question-documents.js'
 import { lockTest, resequenceQuestions, type Tx } from './order.js'
 import { planRelocation, relocateQuestionObjects, switchPointers } from './relocate.js'
@@ -26,8 +26,6 @@ type IdRow = { id: string }
 type OrderRow = { next: number }
 
 type ResolvedTarget = { topic: TopicRow; test: TestRow | null; slug: string }
-
-const UNIQUE_VIOLATION = '23505'
 
 async function lockExpected(tx: Tx, test: { id: string; slug: string; topicId: string }): Promise<void> {
 	let locked
@@ -53,15 +51,6 @@ async function assertTopicSlugs(tx: Tx, expected: Map<string, string>): Promise<
 	}
 }
 
-function isUniqueViolation(error: unknown): boolean {
-	let current: unknown = error
-	for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
-		if ((current as { code?: unknown }).code === UNIQUE_VIOLATION) return true
-		current = (current as { cause?: unknown }).cause
-	}
-	return false
-}
-
 async function freeSlug(topicId: string, base: string): Promise<string> {
 	let slug = base
 	let suffix = 2
@@ -79,6 +68,7 @@ async function resolveTarget(params: {
 }): Promise<ResolvedTarget> {
 	const { source, targetTestId, targetTopicId } = params
 	const byId = targetTestId ? await db.query.tests.findFirst({ where: eq(tests.id, targetTestId) }) : null
+	if (targetTestId && !byId) throw new ApiError(404, ERROR_MESSAGES.TEST_NOT_FOUND)
 	if (byId) {
 		const topic = await db.query.topics.findFirst({ where: eq(topics.id, byId.topicId) })
 		if (!topic) throw new ApiError(404, ERROR_MESSAGES.TOPIC_NOT_FOUND)

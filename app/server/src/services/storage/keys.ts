@@ -7,6 +7,7 @@ export type StorageNamespace = (typeof STORAGE_NAMESPACES)[number]
 const MAX_DECODE_STEPS = 3
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
 const DRIVE_LETTER = /^[A-Za-z]:/
+const URL_DELIMITERS = /[?#]|%2f|%5c/i
 const SERVABLE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
 function decodingStages(input: string): string[] {
@@ -29,6 +30,7 @@ function decodingStages(input: string): string[] {
 function assertSafeStage(stage: string): void {
 	if (stage.startsWith('/') || stage.startsWith('\\') || DRIVE_LETTER.test(stage)) throw new StorageKeyError()
 	if (stage.includes('\\') || CONTROL_CHARACTERS.test(stage)) throw new StorageKeyError()
+	if (URL_DELIMITERS.test(stage)) throw new StorageKeyError()
 	for (const segment of stage.split('/')) {
 		if (segment === '' || segment === '.' || segment === '..') throw new StorageKeyError()
 	}

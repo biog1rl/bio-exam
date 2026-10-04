@@ -5,12 +5,12 @@ import type { z } from 'zod'
 import { db } from '../../db/index.js'
 import { questions, tests, topics } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { ApiError } from '../../lib/errors.js'
+import { ApiError, isUniqueViolation } from '../../lib/errors.js'
 import type { TopicSchema, UpdateTestSettingsSchema } from '../../schemas/tests.js'
 import { updateQuestionSearchDocumentLocation } from '../search/question-documents.js'
 import { StorageKeyError, storage } from '../storage/index.js'
 import { lockTest, type Tx } from './order.js'
-import { questionMarkdownCandidates, questionPrefix, testPrefix, type ContentKind } from './paths.js'
+import { contentKey, newRevision, questionMarkdownCandidates, testPrefix, type ContentKind } from './paths.js'
 import { CONTENT_CHANGED_MESSAGE } from './write.js'
 
 export const COPY_CONCURRENCY = 8
@@ -90,11 +90,6 @@ function rebase(value: string | null, fromPrefix: string, toPrefix: string): str
 	return value.startsWith(`${fromPrefix}/`) ? `${toPrefix}${value.slice(fromPrefix.length)}` : value
 }
 
-function targetFileName(source: string, kind: ContentKind): string {
-	const base = path.posix.basename(source)
-	return new RegExp(`^${kind}(-[0-9a-f]+)?\\.md$`).test(base) ? base : `${kind}.md`
-}
-
 function candidatesFor(row: RelocationRow, kind: ContentKind): string[] {
 	const storedPath = kind === 'prompt' ? row.promptPath : row.explanationPath
 	if (kind === 'explanation' && !storedPath) return []
@@ -128,11 +123,12 @@ export async function planRelocation(rows: RelocationRow[], target: RelocationTa
 		const fromPrefix = testPrefix(row.topicSlug, row.testSlug)
 		const toTestSlug = target.testSlug ?? row.testSlug
 		const toPrefix = testPrefix(target.topicSlug, toTestSlug)
+		const rev = newRevision()
 		const resolve = (kind: ContentKind, value: string | null): string | null => {
 			const source = entry[kind].find((key) => present.has(key))
 			if (!source) return rebase(value, fromPrefix, toPrefix)
-			const to = `${questionPrefix(target.topicSlug, toTestSlug, row.id)}/${targetFileName(source, kind)}`
-			if (to !== source) pairs.push({ questionId: row.id, kind, from: source, to })
+			const to = contentKey({ topicSlug: target.topicSlug, testSlug: toTestSlug, questionId: row.id, kind, rev })
+			pairs.push({ questionId: row.id, kind, from: source, to })
 			return to
 		}
 		pointers.push({
@@ -185,6 +181,53 @@ async function removeObjects(keys: string[]): Promise<void> {
 	}
 }
 
+type NullPointerRow = {
+	id: string
+	test_id: string
+	test_slug: string
+	topic_slug: string
+	prompt_path: string | null
+	explanation_path: string | null
+}
+
+async function fallbackCandidates(tx: Tx, keys: string[]): Promise<Set<string>> {
+	const topicSlugs = new Set<string>()
+	for (const key of keys) {
+		const segments = key.split('/')
+		if (segments[0] === 'topics' && segments[1]) topicSlugs.add(segments[1])
+	}
+	const found = new Set<string>()
+	if (topicSlugs.size === 0) return found
+	const list = sql.join(
+		[...topicSlugs].map((slug) => sql`${slug}`),
+		sql`, `
+	)
+	const result = await tx.execute<NullPointerRow>(sql`
+		SELECT q.id, q.test_id, t.slug AS test_slug, tp.slug AS topic_slug, q.prompt_path, q.explanation_path
+		FROM questions q
+		JOIN tests t ON t.id = q.test_id
+		JOIN topics tp ON tp.id = t.topic_id
+		WHERE tp.slug IN (${list}) AND (q.prompt_path IS NULL OR q.explanation_path IS NULL)
+	`)
+	for (const row of result.rows) {
+		const kinds: ContentKind[] = []
+		if (row.prompt_path === null) kinds.push('prompt')
+		if (row.explanation_path === null) kinds.push('explanation')
+		for (const kind of kinds) {
+			const candidates = questionMarkdownCandidates({
+				storedPath: null,
+				topicSlug: row.topic_slug,
+				testSlug: row.test_slug,
+				testId: row.test_id,
+				questionId: row.id,
+				fileName: `${kind}.md`,
+			})
+			for (const candidate of candidates) found.add(candidate)
+		}
+	}
+	return found
+}
+
 async function unreferencedKeys(tx: Tx, keys: string[]): Promise<string[]> {
 	const unique = [...new Set(keys)]
 	if (unique.length === 0) return []
@@ -198,7 +241,10 @@ async function unreferencedKeys(tx: Tx, keys: string[]): Promise<string[]> {
 		SELECT explanation_path AS key FROM questions WHERE explanation_path IN (${list})
 	`)
 	const used = new Set(result.rows.map((row) => row.key))
-	return unique.filter((key) => !used.has(key))
+	const unused = unique.filter((key) => !used.has(key))
+	if (unused.length === 0) return unused
+	const fallbacks = await fallbackCandidates(tx, unused)
+	return unused.filter((key) => !fallbacks.has(key))
 }
 
 export async function relocateQuestionObjects<T>(
@@ -237,7 +283,18 @@ export async function relocateQuestionObjects<T>(
 	return outcome.result
 }
 
-async function lockPlannedTest(tx: Tx, testId: string, expected: { slug: string; topicId: string }): Promise<void> {
+function conflictOnUniqueViolation(message: string): (error: unknown) => never {
+	return (error) => {
+		if (isUniqueViolation(error)) throw new ApiError(409, message)
+		throw error
+	}
+}
+
+async function lockPlannedTest(
+	tx: Tx,
+	testId: string,
+	expected: { slug: string; topicId: string; version?: number }
+): Promise<void> {
 	let locked
 	try {
 		locked = await lockTest(tx, testId)
@@ -246,6 +303,9 @@ async function lockPlannedTest(tx: Tx, testId: string, expected: { slug: string;
 		throw error
 	}
 	if (locked.slug !== expected.slug || locked.topicId !== expected.topicId) {
+		throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
+	}
+	if (expected.version !== undefined && locked.version !== expected.version) {
 		throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
 	}
 }
@@ -362,6 +422,7 @@ export async function updateTopic(params: { topicId: string; data: TopicUpdateIn
 			.set({ ...data, updatedAt: new Date() })
 			.where(eq(topics.id, topicId))
 			.returning()
+			.catch(conflictOnUniqueViolation(ERROR_MESSAGES.TOPIC_SLUG_EXISTS))
 		if (!updated) throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
 		await switchPointers(tx, plan.pointers)
 		return updated
@@ -419,9 +480,16 @@ export async function updateTestSettings(params: {
 		const [updated] = await db
 			.update(tests)
 			.set({ ...values, updatedAt: new Date() })
-			.where(eq(tests.id, testId))
+			.where(
+				and(
+					eq(tests.id, testId),
+					eq(tests.slug, existingTest.slug),
+					eq(tests.topicId, existingTest.topicId),
+					eq(tests.version, existingTest.version)
+				)
+			)
 			.returning()
-		if (!updated) throw new ApiError(404, ERROR_MESSAGES.TEST_NOT_FOUND)
+		if (!updated) throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
 		return { test: updated, topicSlug: topic.slug }
 	}
 
@@ -436,7 +504,11 @@ export async function updateTestSettings(params: {
 	const topicChanged = data.topicId !== existingTest.topicId
 
 	const test = await relocateQuestionObjects(plan.pairs, async (tx) => {
-		await lockPlannedTest(tx, testId, { slug: existingTest.slug, topicId: existingTest.topicId })
+		await lockPlannedTest(tx, testId, {
+			slug: existingTest.slug,
+			topicId: existingTest.topicId,
+			version: existingTest.version,
+		})
 		await assertTopicSlugs(
 			tx,
 			new Map([
@@ -456,6 +528,7 @@ export async function updateTestSettings(params: {
 			.set({ ...values, updatedAt: new Date() })
 			.where(eq(tests.id, testId))
 			.returning()
+			.catch(conflictOnUniqueViolation(ERROR_MESSAGES.TEST_SLUG_EXISTS))
 		if (!updated) throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
 		await switchPointers(tx, plan.pointers)
 

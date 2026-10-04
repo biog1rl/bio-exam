@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
 import { BCRYPT_COST } from '../../lib/constants.js'
+import { isApiError } from '../../lib/errors.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
 import { revokeUserSessions } from '../../services/session/index.js'
@@ -18,7 +19,13 @@ const updateProfileSchema = z.object({
 	firstName: z.string().min(1, 'Имя обязательно').max(50, 'Имя слишком длинное').optional(),
 	lastName: z.string().min(1, 'Фамилия обязательна').max(50, 'Фамилия слишком длинная').optional(),
 	login: z.string().min(3, 'Логин должен содержать минимум 3 символа').max(30, 'Логин слишком длинный').optional(),
-	avatar: z.string().url('Некорректный URL аватара').optional().or(z.literal('')).or(z.null()),
+	avatar: z
+		.string()
+		.url('Некорректный URL аватара')
+		.or(z.string().startsWith('/api/docs/assets/proxy?', 'Некорректный URL аватара'))
+		.optional()
+		.or(z.literal(''))
+		.or(z.null()),
 	avatarColor: z
 		.string()
 		.regex(/^#[0-9A-Fa-f]{6}$/, 'Некорректный цвет')
@@ -78,7 +85,7 @@ router.patch('/', sessionRequired(), async (req, res) => {
 				firstName: body.firstName,
 				lastName: body.lastName,
 				login: body.login,
-				avatar: body.avatar === undefined ? undefined : storedAvatarValue(body.avatar),
+				avatar: body.avatar === undefined ? undefined : storedAvatarValue(body.avatar, userId),
 				avatarColor: body.avatarColor,
 				initials: body.initials,
 				birthdate: body.birthdate,
@@ -110,6 +117,9 @@ router.patch('/', sessionRequired(), async (req, res) => {
 		if (error instanceof z.ZodError) {
 			console.log('Zod validation error:', error.issues)
 			return res.status(400).json({ error: 'Ошибка валидации', details: error.issues, message: 'Validation failed' })
+		}
+		if (isApiError(error) && error.statusCode < 500) {
+			return res.status(error.statusCode).json({ error: error.message })
 		}
 		console.error('Error updating profile:', error)
 		res.status(500).json({ error: 'Внутренняя ошибка сервера' })

@@ -243,12 +243,8 @@ describe('POST /api/users/avatar', () => {
 		const meta = await sharp(cropped.data).metadata()
 		assert.equal(meta.width, 256)
 		assert.equal(meta.height, 256)
-		assert.ok(
-			String(reply.body.avatarUrl).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(originalKey)}&`)
-		)
-		assert.ok(
-			String(reply.body.avatarCroppedUrl).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(croppedKey)}&`)
-		)
+		assert.equal(reply.body.avatarUrl, `/api/docs/assets/proxy?path=${encodeURIComponent(originalKey)}`)
+		assert.equal(reply.body.avatarCroppedUrl, `/api/docs/assets/proxy?path=${encodeURIComponent(croppedKey)}`)
 		const [row] = await dbModule.db
 			.select({
 				avatar: schema.users.avatar,

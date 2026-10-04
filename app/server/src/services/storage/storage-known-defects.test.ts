@@ -113,6 +113,8 @@ describe('normalizeKey and normalizePrefix (D-02)', () => {
 
 	test('percent-encoding is checked but the key is passed on without decoding', () => {
 		assert.equal(normalizeKey('images/a%20b.webp'), 'images/a%20b.webp')
+		assert.equal(normalizeKey('images/фото.webp'), 'images/фото.webp')
+		assert.equal(normalizeKey('topics/т/с/assets/a%20b.png'), 'topics/т/с/assets/a%20b.png')
 	})
 
 	const rejected: string[] = [
@@ -135,6 +137,18 @@ describe('normalizeKey and normalizePrefix (D-02)', () => {
 		'https://fake-project.supabase.test/storage/v1/object/public/main/images/x',
 		'images',
 		'',
+		'topics/T/S%2Fanswer_keys.json?/assets/x.png',
+		'topics/T/S%2Fanswer_keys.json#/assets/x.png',
+		'topics/T/S%252Fanswer_keys.json?/assets/x.png',
+		'images/foo?.png',
+		'images/foo#.png',
+		'images/foo%3F.png',
+		'images/foo%23.png',
+		'images/a%2Fb.png',
+		'images/a%2fb.png',
+		'images/a%5Cb.png',
+		'images/a%5cb.png',
+		'images/a%252Fb.png',
 	]
 
 	for (const key of rejected) {
@@ -154,6 +168,17 @@ describe('normalizeKey and normalizePrefix (D-02)', () => {
 			assert.throws(() => normalizePrefix(prefix), errorNamed('StorageKeyError'))
 		})
 	}
+
+	test('private bucket: in Supabase mode avatars and images resolve to the proxy route without a nonce or a public URL', async () => {
+		const { storageUrl } = await import('./index.js')
+		for (const key of ['avatars/u/a.png', 'images/a.webp', 'topics/t/s/assets/b.png']) {
+			const url = storageUrl(key)
+			assert.equal(url, `/api/docs/assets/proxy?path=${encodeURIComponent(key)}`)
+			assert.equal(url.includes('/storage/v1/object/public'), false)
+			assert.equal(storageUrl(key), url)
+		}
+		assert.equal(fake.calls.length, 0)
+	})
 
 	test('the module rejects a bad key before the adapter is called', async () => {
 		const { storage } = await import('./index.js')
@@ -279,6 +304,122 @@ describe('Supabase adapter error classification (D-03, storage-js 2.93)', () => 
 		await assert.rejects(() => adapter.list('images', { recursive: false }), errorNamed('StorageUnavailableError'))
 		warnSpy.mockRestore()
 		assert.equal(callsTo('POST', '/object/list/main'), 3)
+	})
+
+	describe('retry classifier on scripted responses', () => {
+		type Step = { status: number; body?: unknown } | 'throw'
+
+		async function scriptedAdapter(steps: Step[]) {
+			const calls: string[] = []
+			const create = await realCreateClient()
+			const client = create(FAKE_SUPABASE_URL, FAKE_SUPABASE_KEY, {
+				global: {
+					fetch: async (input: unknown) => {
+						calls.push(String(input instanceof Request ? input.url : input))
+						const step = steps[Math.min(calls.length - 1, steps.length - 1)]
+						if (step === undefined || step === 'throw') throw new TypeError('fetch failed')
+						if (step.status === 200) {
+							return new Response(new Uint8Array([111, 107]), {
+								status: 200,
+								headers: { 'content-type': 'text/plain' },
+							})
+						}
+						return new Response(JSON.stringify(step.body ?? { message: 'error' }), {
+							status: step.status,
+							headers: { 'content-type': 'application/json' },
+						})
+					},
+				},
+				auth: { persistSession: false },
+			})
+			return { adapter: createSupabaseAdapter({ client, bucket: 'main', retries: 2, baseDelayMs: 1 }), calls }
+		}
+
+		for (const status of [401, 403]) {
+			test(`download ${status} is not retried and is StorageUnavailableError`, async () => {
+				const { adapter, calls } = await scriptedAdapter([{ status }])
+				await assert.rejects(() => adapter.read('images/a.webp'), errorNamed('StorageUnavailableError'))
+				assert.equal(calls.length, 1)
+			})
+
+			test(`upload ${status} is not retried and is StorageUnavailableError`, async () => {
+				const { adapter, calls } = await scriptedAdapter([
+					{ status, body: { statusCode: String(status), error: 'Unauthorized', message: 'denied' } },
+				])
+				await assert.rejects(
+					() => adapter.write('images/a.webp', 'x', { contentType: 'image/webp' }),
+					errorNamed('StorageUnavailableError')
+				)
+				assert.equal(calls.length, 1)
+			})
+		}
+
+		test('a 503 followed by success returns the object after two requests', async () => {
+			const { adapter, calls } = await scriptedAdapter([{ status: 503 }, { status: 200 }])
+			const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+			const result = await adapter.read('images/a.webp')
+			warnSpy.mockRestore()
+			assert.equal(result?.data.toString(), 'ok')
+			assert.equal(calls.length, 2)
+		})
+
+		test('a thrown fetch is retried and succeeds on the next request', async () => {
+			const { adapter, calls } = await scriptedAdapter(['throw', { status: 200 }])
+			const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+			const result = await adapter.read('images/a.webp')
+			warnSpy.mockRestore()
+			assert.equal(result?.data.toString(), 'ok')
+			assert.equal(calls.length, 2)
+		})
+
+		test('a fetch that keeps throwing ends with StorageUnavailableError after three requests', async () => {
+			const { adapter, calls } = await scriptedAdapter(['throw'])
+			const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+			await assert.rejects(() => adapter.read('images/a.webp'), errorNamed('StorageUnavailableError'))
+			warnSpy.mockRestore()
+			assert.equal(calls.length, 3)
+		})
+	})
+
+	describe('read, exists and write send the key as one path, without a query or fragment tail', () => {
+		const keys = [
+			'topics/T/S%2Fanswer_keys.json?/assets/x.png',
+			'topics/T/S%2Fanswer_keys.json#/assets/x.png',
+			'images/foo?.png',
+			'images/a%20b фото.webp',
+		]
+
+		async function recordingAdapter(urls: URL[]) {
+			const create = await realCreateClient()
+			const client = create(FAKE_SUPABASE_URL, FAKE_SUPABASE_KEY, {
+				global: {
+					fetch: async (input: unknown, init?: RequestInit) => {
+						urls.push(new URL(String(input instanceof Request ? input.url : input)))
+						return fake.fetch(input, init)
+					},
+				},
+				auth: { persistSession: false },
+			})
+			return createSupabaseAdapter({ client, bucket: 'main', retries: 0, baseDelayMs: 1 })
+		}
+
+		for (const key of keys) {
+			test(JSON.stringify(key), async () => {
+				const urls: URL[] = []
+				const adapter = await recordingAdapter(urls)
+				await adapter.write(key, 'x', { contentType: 'text/plain' })
+				await adapter.read(key)
+				await adapter.exists(key)
+				assert.equal(urls.length, 3)
+				for (const url of urls) {
+					assert.equal(url.search, '')
+					assert.equal(url.hash, '')
+					const rest = url.pathname.slice('/storage/v1/object/main/'.length)
+					assert.deepEqual(rest.split('/').map(decodeURIComponent), key.split('/'))
+				}
+				assert.deepEqual([...fake.objects.keys()], [key])
+			})
+		}
 	})
 
 	test('publicUrl is computed by the client without a request', async () => {

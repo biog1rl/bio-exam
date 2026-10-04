@@ -133,6 +133,16 @@ const hostileKeys: Array<{ name: string; key: string }> = [
 		name: 'Supabase URL as a key',
 		key: 'https://fake-project.supabase.test/storage/v1/object/public/main/images/x',
 	},
+	{ name: 'encoded slash and query hiding the extension', key: 'topics/T/S%2Fanswer_keys.json?/assets/x.png' },
+	{ name: 'encoded slash and fragment hiding the extension', key: 'topics/T/S%2Fanswer_keys.json#/assets/x.png' },
+	{ name: 'raw query in a key', key: 'images/foo?.png' },
+	{ name: 'raw fragment in a key', key: 'images/foo#.png' },
+	{ name: 'encoded query in a key', key: 'images/foo%3F.png' },
+	{ name: 'encoded slash', key: 'topics/T/S%2Fanswer_keys.json' },
+	{ name: 'lowercase encoded slash', key: 'topics/T/S%2fanswer_keys.json' },
+	{ name: 'encoded backslash', key: 'topics/T/S%5Canswer_keys.json' },
+	{ name: 'lowercase encoded backslash', key: 'topics/T/S%5canswer_keys.json' },
+	{ name: 'double encoded slash', key: 'topics/T/S%252Fanswer_keys.json?/assets/x.png' },
 ]
 
 describe.each(factories)('storage contract: $name', (factory) => {
@@ -287,8 +297,25 @@ describe.each(factories)('storage contract: $name', (factory) => {
 		)
 	})
 
+	test('a key with %20 and Cyrillic is the same object for write, read, exists, copy, list and remove', async () => {
+		const key = 'images/фото%20схема.webp'
+		const copy = 'images/копия%20схемы.webp'
+		await storage.write(key, 'x', { contentType: 'image/webp' })
+		assert.equal(await storage.readText(key), 'x')
+		assert.equal(await storage.exists(key), true)
+		await storage.copy(key, copy)
+		assert.equal(await storage.readText(copy), 'x')
+		assert.deepEqual(
+			(await storage.list('images')).map((object) => object.key),
+			[copy, key].sort()
+		)
+		await storage.remove([key])
+		assert.equal(await storage.exists(key), false)
+		assert.equal(await storage.readText(copy), 'x')
+	})
+
 	test('storageUrl for images/ is the proxy route', () => {
-		assert.ok(storageUrl('images/a.webp').startsWith('/api/docs/assets/proxy?path=images%2Fa.webp&cacheNonce='))
+		assert.equal(storageUrl('images/a.webp'), '/api/docs/assets/proxy?path=images%2Fa.webp')
 	})
 
 	describe('hostile keys never reach the adapter', () => {

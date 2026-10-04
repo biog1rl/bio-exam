@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import multer from 'multer'
 
-import { isApiError } from '../../lib/errors.js'
+import { ApiError, isApiError } from '../../lib/errors.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { deleteAvatar, recropAvatar, saveAvatar, type AvatarCrop } from '../../services/assets/index.js'
 
@@ -22,10 +22,14 @@ const upload = multer({
 	},
 })
 
+const INVALID_CROP_MESSAGE = 'Некорректные параметры кропа'
+
 function numberField(body: Record<string, unknown>, name: string): number | null {
 	const value = body[name]
 	if (!value) return null
-	return parseFloat(String(value))
+	const parsed = parseFloat(String(value))
+	if (!Number.isFinite(parsed)) throw new ApiError(400, INVALID_CROP_MESSAGE)
+	return parsed
 }
 
 function cropFromBody(body: unknown): AvatarCrop {

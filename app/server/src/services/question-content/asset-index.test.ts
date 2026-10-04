@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { Pool } from 'pg'
-import { afterAll, afterEach, beforeAll, describe, test } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, test, vi } from 'vitest'
 
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 import { memoryStorage } from '../../test-support/storage.js'
@@ -233,6 +233,97 @@ async function insertUnindexed(testId: string, promptPath: string | null): Promi
 	assert.ok(id)
 	return id
 }
+
+describe('удаление картинки и сохранение вопроса с ней сериализуются по ключу (CR-02)', () => {
+	let side: Pool
+
+	beforeAll(() => {
+		side = new Pool({ connectionString: process.env.TEST_DATABASE_URL, max: 2 })
+	})
+
+	afterAll(async () => {
+		await side?.end()
+	})
+
+	async function advisoryWaiters(): Promise<number> {
+		const { rows } = await side.query<{ count: string }>(
+			`SELECT count(*)::text AS count FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND wait_event = 'advisory'`
+		)
+		return Number(rows[0]?.count)
+	}
+
+	async function waitForWaiters(expected: number): Promise<boolean> {
+		for (let attempt = 0; attempt < 250; attempt += 1) {
+			if ((await advisoryWaiters()) >= expected) return true
+			await new Promise((resolve) => setTimeout(resolve, 20))
+		}
+		return false
+	}
+
+	function imageKey(name: string): string {
+		return `images/asset-lock-${name}-${slugCounter}.webp`
+	}
+
+	test('сохранение первым: удаление ждёт его commit и отвечает 409, вопрос со ссылкой сохранён, картинка на месте', async () => {
+		const testId = await saveTest(nextSlug('lock-save'), [radio('Без картинки', { order: 0 })])
+		const [questionId] = await questionIds(testId)
+		assert.ok(questionId)
+		const key = imageKey('save-first')
+		mem.put(key, 'webp', 'image/webp')
+		const holder = await side.connect()
+		let save: ReturnType<typeof patchQuestion> | null = null
+		let remove: ReturnType<typeof call> | null = null
+		let saveWaited = false
+		let deleteWaited = false
+		try {
+			await holder.query('BEGIN')
+			await holder.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key])
+			save = patchQuestion(testId, questionId, radio(`С картинкой ![](${key})`, { order: 0 }))
+			saveWaited = await waitForWaiters(1)
+			remove = call(ctx, 'DELETE', '/api/docs/assets', { cookies: adminJar, body: { path: key } })
+			deleteWaited = await waitForWaiters(2)
+		} finally {
+			await holder.query('COMMIT')
+			holder.release()
+		}
+		const [saved, deleted] = await Promise.all([save, remove])
+		assert.equal(saveWaited, true)
+		assert.equal(deleteWaited, true)
+		assert.equal(saved?.status, 200, JSON.stringify(saved?.body))
+		assert.equal(deleted?.status, 409, JSON.stringify(deleted?.body))
+		assert.ok(mem.get(key))
+		assert.deepEqual(await refsOf(questionId), [key])
+	})
+
+	test('удаление первым: сохранение вопроса ждёт, пока удаление держит ключ', async () => {
+		const testId = await saveTest(nextSlug('lock-delete'), [radio('Без картинки', { order: 0 })])
+		const [questionId] = await questionIds(testId)
+		assert.ok(questionId)
+		const key = imageKey('delete-first')
+		mem.put(key, 'webp', 'image/webp')
+		const original = mem.remove.bind(mem)
+		const pending: Array<ReturnType<typeof patchQuestion>> = []
+		let saveWaited = false
+		const spy = vi.spyOn(mem, 'remove').mockImplementation(async (keys: string[]) => {
+			if (pending.length === 0 && keys.includes(key)) {
+				pending.push(patchQuestion(testId, questionId, radio(`С картинкой ![](${key})`, { order: 0 })))
+				saveWaited = await waitForWaiters(1)
+			}
+			return original(keys)
+		})
+		try {
+			const deleted = await call(ctx, 'DELETE', '/api/docs/assets', { cookies: adminJar, body: { path: key } })
+			assert.equal(deleted.status, 200, JSON.stringify(deleted.body))
+			assert.equal(pending.length, 1)
+			const saved = await pending[0]
+			assert.equal(saveWaited, true)
+			assert.equal(saved?.status, 200, JSON.stringify(saved?.body))
+			assert.equal(mem.get(key), null)
+		} finally {
+			spy.mockRestore()
+		}
+	})
+})
 
 describe('инвентаризация и бэкфилл индекса (D-17, D-19)', () => {
 	test('инвентаризация считает формы, пространства, nonServable и отсутствующие объекты и ничего не пишет', async () => {

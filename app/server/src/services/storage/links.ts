@@ -1,3 +1,4 @@
+import { ApiError } from '../../lib/errors.js'
 import { storageUrl } from './index.js'
 import { isServableImageKey, normalizeKey } from './keys.js'
 import { StorageKeyError } from './port.js'
@@ -53,6 +54,10 @@ function parseHttpUrl(input: string): StorageLink {
 	} catch {
 		return INVALID
 	}
+	if (url.pathname === PROXY_PATH) {
+		const key = url.searchParams.get('path')
+		return key ? keyLink(key) : INVALID
+	}
 	const match = SUPABASE_OBJECT_PATH.exec(url.pathname)
 	if (!match || match[1] !== ownBucket() || !isOwnHost(url.host)) return { kind: 'external', url: input }
 	const key = decodeOnce(match[2] ?? '')
@@ -107,8 +112,12 @@ export function avatarUrl(value: string | null | undefined): string | null {
 	return link.kind === 'key' ? storageUrl(link.key) : value
 }
 
-export function storedAvatarValue(value: string | null | undefined): string | null {
+export const FOREIGN_AVATAR_MESSAGE = 'Аватар должен быть загружен этим пользователем'
+
+export function storedAvatarValue(value: string | null | undefined, userId: string): string | null {
 	if (!value) return null
 	const key = ownStorageKey(value)
-	return key !== null && key.startsWith('avatars/') ? key : value
+	if (key === null) return value
+	if (!key.startsWith(`avatars/${userId}/`)) throw new ApiError(400, FOREIGN_AVATAR_MESSAGE)
+	return key
 }

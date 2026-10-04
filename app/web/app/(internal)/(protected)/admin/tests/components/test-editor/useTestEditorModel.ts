@@ -84,7 +84,6 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		data: questionsData,
 		isLoading: questionsLoading,
 		error: questionsError,
-		mutate: mutateTest,
 	} = useSWR<TestDetailResponse>(isEditingExisting ? `/api/tests/by-slug/${topicSlug}/${testSlug}` : null, fetcher)
 	const testId = testData?.test?.id
 	const { data: questionDraftsData, mutate: mutateQuestionDrafts } = useSWR<QuestionDraftsResponse>(
@@ -407,14 +406,6 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				const newTopicSlug = data.test.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
 				if (newTopicSlug !== topicSlug || form.slug !== testSlug) {
 					router.replace(`/admin/tests/${newTopicSlug}/${form.slug}`)
-				}
-
-				if (data.assetsMoved === true) {
-					try {
-						await mutateTest()
-					} catch (e) {
-						console.warn('Failed to revalidate test data after assets moved', e)
-					}
 				}
 			}
 		} catch (err) {

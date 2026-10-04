@@ -170,7 +170,7 @@ describe('матрица прав GET /api/users', () => {
 		const ivanov = (reply.body.rows as Json[]).find((row) => row.id === idOf('ivanov'))
 		assert.ok(ivanov)
 		const key = `avatars/${idOf('ivanov')}/a.png`
-		assert.ok(String(ivanov.avatarCropped).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(key)}&`))
+		assert.equal(ivanov.avatarCropped, `/api/docs/assets/proxy?path=${encodeURIComponent(key)}`)
 		assert.equal(ivanov.avatar, null)
 	})
 })
@@ -270,6 +270,6 @@ describe('GET /api/users/directory', () => {
 		const ivanov = reply.users.find((item) => item.id === idOf('ivanov'))
 		assert.ok(ivanov)
 		const key = `avatars/${idOf('ivanov')}/a.png`
-		assert.ok(String(ivanov.avatarCropped).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(key)}&`))
+		assert.equal(ivanov.avatarCropped, `/api/docs/assets/proxy?path=${encodeURIComponent(key)}`)
 	})
 })
