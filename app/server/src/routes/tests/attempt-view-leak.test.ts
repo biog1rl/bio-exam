@@ -136,3 +136,107 @@ describe('вид попытки при открытом ключе', () => {
 		assert.equal(short.status, 'correct')
 	})
 })
+
+async function setShowCorrectAnswer(testId: string, value: boolean): Promise<void> {
+	await ctx.pgPool.query('UPDATE tests SET show_correct_answer = $2 WHERE id = $1', [testId, value])
+}
+
+function assertHidden(item: ViewItem): void {
+	assert.equal(item.keyVisible, false)
+	assert.equal(item.correctAnswer, null)
+	assert.equal(item.verdicts, null)
+	assert.equal(item.mistakes, null)
+}
+
+describe('повтор submit после смены showCorrectAnswer', () => {
+	test('ключ был открыт при сдаче, затем скрыт: повтор без ключа и вердиктов', async () => {
+		const { testId, sequenceId, shortId, sessionId } = await prepare('leak-shown-then-hidden', true)
+		const body = {
+			sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [sequenceId]: '2315', [shortId]: 'Мейоз' },
+		}
+		const first = await submitAttempt(world, student.cookie, testId, body)
+		assert.equal(first.status, 200, JSON.stringify(first.body))
+		assert.equal(itemOf(first.body, sequenceId).correctAnswer, '2314')
+		assert.equal(itemOf(first.body, shortId).correctAnswer, 'Митоз')
+
+		await setShowCorrectAnswer(testId, false)
+		const replay = await submitAttempt(world, student.cookie, testId, body)
+		assert.equal(replay.status, 200, JSON.stringify(replay.body))
+		assert.equal(replay.body.attemptId, first.body.attemptId)
+		const json = JSON.stringify(replay.body)
+		assert.equal(json.includes('"2314"'), false)
+		assert.equal(json.includes('"Митоз"'), false)
+		for (const questionId of [sequenceId, shortId]) assertHidden(itemOf(replay.body, questionId))
+		assert.equal(itemOf(replay.body, sequenceId).status, 'partial')
+		assert.equal(itemOf(replay.body, shortId).status, 'wrong')
+	})
+
+	test('ключ был скрыт при сдаче, затем открыт: повтор показывает сохранённый ключ и вердикты', async () => {
+		const { testId, sequenceId, shortId, sessionId } = await prepare('leak-hidden-then-shown', false)
+		const body = {
+			sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [sequenceId]: '2315', [shortId]: 'Мейоз' },
+		}
+		const first = await submitAttempt(world, student.cookie, testId, body)
+		assert.equal(first.status, 200, JSON.stringify(first.body))
+		for (const questionId of [sequenceId, shortId]) assertHidden(itemOf(first.body, questionId))
+
+		await setShowCorrectAnswer(testId, true)
+		const replay = await submitAttempt(world, student.cookie, testId, body)
+		assert.equal(replay.status, 200, JSON.stringify(replay.body))
+		assert.equal(replay.body.attemptId, first.body.attemptId)
+		assert.equal(replay.body.earnedPoints, first.body.earnedPoints)
+		const sequence = itemOf(replay.body, sequenceId)
+		assert.equal(sequence.keyVisible, true)
+		assert.equal(sequence.correctAnswer, '2314')
+		assert.ok(sequence.verdicts)
+		assert.equal(sequence.verdicts.template, 'sequence_digits')
+		assert.equal(sequence.mistakes, 1)
+		const short = itemOf(replay.body, shortId)
+		assert.equal(short.keyVisible, true)
+		assert.equal(short.correctAnswer, 'Митоз')
+	})
+})
+
+describe('скрытый ключ для radio, checkbox и matching', () => {
+	test('ответ submit не содержит ключа, вердиктов и числа ошибок, в строке ключ сохранён', async () => {
+		const testId = await createAttemptTest(world, { slug: 'leak-hidden-choice', showCorrectAnswer: false })
+		const radioId = await addQuestion(world, testId, 'radio', { order: 0 })
+		const checkboxId = await addQuestion(world, testId, 'checkbox', { order: 1 })
+		const matchingId = await addQuestion(world, testId, 'matching', { order: 2 })
+		await assignTest(world, testId, student.id)
+		const started = await startSession(world, student.cookie, testId)
+		assert.equal(started.status, 200, JSON.stringify(started.body))
+
+		const reply = await submitAttempt(world, student.cookie, testId, {
+			sessionId: started.body.sessionId as string,
+			clientAttemptId: crypto.randomUUID(),
+			answers: {
+				[radioId]: 'a',
+				[checkboxId]: ['a'],
+				[matchingId]: { l1: 'r1', l2: 'r3', l3: 'r2' },
+			},
+		})
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		for (const questionId of [radioId, checkboxId, matchingId]) {
+			const item = itemOf(reply.body, questionId)
+			assert.equal(item.isCorrect, false)
+			assertHidden(item)
+		}
+		const json = JSON.stringify(reply.body)
+		assert.equal(json.includes('"b"'), false)
+		assert.equal(json.includes('"c"'), false)
+		assert.equal(json.includes('"l2":"r2"'), false)
+		assert.equal(json.includes('"l3":"r3"'), false)
+
+		const row = await storedRow(reply.body.attemptId as string)
+		assert.equal(row.results_version, 2)
+		const keyOf = (questionId: string) => row.results.find((fact) => fact.questionId === questionId)?.key
+		assert.equal(keyOf(radioId), 'b')
+		assert.deepEqual(keyOf(checkboxId), ['a', 'c'])
+		assert.deepEqual(keyOf(matchingId), { l1: 'r1', l2: 'r2', l3: 'r3' })
+	})
+})

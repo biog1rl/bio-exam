@@ -531,6 +531,8 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 				answers,
 				telemetry: finalTelemetry,
 			})
+			debouncedSaveAnswer.cancel()
+			clearAttemptStorage('success')
 			if (isAutoSubmit) {
 				setShowTimeUp(true)
 				// Brief delay to show "Время вышло" screen before transitioning to results
@@ -550,9 +552,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 				...prev,
 			])
 			// The completed session must never be reused by a retake.
-			debouncedSaveAnswer.cancel()
 			setSession(null)
-			clearAttemptStorage('success')
 		} catch (error) {
 			const failure = classifySubmitFailure(error)
 			if (failure.kind === 'already-submitted') {
