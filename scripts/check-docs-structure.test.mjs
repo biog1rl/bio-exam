@@ -51,3 +51,42 @@ test('app/server/README.md называет все пять шаблонов в�
 		assert.ok(readme.includes(`\`${id}\``), `template ${id} missing in app/server/README.md`)
 	}
 })
+
+const SKILLS = ['bio-exam-web', 'bio-exam-api', 'bio-exam-data']
+const REPO_PATH = /^(?:app|packages|scripts|e2e|docs)\//
+
+function skillPaths(text) {
+	return [...text.matchAll(/`([^`\s]+)`/g)]
+		.map((match) => match[1].replace(/:\d+(?::\d+)?$/, ''))
+		.filter((value) => REPO_PATH.test(value) && !value.includes('*'))
+}
+
+test('AGENTS.md называет все навыки проекта и каталог .agents/skills', () => {
+	const agents = read('AGENTS.md')
+	assert.ok(agents.includes('.agents/skills'), '.agents/skills missing in AGENTS.md')
+	for (const name of SKILLS) assert.ok(agents.includes(`\`${name}\``), `skill ${name} missing in AGENTS.md`)
+})
+
+test('у каждого навыка есть SKILL.md с name, равным имени каталога', () => {
+	for (const name of SKILLS) {
+		const file = `.agents/skills/${name}/SKILL.md`
+		assert.ok(fs.existsSync(new URL(`../${file}`, import.meta.url)), `${file} missing`)
+		const frontmatter = /^---\n([\s\S]*?)\n---/.exec(read(file))
+		assert.ok(frontmatter, `${file}: no frontmatter`)
+		assert.match(frontmatter[1], new RegExp(`^name: ${name}$`, 'm'), `${file}: name is not ${name}`)
+	}
+})
+
+test('каждый путь репозитория в обратных кавычках внутри навыков существует', () => {
+	for (const name of SKILLS) {
+		const file = `.agents/skills/${name}/SKILL.md`
+		if (!fs.existsSync(new URL(`../${file}`, import.meta.url))) assert.fail(`${file} missing`)
+		const missing = skillPaths(read(file)).filter((value) => !fs.existsSync(new URL(`../${value}`, import.meta.url)))
+		assert.deepEqual(missing, [], `${file}: paths do not exist`)
+	}
+})
+
+test('разбор путей навыка снимает суффикс строки и пропускает шаблоны и чужие префиксы', () => {
+	const text = '`app/web/proxy.ts:12` `app/server/drizzle/*.sql` `lib/session/client.ts` `yarn verify` `docs/adr`'
+	assert.deepEqual(skillPaths(text), ['app/web/proxy.ts', 'docs/adr'])
+})

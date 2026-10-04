@@ -21,6 +21,8 @@ const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url))
 
 /** Проверяемые файлы в порядке вывода находок */
 export const DOC_FILES = ['README.md', 'app/server/README.md', 'AGENTS.md']
+export const SKILLS_DIR = '.agents/skills'
+const SKILL_FILE = /^\.agents\/skills\/[^/]+\/SKILL\.md$/
 /** Команды, которые обязан показывать README.md */
 const README_REQUIRED_SCRIPTS = ['verify', 'e2e']
 
@@ -123,7 +125,10 @@ function judgeCommand(args, packages) {
  */
 export function checkDocsCommands({ files, packages }) {
 	const findings = []
-	for (const file of DOC_FILES) {
+	const skillFiles = Object.keys(files)
+		.filter((file) => SKILL_FILE.test(file))
+		.sort()
+	for (const file of [...DOC_FILES, ...skillFiles]) {
 		const text = files[file]
 		if (typeof text !== 'string') {
 			findings.push({ file, line: 0, message: `${file}: missing file` })
@@ -190,6 +195,11 @@ function listChildren(repoRoot, relativeDir) {
 export function loadDocs(repoRoot = REPO_ROOT) {
 	const files = {}
 	for (const file of DOC_FILES) {
+		const full = path.join(repoRoot, file)
+		if (fs.existsSync(full)) files[file] = fs.readFileSync(full, 'utf8')
+	}
+	for (const skillDir of listChildren(repoRoot, SKILLS_DIR)) {
+		const file = path.posix.join(skillDir, 'SKILL.md')
 		const full = path.join(repoRoot, file)
 		if (fs.existsSync(full)) files[file] = fs.readFileSync(full, 'utf8')
 	}

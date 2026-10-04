@@ -39,13 +39,15 @@ Run everything from the repository root. Node 24 (`.nvmrc`), Yarn 4.12 through C
 
 ## Routing
 
-| Area                                                | Where                                                                           | Read first                                             |
-| --------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Web client (Next.js)                                | `app/web`                                                                       | `docs/adr/0001-express-owns-data-and-access-policy.md` |
-| API, auth, access policy                            | `app/server/src/routes`, `app/server/src/middleware`, `packages/rbac`           | `docs/adr/0001-express-owns-data-and-access-policy.md` |
-| Exam domain (question templates, scoring, attempts) | `packages/exam-core`, `app/server/src/lib/tests`, `app/server/src/routes/tests` | `docs/adr/0002-shared-exam-core-package.md`            |
-| File storage                                        | `app/server/src/services/storage`                                               | `docs/adr/0004-storage-port-two-adapters.md`           |
-| Schema and migrations                               | `app/server/src/db`, `app/server/drizzle`                                       | `docs/adr/0003-verification-before-refactoring.md`     |
-| Module structure and decomposition                  | `app/server/src`, `app/web`                                                     | `docs/adr/0005-decompose-by-concept.md`                |
-| Verification, e2e, repository checks                | `scripts`, `e2e`, `turbo.json`                                                  | `docs/adr/0003-verification-before-refactoring.md`     |
-| Work order and plans                                | `plans`                                                                         | `plans/README.md`                                      |
+| Area                                                | Where                                                                           | Read first                                             | Skill           |
+| --------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------- |
+| Web client (Next.js)                                | `app/web`                                                                       | `docs/adr/0001-express-owns-data-and-access-policy.md` | `bio-exam-web`  |
+| API, auth, access policy                            | `app/server/src/routes`, `app/server/src/middleware`, `packages/rbac`           | `docs/adr/0001-express-owns-data-and-access-policy.md` | `bio-exam-api`  |
+| Exam domain (question templates, scoring, attempts) | `packages/exam-core`, `app/server/src/lib/tests`, `app/server/src/routes/tests` | `docs/adr/0002-shared-exam-core-package.md`            | `bio-exam-api`  |
+| File storage                                        | `app/server/src/services/storage`                                               | `docs/adr/0004-storage-port-two-adapters.md`           | `bio-exam-api`  |
+| Schema and migrations                               | `app/server/src/db`, `app/server/drizzle`                                       | `docs/adr/0003-verification-before-refactoring.md`     | `bio-exam-data` |
+| Module structure and decomposition                  | `app/server/src`, `app/web`                                                     | `docs/adr/0005-decompose-by-concept.md`                | -               |
+| Verification, e2e, repository checks                | `scripts`, `e2e`, `turbo.json`                                                  | `docs/adr/0003-verification-before-refactoring.md`     | -               |
+| Work order and plans                                | `plans`                                                                         | `plans/README.md`                                      | -               |
+
+Project skills live in `.agents/skills/<name>/SKILL.md`. Read the skill named in the Skill column before editing its area.
