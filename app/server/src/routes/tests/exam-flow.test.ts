@@ -727,6 +727,67 @@ describe('оценка submit по шаблонам', () => {
 	})
 })
 
+describe('D-11: ключи answer_keys читаются как записаны', () => {
+	const ids: Record<string, string> = {}
+	let testId = ''
+
+	beforeAll(async () => {
+		testId = await createTest()
+		const payloads: Record<string, Json> = {
+			key150: validQuestion('short_answer', { correct: '1.50' }),
+			key1e3: validQuestion('short_answer', { correct: '1e3' }),
+			key100: validQuestion('short_answer', { correct: '10.0' }),
+			keyTrue: validQuestion('short_answer', { correct: 'true' }),
+			keyFalse: validQuestion('short_answer', { correct: 'false' }),
+			keyNull: validQuestion('short_answer', { correct: 'null' }),
+			sequence3142: validQuestion('sequence', { correct: '3142' }),
+		}
+		for (const [name, payload] of Object.entries(payloads)) {
+			ids[name] = await createQuestion(testId, payload)
+		}
+	})
+
+	function idOf(name: string): string {
+		const id = ids[name]
+		assert.ok(id, `no question ${name}`)
+		return id
+	}
+
+	const cases: Array<{ name: string; question: string; answer: string; earned: number; isCorrect: boolean }> = [
+		{ name: "ключ '1.50', ответ '1.50'", question: 'key150', answer: '1.50', earned: 1, isCorrect: true },
+		{ name: "ключ '1.50', ответ '1.5'", question: 'key150', answer: '1.5', earned: 0, isCorrect: false },
+		{ name: "ключ '1e3', ответ '1e3'", question: 'key1e3', answer: '1e3', earned: 1, isCorrect: true },
+		{ name: "ключ '1e3', ответ '1000'", question: 'key1e3', answer: '1000', earned: 0, isCorrect: false },
+		{ name: "ключ '10.0', ответ '10.0'", question: 'key100', answer: '10.0', earned: 1, isCorrect: true },
+		{ name: "ключ '10.0', ответ '10'", question: 'key100', answer: '10', earned: 0, isCorrect: false },
+		{ name: "ключ 'true', ответ 'true'", question: 'keyTrue', answer: 'true', earned: 1, isCorrect: true },
+		{ name: "ключ 'false', ответ 'false'", question: 'keyFalse', answer: 'false', earned: 1, isCorrect: true },
+		{ name: "ключ 'null', ответ 'null'", question: 'keyNull', answer: 'null', earned: 1, isCorrect: true },
+	]
+
+	for (const item of cases) {
+		test(`short_answer: ${item.name} → ${item.earned} из 1`, async () => {
+			const questionId = idOf(item.question)
+			const reply = await submit(testId, { answers: { [questionId]: item.answer } })
+			assert.equal(reply.status, 200)
+			const result = findResult(reply.body, questionId)
+			assert.equal(result.earnedPoints, item.earned)
+			assert.equal(result.points, 1)
+			assert.equal(result.isCorrect, item.isCorrect)
+		})
+	}
+
+	test("sequence с ключом '3142': ответ '3141', correctAnswer строго строка '3142'", async () => {
+		const questionId = idOf('sequence3142')
+		const reply = await submit(testId, { answers: { [questionId]: '3141' } })
+		assert.equal(reply.status, 200)
+		const result = findResult(reply.body, questionId)
+		assert.equal(result.earnedPoints, 1)
+		assert.equal(result.isCorrect, false)
+		assert.equal(result.correctAnswer, '3142')
+	})
+})
+
 describe('скрытие ключа в results', () => {
 	test('showCorrectAnswer=false и неверный ответ: correctAnswer null', async () => {
 		const testId = await createTest({ showCorrectAnswer: false })

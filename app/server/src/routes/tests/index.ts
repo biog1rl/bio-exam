@@ -1,6 +1,13 @@
 /**
  * API роуты для управления тестами
  */
+import {
+	QuestionTypeDefinitionSchema,
+	QuestionTypeScoringRuleSchema,
+	QuestionTypeValidationSchema,
+	isMistakeMetricAllowedForTemplate,
+} from '@bio-exam/exam-core'
+
 import crypto from 'crypto'
 import { and, asc, count, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { Router } from 'express'
@@ -31,12 +38,6 @@ import {
 	questionTypeToDefinition,
 	validateQuestionWithType,
 } from '../../lib/tests/question-type-resolver.js'
-import {
-	QuestionTypeDefinitionSchema,
-	QuestionTypeScoringRuleSchema,
-	QuestionTypeValidationSchema,
-	isMistakeMetricAllowedForTemplate,
-} from '../../lib/tests/question-types.js'
 import {
 	TestScoringRulesSchema,
 	createDefaultTestScoringRules,

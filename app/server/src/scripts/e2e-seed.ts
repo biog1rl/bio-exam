@@ -68,7 +68,7 @@ async function main(): Promise<void> {
 	const { db, pgPool } = await import('../db/index.js')
 	const { answerKeys, questions, roles, testAssignments, tests, topics, userRoles, users } =
 		await import('../db/schema.js')
-	const { getBuiltinQuestionTypeByKey } = await import('../lib/tests/question-types.js')
+	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
 	const { storageService } = await import('../services/storage/storage.js')
 	const { upsertQuestionSearchDocument } = await import('../services/search/question-documents.js')
 

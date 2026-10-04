@@ -19,8 +19,6 @@ const KEYS: Array<{ name: string; value: unknown; kind: string }> = [
 	{ name: 'объект', value: { l1: 'r1' }, kind: 'object' },
 ]
 
-const KNOWN_DEFECTS = new Set(['3142', '1.50', 'true'])
-
 let scratch: ScratchDatabase | null = null
 let pool: Pool | null = null
 let db: NodePgDatabase<typeof schema>
@@ -101,19 +99,11 @@ for (const reader of READERS) {
 		})
 
 		for (const key of STRING_KEYS) {
-			if (KNOWN_DEFECTS.has(key)) {
-				test.fails(`чтение ключа ${key} через Drizzle возвращает строку — исправляется в 03-08 (D-11)`, async () => {
-					const value = await readKey(key)
-					assert.equal(typeof value, 'string')
-					assert.equal(value, key)
-				})
-			} else {
-				test(`чтение ключа ${key} через Drizzle возвращает строку`, async () => {
-					const value = await readKey(key)
-					assert.equal(typeof value, 'string')
-					assert.equal(value, key)
-				})
-			}
+			test(`чтение ключа ${key} через Drizzle возвращает строку`, async () => {
+				const value = await readKey(key)
+				assert.equal(typeof value, 'string')
+				assert.equal(value, key)
+			})
 		}
 
 		test('массив читается без изменений', async () => {

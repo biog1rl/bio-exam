@@ -1,7 +1,13 @@
 /**
  * Публичные API роуты для прохождения тестов (для студентов)
  */
-import { AnswerValueSchema, mergeTelemetryMaps, SubmitResultSchema, TelemetryMapSchema } from '@bio-exam/exam-core'
+import {
+	AnswerValueSchema,
+	mergeTelemetryMaps,
+	scoreQuestionByType,
+	SubmitResultSchema,
+	TelemetryMapSchema,
+} from '@bio-exam/exam-core'
 
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { Router } from 'express'
@@ -20,7 +26,6 @@ import {
 } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
-import { scoreQuestionByType } from '../../lib/tests/scoring.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { storageService } from '../../services/storage/storage.js'

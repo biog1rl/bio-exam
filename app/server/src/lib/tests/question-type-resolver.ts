@@ -1,17 +1,19 @@
+import {
+	QuestionTypeScoringRuleSchema,
+	QuestionTypeValidationSchema,
+	createDefaultScoringRuleForTemplate,
+	isMistakeMetricAllowedForTemplate,
+	type MistakeMetric,
+	type QuestionTypeDefinition,
+	type QuestionTypeScoringRule,
+	type QuestionUiTemplate,
+} from '@bio-exam/exam-core'
+
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import { questionTypes, testQuestionTypeOverrides } from '../../db/schema.js'
-import {
-	QuestionTypeScoringRuleSchema,
-	QuestionTypeValidationSchema,
-	isMistakeMetricAllowedForTemplate,
-	type MistakeMetric,
-	type QuestionTypeDefinition,
-	type QuestionTypeScoringRule,
-} from './question-types.js'
-import { createDefaultScoringRuleForTemplate, type QuestionUiTemplate } from './question-types.js'
 
 type ValidationSchema = NonNullable<z.infer<typeof QuestionTypeValidationSchema>>
 

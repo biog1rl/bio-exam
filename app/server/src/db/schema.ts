@@ -1,4 +1,4 @@
-import type { TelemetryMap } from '@bio-exam/exam-core'
+import type { QuestionTypeScoringRule, QuestionUiTemplate, TelemetryMap } from '@bio-exam/exam-core'
 
 import { relations, sql } from 'drizzle-orm'
 import {
@@ -13,14 +13,26 @@ import {
 	uniqueIndex,
 	foreignKey,
 	boolean,
+	customType,
 	index,
 	real,
 	jsonb,
 	pgPolicy,
 } from 'drizzle-orm/pg-core'
 
-import type { QuestionTypeScoringRule, QuestionUiTemplate } from '../lib/tests/question-types.js'
 import type { TestScoringRules } from '../lib/tests/scoring.js'
+
+const jsonbParsedByDriver = customType<{ data: unknown; driverData: unknown }>({
+	dataType() {
+		return 'jsonb'
+	},
+	toDriver(value) {
+		return JSON.stringify(value)
+	},
+	fromDriver(value) {
+		return value
+	},
+})
 
 /**
  * Политика deny_direct_access из миграции 0018: прямой доступ через API Supabase закрыт,
@@ -427,7 +439,7 @@ export const answerKeys = pgTable(
 			.notNull()
 			.references(() => questions.id, { onDelete: 'cascade' }),
 		version: integer('version').notNull().default(1),
-		correctAnswer: jsonb('correct_answer').notNull(), // string | string[] | Record<string, string>
+		correctAnswer: jsonbParsedByDriver('correct_answer').notNull(), // string | string[] | Record<string, string>
 		isActive: boolean('is_active').notNull().default(true),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
