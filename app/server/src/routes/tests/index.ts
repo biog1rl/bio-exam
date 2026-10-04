@@ -10,12 +10,9 @@ import {
 	type QuestionUiTemplate,
 } from '@bio-exam/exam-core'
 
-import crypto from 'crypto'
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { Router } from 'express'
-import fs from 'fs'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
-import path from 'path'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
@@ -58,7 +55,10 @@ import {
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
 import { canReadTest, canWriteTest, canWriteTopic, testScope } from '../../services/access-policy/index.js'
+import { uploadImage } from '../../services/assets/index.js'
 import {
+	buildTestArchive,
+	buildTopicArchive,
 	createQuestion,
 	createTestWithQuestions,
 	deleteQuestion,
@@ -73,7 +73,6 @@ import {
 	updateTestSettings,
 	updateTopic,
 } from '../../services/question-content/index.js'
-import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
 import { assignmentsRouter } from './assignments.js'
 
 const router = Router()
@@ -1367,7 +1366,6 @@ router.delete('/:id', validateUUID('id'), sessionRequired(), async (req, res, ne
 	}
 })
 
-// POST /api/tests/:id/assets - загрузка изображений, сохраняем в папку assets рядом с тестом
 const upload = multer({
 	storage: multer.memoryStorage(),
 	limits: {
@@ -1383,11 +1381,20 @@ const upload = multer({
 	},
 })
 
+async function requireTestWrite(req: Request, res: Response, next: NextFunction) {
+	try {
+		if (!(await canWriteTest(req, req.params.id as string))) return res.status(403).json({ error: 'Forbidden' })
+		return next()
+	} catch (e) {
+		return next(e)
+	}
+}
+
 router.post(
 	'/:id/assets',
 	validateUUID('id'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
+	requireTestWrite,
 	upload.single('file') as any,
 	async (req, res, next) => {
 		try {
@@ -1401,31 +1408,10 @@ router.post(
 			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
 			if (!topic) return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
 
-			const testPath = storageService.getTestPath(topic.slug, test.slug) // topics/{topic}/{test}
-			const ext = path.extname((file.originalname || '').toLowerCase()) || '.png'
-			const filename = `${crypto.randomBytes(12).toString('hex')}${ext}`
-			const storagePath = `${testPath}/assets/${filename}`
-
-			if (storageService.isConfigured()) {
-				// Upload to Supabase (or configured storage)
-				await storageService.uploadBuffer(storagePath, file.buffer, file.mimetype, {
-					cacheControl: '3600',
-					upsert: false,
-				})
-				return res.status(201).json({ url: storagePath })
-			} else {
-				// Local disk fallback: save under web/public/uploads/tests/{topicSlug}/{testSlug}/assets
-				// В изолированном процессе запрещено: рабочее дерево не меняется (WR-04)
-				assertLegacyUploadsAllowed()
-				const UPLOAD_DIR = path.join(process.cwd(), `../web/public/uploads/tests/${topic.slug}/${test.slug}/assets`)
-				fs.mkdirSync(UPLOAD_DIR, { recursive: true })
-				const filePath = path.join(UPLOAD_DIR, filename)
-				fs.writeFileSync(filePath, file.buffer)
-				const publicUrl = `/uploads/tests/${topic.slug}/${test.slug}/assets/${filename}`
-				return res.status(201).json({ url: publicUrl })
-			}
+			const { path: key } = await uploadImage(file.buffer)
+			return res.status(201).json({ url: key })
 		} catch (e) {
-			next(e)
+			return next(e)
 		}
 	}
 )
@@ -1435,103 +1421,36 @@ router.post(
 // =============================================================================
 
 // GET /api/tests/:id/export - экспорт теста в ZIP
-router.get(
-	'/:id/export',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'read'),
-	async (req, res, next) => {
-		try {
-			const id = req.params.id as string
-			const withAnswers = req.query.withAnswers === 'true'
-
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, id) })
-			if (!test) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-
-			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
-			if (!topic) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-
-			// Если нужны ответы, сначала записываем их в Storage
-			if (withAnswers) {
-				const questionRows = await db.select().from(questions).where(eq(questions.testId, id))
-				const questionIds = questionRows.map((q) => q.id)
-
-				if (questionIds.length > 0) {
-					const answerKeyRows = await db
-						.select()
-						.from(answerKeys)
-						.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
-
-					const answersData = answerKeyRows.map((ak) => ({
-						questionId: ak.questionId,
-						correct: ak.correctAnswer,
-					}))
-
-					const testPath = storageService.getTestPath(topic.slug, test.slug)
-					await storageService.writeJson(`${testPath}/answer_keys.json`, answersData)
-				}
-			}
-
-			const testPath = storageService.getTestPath(topic.slug, test.slug)
-			const zipBuffer = await storageService.createZip(testPath, withAnswers)
-
-			res.setHeader('Content-Type', 'application/zip')
-			res.setHeader('Content-Disposition', `attachment; filename="${topic.slug}-${test.slug}.zip"`)
-			res.send(zipBuffer)
-		} catch (e) {
-			next(e)
-		}
-	}
-)
-
-// GET /api/tests/topics/:slug/export - экспорт темы в ZIP
-router.get('/topics/:slug/export', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
+router.get('/:id/export', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
-		const slug = req.params.slug as string
+		const id = req.params.id as string
+		if (!(await canReadTest(req, id))) return res.status(403).json({ error: 'Forbidden' })
+
 		const withAnswers = req.query.withAnswers === 'true'
-
-		const topic = await db.query.topics.findFirst({ where: eq(topics.slug, slug) })
-		if (!topic) {
-			return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-		}
-
-		// Если нужны ответы, записываем их для каждого теста
-		if (withAnswers) {
-			const topicTests = await db.select().from(tests).where(eq(tests.topicId, topic.id))
-
-			for (const test of topicTests) {
-				const questionRows = await db.select().from(questions).where(eq(questions.testId, test.id))
-				const questionIds = questionRows.map((q) => q.id)
-
-				if (questionIds.length > 0) {
-					const answerKeyRows = await db
-						.select()
-						.from(answerKeys)
-						.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
-
-					const answersData = answerKeyRows.map((ak) => ({
-						questionId: ak.questionId,
-						correct: ak.correctAnswer,
-					}))
-
-					const testPath = storageService.getTestPath(topic.slug, test.slug)
-					await storageService.writeJson(`${testPath}/answer_keys.json`, answersData)
-				}
-			}
-		}
-
-		const topicPath = `topics/${topic.slug}`
-		const zipBuffer = await storageService.createZip(topicPath, withAnswers)
+		const archive = await buildTestArchive({ testId: id, withAnswers })
 
 		res.setHeader('Content-Type', 'application/zip')
-		res.setHeader('Content-Disposition', `attachment; filename="${topic.slug}.zip"`)
-		res.send(zipBuffer)
+		res.setHeader('Content-Disposition', `attachment; filename="${archive.filename}"`)
+		return res.send(archive.buffer)
 	} catch (e) {
-		next(e)
+		return next(e)
+	}
+})
+
+// GET /api/tests/topics/:slug/export - экспорт темы в ZIP
+router.get('/topics/:slug/export', sessionRequired(), async (req, res, next) => {
+	try {
+		const scope = await testScope(req)
+		if (!scope.all && scope.topicIds.length === 0) return res.status(403).json({ error: 'Forbidden' })
+
+		const withAnswers = req.query.withAnswers === 'true'
+		const archive = await buildTopicArchive({ topicSlug: req.params.slug as string, withAnswers, scope })
+
+		res.setHeader('Content-Type', 'application/zip')
+		res.setHeader('Content-Disposition', `attachment; filename="${archive.filename}"`)
+		return res.send(archive.buffer)
+	} catch (e) {
+		return next(e)
 	}
 })
 

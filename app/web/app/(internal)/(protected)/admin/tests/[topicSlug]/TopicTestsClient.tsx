@@ -15,6 +15,7 @@ import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
 
 import { TopicFormDialog } from '../components/TopicFormDialog'
+import { readApiError } from '../components/test-editor/test-editor-api'
 import { TopicEmptyState } from '../components/topic-page/TopicEmptyState'
 import { TopicHero } from '../components/topic-page/TopicHero'
 import { TopicStatsPanel } from '../components/topic-page/TopicStatsPanel'
@@ -73,7 +74,7 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		try {
 			const res = await apiFetch(`/api/tests/topics/${topicSlug}/export?withAnswers=${withAnswers}`)
 
-			if (!res.ok) throw new Error('Ошибка экспорта')
+			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
 
 			const blob = await res.blob()
 			const url = URL.createObjectURL(blob)
@@ -93,7 +94,7 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		try {
 			const res = await apiFetch(`/api/tests/${test.id}/export?withAnswers=${withAnswers}`)
 
-			if (!res.ok) throw new Error('Ошибка экспорта')
+			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
 
 			const blob = await res.blob()
 			const url = URL.createObjectURL(blob)

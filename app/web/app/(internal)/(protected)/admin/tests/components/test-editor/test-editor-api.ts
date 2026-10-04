@@ -2,7 +2,7 @@ import { apiFetch } from '@/lib/api-fetch'
 
 import type { TestFormData } from '../../types'
 
-async function readApiError(response: Response, fallback: string) {
+export async function readApiError(response: Response, fallback: string) {
 	const data = (await response.json().catch(() => null)) as { error?: string } | null
 	return data?.error || fallback
 }
@@ -83,7 +83,7 @@ export async function updateTestSettings(testId: string, form: TestFormData) {
 
 export async function exportTestArchive(testId: string, slug: string, withAnswers: boolean) {
 	const response = await apiFetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`)
-	if (!response.ok) throw new Error('Ошибка экспорта')
+	if (!response.ok) throw new Error(await readApiError(response, 'Ошибка экспорта'))
 
 	const blob = await response.blob()
 	const url = URL.createObjectURL(blob)

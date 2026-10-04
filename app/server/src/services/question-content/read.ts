@@ -53,15 +53,19 @@ function isReadableKey(key: string): boolean {
 	}
 }
 
-export async function readFirstMarkdown(candidates: string[]): Promise<string> {
+export async function findFirstMarkdown(candidates: string[]): Promise<{ key: string; text: string } | null> {
 	let module: StorageModule | null = null
 	for (const candidate of candidates) {
 		if (!isReadableKey(candidate)) continue
 		module ??= storage()
 		const content = await module.readText(candidate)
-		if (content !== null && content.trim().length > 0) return content
+		if (content !== null && content.trim().length > 0) return { key: candidate, text: content }
 	}
-	return ''
+	return null
+}
+
+export async function readFirstMarkdown(candidates: string[]): Promise<string> {
+	return (await findFirstMarkdown(candidates))?.text ?? ''
 }
 
 export function readQuestionMarkdown(params: {

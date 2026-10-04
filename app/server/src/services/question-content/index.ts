@@ -1,3 +1,12 @@
+export { extractAssetRefs } from './asset-refs.js'
+export {
+	ARCHIVE_TOO_LARGE_MESSAGE,
+	ZIP_RESPONSE_LIMIT_BYTES,
+	assertArchiveFits,
+	buildTestArchive,
+	buildTopicArchive,
+	type ArchiveResult,
+} from './export.js'
 export { insertAt, lockTest, resequenceQuestions, type LockedTest, type Tx } from './order.js'
 export {
 	contentKey,
@@ -12,6 +21,7 @@ export {
 	type QuestionMarkdownFileName,
 } from './paths.js'
 export {
+	findFirstMarkdown,
 	readAdminTest,
 	readFirstMarkdown,
 	readQuestionMarkdown,

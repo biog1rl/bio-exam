@@ -28,7 +28,7 @@ const PASSWORD = 'reloc-password-1'
 const KEEP_IMAGE = 'images/keep.webp'
 const ROLLBACK_ERROR = 'Не удалось перенести файлы, переименование отменено'
 
-const KNOWN_DEFECTS = new Set<string>(['STOR-zip-no-images', 'STOR-export-writes-answer-keys'])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function defectTest(id: string, title: string, fn: () => Promise<void>, timeout?: number): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
@@ -55,6 +55,10 @@ function escape(value: string): string {
 
 function promptName(base: string, questionId: string): RegExp {
 	return new RegExp(`^${escape(base)}questions/${questionId}/prompt(-[0-9a-f]+)?\\.md$`)
+}
+
+function zipPromptName(base: string, questionId: string): string {
+	return `${base}questions/${questionId}/prompt.md`
 }
 
 function testPrefix(topicSlug: string, testSlug: string): string {
@@ -367,11 +371,10 @@ describe('экспорт теста и темы', () => {
 		assert.equal(reply.status, 200)
 		assert.equal(reply.headers.get('content-type'), 'application/zip')
 		assert.equal(reply.headers.get('content-disposition'), `attachment; filename="${topicSlug}-reloc-exp.zip"`)
-		const names = [...reply.entries.keys()]
 		for (const row of rows) {
-			const entry = names.find((name) => promptName('', row.id).test(name))
+			const entry = reply.entries.get(zipPromptName('', row.id))
 			assert.ok(entry, `prompt entry for ${row.id}`)
-			assert.equal(reply.entries.get(entry)?.toString('utf8'), stored(row.prompt_path))
+			assert.equal(entry.toString('utf8'), stored(row.prompt_path))
 		}
 		assert.equal(reply.entries.has('answer_keys.json'), false)
 	})
@@ -417,10 +420,7 @@ describe('экспорт теста и темы', () => {
 			[secondId, 'reloc-topic-b'],
 		] as const) {
 			for (const row of await questionRows(testId)) {
-				assert.ok(
-					names.some((name) => promptName(`${testSlug}/`, row.id).test(name)),
-					`prompt entry for ${testSlug}/${row.id}`
-				)
+				assert.ok(names.includes(zipPromptName(`${testSlug}/`, row.id)), `prompt entry for ${testSlug}/${row.id}`)
 			}
 		}
 	})

@@ -39,6 +39,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { cn } from '@/lib/utils/cn'
 
 import { TopicFormDialog } from './components/TopicFormDialog'
+import { readApiError } from './components/test-editor/test-editor-api'
 import type { Test, Topic, TopicsResponse, TestsResponse } from './types'
 
 const fetcher = async (url: string) => {
@@ -170,7 +171,7 @@ export default function TestsClient() {
 		try {
 			const res = await apiFetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`)
 
-			if (!res.ok) throw new Error('Ошибка экспорта')
+			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
 
 			const blob = await res.blob()
 			const url = URL.createObjectURL(blob)
@@ -190,7 +191,7 @@ export default function TestsClient() {
 		try {
 			const res = await apiFetch(`/api/tests/topics/${topicSlug}/export?withAnswers=${withAnswers}`)
 
-			if (!res.ok) throw new Error('Ошибка экспорта')
+			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
 
 			const blob = await res.blob()
 			const url = URL.createObjectURL(blob)
