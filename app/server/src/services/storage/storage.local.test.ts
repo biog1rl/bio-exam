@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, test, vi } from 'vitest'
 
+import { StorageConflictError, StorageNotFoundError } from './port.js'
 import { StorageService } from './storage.js'
 
 // Шпион на createClient: изолированный процесс не должен создавать клиент Supabase (D-17).
@@ -15,7 +16,8 @@ vi.mock('@supabase/supabase-js', () => ({ createClient: createClientSpy }))
 // Локальный режим StorageService (D-18): все ключи живут внутри STORAGE_LOCAL_DIR.
 // Тесты работают только с временным каталогом, без базы данных и без Supabase.
 
-const ESCAPE_MESSAGE = /path escapes storage root|invalid storage key/
+const KEY_ERROR = (error: unknown) => error instanceof Error && error.name === 'StorageKeyError'
+const CONFIG_ERROR = (error: unknown) => error instanceof Error && error.name === 'StorageConfigError'
 
 let base = ''
 let root = ''
@@ -70,14 +72,17 @@ describe('local mode: configuration', () => {
 	test('relative STORAGE_LOCAL_DIR is rejected', async () => {
 		vi.stubEnv('STORAGE_LOCAL_DIR', 'relative/dir')
 		await assert.rejects(
-			() => new StorageService().writeFile('a/b.md', 'x'),
+			() => new StorageService().writeFile('topics/a/b.md', 'x'),
 			/STORAGE_LOCAL_DIR must be an absolute path/
 		)
 	})
 
 	test('missing STORAGE_LOCAL_DIR is rejected', async () => {
 		vi.stubEnv('STORAGE_LOCAL_DIR', '')
-		await assert.rejects(() => new StorageService().readFile('a/b.md'), /STORAGE_LOCAL_DIR must be an absolute path/)
+		await assert.rejects(
+			() => new StorageService().readFile('topics/a/b.md'),
+			/STORAGE_LOCAL_DIR must be an absolute path/
+		)
 	})
 })
 
@@ -102,17 +107,17 @@ describe('local mode: file operations', () => {
 
 	test('writeFile overwrites and leaves no temporary files behind', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('a/f.md', 'one')
-		await storage.writeFile('a/f.md', 'two')
-		assert.equal(await storage.readFile('a/f.md'), 'two')
-		assert.deepEqual(fs.readdirSync(path.join(root, 'a')), ['f.md'])
+		await storage.writeFile('topics/a/f.md', 'one')
+		await storage.writeFile('topics/a/f.md', 'two')
+		assert.equal(await storage.readFile('topics/a/f.md'), 'two')
+		assert.deepEqual(fs.readdirSync(path.join(root, 'topics', 'a')), ['f.md'])
 	})
 
 	test('a failed write cleans up its temporary file', async () => {
 		const storage = new StorageService()
-		fs.mkdirSync(path.join(root, 'a', 'dir'), { recursive: true })
-		await assert.rejects(() => storage.writeFile('a/dir', 'x'))
-		assert.deepEqual(fs.readdirSync(path.join(root, 'a')), ['dir'])
+		fs.mkdirSync(path.join(root, 'topics', 'a', 'dir'), { recursive: true })
+		await assert.rejects(() => storage.writeFile('topics/a/dir', 'x'))
+		assert.deepEqual(fs.readdirSync(path.join(root, 'topics', 'a')), ['dir'])
 	})
 
 	test('writeJson and readJson round-trip an object, missing key gives null', async () => {
@@ -123,12 +128,10 @@ describe('local mode: file operations', () => {
 		assert.equal(await storage.readJson('topics/t/missing.json'), null)
 	})
 
-	test('readJson of invalid JSON returns null', async () => {
+	test('readJson of invalid JSON rejects instead of hiding the parse error', async () => {
 		const storage = new StorageService()
 		await storage.writeFile('topics/t/broken.json', '{not json')
-		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-		assert.equal(await storage.readJson('topics/t/broken.json'), null)
-		errorSpy.mockRestore()
+		await assert.rejects(() => storage.readJson('topics/t/broken.json'), SyntaxError)
 	})
 
 	test('uploadBuffer and downloadBuffer round-trip bytes', async () => {
@@ -145,7 +148,7 @@ describe('local mode: file operations', () => {
 		await storage.uploadBuffer('images/pic.png', Buffer.from('a'), 'image/png')
 		await assert.rejects(
 			() => storage.uploadBuffer('images/pic.png', Buffer.from('b'), 'image/png', { upsert: false }),
-			/already exists/
+			StorageConflictError
 		)
 		assert.equal((await storage.downloadBuffer('images/pic.png')).buffer.toString(), 'a')
 	})
@@ -168,25 +171,25 @@ describe('local mode: file operations', () => {
 			['noext', 'application/octet-stream'],
 		]
 		for (const [name, expected] of cases) {
-			await storage.uploadBuffer(`ct/${name}`, Buffer.from('x'), 'application/octet-stream')
-			assert.equal((await storage.downloadBuffer(`ct/${name}`)).contentType, expected, name)
+			await storage.uploadBuffer(`topics/ct/${name}`, Buffer.from('x'), 'application/octet-stream')
+			assert.equal((await storage.downloadBuffer(`topics/ct/${name}`)).contentType, expected, name)
 		}
 	})
 
 	test('downloadBuffer of a missing key rejects', async () => {
-		await assert.rejects(() => new StorageService().downloadBuffer('images/none.png'), /not found/i)
+		await assert.rejects(() => new StorageService().downloadBuffer('images/none.png'), StorageNotFoundError)
 	})
 
 	test('readFilesParallel returns a Map with only the existing keys', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('p/a.md', 'A')
-		await storage.writeFile('p/b.md', 'B')
-		const result = await storage.readFilesParallel(['p/a.md', 'p/missing.md', 'p/b.md'], 2)
+		await storage.writeFile('topics/p/a.md', 'A')
+		await storage.writeFile('topics/p/b.md', 'B')
+		const result = await storage.readFilesParallel(['topics/p/a.md', 'topics/p/missing.md', 'topics/p/b.md'], 2)
 		assert.deepEqual(
 			[...result.entries()],
 			[
-				['p/a.md', 'A'],
-				['p/b.md', 'B'],
+				['topics/p/a.md', 'A'],
+				['topics/p/b.md', 'B'],
 			]
 		)
 		assert.equal((await storage.readFilesParallel([])).size, 0)
@@ -194,35 +197,35 @@ describe('local mode: file operations', () => {
 
 	test('exists is true for files only', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('e/a.md', 'A')
-		assert.equal(await storage.exists('e/a.md'), true)
-		assert.equal(await storage.exists('e/b.md'), false)
-		assert.equal(await storage.exists('e'), false)
+		await storage.writeFile('topics/e/a.md', 'A')
+		assert.equal(await storage.exists('topics/e/a.md'), true)
+		assert.equal(await storage.exists('topics/e/b.md'), false)
+		assert.equal(await storage.exists('topics/e'), false)
 	})
 
 	test('deleteFiles removes files and ignores missing keys', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('d/a.md', 'A')
-		await storage.writeFile('d/b.md', 'B')
-		await storage.deleteFiles(['d/a.md', 'd/none.md'])
-		assert.equal(await storage.exists('d/a.md'), false)
-		assert.equal(await storage.exists('d/b.md'), true)
+		await storage.writeFile('topics/d/a.md', 'A')
+		await storage.writeFile('topics/d/b.md', 'B')
+		await storage.deleteFiles(['topics/d/a.md', 'topics/d/none.md'])
+		assert.equal(await storage.exists('topics/d/a.md'), false)
+		assert.equal(await storage.exists('topics/d/b.md'), true)
 		await storage.deleteFiles([])
 	})
 
-	test('listFiles returns direct entries sorted by name', async () => {
+	test('listFiles returns direct files sorted by name', async () => {
 		const storage = new StorageService()
 		await storage.writeFile('topics/t/x/a.md', 'a')
 		await storage.writeFile('topics/t/b.md', 'b')
 		await storage.writeFile('topics/t/a.md', 'a')
-		assert.deepEqual(await storage.listFiles('topics/t'), ['topics/t/a.md', 'topics/t/b.md', 'topics/t/x'])
+		assert.deepEqual(await storage.listFiles('topics/t'), ['topics/t/a.md', 'topics/t/b.md'])
 		assert.deepEqual(await storage.listFiles('topics/none'), [])
 	})
 
-	test('listFiles of a lone subdirectory returns it as a direct entry', async () => {
+	test('listFiles of a lone subdirectory returns no entries', async () => {
 		const storage = new StorageService()
 		await storage.writeFile('topics/t/x/a.md', 'a')
-		assert.deepEqual(await storage.listFiles('topics/t'), ['topics/t/x'])
+		assert.deepEqual(await storage.listFiles('topics/t'), [])
 	})
 
 	test('listFilesRecursive returns full file keys, files only, sorted', async () => {
@@ -237,15 +240,15 @@ describe('local mode: file operations', () => {
 			'topics/a/top.md',
 			'topics/b/z.md',
 		])
-		assert.deepEqual(await storage.listFilesRecursive('nothing'), [])
+		assert.deepEqual(await storage.listFilesRecursive('topics/nothing'), [])
 	})
 
 	test('listings do not expose or follow symlinks', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('l/a.md', 'a')
+		await storage.writeFile('topics/l/a.md', 'a')
 		fs.writeFileSync(path.join(outside, 'secret.md'), 'secret')
-		fs.symlinkSync(outside, path.join(root, 'l', 'link'))
-		assert.deepEqual(await storage.listFilesRecursive('l'), ['l/a.md'])
+		fs.symlinkSync(outside, path.join(root, 'topics', 'l', 'link'))
+		assert.deepEqual(await storage.listFilesRecursive('topics/l'), ['topics/l/a.md'])
 	})
 
 	test('deleteDirectory removes a whole prefix and leaves siblings', async () => {
@@ -289,18 +292,18 @@ describe('local mode: containment', () => {
 			const storage = new StorageService()
 			const before = snapshot(base)
 
-			await assert.rejects(() => storage.writeFile(key, 'x'), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.readFile(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.writeJson(key, {}), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.readJson(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.uploadBuffer(key, Buffer.from('x'), 'text/plain'), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.downloadBuffer(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.exists(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.deleteFiles([key]), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.listFiles(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.listFilesRecursive(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.deleteDirectory(key), ESCAPE_MESSAGE)
-			await assert.rejects(() => storage.readFilesParallel(['ok.md', key]), ESCAPE_MESSAGE)
+			await assert.rejects(() => storage.writeFile(key, 'x'), KEY_ERROR)
+			await assert.rejects(() => storage.readFile(key), KEY_ERROR)
+			await assert.rejects(() => storage.writeJson(key, {}), KEY_ERROR)
+			await assert.rejects(() => storage.readJson(key), KEY_ERROR)
+			await assert.rejects(() => storage.uploadBuffer(key, Buffer.from('x'), 'text/plain'), KEY_ERROR)
+			await assert.rejects(() => storage.downloadBuffer(key), KEY_ERROR)
+			await assert.rejects(() => storage.exists(key), KEY_ERROR)
+			await assert.rejects(() => storage.deleteFiles([key]), KEY_ERROR)
+			await assert.rejects(() => storage.listFiles(key), KEY_ERROR)
+			await assert.rejects(() => storage.listFilesRecursive(key), KEY_ERROR)
+			await assert.rejects(() => storage.deleteDirectory(key), KEY_ERROR)
+			await assert.rejects(() => storage.readFilesParallel(['topics/ok.md', key]), KEY_ERROR)
 
 			assert.deepEqual(snapshot(base), before)
 		})
@@ -314,11 +317,12 @@ describe('local mode: containment', () => {
 		)
 	})
 
-	test('a literal %2e%2e segment is a plain directory name inside the root', async () => {
+	test('a literal %2e%2e segment is rejected as a parent segment after decoding', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('%2e%2e/x', 'literal')
-		assert.equal(fs.readFileSync(path.join(root, '%2e%2e', 'x'), 'utf8'), 'literal')
-		assert.equal(await storage.readFile('%2e%2e/x'), 'literal')
+		await assert.rejects(() => storage.writeFile('topics/%2e%2e/x', 'literal'), KEY_ERROR)
+		await assert.rejects(() => storage.readFile('topics/%2e%2e/x'), KEY_ERROR)
+		await assert.rejects(() => storage.writeFile('topics/%252e%252e/x', 'literal'), KEY_ERROR)
+		assert.deepEqual(snapshot(root), [])
 		assert.deepEqual(snapshot(evil), [])
 		assert.deepEqual(snapshot(outside), [])
 	})
@@ -326,13 +330,14 @@ describe('local mode: containment', () => {
 	test('a directory symlink pointing outside blocks writeFile and readFile through it', async () => {
 		const storage = new StorageService()
 		fs.writeFileSync(path.join(outside, 'secret.md'), 'secret')
-		fs.symlinkSync(outside, path.join(root, 'link'))
+		fs.mkdirSync(path.join(root, 'topics'), { recursive: true })
+		fs.symlinkSync(outside, path.join(root, 'topics', 'link'))
 
-		await assert.rejects(() => storage.writeFile('link/new.md', 'x'), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.writeFile('link/deep/new.md', 'x'), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.readFile('link/secret.md'), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.deleteFiles(['link/secret.md']), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.exists('link/secret.md'), ESCAPE_MESSAGE)
+		await assert.rejects(() => storage.writeFile('topics/link/new.md', 'x'), KEY_ERROR)
+		await assert.rejects(() => storage.writeFile('topics/link/deep/new.md', 'x'), KEY_ERROR)
+		await assert.rejects(() => storage.readFile('topics/link/secret.md'), KEY_ERROR)
+		await assert.rejects(() => storage.deleteFiles(['topics/link/secret.md']), KEY_ERROR)
+		await assert.rejects(() => storage.exists('topics/link/secret.md'), KEY_ERROR)
 
 		assert.deepEqual(snapshot(outside), ['secret.md'])
 		assert.equal(fs.readFileSync(path.join(outside, 'secret.md'), 'utf8'), 'secret')
@@ -341,38 +346,41 @@ describe('local mode: containment', () => {
 	test('a file symlink pointing outside blocks reads and overwrites', async () => {
 		const storage = new StorageService()
 		fs.writeFileSync(path.join(outside, 'secret.md'), 'secret')
-		fs.symlinkSync(path.join(outside, 'secret.md'), path.join(root, 'filelink.md'))
+		fs.mkdirSync(path.join(root, 'topics'), { recursive: true })
+		fs.symlinkSync(path.join(outside, 'secret.md'), path.join(root, 'topics', 'filelink.md'))
 
-		await assert.rejects(() => storage.readFile('filelink.md'), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.writeFile('filelink.md', 'overwritten'), ESCAPE_MESSAGE)
+		await assert.rejects(() => storage.readFile('topics/filelink.md'), KEY_ERROR)
+		await assert.rejects(() => storage.writeFile('topics/filelink.md', 'overwritten'), KEY_ERROR)
 		assert.equal(fs.readFileSync(path.join(outside, 'secret.md'), 'utf8'), 'secret')
 	})
 
 	test('a dangling symlink pointing outside blocks writes', async () => {
 		const storage = new StorageService()
-		fs.symlinkSync(path.join(outside, 'not-yet'), path.join(root, 'dangling'))
+		fs.mkdirSync(path.join(root, 'topics'), { recursive: true })
+		fs.symlinkSync(path.join(outside, 'not-yet'), path.join(root, 'topics', 'dangling'))
 
-		await assert.rejects(() => storage.writeFile('dangling/x.md', 'x'), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.writeFile('dangling', 'x'), ESCAPE_MESSAGE)
+		await assert.rejects(() => storage.writeFile('topics/dangling/x.md', 'x'), KEY_ERROR)
+		await assert.rejects(() => storage.writeFile('topics/dangling', 'x'), KEY_ERROR)
 		assert.deepEqual(snapshot(outside), [])
 	})
 
 	test('sibling-prefix trap: no key reaches the directory that shares the root prefix', async () => {
 		const storage = new StorageService()
-		fs.symlinkSync(evil, path.join(root, 'sib'))
+		fs.mkdirSync(path.join(root, 'topics'), { recursive: true })
+		fs.symlinkSync(evil, path.join(root, 'topics', 'sib'))
 
-		await assert.rejects(() => storage.writeFile('sib/x', 'x'), ESCAPE_MESSAGE)
-		await assert.rejects(() => storage.writeFile('../data-evil/x', 'x'), ESCAPE_MESSAGE)
+		await assert.rejects(() => storage.writeFile('topics/sib/x', 'x'), KEY_ERROR)
+		await assert.rejects(() => storage.writeFile('../data-evil/x', 'x'), KEY_ERROR)
 		assert.deepEqual(snapshot(evil), [])
 	})
 
 	test('a symlink that stays inside the root is allowed', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('real/a.md', 'a')
-		fs.symlinkSync(path.join(root, 'real'), path.join(root, 'alias'))
-		assert.equal(await storage.readFile('alias/a.md'), 'a')
-		await storage.writeFile('alias/b.md', 'b')
-		assert.equal(fs.readFileSync(path.join(root, 'real', 'b.md'), 'utf8'), 'b')
+		await storage.writeFile('topics/real/a.md', 'a')
+		fs.symlinkSync(path.join(root, 'topics', 'real'), path.join(root, 'topics', 'alias'))
+		assert.equal(await storage.readFile('topics/alias/a.md'), 'a')
+		await storage.writeFile('topics/alias/b.md', 'b')
+		assert.equal(fs.readFileSync(path.join(root, 'topics', 'real', 'b.md'), 'utf8'), 'b')
 	})
 })
 
@@ -400,22 +408,22 @@ describe('local mode: moveDirectory', () => {
 
 	test('overwrites an existing destination file', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('m/old/a.md', 'new content')
-		await storage.writeFile('m/new/a.md', 'stale content')
-		await storage.moveDirectory('m/old', 'm/new')
-		assert.equal(await storage.readFile('m/new/a.md'), 'new content')
+		await storage.writeFile('topics/m/old/a.md', 'new content')
+		await storage.writeFile('topics/m/new/a.md', 'stale content')
+		await storage.moveDirectory('topics/m/old', 'topics/m/new')
+		assert.equal(await storage.readFile('topics/m/new/a.md'), 'new content')
 	})
 
 	test('moving into its own subdirectory keeps the files', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('n/a/f.md', 'f')
-		await storage.moveDirectory('n/a', 'n/a/inner')
-		assert.deepEqual(await storage.listFilesRecursive('n/a'), ['n/a/inner/f.md'])
+		await storage.writeFile('topics/n/a/f.md', 'f')
+		await storage.moveDirectory('topics/n/a', 'topics/n/a/inner')
+		assert.deepEqual(await storage.listFilesRecursive('topics/n/a'), ['topics/n/a/inner/f.md'])
 	})
 
 	test('a missing source prefix is a no-op', async () => {
-		await new StorageService().moveDirectory('nothing/here', 'nothing/there')
-		assert.equal(fs.existsSync(path.join(root, 'nothing', 'there')), false)
+		await new StorageService().moveDirectory('topics/nothing/here', 'topics/nothing/there')
+		assert.equal(fs.existsSync(path.join(root, 'topics', 'nothing', 'there')), false)
 	})
 
 	test('requires both prefixes', async () => {
@@ -424,11 +432,11 @@ describe('local mode: moveDirectory', () => {
 
 	test('rejects a destination that escapes the root and moves nothing', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('mv/src/a.md', 'a')
+		await storage.writeFile('topics/mv/src/a.md', 'a')
 		const before = snapshot(base)
 
-		for (const target of ['../escaped', 'mv/../../escaped', '/abs/escaped', '../data-evil/x']) {
-			await assert.rejects(() => storage.moveDirectory('mv/src', target), ESCAPE_MESSAGE)
+		for (const target of ['../escaped', 'topics/mv/../../escaped', '/abs/escaped', '../data-evil/x']) {
+			await assert.rejects(() => storage.moveDirectory('topics/mv/src', target), KEY_ERROR)
 		}
 		assert.deepEqual(snapshot(base), before)
 	})
@@ -436,17 +444,17 @@ describe('local mode: moveDirectory', () => {
 	test('rejects a source that escapes the root', async () => {
 		const storage = new StorageService()
 		fs.writeFileSync(path.join(outside, 'secret.md'), 'secret')
-		await assert.rejects(() => storage.moveDirectory('../outside', 'taken'), ESCAPE_MESSAGE)
+		await assert.rejects(() => storage.moveDirectory('../outside', 'topics/taken'), KEY_ERROR)
 		assert.deepEqual(snapshot(outside), ['secret.md'])
 	})
 
 	test('rejects a destination behind a symlink that points outside', async () => {
 		const storage = new StorageService()
-		await storage.writeFile('mv/src/a.md', 'a')
-		fs.symlinkSync(outside, path.join(root, 'link'))
-		await assert.rejects(() => storage.moveDirectory('mv/src', 'link/dest'), ESCAPE_MESSAGE)
+		await storage.writeFile('topics/mv/src/a.md', 'a')
+		fs.symlinkSync(outside, path.join(root, 'topics', 'link'))
+		await assert.rejects(() => storage.moveDirectory('topics/mv/src', 'topics/link/dest'), KEY_ERROR)
 		assert.deepEqual(snapshot(outside), [])
-		assert.equal(await storage.readFile('mv/src/a.md'), 'a')
+		assert.equal(await storage.readFile('topics/mv/src/a.md'), 'a')
 	})
 
 	test('does not touch the legacy web/public/uploads directory', async () => {
@@ -461,14 +469,46 @@ describe('local mode: moveDirectory', () => {
 	})
 })
 
-describe('local mode: unsupported methods fail loudly', () => {
-	test('createSignedUrl, getPublicUrl, createZip and listFilesWithMeta throw', async () => {
+describe('local mode: URL, ZIP and media listing', () => {
+	test('getPublicUrl returns the proxy route for the key', () => {
+		const url = new StorageService().getPublicUrl('topics/a/b.png')
+		assert.match(url, /^\/api\/docs\/assets\/proxy\?path=topics%2Fa%2Fb\.png&cacheNonce=\d+$/)
+	})
+
+	test('createZip packs the files under the prefix and skips answer keys unless asked', async () => {
 		const storage = new StorageService()
-		const unsupported = /not supported in local storage mode/
-		await assert.rejects(() => storage.createSignedUrl('a/b.png'), unsupported)
-		assert.throws(() => storage.getPublicUrl('a/b.png'), unsupported)
-		await assert.rejects(() => storage.createZip('topics/a'), unsupported)
-		await assert.rejects(() => storage.listFilesWithMeta('images'), unsupported)
+		await storage.writeFile('topics/z/t/questions/q1/prompt.md', 'Q1')
+		await storage.writeJson('topics/z/t/answer_keys.json', { q1: 'a' })
+		const withoutAnswers = await storage.createZip('topics/z/t')
+		assert.equal(withoutAnswers.subarray(0, 2).toString('latin1'), 'PK')
+		assert.ok(withoutAnswers.includes(Buffer.from('questions/q1/prompt.md')))
+		assert.ok(!withoutAnswers.includes(Buffer.from('answer_keys.json')))
+		const withAnswers = await storage.createZip('topics/z/t', true)
+		assert.ok(withAnswers.includes(Buffer.from('answer_keys.json')))
+	})
+
+	test('listFilesWithMeta pages direct files newest first with size and total', async () => {
+		const storage = new StorageService()
+		await storage.uploadBuffer('images/one.webp', Buffer.from('1'), 'image/webp')
+		await storage.uploadBuffer('images/two.webp', Buffer.from('22'), 'image/webp')
+		await storage.uploadBuffer('images/three.webp', Buffer.from('333'), 'image/webp')
+		const page = await storage.listFilesWithMeta('images', { limit: 2, offset: 0 })
+		assert.equal(page.total, 3)
+		assert.equal(page.files.length, 2)
+		for (const file of page.files) {
+			assert.equal(file.id, `images/${file.name}`)
+			assert.equal(file.metadata.size, file.name === 'one.webp' ? 1 : file.name === 'two.webp' ? 2 : 3)
+			assert.equal(file.metadata.mimetype, 'image/webp')
+			assert.ok(!Number.isNaN(Date.parse(file.created_at)))
+		}
+		assert.ok(page.files[0]!.created_at >= page.files[1]!.created_at)
+		const rest = await storage.listFilesWithMeta('images', { limit: 2, offset: 2 })
+		assert.equal(rest.files.length, 1)
+		assert.equal(rest.total, 3)
+	})
+
+	test('createSignedUrl no longer exists', () => {
+		assert.equal('createSignedUrl' in new StorageService(), false)
 	})
 })
 
@@ -476,7 +516,6 @@ describe('Supabase client lock-out', () => {
 	const FAKE_URL = 'https://fake-project.invalid'
 	const FAKE_KEY = 'fake-service-key'
 
-	/** Свежий импорт модуля: SUPABASE_* читаются при загрузке */
 	async function loadStorage() {
 		vi.resetModules()
 		return import('./storage.js')
@@ -489,62 +528,77 @@ describe('Supabase client lock-out', () => {
 		vi.stubEnv('SUPABASE_SERVICE_KEY', FAKE_KEY)
 	})
 
-	test('isolated env never constructs a Supabase client, even with SUPABASE_* set', async () => {
+	test('isolated env never constructs a Supabase client, even with SUPABASE_* set: the in-memory adapter serves it', async () => {
 		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '1')
 		const { StorageService: Fresh } = await loadStorage()
 		const storage = new Fresh()
 
-		await assert.rejects(() => storage.writeFile('a/b.md', 'x'), /Supabase not configured/)
-		await assert.rejects(() => storage.writeJson('a/b.json', {}), /Supabase not configured/)
-		await assert.rejects(
-			() => storage.uploadBuffer('a/b.png', Buffer.from('x'), 'image/png'),
-			/Supabase not configured/
-		)
-		await assert.rejects(() => storage.downloadBuffer('a/b.png'), /Supabase not configured/)
-		assert.equal(await storage.readFile('a/b.md'), '')
-		assert.equal(await storage.readJson('a/b.json'), null)
-		assert.equal(await storage.exists('a/b.md'), false)
-		assert.deepEqual(await storage.listFiles('a'), [])
-		assert.deepEqual(await storage.listFilesRecursive('a'), [])
-		await storage.deleteFiles(['a/b.md'])
-		assert.equal(storage.getPublicUrl('a/b.png'), '')
+		await storage.writeFile('topics/a/b.md', 'x')
+		assert.equal(await storage.readFile('topics/a/b.md'), 'x')
+		await storage.writeJson('topics/a/b.json', { ok: true })
+		assert.deepEqual(await storage.readJson('topics/a/b.json'), { ok: true })
+		await storage.uploadBuffer('images/b.png', Buffer.from('x'), 'image/png')
+		assert.equal((await storage.downloadBuffer('images/b.png')).contentType, 'image/png')
+		assert.equal(await storage.exists('topics/a/b.md'), true)
+		assert.deepEqual(await storage.listFiles('topics/a'), ['topics/a/b.json', 'topics/a/b.md'])
+		await storage.deleteFiles(['topics/a/b.md'])
+		assert.equal(await storage.readFile('topics/a/b.md'), '')
+		assert.match(storage.getPublicUrl('avatars/u/b.png'), /^\/api\/docs\/assets\/proxy\?path=avatars%2Fu%2Fb\.png/)
 		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
 
-	test('isolated env reports Supabase as not configured even with SUPABASE_* set', async () => {
+	test('isolated env selects the in-memory adapter, not Supabase, even with SUPABASE_* set', async () => {
 		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '1')
 		const { StorageService: Fresh } = await loadStorage()
-		assert.equal(new Fresh().isConfigured(), false)
+		const { resolveStorageDriver } = await import('./index.js')
+		assert.equal(new Fresh().isConfigured(), true)
+		assert.equal(resolveStorageDriver(), 'memory')
+		assert.equal(createClientSpy.mock.calls.length, 0)
+	})
+
+	test('isolated env refuses STORAGE_DRIVER=supabase with a configuration error and no client', async () => {
+		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '1')
+		vi.stubEnv('STORAGE_DRIVER', 'supabase')
+		const { StorageService: Fresh } = await loadStorage()
+		const storage = new Fresh()
+		assert.equal(storage.isConfigured(), false)
+		await assert.rejects(() => storage.readFile('topics/a/b.md'), CONFIG_ERROR)
+		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
 
 	test('without isolation and without the local driver the Supabase client is created once from the env values', async () => {
 		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '')
+		createClientSpy.mockImplementation(() => ({
+			storage: {
+				from: () => ({
+					download: async () => ({
+						data: null,
+						error: Object.assign(new Error('{}'), { name: 'StorageUnknownError', originalError: { status: 400 } }),
+					}),
+				}),
+			},
+		}))
 		const { StorageService: Fresh } = await loadStorage()
 		const storage = new Fresh()
-		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
 		assert.equal(storage.isConfigured(), true)
-		assert.equal(await storage.readFile('a/b.md'), '')
-		assert.equal(await storage.readFile('a/c.md'), '')
-		errorSpy.mockRestore()
+		assert.equal(await storage.readFile('topics/a/b.md'), '')
+		assert.equal(await storage.readFile('topics/a/c.md'), '')
 
 		assert.equal(createClientSpy.mock.calls.length, 1)
 		assert.deepEqual(createClientSpy.mock.calls[0], [FAKE_URL, FAKE_KEY])
 	})
 
-	test('without any configuration the old fallbacks stay: reads are empty, writes throw', async () => {
+	test('without any configuration every call fails with a configuration error and no client is created', async () => {
 		vi.stubEnv('BIO_EXAM_ISOLATED_ENV', '')
 		vi.stubEnv('SUPABASE_URL', undefined)
 		vi.stubEnv('SUPABASE_SERVICE_KEY', undefined)
-		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 		const { StorageService: Fresh } = await loadStorage()
 		const storage = new Fresh()
 
 		assert.equal(storage.isConfigured(), false)
-		assert.equal(await storage.readFile('a/b.md'), '')
-		await assert.rejects(() => storage.writeFile('a/b.md', 'x'), /Supabase not configured/)
-		assert.equal(warnSpy.mock.calls.length, 1)
-		warnSpy.mockRestore()
+		await assert.rejects(() => storage.readFile('topics/a/b.md'), CONFIG_ERROR)
+		await assert.rejects(() => storage.writeFile('topics/a/b.md', 'x'), CONFIG_ERROR)
 		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
 
@@ -555,12 +609,11 @@ describe('Supabase client lock-out', () => {
 		const { StorageService: Fresh } = await loadStorage()
 		const storage = new Fresh()
 
-		await storage.writeFile('p/a.md', 'local wins')
-		assert.equal(await storage.readFile('p/a.md'), 'local wins')
-		assert.equal(fs.readFileSync(path.join(root, 'p', 'a.md'), 'utf8'), 'local wins')
-		await storage.moveDirectory('p', 'q')
-		assert.deepEqual(await storage.listFilesRecursive('q'), ['q/a.md'])
-		// isConfigured() по-прежнему означает «Supabase настроен»
+		await storage.writeFile('topics/p/a.md', 'local wins')
+		assert.equal(await storage.readFile('topics/p/a.md'), 'local wins')
+		assert.equal(fs.readFileSync(path.join(root, 'topics', 'p', 'a.md'), 'utf8'), 'local wins')
+		await storage.moveDirectory('topics/p', 'topics/q')
+		assert.deepEqual(await storage.listFilesRecursive('topics/q'), ['topics/q/a.md'])
 		assert.equal(storage.isConfigured(), true)
 		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
@@ -575,7 +628,7 @@ describe('Supabase client lock-out', () => {
 
 		const refusal = /legacy web\/public\/uploads fallback is disabled in isolated mode/
 		assert.throws(() => assertLegacyUploadsAllowed(), refusal)
-		await assert.rejects(() => new Fresh().moveDirectory('topics/a/t1', 'topics/a/t2'), refusal)
+		await new Fresh().moveDirectory('topics/a/t1', 'topics/a/t2')
 		assert.deepEqual(fs.existsSync(legacy) ? snapshot(legacy) : null, before)
 		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
@@ -595,9 +648,9 @@ describe('Supabase client lock-out', () => {
 		const { StorageService: Fresh } = await loadStorage()
 		const storage = new Fresh()
 
-		await storage.writeFile('p/a.md', 'prompt')
-		assert.equal(await storage.readFile('p/a.md'), 'prompt')
-		assert.equal(storage.isConfigured(), false)
+		await storage.writeFile('topics/p/a.md', 'prompt')
+		assert.equal(await storage.readFile('topics/p/a.md'), 'prompt')
+		assert.equal(storage.isConfigured(), true)
 		assert.equal(createClientSpy.mock.calls.length, 0)
 	})
 })
