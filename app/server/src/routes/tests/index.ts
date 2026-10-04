@@ -11,7 +11,7 @@ import {
 } from '@bio-exam/exam-core'
 
 import crypto from 'crypto'
-import { and, asc, count, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import fs from 'fs'
 import multer from 'multer'
@@ -57,6 +57,8 @@ import {
 	UpdateQuestionDraftSchema,
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
+import { canReadTest, testScope } from '../../services/access-policy/index.js'
+import { readAdminTest, readQuestionMarkdown } from '../../services/question-content/index.js'
 import {
 	updateQuestionSearchDocumentLocation,
 	upsertQuestionSearchDocument,
@@ -968,105 +970,23 @@ router.put(
 )
 
 // GET /api/tests/by-slug/:topicSlug/:testSlug - загрузить тест по slug
-router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
+router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), async (req, res, next) => {
 	try {
+		const scope = await testScope(req)
+		if (!scope.all && scope.topicIds.length === 0) {
+			return res.status(403).json({ error: 'Forbidden' })
+		}
+
 		const { topicSlug, testSlug } = req.params as { topicSlug: string; testSlug: string }
-
-		// Находим тему по slug
-		const topic = await db.query.topics.findFirst({
-			where: eq(topics.slug, topicSlug),
-		})
-		if (!topic) {
-			return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-		}
-
-		// Находим тест по (topicId, slug)
-		const test = await db.query.tests.findFirst({
-			where: and(eq(tests.topicId, topic.id), eq(tests.slug, testSlug)),
-		})
-		if (!test) {
-			return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-		}
-
-		if (req.query.view === 'summary') {
-			const [totals] = await db.select({ count: count() }).from(questions).where(eq(questions.testId, test.id))
-			return res.json({
-				test: { ...test, topicSlug: topic.slug, topicTitle: topic.title },
-				questionsCount: totals.count,
-			})
-		}
-
-		// Загружаем вопросы
-		const questionRows = await db
-			.select()
-			.from(questions)
-			.where(eq(questions.testId, test.id))
-			.orderBy(asc(questions.order))
-		const questionTypesMap = await getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
-
-		// Загружаем активные ключи ответов
-		const questionIds = questionRows.map((q) => q.id)
-		const answerKeyRows =
-			questionIds.length > 0
-				? await db
-						.select()
-						.from(answerKeys)
-						.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
-				: []
-
-		const answerKeyMap = new Map(answerKeyRows.map((ak) => [ak.questionId, ak.correctAnswer]))
-
-		// Собираем все пути к файлам для чтения
-		const filePaths: string[] = []
-		const pathToQuestion = new Map<string, { questionId: string; type: 'prompt' | 'explanation' }>()
-
-		for (const q of questionRows) {
-			if (q.promptPath) {
-				filePaths.push(q.promptPath)
-				pathToQuestion.set(q.promptPath, { questionId: q.id, type: 'prompt' })
-			}
-			if (q.explanationPath) {
-				filePaths.push(q.explanationPath)
-				pathToQuestion.set(q.explanationPath, { questionId: q.id, type: 'explanation' })
-			}
-		}
-
-		// Пакетная загрузка файлов из Storage
-		const fileContents = await storageService.readFilesParallel(filePaths)
-
-		// Формируем объекты вопросов с текстами
-		const questionsWithTexts = questionRows.map((q) => {
-			const promptText = q.promptPath ? fileContents.get(q.promptPath) || '' : ''
-			const explanationText = q.explanationPath ? fileContents.get(q.explanationPath) || '' : ''
-			const correct = answerKeyMap.get(q.id) ?? null
-			const typeConfig = questionTypesMap[q.type]
-			if (!typeConfig) {
-				throw new Error(`Question type is not configured: ${q.type}`)
-			}
-
-			return {
-				id: q.id,
-				type: q.type,
-				questionUiTemplate: typeConfig.uiTemplate,
-				questionTypeTitle: typeConfig.title,
-				order: q.order,
-				points: q.points,
-				options: q.options,
-				matchingPairs: q.matchingPairs,
-				promptText,
-				explanationText,
-				correct,
-			}
-		})
-
-		res.json({
-			test: {
-				...test,
-				topicSlug: topic.slug,
-				topicTitle: topic.title,
-			},
-			questions: questionsWithTexts,
-		})
+		res.json(
+			await readAdminTest(
+				{ topicSlug, testSlug },
+				{
+					view: req.query.view === 'summary' ? 'summary' : undefined,
+					canRead: (testId) => canReadTest(req, testId),
+				}
+			)
+		)
 	} catch (e) {
 		next(e)
 	}
@@ -1288,90 +1208,14 @@ router.delete(
 )
 
 // GET /api/tests/:id - загрузить тест для редактирования
-router.get('/:id', validateUUID('id'), sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
+router.get('/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
 		const id = req.params.id as string
-
-		// Загружаем тест с темой
-		const test = await db.query.tests.findFirst({
-			where: eq(tests.id, id),
-		})
-
-		if (!test) {
-			return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+		if (!(await canReadTest(req, id))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
 
-		const topic = await db.query.topics.findFirst({
-			where: eq(topics.id, test.topicId),
-		})
-
-		// Загружаем вопросы
-		const questionRows = await db.select().from(questions).where(eq(questions.testId, id)).orderBy(asc(questions.order))
-		const questionTypesMap = await getQuestionTypeMapForTest({ testId: id, includeInactive: true })
-
-		// Загружаем активные ключи ответов
-		const questionIds = questionRows.map((q) => q.id)
-		const answerKeyRows =
-			questionIds.length > 0
-				? await db
-						.select()
-						.from(answerKeys)
-						.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
-				: []
-
-		const answerKeyMap = new Map(answerKeyRows.map((ak) => [ak.questionId, ak.correctAnswer]))
-
-		// Собираем все пути к файлам для чтения
-		const filePaths: string[] = []
-		const pathToQuestion = new Map<string, { questionId: string; type: 'prompt' | 'explanation' }>()
-
-		for (const q of questionRows) {
-			if (q.promptPath) {
-				filePaths.push(q.promptPath)
-				pathToQuestion.set(q.promptPath, { questionId: q.id, type: 'prompt' })
-			}
-			if (q.explanationPath) {
-				filePaths.push(q.explanationPath)
-				pathToQuestion.set(q.explanationPath, { questionId: q.id, type: 'explanation' })
-			}
-		}
-
-		// Пакетная загрузка файлов из Storage с лимитом параллелизма
-		const fileContents = await storageService.readFilesParallel(filePaths)
-
-		// Формируем объекты вопросов с текстами
-		const questionsWithTexts = questionRows.map((q) => {
-			const promptText = q.promptPath ? fileContents.get(q.promptPath) || '' : ''
-			const explanationText = q.explanationPath ? fileContents.get(q.explanationPath) || '' : ''
-			const correct = answerKeyMap.get(q.id) ?? null
-			const typeConfig = questionTypesMap[q.type]
-			if (!typeConfig) {
-				throw new Error(`Question type is not configured: ${q.type}`)
-			}
-
-			return {
-				id: q.id,
-				type: q.type,
-				questionUiTemplate: typeConfig.uiTemplate,
-				questionTypeTitle: typeConfig.title,
-				order: q.order,
-				points: q.points,
-				options: q.options,
-				matchingPairs: q.matchingPairs,
-				promptText,
-				explanationText,
-				correct,
-			}
-		})
-
-		res.json({
-			test: {
-				...test,
-				topicSlug: topic?.slug,
-				topicTitle: topic?.title,
-			},
-			questions: questionsWithTexts,
-		})
+		res.json(await readAdminTest({ testId: id }))
 	} catch (e) {
 		next(e)
 	}
@@ -2662,22 +2506,16 @@ router.get(
 
 			const questionsWithTexts = await Promise.all(
 				questionRows.map(async (q) => {
-					let promptText = ''
-					if (testRow) {
-						const candidates = [
-							q.promptPath,
-							`topics/${testRow.topic.slug}/${testRow.slug}/questions/${q.id}/prompt.md`,
-							`topics/${testRow.topic.slug}/${testRow.id}/questions/${q.id}/prompt.md`,
-						].filter((v): v is string => typeof v === 'string' && v.length > 0)
-
-						for (const candidate of candidates) {
-							const content = await storageService.readFile(candidate)
-							if (content.trim().length > 0) {
-								promptText = content
-								break
-							}
-						}
-					}
+					const promptText = testRow
+						? await readQuestionMarkdown({
+								storedPath: q.promptPath,
+								topicSlug: testRow.topic.slug,
+								testSlug: testRow.slug,
+								testId: testRow.id,
+								questionId: q.id,
+								kind: 'prompt',
+							})
+						: ''
 
 					const typeConfig = questionTypesMap[q.type]
 					return {

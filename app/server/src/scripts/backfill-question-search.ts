@@ -3,8 +3,8 @@ import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, pgPool } from '../db/index.js'
 import { questions, tests, topics } from '../db/schema.js'
+import { readFirstMarkdown } from '../services/question-content/index.js'
 import { upsertQuestionSearchDocument } from '../services/search/question-documents.js'
-import { storageService } from '../services/storage/storage.js'
 
 type BackfillCounters = {
 	processed: number
@@ -53,7 +53,7 @@ async function main() {
 				continue
 			}
 
-			const promptText = await storageService.readFile(row.promptPath)
+			const promptText = await readFirstMarkdown([row.promptPath])
 			if (!promptText.trim()) {
 				counters.skipped += 1
 				continue

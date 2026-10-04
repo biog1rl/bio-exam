@@ -29,7 +29,10 @@ import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolve
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { hasPermission } from '../../services/access-policy/index.js'
-import { storageService } from '../../services/storage/storage.js'
+import {
+	questionMarkdownCandidates,
+	readFirstMarkdown as readFirstQuestionMarkdown,
+} from '../../services/question-content/index.js'
 
 const router = Router()
 
@@ -60,33 +63,11 @@ function buildQuestionMarkdownCandidates(params: {
 	questionId: string
 	fileName: 'prompt.md' | 'explanation.md'
 }): string[] {
-	const { storedPath, topicSlug, testSlug, testId, questionId, fileName } = params
-
-	// Current canonical path:
-	// topics/{topicSlug}/{testSlug}/questions/{questionId}/{fileName}
-	//
-	// Backward-compatible fallbacks:
-	// - questions/{testId}/{fileName}
-	// - {testId} used as test folder
-	const candidates = [
-		storedPath,
-		`topics/${topicSlug}/${testSlug}/questions/${questionId}/${fileName}`,
-		`topics/${topicSlug}/${testSlug}/questions/${testId}/${fileName}`,
-		`topics/${topicSlug}/${testId}/questions/${questionId}/${fileName}`,
-		`topics/${topicSlug}/${testId}/questions/${testId}/${fileName}`,
-	].filter((value): value is string => typeof value === 'string' && value.length > 0)
-
-	return [...new Set(candidates)]
+	return questionMarkdownCandidates(params)
 }
 
 async function readFirstMarkdown(candidates: string[]): Promise<string> {
-	for (const candidate of candidates) {
-		const content = await storageService.readFile(candidate)
-		if (content.trim().length > 0) {
-			return content
-		}
-	}
-	return ''
+	return readFirstQuestionMarkdown(candidates)
 }
 
 function errorText(err: unknown): string {
