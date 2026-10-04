@@ -1,5 +1,7 @@
 'use client'
 
+import { isAnswered } from '@bio-exam/exam-core'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { toast } from 'sonner'
@@ -64,22 +66,6 @@ type Props = {
 
 function resolveTemplate(question: PublicTestQuestion): NonNullable<PublicTestQuestion['questionUiTemplate']> | null {
 	return question.questionUiTemplate
-}
-
-function isAnswered(question: PublicTestQuestion, value: TestAnswerValue | undefined): boolean {
-	const template = resolveTemplate(question)
-	if (!value) return false
-	if (template === 'single_choice') return typeof value === 'string' && value.length > 0
-	if (template === 'short_text' || template === 'sequence_digits') {
-		return typeof value === 'string' && value.trim().length > 0
-	}
-	if (template === 'multi_choice') return Array.isArray(value) && value.length > 0
-	if (template === 'matching') {
-		if (!value || typeof value !== 'object' || Array.isArray(value) || !question.matchingPairs) return false
-		const pairs = value as Record<string, string>
-		return question.matchingPairs.left.every((left) => typeof pairs[left.id] === 'string' && pairs[left.id].length > 0)
-	}
-	return false
 }
 
 function formatDate(value: string): string {
@@ -353,7 +339,14 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 	}, [submitResult])
 
 	const answeredCount = useMemo(
-		() => orderedQuestions.filter((question) => isAnswered(question, answers[question.id])).length,
+		() =>
+			orderedQuestions.filter((question) =>
+				isAnswered({
+					template: question.questionUiTemplate,
+					answer: answers[question.id],
+					content: { options: question.options, matchingPairs: question.matchingPairs },
+				})
+			).length,
 		[answers, orderedQuestions]
 	)
 
@@ -846,7 +839,11 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 
 				<div className="grid grid-cols-5 gap-1">
 					{orderedQuestions.map((question, index) => {
-						const answered = isAnswered(question, answers[question.id])
+						const answered = isAnswered({
+							template: question.questionUiTemplate,
+							answer: answers[question.id],
+							content: { options: question.options, matchingPairs: question.matchingPairs },
+						})
 						const isCurrent = question.id === currentQuestionId
 						return (
 							<button

@@ -1,7 +1,6 @@
-import type { AnswerValue as TestAnswerValue, QuestionTelemetry } from '@bio-exam/exam-core'
+import type { AnswerValue as TestAnswerValue, QuestionTelemetry, QuestionUiTemplate } from '@bio-exam/exam-core'
 
 export type TestQuestionType = string
-export type QuestionUiTemplate = 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits'
 
 export type TestOption = {
 	id: string
@@ -54,6 +53,7 @@ export type PublicTestQuestion = {
 export type {
 	AnswerValue as TestAnswerValue,
 	QuestionTelemetry,
+	QuestionUiTemplate,
 	SubmitResult,
 	SubmitResultItem,
 } from '@bio-exam/exam-core'

@@ -1,12 +1,12 @@
 /**
- * D-14 flow 3: разбор отправленной попытки студентом и администратором, плюс известные дефекты
- * D2 и D1 как ожидаемые падения (test.fail).
+ * D-14 flow 3: разбор отправленной попытки студентом и администратором, плюс известный дефект
+ * D1 как ожидаемое падение (test.fail).
  *
  * Отдельной страницы разбора для студента в приложении нет: разбор по вопросам студент видит
  * в TestRunner сразу после отправки (кнопки номеров вопросов остаются активными). Администратор
  * открывает ту же попытку на /admin/attempts/<id>.
  *
- * Известные дефекты (D-14), сценарии в test.describe.serial:
+ * Известный дефект D1 (D-14), сценарий в test.describe.serial:
  * - вся подготовка (прохождение, чтение разбора, правка ключа) идёт в обычном тесте `setup`,
  *   первом в блоке. test.fail() засчитывает любое падение как ожидаемое, в том числе ошибку
  *   хука beforeAll (проверено пробой: ошибка в beforeAll у test.fail остаётся «ожидаемой»), а
@@ -100,7 +100,7 @@ const MIXED: ExpectedQuestion[] = [
 		adminStatus: 'Верно',
 		earned: 2,
 		points: 2,
-		shows: ['Ответ студента · верно', '2314', 'Совпало позиций: 4 / 4'],
+		shows: ['Ответ студента · верно', '2314', 'Ошибок: 0'],
 	},
 ]
 
@@ -161,11 +161,10 @@ test.describe.serial('flow 3: review of a submitted attempt', () => {
 	})
 })
 
-/** Число после «Совпало позиций: X / N» в тексте вопроса разбора */
-function positionsMatched(sectionText: string): { matched: number; length: number } {
-	const found = /Совпало позиций: (\d+) \/ (\d+)/.exec(sectionText)
-	if (!found) throw new Error(`no "Совпало позиций: X / N" line in the review: ${sectionText}`)
-	return { matched: Number(found[1]), length: Number(found[2]) }
+function mistakesInReview(sectionText: string): number {
+	const found = /Ошибок: (\d+)/.exec(sectionText)
+	if (!found) throw new Error(`no "Ошибок: N" line in the review: ${sectionText}`)
+	return Number(found[1])
 }
 
 /**
@@ -178,17 +177,14 @@ function serverMistakesFromPoints(earnedPoints: number, maxPoints: number): numb
 	return 2
 }
 
-test.describe.serial('known defect D2: two sequence error counts', () => {
+test.describe.serial('D2: two sequence error counts', () => {
 	let student: BrowserContext | undefined
 	let admin: BrowserContext | undefined
-	let wrongPositionsInReview = -1
+	let mistakesShownInReview = -1
 	let serverMistakes = -1
 
 	// Подготовка: ответ 1234 на ключ 1243, затем оба числа читаются из разбора и из API.
-	// Обычный тест: любой сбой здесь красный и не считается ожидаемым падением D2.
-	test('D2 setup: student answers 1234 on key 1243 and both error counts are read @known-defect', async ({
-		browser,
-	}, testInfo) => {
+	test('D2 setup: student answers 1234 on key 1243 and both error counts are read', async ({ browser }, testInfo) => {
 		const sequenceTest = seedTest(projectKey(testInfo), 'seq-d2')
 		const question = sequenceTest.questions[0]
 		expect(question.correct).toBe('1243')
@@ -200,9 +196,8 @@ test.describe.serial('known defect D2: two sequence error counts', () => {
 
 		admin = await newSessionContext(browser, testInfo, 'admin')
 		const sections = await adminReviewSections(await admin.newPage(), submitted.attemptId, 1)
-		const { matched, length } = positionsMatched(sections[0])
-		expect(length).toBe(4)
-		wrongPositionsInReview = length - matched
+		mistakesShownInReview = mistakesInReview(sections[0])
+		expect(sections[0]).toContain('Соседняя перестановка считается одной ошибкой.')
 
 		// Баллы попытки читаются отдельным запросом студента, а не из ответа отправки
 		const testId = (
@@ -221,12 +216,10 @@ test.describe.serial('known defect D2: two sequence error counts', () => {
 		await admin?.close()
 	})
 
-	// Ожидаемо падает единственное утверждение ниже: для ключа 1243 и ответа 1234 сервер засчитывает
-	// 1 ошибку (соседняя перестановка), а разбор показывает «Совпало позиций: 2 / 4», то есть 2 неверные позиции.
-	test.fail('D2 — fixed in Phase 3 (EXAM-06): review error count equals the server error count @known-defect', () => {
+	test('D2: review error count equals the server error count', () => {
 		expect(
-			wrongPositionsInReview,
-			'wrong positions shown in review must equal the mistakes the server scored for 1234 vs 1243'
+			mistakesShownInReview,
+			'mistakes shown in review must equal the mistakes the server scored for 1234 vs 1243'
 		).toBe(serverMistakes)
 	})
 })

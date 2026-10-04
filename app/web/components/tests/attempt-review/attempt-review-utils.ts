@@ -1,3 +1,12 @@
+import {
+	answerIdList,
+	computeVerdicts,
+	normalizeIdRecord,
+	normalizeIdValue,
+	type ChoiceOptionVerdict,
+	type SequencePositionVerdict,
+} from '@bio-exam/exam-core'
+
 import type { PublicTestQuestion, QuestionTelemetry } from '@/lib/tests/types'
 
 export type QuestionResult = {
@@ -27,13 +36,14 @@ export type ChoiceOptionReviewRow = {
 }
 
 export function answerIds(value: unknown): Set<string> {
-	if (Array.isArray(value)) {
-		return new Set(value.filter((item: unknown) => typeof item === 'string' || typeof item === 'number').map(String))
-	}
-	if (typeof value === 'string' || typeof value === 'number') {
-		return new Set([String(value)])
-	}
-	return new Set()
+	return new Set(answerIdList(value))
+}
+
+const CHOICE_ROW_STATUS: Record<ChoiceOptionVerdict['kind'], ChoiceOptionReviewStatus> = {
+	selected_correct: 'correct',
+	missed: 'correct',
+	selected_wrong: 'incorrect-selected',
+	neutral: 'neutral',
 }
 
 export function getChoiceOptionReviewRows(
@@ -41,14 +51,60 @@ export function getChoiceOptionReviewRows(
 	studentAnswer: unknown,
 	correctAnswer: unknown
 ): ChoiceOptionReviewRow[] {
-	const selectedIds = answerIds(studentAnswer)
-	const correctIds = answerIds(correctAnswer)
+	const options = question.options ?? []
+	const template = question.questionUiTemplate
+	const verdicts =
+		template === 'single_choice' || template === 'multi_choice'
+			? computeVerdicts({ template, key: correctAnswer ?? null, answer: studentAnswer, content: { options } })
+			: null
+	const parts = verdicts?.template === 'single_choice' || verdicts?.template === 'multi_choice' ? verdicts.parts : []
+	const statusById = new Map(parts.map((part) => [part.optionId, CHOICE_ROW_STATUS[part.kind]]))
 
-	return (question.options ?? []).map((option) => ({
+	return options.map((option) => ({
 		id: option.id,
 		text: option.text,
-		status: correctIds.has(option.id) ? 'correct' : selectedIds.has(option.id) ? 'incorrect-selected' : 'neutral',
+		status: statusById.get(option.id) ?? 'neutral',
 	}))
+}
+
+export type SequenceReview = {
+	visible: boolean
+	mistakes: number
+	summaryText: string | null
+	parts: SequencePositionVerdict[]
+	showCells: boolean
+	hasSwap: boolean
+}
+
+export function getSequenceReview(input: {
+	studentAnswer: unknown
+	correctAnswer: unknown
+	isCorrect: boolean
+}): SequenceReview {
+	const visible = input.correctAnswer != null || input.isCorrect
+	const key = input.correctAnswer != null ? input.correctAnswer : input.isCorrect ? input.studentAnswer : null
+	const verdicts = computeVerdicts({ template: 'sequence_digits', key, answer: input.studentAnswer })
+	const parts = verdicts.template === 'sequence_digits' ? verdicts.parts : []
+	const mistakes = verdicts.mistakes
+	return {
+		visible,
+		mistakes,
+		summaryText: visible ? `Ошибок: ${mistakes}` : null,
+		parts,
+		showCells: input.correctAnswer != null && mistakes > 0 && parts.some((part) => part.given != null),
+		hasSwap: parts.some((part) => part.kind === 'swapped'),
+	}
+}
+
+export function sequencePositionLabel(part: SequencePositionVerdict, keyVisible: boolean): string {
+	const prefix = `позиция ${part.position}: `
+	const expected = keyVisible && part.expected != null ? part.expected : null
+	if (part.kind === 'correct') return `${prefix}верно`
+	if (part.kind === 'swapped') return `${prefix}переставлена местами с соседней`
+	if (part.kind === 'extra') return `${prefix}лишняя цифра`
+	if (part.kind === 'missing')
+		return expected ? `${prefix}цифра пропущена, ожидалась ${expected}` : `${prefix}цифра пропущена`
+	return expected ? `${prefix}неверно, ожидалась ${expected}` : `${prefix}неверно`
 }
 
 function optionText(question: PublicTestQuestion, optionId: string) {
@@ -57,37 +113,26 @@ function optionText(question: PublicTestQuestion, optionId: string) {
 
 export function formatAnswerLines(question: PublicTestQuestion, value: unknown): string[] {
 	const template = question.questionUiTemplate
+	const single = normalizeIdValue(value)
 
-	if (template === 'single_choice' && (typeof value === 'string' || typeof value === 'number')) {
-		return [optionText(question, String(value))]
+	if (template === 'single_choice' && single != null) {
+		return [optionText(question, single)]
 	}
 	if (template === 'multi_choice' && Array.isArray(value)) {
-		return value.map((item: unknown) => optionText(question, String(item)))
+		return answerIdList(value).map((item) => optionText(question, item))
 	}
 	if (template === 'short_text' && Array.isArray(value)) {
-		const answers = value
-			.filter((item: unknown) => typeof item === 'string' || typeof item === 'number')
-			.map(String)
-			.filter(Boolean)
+		const answers = answerIdList(value).filter(Boolean)
 		return answers.length > 0 ? answers : ['Нет ответа']
 	}
-	if (
-		(template === 'short_text' || template === 'sequence_digits') &&
-		(typeof value === 'string' || typeof value === 'number')
-	) {
-		return [String(value) || 'Нет ответа']
+	if ((template === 'short_text' || template === 'sequence_digits') && single != null) {
+		return [single || 'Нет ответа']
 	}
 
-	if (
-		template === 'matching' &&
-		value &&
-		typeof value === 'object' &&
-		!Array.isArray(value) &&
-		question.matchingPairs
-	) {
-		const map = value as Record<string, string | number>
+	const pairs = template === 'matching' ? normalizeIdRecord(value) : null
+	if (pairs && question.matchingPairs) {
 		return question.matchingPairs.left.map((left) => {
-			const right = question.matchingPairs?.right.find((item) => item.id === String(map[left.id]))
+			const right = question.matchingPairs?.right.find((item) => item.id === pairs[left.id])
 			return `${left.text} -> ${right?.text ?? 'нет ответа'}`
 		})
 	}

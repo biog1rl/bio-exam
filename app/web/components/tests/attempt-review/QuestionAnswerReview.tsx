@@ -1,9 +1,17 @@
-import { Check } from 'lucide-react'
+import { computeVerdicts, type SequencePositionVerdict } from '@bio-exam/exam-core'
+
+import { ArrowLeftRight, Check, Minus, X, type LucideIcon } from 'lucide-react'
 
 import type { PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
-import { answerIds, formatAnswerLines, getChoiceOptionReviewRows } from './attempt-review-utils'
+import {
+	answerIds,
+	formatAnswerLines,
+	getChoiceOptionReviewRows,
+	getSequenceReview,
+	sequencePositionLabel,
+} from './attempt-review-utils'
 
 type Props = {
 	question: PublicTestQuestion
@@ -101,10 +109,18 @@ function MatchingAnswerReview({ question, studentAnswer, correctAnswer, isCorrec
 	const correct = answerMap(correctAnswer)
 	const keyVisible = correctAnswer != null || (showCorrectAnswer && isCorrect)
 	const rightText = (value: unknown) => pairs.right.find((item) => item.id === String(value))?.text ?? 'Нет ответа'
-	const matched = isCorrect
-		? pairs.left.length
-		: pairs.left.filter((left) => selected[left.id] != null && String(selected[left.id]) === String(correct[left.id]))
-				.length
+	const verdicts = computeVerdicts({
+		template: 'matching',
+		key: correctAnswer ?? null,
+		answer: studentAnswer,
+		content: { matchingPairs: pairs },
+	})
+	const correctLeftIds = new Set(
+		verdicts.template === 'matching'
+			? verdicts.parts.filter((part) => part.kind === 'correct').map((part) => part.leftId)
+			: []
+	)
+	const matched = isCorrect ? pairs.left.length : pairs.left.filter((left) => correctLeftIds.has(left.id)).length
 
 	return (
 		<div className="mt-4 space-y-2">
@@ -116,8 +132,7 @@ function MatchingAnswerReview({ question, studentAnswer, correctAnswer, isCorrec
 			<div className="space-y-2" role="list">
 				{pairs.left.map((left) => {
 					const chosen = selected[left.id]
-					const pairCorrect =
-						keyVisible && (isCorrect || (chosen != null && String(chosen) === String(correct[left.id])))
+					const pairCorrect = keyVisible && (isCorrect || correctLeftIds.has(left.id))
 					return (
 						<div
 							key={left.id}
@@ -145,15 +160,45 @@ function MatchingAnswerReview({ question, studentAnswer, correctAnswer, isCorrec
 	)
 }
 
+const POSITION_CELL: Record<SequencePositionVerdict['kind'], { className: string; Icon: LucideIcon }> = {
+	correct: { className: 'border-green-500/40 bg-green-50/80 text-green-900', Icon: Check },
+	swapped: { className: 'border-amber-500/50 bg-amber-50/60 text-amber-950', Icon: ArrowLeftRight },
+	wrong: { className: 'border-red-500/40 bg-red-50/80 text-red-900', Icon: X },
+	extra: { className: 'border-red-500/40 bg-red-50/80 text-red-900', Icon: X },
+	missing: { className: 'border-dashed border-red-500/40 bg-red-50/80 text-red-900', Icon: Minus },
+}
+
+function SequencePositionCells({ parts, keyVisible }: { parts: SequencePositionVerdict[]; keyVisible: boolean }) {
+	return (
+		<div role="list" aria-label="Разбор по позициям" className="mt-3 flex flex-wrap gap-2">
+			{parts.map((part) => {
+				const { className, Icon } = POSITION_CELL[part.kind]
+				return (
+					<div
+						key={part.position}
+						role="listitem"
+						className={cn(
+							'inline-flex size-10 items-center justify-center gap-1 rounded-xl border font-mono text-base font-medium',
+							className
+						)}
+					>
+						<span aria-hidden="true">{part.kind === 'missing' ? '—' : part.given}</span>
+						<Icon className="size-3" aria-hidden="true" />
+						<span className="sr-only">{sequencePositionLabel(part, keyVisible)}</span>
+					</div>
+				)
+			})}
+		</div>
+	)
+}
+
 function TextAnswerReview({ question, studentAnswer, correctAnswer, isCorrect, earnedPoints }: Props) {
 	const studentLines = formatAnswerLines(question, studentAnswer)
 	const correctLines = correctAnswer == null ? [] : formatAnswerLines(question, correctAnswer)
-	const sequence = question.questionUiTemplate === 'sequence_digits'
-	const given = studentLines[0] === 'Нет ответа' ? '' : studentLines[0]
-	const expected = correctLines[0] ?? (isCorrect ? given : '')
-	const givenDigits = given.replace(/\s+/g, '')
-	const expectedDigits = expected.replace(/\s+/g, '')
-	const matchingPositions = [...givenDigits].filter((digit, index) => digit === expectedDigits[index]).length
+	const sequenceReview =
+		question.questionUiTemplate === 'sequence_digits'
+			? getSequenceReview({ studentAnswer, correctAnswer, isCorrect })
+			: null
 
 	return (
 		<div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -176,10 +221,12 @@ function TextAnswerReview({ question, studentAnswer, correctAnswer, isCorrect, e
 				{studentLines.map((line, index) => (
 					<p key={index}>{line}</p>
 				))}
-				{sequence && (correctAnswer != null || isCorrect) ? (
-					<p className="mt-2 text-xs">
-						Совпало позиций: {matchingPositions} / {expectedDigits.length}
-					</p>
+				{sequenceReview?.summaryText != null ? <p className="mt-2 text-xs">{sequenceReview.summaryText}</p> : null}
+				{sequenceReview?.summaryText != null && sequenceReview.hasSwap ? (
+					<p className="mt-1 text-xs">Соседняя перестановка считается одной ошибкой.</p>
+				) : null}
+				{sequenceReview?.showCells ? (
+					<SequencePositionCells parts={sequenceReview.parts} keyVisible={correctAnswer != null} />
 				) : null}
 			</div>
 			{correctAnswer != null && !isCorrect ? (
