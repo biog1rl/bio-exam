@@ -41,14 +41,21 @@ export default function remarkMdxStyleToEstree() {
 			if (idx === -1) return
 
 			const styleStr = (node.attributes[idx] as Extract<MdxJsxAttribute, { value?: string }>).value ?? ''
-			if (!styleStr.trim()) return
 
 			// Собираем объект стилей
 			const entries: Array<[key: string, value: string]> = []
-			styleToObject(styleStr, (name, value) => {
-				const clean = String(value).replace(/\s*!important\s*$/i, '')
-				entries.push([camelize(name), clean])
-			})
+			try {
+				styleToObject(styleStr, (name, value) => {
+					const clean = String(value).replace(/\s*!important\s*$/i, '')
+					entries.push([camelize(name), clean])
+				})
+			} catch {
+				entries.length = 0
+			}
+			if (entries.length === 0) {
+				node.attributes.splice(idx, 1)
+				return
+			}
 
 			// Преобразуем в ESTree: { textAlign: "center", fontWeight: "700" }
 			const properties: Property[] = entries.map<Property>(([key, val]) => {

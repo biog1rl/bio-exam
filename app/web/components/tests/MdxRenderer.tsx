@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ImgHTMLAttributes } from 'react'
+import { Component, useEffect, useMemo, useState, type ImgHTMLAttributes, type ReactNode } from 'react'
 
 import { Loader2 } from 'lucide-react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
@@ -117,6 +117,27 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	)
 }
 
+type MdxErrorBoundaryProps = {
+	fallback: ReactNode
+	children: ReactNode
+}
+
+class MdxErrorBoundary extends Component<MdxErrorBoundaryProps, { failed: boolean }> {
+	state = { failed: false }
+
+	static getDerivedStateFromError() {
+		return { failed: true }
+	}
+
+	componentDidCatch(error: unknown) {
+		console.error('Failed to render MDX content:', error)
+	}
+
+	render() {
+		return this.state.failed ? this.props.fallback : this.props.children
+	}
+}
+
 export default function MdxRenderer({ source, className }: Props) {
 	const normalized = useMemo(() => normalizeMdxSource((source ?? '').trim()), [source])
 	const [compiled, setCompiled] = useState<MDXRemoteSerializeResult | null>(null)
@@ -165,13 +186,17 @@ export default function MdxRenderer({ source, className }: Props) {
 		return null
 	}
 
+	const fallback = <div className={className ?? ''}>{normalized}</div>
+
 	if (hasError || !compiled) {
-		return <div className={className ?? ''}>{normalized}</div>
+		return fallback
 	}
 
 	return (
-		<div className={className ?? ''}>
-			<MDXRemote {...compiled} components={components} />
-		</div>
+		<MdxErrorBoundary key={normalized} fallback={fallback}>
+			<div className={className ?? ''}>
+				<MDXRemote {...compiled} components={components} />
+			</div>
+		</MdxErrorBoundary>
 	)
 }
