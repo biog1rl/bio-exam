@@ -11,6 +11,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
+import { runnerResultCard } from '@/components/tests/runner-result-card'
 import { isStoragePath, prefetchSignedUrls } from '@/lib/image-signed-url-cache'
 import { saveAnswer, saveSessionTelemetry, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
@@ -704,6 +705,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 					const question = orderedQuestions[currentIndex]
 					if (!question) return null
 					const questionResult = resultByQuestion[question.id]
+					const card = questionResult ? runnerResultCard(questionResult) : null
 					const template = resolveTemplate(question)
 
 					return (
@@ -733,23 +735,9 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 									<p className="text-sm text-amber-600">Тип этого вопроса не настроен. Обратитесь к администратору.</p>
 								) : null}
 
-								{questionResult ? (
-									<div
-										className={
-											questionResult.isCorrect
-												? 'rounded border border-emerald-200 bg-emerald-50 p-3 text-sm'
-												: questionResult.earnedPoints > 0
-													? 'rounded border border-amber-200 bg-amber-50 p-3 text-sm'
-													: 'rounded border border-rose-200 bg-rose-50 p-3 text-sm'
-										}
-									>
-										<p>
-											{questionResult.isCorrect
-												? 'Верно'
-												: questionResult.earnedPoints > 0
-													? 'Частично верно'
-													: 'Неверно'}
-										</p>
+								{questionResult && card ? (
+									<div className={card.className}>
+										<p>{card.label}</p>
 										<p className="mt-0.5 text-xs text-muted-foreground">
 											{questionResult.earnedPoints} / {questionResult.points} баллов
 										</p>
