@@ -10,36 +10,7 @@ import {
 	type ZoneProfile,
 } from '../../test-support/teacher-zone-world.js'
 
-const KNOWN_DEFECTS = new Set<string>([
-	'admin GET /api/groups',
-	'admin GET /api/groups/owner-options',
-	'admin PATCH /api/groups/:fresh ownerId teacher',
-	'admin PATCH /api/groups/:fresh ownerId teacher member teacher',
-	'admin POST /api/groups ownerId s1',
-	'admin POST /api/groups ownerId teacher',
-	'admin POST /api/groups ownerId teacher member teacher',
-	'adminNoZone GET /api/groups',
-	's1 GET /api/groups/candidates',
-	's1 GET /api/groups/my',
-	's2 GET /api/groups/my',
-	'teacherA GET /api/groups',
-	'teacherA GET /api/groups/:G',
-	'teacherA GET /api/groups/:missing',
-	'teacherA GET /api/groups/candidates',
-	'teacherA GET /api/groups/owner-options',
-	'teacherA PATCH /api/groups/:fresh member deactivated',
-	'teacherA PATCH /api/groups/:fresh member teacher',
-	'teacherA PATCH /api/groups/:fresh ownerId',
-	'teacherA POST /api/groups',
-	'teacherA POST /api/groups member allow tests.read',
-	'teacherA POST /api/groups member deactivated',
-	'teacherA POST /api/groups member teacher',
-	'teacherA POST /api/groups ownerId teacherB',
-	'teacherB DELETE /api/groups/:fresh',
-	'teacherB GET /api/groups',
-	'teacherB GET /api/groups/:G',
-	'teacherB PATCH /api/groups/:fresh',
-])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function check(id: string, title: string, fn: () => Promise<void>): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
@@ -340,6 +311,18 @@ row(
 		const owner = await teacherId()
 		expectStatus(await send(p, 'PATCH', `/${groupId}`, { ownerId: owner }), 400)
 		assert.equal(await ownerOf(groupId), null)
+	}
+)
+
+row(
+	['admin'],
+	'PATCH /api/groups/:fresh member teacher',
+	'400 персонал в группе учителя, состав не изменился',
+	async (p) => {
+		const { groupId, members } = await teacherAGroupWithStudent()
+		expectStatus(await send(p, 'PATCH', `/${groupId}`, { memberIds: [...members, await teacherId()] }), 400)
+		assert.deepEqual(await membersOf(groupId), members)
+		assert.equal(await ownerOf(groupId), w.users.teacherA.id)
 	}
 )
 
