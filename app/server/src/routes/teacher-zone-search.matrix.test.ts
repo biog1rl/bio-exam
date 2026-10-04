@@ -12,14 +12,7 @@ import {
 	type ZoneTopicKey,
 } from '../test-support/teacher-zone-world.js'
 
-const KNOWN_DEFECTS = new Set<string>([
-	's3 GET /search attempts',
-	'teacherA GET /search attempts',
-	'teacherA GET /search groups',
-	'teacherA GET /search questions',
-	'teacherA GET /search tests',
-	'teacherA GET /search users',
-])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function check(id: string, title: string, fn: () => Promise<void>): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test

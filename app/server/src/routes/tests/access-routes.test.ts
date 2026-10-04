@@ -69,10 +69,7 @@ const PROFILES: Array<{ name: Profile; roles: string[]; grants: Grant[]; assigne
 	{
 		name: 'admin_deny_search',
 		roles: ['admin'],
-		grants: [
-			{ domain: 'tests', action: 'write', allow: false },
-			{ domain: 'groups', action: 'manage_groups', allow: false },
-		],
+		grants: [{ domain: 'tests', action: 'read', allow: false }],
 		assigned: true,
 	},
 ]
@@ -237,7 +234,7 @@ describe('поиск: GET /api/search?scope=tests', () => {
 		['admin', ['assigned', 'free'], '/admin/tests/'],
 		['student', ['assigned'], '/tests/'],
 		['stranger', [], '/tests/'],
-		['allow_tests_write', ['assigned', 'free'], '/admin/tests/'],
+		['allow_tests_write', [], '/tests/'],
 		['admin_deny_search', ['assigned'], '/tests/'],
 	]
 

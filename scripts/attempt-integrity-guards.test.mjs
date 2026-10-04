@@ -19,6 +19,8 @@ const SERVER_ROUTES = 'app/server/src/routes'
 const PUBLIC_ROUTES = 'app/server/src/routes/tests/public.ts'
 const TESTS_ROUTES = 'app/server/src/routes/tests/index.ts'
 const ACCESS_POLICY_DIR = 'app/server/src/services/access-policy/'
+const SEARCH_ROUTE = 'app/server/src/routes/search.ts'
+const SEARCH_DIR = 'app/server/src/services/search/'
 const SCORED_ATTEMPT_DIR = 'app/server/src/services/scored-attempt/'
 const ASSIGNMENT_ROUTES = new Set([
 	'app/server/src/routes/tests/assignments.ts',
@@ -66,6 +68,30 @@ const TESTS_READ_CHECKS = [
 		label: "hasPermission(req, 'tests.read') вне access-policy: доступ к тесту через canReadTest и testScope",
 		match: (line) =>
 			line.includes("hasPermission(req, 'tests.read')") || line.includes('hasPermission(req, "tests.read")'),
+	},
+]
+
+const SEARCH_CHECKS = [
+	{
+		label: 'isPrivileged в services/search: привилегию поиска решает шов через testScope, groupScope и userScope',
+		match: (line) => /\bisPrivileged\b/.test(line),
+	},
+	{
+		label: "permissions.has('tests.read') в services/search: чтение тестов выражено через testScope",
+		match: (line) => line.includes("permissions.has('tests.read')") || line.includes('permissions.has("tests.read")'),
+	},
+]
+
+const REQUIRED_SCOPE_CALLS = [
+	{
+		file: PUBLIC_ROUTES,
+		calls: ['canReadTest(', 'testScope('],
+		label: 'маршруты попытки не вызывают',
+	},
+	{
+		file: SEARCH_ROUTE,
+		calls: ['testScope(', 'groupScope(', 'userScope('],
+		label: 'маршрут поиска не вызывает',
 	},
 ]
 
@@ -157,6 +183,10 @@ function testsReadViolations(root) {
 	return scanFiles(root, files, TESTS_READ_CHECKS)
 }
 
+function searchViolations(root) {
+	return scanFiles(root, collectSources(root, SEARCH_DIR), SEARCH_CHECKS)
+}
+
 function resultsReadViolations(root) {
 	const files = collectSources(root, SERVER_ROOT).filter((file) => !file.startsWith(SCORED_ATTEMPT_DIR))
 	return scanFiles(root, files, RESULTS_READ_CHECKS)
@@ -203,11 +233,13 @@ function adminReviewViolations(root) {
 	return violations
 }
 
-function requiredScopeCallsViolations(root) {
-	const source = fs.readFileSync(path.join(root, PUBLIC_ROUTES), 'utf8')
-	return ['canReadTest(', 'testScope(']
-		.filter((call) => !source.includes(call))
-		.map((call) => `${PUBLIC_ROUTES}: маршруты попытки не вызывают ${call} из services/access-policy/scope.ts`)
+function requiredScopeCallsViolations(root, entries = REQUIRED_SCOPE_CALLS) {
+	return entries.flatMap(({ file, calls, label }) => {
+		const source = fs.readFileSync(path.join(root, file), 'utf8')
+		return calls
+			.filter((call) => !source.includes(call))
+			.map((call) => `${file}: ${label} ${call} из services/access-policy/scope.ts`)
+	})
 }
 
 const q = '\u0027'
@@ -246,6 +278,10 @@ test('детекторы находят запрещённые строки и �
 	assert.ok(!matchesAny(RUNNER_STATUS_CHECKS, 'const tone = toneFor(view.status)'))
 	assert.ok(matchesAny(TESTS_READ_CHECKS, `const canReadAll = await hasPermission(req, ${q}tests.read${q})`))
 	assert.ok(!matchesAny(TESTS_READ_CHECKS, 'const allowed = await canReadTest(req, testId)'))
+	assert.ok(matchesAny(SEARCH_CHECKS, 'const privileged = isPrivileged(access)'))
+	assert.ok(matchesAny(SEARCH_CHECKS, `if (access.permissions.has(${q}tests.read${q})) return true`))
+	assert.ok(!matchesAny(SEARCH_CHECKS, `if (access.permissions.has(${q}tests.write${q})) return true`))
+	assert.ok(!matchesAny(SEARCH_CHECKS, 'const staff = hasTestZone(access.tests)'))
 	assert.ok(matchesAny(RESULTS_READ_CHECKS, 'select({ results: testAttempts.results })'))
 	assert.ok(!matchesAny(RESULTS_READ_CHECKS, 'select({ version: testAttempts.resultsVersion })'))
 	assert.ok(matchesAny(ASSIGNMENT_QUERY_CHECKS, 'const rows = await db.select().from(testAssignments)'))
@@ -315,6 +351,31 @@ test("в app/server/src вне access-policy нет hasPermission(req, 'tests.re
 	assert.deepEqual(testsReadViolations(REPO_ROOT), [])
 })
 
+test('в app/server/src/services/search нет isPrivileged и permissions.has(tests.read)', () => {
+	const files = collectSources(REPO_ROOT, SEARCH_DIR)
+	assert.ok(files.includes(`${SEARCH_DIR}database-search.ts`), `${SEARCH_DIR}: просканировано файлов: ${files.length}`)
+	assert.deepEqual(searchViolations(REPO_ROOT), [])
+})
+
+test('маршрут поиска берёт зону из шва: testScope, groupScope и userScope из services/access-policy', () => {
+	const source = fs.readFileSync(path.join(REPO_ROOT, SEARCH_ROUTE), 'utf8')
+	assert.match(
+		source,
+		/\{[^}]*\bgroupScope\b[^}]*\}\s*from\s+['"][./]*services\/access-policy\/(?:index|scope)\.js['"]/
+	)
+	assert.match(source, /\{[^}]*\btestScope\b[^}]*\}\s*from\s+['"][./]*services\/access-policy\/(?:index|scope)\.js['"]/)
+	assert.match(source, /\{[^}]*\buserScope\b[^}]*\}\s*from\s+['"][./]*services\/access-policy\/(?:index|scope)\.js['"]/)
+	const policyIndex = fs.readFileSync(path.join(REPO_ROOT, ACCESS_POLICY_DIR, 'index.ts'), 'utf8')
+	assert.match(policyIndex, /\bgroupScope\b[^}]*\btestScope\b[^}]*\buserScope\b[^}]*\}\s*from\s+['"]\.\/scope\.js['"]/)
+	assert.deepEqual(
+		requiredScopeCallsViolations(
+			REPO_ROOT,
+			REQUIRED_SCOPE_CALLS.filter((entry) => entry.file === SEARCH_ROUTE)
+		),
+		[]
+	)
+})
+
 test('маршруты попытки вызывают canReadTest и testScope из services/access-policy/scope.ts', () => {
 	const source = fs.readFileSync(path.join(REPO_ROOT, PUBLIC_ROUTES), 'utf8')
 	assert.match(
@@ -337,6 +398,13 @@ test('проба: вставка запрещённой строки в копи
 		copyWith(TEST_RUNNER, 'const probeVerdicts = computeVerdicts({})')
 		copyWith(PUBLIC_ROUTES, `const probeAccess = await hasPermission(req, ${q}tests.read${q})`)
 		copyWith(TESTS_ROUTES, 'const probeKeys = answerKeys')
+		copyWith(`${SEARCH_DIR}database-search.ts`, 'const privileged = isPrivileged(access)')
+		const searchRoute = path.join(tmp, SEARCH_ROUTE)
+		fs.mkdirSync(path.dirname(searchRoute), { recursive: true })
+		fs.writeFileSync(
+			searchRoute,
+			fs.readFileSync(path.join(REPO_ROOT, SEARCH_ROUTE), 'utf8').replaceAll('testScope(', 'probeScope(')
+		)
 
 		const web = webViolations(tmp)
 		assert.equal(web.length, 1, web.join('\n'))
@@ -350,8 +418,18 @@ test('проба: вставка запрещённой строки в копи
 		assert.equal(review.length, 1, review.join('\n'))
 		assert.match(review[0], /^app\/server\/src\/routes\/tests\/index\.ts:\d+: .*answerKeys/)
 
+		const search = searchViolations(tmp)
+		assert.equal(search.length, 1, search.join('\n'))
+		assert.match(search[0], /^app\/server\/src\/services\/search\/database-search\.ts:\d+: .*isPrivileged/)
+
+		const calls = requiredScopeCallsViolations(tmp)
+		assert.equal(calls.length, 1, calls.join('\n'))
+		assert.match(calls[0], /^app\/server\/src\/routes\/search\.ts: маршрут поиска не вызывает testScope\(/)
+
 		assert.deepEqual(webViolations(REPO_ROOT), [])
 		assert.deepEqual(testsReadViolations(REPO_ROOT), [])
+		assert.deepEqual(searchViolations(REPO_ROOT), [])
+		assert.deepEqual(requiredScopeCallsViolations(REPO_ROOT), [])
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true })
 	}

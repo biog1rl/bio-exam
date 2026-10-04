@@ -2,6 +2,7 @@ import type { PermissionKey } from '@bio-exam/rbac'
 
 import { pgPool } from '../../db/index.js'
 import { transliterate } from '../../lib/transliterate.js'
+import type { GroupScope, TestScope, UserScope } from '../access-policy/index.js'
 import { highlightSnippet } from './highlight.js'
 
 export type SearchScope = 'all' | 'tests' | 'questions' | 'users' | 'groups' | 'attempts'
@@ -33,6 +34,9 @@ export type SearchResponse = {
 type SearchAccess = {
 	userId: string
 	permissions: ReadonlySet<PermissionKey>
+	tests: TestScope
+	groups: GroupScope
+	users: UserScope
 }
 
 type SearchParams = {
@@ -78,15 +82,14 @@ function queryAlt(query: string): string {
 	return alt && alt.toLowerCase() !== query.toLowerCase() ? alt : query
 }
 
-function isPrivileged(access: SearchAccess): boolean {
-	return access.permissions.has('tests.write') || access.permissions.has('groups.manage_groups')
+function hasTestZone(tests: TestScope): boolean {
+	return tests.all || tests.topicIds.length > 0
 }
 
 function canRunScope(scope: Exclude<SearchScope, 'all'>, access: SearchAccess): boolean {
-	const privileged = isPrivileged(access)
 	if (scope === 'tests') return true
-	if (scope === 'questions') return privileged && access.permissions.has('tests.write')
-	if (scope === 'users') return privileged && access.permissions.has('users.read')
+	if (scope === 'questions') return access.permissions.has('tests.write') && hasTestZone(access.tests)
+	if (scope === 'users') return access.permissions.has('users.read')
 	if (scope === 'groups') return access.permissions.has('groups.manage_groups')
 	if (scope === 'attempts') return true
 	return false
@@ -111,7 +114,16 @@ async function queryRows(sqlText: string, values: unknown[], query: string): Pro
 }
 
 async function searchTests(params: { query: string; like: string; limit: number; access: SearchAccess }) {
-	if (isPrivileged(params.access)) {
+	const tests = params.access.tests
+	if (hasTestZone(tests)) {
+		const values: unknown[] = [params.query, params.like, params.limit]
+		let topicZone = ''
+		let testZone = ''
+		if (!tests.all) {
+			values.push(tests.topicIds)
+			topicZone = `and t.id = any($${values.length}::uuid[])`
+			testZone = `and te.topic_id = any($${values.length}::uuid[])`
+		}
 		return queryRows(
 			`
 				select *
@@ -130,8 +142,11 @@ async function searchTests(params: { query: string; like: string; limit: number;
 							case when concat_ws(' ', t.title, t.description, t.slug) ilike $2 escape '\\' then 1 else 0 end
 						) as score
 					from topics t
-					where concat_ws(' ', t.title, t.description, t.slug) ilike $2 escape '\\'
+					where (
+						concat_ws(' ', t.title, t.description, t.slug) ilike $2 escape '\\'
 						or extensions.similarity(concat_ws(' ', t.title, t.description, t.slug), $1) > 0.08
+					)
+					${topicZone}
 
 					union all
 
@@ -151,13 +166,16 @@ async function searchTests(params: { query: string; like: string; limit: number;
 						) as score
 					from tests te
 					inner join topics top on top.id = te.topic_id
-					where concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) ilike $2 escape '\\'
+					where (
+						concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug) ilike $2 escape '\\'
 						or extensions.similarity(concat_ws(' ', te.title, te.description, te.slug, top.title, top.slug), $1) > 0.08
+					)
+					${testZone}
 				) rows
 				order by score desc, title asc
 				limit $3
 			`,
-			[params.query, params.like, params.limit],
+			values,
 			params.query
 		)
 	}
@@ -195,7 +213,14 @@ async function searchTests(params: { query: string; like: string; limit: number;
 	)
 }
 
-async function searchQuestions(params: { query: string; like: string; limit: number }) {
+async function searchQuestions(params: { query: string; like: string; limit: number; tests: TestScope }) {
+	const values: unknown[] = [params.query, params.like, params.limit]
+	let zone = ''
+	if (!params.tests.all) {
+		values.push(params.tests.topicIds)
+		zone = `and qsd.topic_id = any($${values.length}::uuid[])`
+	}
+
 	return queryRows(
 		`
 			select
@@ -215,17 +240,27 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 			inner join questions q on q.id = qsd.question_id
 			inner join tests te on te.id = qsd.test_id
 			inner join topics top on top.id = qsd.topic_id
-			where concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text) ilike $2 escape '\\'
+			where (
+				concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text) ilike $2 escape '\\'
 				or extensions.similarity(concat_ws(' ', qsd.search_text, q.type, 'Вопрос #' || q.order::text), $1) > 0.08
+			)
+			${zone}
 			order by score desc, top.title asc, te.title asc, q.order asc
 			limit $3
 		`,
-		[params.query, params.like, params.limit],
+		values,
 		params.query
 	)
 }
 
-async function searchUsers(params: { query: string; like: string; limit: number }) {
+async function searchUsers(params: { query: string; like: string; limit: number; users: UserScope }) {
+	const values: unknown[] = [params.query, params.like, params.limit]
+	let zone = ''
+	if (!params.users.all) {
+		values.push(params.users.groupIds)
+		zone = `and exists (select 1 from user_groups ug where ug.user_id = u.id and ug.group_id = any($${values.length}::uuid[]))`
+	}
+
 	return queryRows(
 		`
 			select
@@ -242,17 +277,27 @@ async function searchUsers(params: { query: string; like: string; limit: number 
 					case when concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone) ilike $2 escape '\\' then 1 else 0 end
 				) as score
 			from users u
-			where concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone) ilike $2 escape '\\'
+			where (
+				concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone) ilike $2 escape '\\'
 				or extensions.similarity(concat_ws(' ', u.name, u.first_name, u.last_name, u.login, u.email, u.telegram, u.phone), $1) > 0.08
+			)
+			${zone}
 			order by score desc, title asc
 			limit $3
 		`,
-		[params.query, params.like, params.limit],
+		values,
 		params.query
 	)
 }
 
-async function searchGroups(params: { query: string; like: string; limit: number }) {
+async function searchGroups(params: { query: string; like: string; limit: number; groups: GroupScope }) {
+	const values: unknown[] = [params.query, params.like, params.limit]
+	let zone = ''
+	if (!params.groups.all) {
+		values.push(params.groups.groupIds)
+		zone = `where sg.id = any($${values.length}::uuid[])`
+	}
+
 	return queryRows(
 		`
 			select
@@ -270,13 +315,14 @@ async function searchGroups(params: { query: string; like: string; limit: number
 			from student_groups sg
 			left join user_groups ug on ug.group_id = sg.id
 			left join users u on u.id = ug.user_id
+			${zone}
 			group by sg.id, sg.name
 			having concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')) ilike $2 escape '\\'
 				or extensions.similarity(concat_ws(' ', sg.name, string_agg(coalesce(u.name, u.login, ''), ' ')), $1) > 0.08
 			order by score desc, sg.name asc
 			limit $3
 		`,
-		[params.query, params.like, params.limit],
+		values,
 		params.query
 	)
 }
@@ -288,12 +334,18 @@ async function searchAttempts(params: {
 	limit: number
 	access: SearchAccess
 }) {
-	const privileged = isPrivileged(params.access)
-	const whereAccess = privileged ? '' : 'and ta.user_id = $4'
-	const limitParam = privileged ? '$4' : '$5'
-	const values = privileged
-		? [params.query, params.like, params.likeAlt, params.limit]
-		: [params.query, params.like, params.likeAlt, params.access.userId, params.limit]
+	const tests = params.access.tests
+	const staff = hasTestZone(tests)
+	const values: unknown[] = [params.query, params.like, params.likeAlt, params.limit]
+	let whereAccess = ''
+	if (!tests.all && staff) {
+		values.push(tests.topicIds)
+		whereAccess = `and te.topic_id = any($${values.length}::uuid[])`
+	}
+	if (!staff) {
+		values.push(params.access.userId)
+		whereAccess = `and ta.user_id = $${values.length} and exists (select 1 from test_assignments a where a.test_id = ta.test_id and a.user_id = ta.user_id)`
+	}
 
 	return queryRows(
 		`
@@ -304,7 +356,7 @@ async function searchAttempts(params: {
 				concat_ws(' · ', top.title, coalesce(u.name, u.login), case when ta.passed then 'Сдано' else 'Не сдано' end, ta.submitted_at::date::text) as subtitle,
 				concat_ws(' · ', top.title, coalesce(u.name, u.login), case when ta.passed then 'Сдано' else 'Не сдано' end, ta.submitted_at::date::text) as snippet_source,
 				case
-					when ${privileged ? 'true' : 'false'} then ('/admin/attempts/' || ta.id::text)
+					when ${staff ? 'true' : 'false'} then ('/admin/attempts/' || ta.id::text)
 					else ('/tests/' || top.slug || '/' || te.slug)
 				end as href,
 				greatest(
@@ -329,7 +381,7 @@ async function searchAttempts(params: {
 			)
 			${whereAccess}
 			order by score desc, ta.submitted_at desc
-			limit ${limitParam}
+			limit $4
 		`,
 		values,
 		params.query
@@ -351,9 +403,9 @@ export async function searchDatabase(params: SearchParams): Promise<SearchRespon
 		let items: SearchResultItem[] = []
 		if (available && query.length >= 2) {
 			if (scope === 'tests') items = await searchTests({ query, like, limit, access: params.access })
-			if (scope === 'questions') items = await searchQuestions({ query, like, limit })
-			if (scope === 'users') items = await searchUsers({ query, like, limit })
-			if (scope === 'groups') items = await searchGroups({ query, like, limit })
+			if (scope === 'questions') items = await searchQuestions({ query, like, limit, tests: params.access.tests })
+			if (scope === 'users') items = await searchUsers({ query, like, limit, users: params.access.users })
+			if (scope === 'groups') items = await searchGroups({ query, like, limit, groups: params.access.groups })
 			if (scope === 'attempts') items = await searchAttempts({ query, like, likeAlt, limit, access: params.access })
 		}
 		categories.push({ scope, title: CATEGORY_TITLES[scope], available, items })

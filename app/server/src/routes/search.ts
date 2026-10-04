@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 
 import { sessionRequired } from '../middleware/auth/session.js'
-import { requestAccess } from '../services/access-policy/index.js'
+import { groupScope, requestAccess, testScope, userScope } from '../services/access-policy/index.js'
 import { searchDatabase, type SearchScope } from '../services/search/database-search.js'
 
 const router = Router()
@@ -21,7 +21,12 @@ router.get('/', sessionRequired(), async (req, res, next) => {
 		}
 
 		const user = req.authUser!
-		const access = await requestAccess(req)
+		const [access, tests, groups, users] = await Promise.all([
+			requestAccess(req),
+			testScope(req),
+			groupScope(req),
+			userScope(req),
+		])
 		const result = await searchDatabase({
 			query: parsed.data.q,
 			scope: parsed.data.scope as SearchScope,
@@ -29,6 +34,9 @@ router.get('/', sessionRequired(), async (req, res, next) => {
 			access: {
 				userId: user.id,
 				permissions: access.permissions,
+				tests,
+				groups,
+				users,
 			},
 		})
 
