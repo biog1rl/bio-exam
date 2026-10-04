@@ -10,34 +10,13 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { fetchAuthMe } from '@/lib/auth/fetchMe'
 import { normalizeLogin } from '@/lib/auth/validators'
-
-function safeRedirect(url?: string | null) {
-	if (!url) return '/'
-	let decoded = url
-	try {
-		decoded = decodeURIComponent(url)
-	} catch {
-		/* ignore */
-	}
-	if (decoded.startsWith('/')) return decoded
-	if (typeof window !== 'undefined') {
-		try {
-			const u = new URL(decoded, window.location.origin)
-			if (u.origin === window.location.origin) {
-				return `${u.pathname}${u.search}${u.hash || ''}` || '/'
-			}
-		} catch {
-			/* ignore */
-		}
-	}
-	return '/'
-}
+import { sessionClient } from '@/lib/session/client'
+import { safeCallbackPath } from '@/lib/session/redirect'
 
 async function fetchMe(): Promise<boolean> {
 	try {
-		return Boolean(await fetchAuthMe())
+		return (await sessionClient.loadMe()).kind === 'ok'
 	} catch {
 		return false
 	}
@@ -48,17 +27,7 @@ export default function LoginPage() {
 	const searchParams = useSearchParams()
 	const { refresh } = useAuth()
 
-	const callbackUrl = useMemo(
-		() =>
-			searchParams.get('callbackUrl') ||
-			searchParams.get('from') ||
-			searchParams.get('next') ||
-			searchParams.get('redirectTo') ||
-			searchParams.get('returnTo') ||
-			searchParams.get('redirect') ||
-			'/dashboard',
-		[searchParams]
-	)
+	const callbackUrl = useMemo(() => safeCallbackPath(searchParams.get('callbackUrl')), [searchParams])
 
 	const [bootLoading, setBootLoading] = useState(true)
 	const [showPassword, setShowPassword] = useState(false)
@@ -69,7 +38,7 @@ export default function LoginPage() {
 	useEffect(() => {
 		;(async () => {
 			const ok = await fetchMe()
-			if (ok) router.replace(safeRedirect(callbackUrl))
+			if (ok) router.replace(callbackUrl)
 			else setBootLoading(false)
 		})()
 	}, [router, callbackUrl])
@@ -108,7 +77,7 @@ export default function LoginPage() {
 
 			// Обновляем состояние авторизации после успешного входа
 			await refresh()
-			const target = safeRedirect(callbackUrl)
+			const target = callbackUrl
 			const isReady = await fetchMe()
 			if (!isReady) {
 				setError('Сессия не установилась. Обновите страницу и попробуйте снова.')

@@ -5,7 +5,7 @@ import { can as canRbac } from '@bio-exam/rbac'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
-import { fetchAuthMe, type AuthMe } from '@/lib/auth/fetchMe'
+import { sessionClient, type AuthMe, type LoadMeOutcome } from '@/lib/session/client'
 
 type Me = AuthMe
 
@@ -24,11 +24,11 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-async function fetchMeOnce(): Promise<Me | null> {
+async function fetchMeOnce(): Promise<LoadMeOutcome> {
 	try {
-		return await fetchAuthMe()
+		return await sessionClient.loadMe()
 	} catch {
-		return null
+		return { kind: 'unavailable' }
 	}
 }
 
@@ -41,7 +41,12 @@ export function AuthProvider({ children, initialMe }: { children: React.ReactNod
 	const perms = useMemo<ReadonlySet<PermissionKey>>(() => new Set((me?.perms ?? []) as PermissionKey[]), [me])
 
 	const refresh = useCallback(async () => {
-		const next = await fetchMeOnce()
+		const outcome = await fetchMeOnce()
+		if (outcome.kind === 'unavailable') {
+			setLoading(false)
+			return
+		}
+		const next = outcome.kind === 'ok' ? outcome.me : null
 		const newVersion = Date.now()
 
 		// Предзагружаем изображение перед обновлением состояния для плавного перехода

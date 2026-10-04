@@ -8,6 +8,7 @@ import { useEffect, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { useAuth } from '@/components/providers/AuthProvider'
+import { buildLoginRedirect } from '@/lib/session/redirect'
 
 type AuthGuardProps = {
 	children: ReactNode
@@ -49,8 +50,7 @@ export default function AuthGuard({
 		if (!redirectTo || isSkipped || loading || me) return
 		const query = searchParams?.toString()
 		const callbackUrl = `${pathname || '/'}${query ? `?${query}` : ''}`
-		const target = `${redirectTo}?callbackUrl=${encodeURIComponent(callbackUrl)}`
-		router.replace(target)
+		router.replace(buildLoginRedirect(callbackUrl))
 	}, [redirectTo, isSkipped, loading, me, pathname, router, searchParams])
 
 	if (isSkipped) return <>{children}</>

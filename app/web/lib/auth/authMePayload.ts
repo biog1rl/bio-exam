@@ -17,6 +17,7 @@ export type AuthMe = {
 	avatarCropViewY: number | null
 	roles: RoleKey[]
 	perms: PermissionKey[]
+	accessExpiresAt: string | null
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -61,5 +62,6 @@ export function parseAuthMe(body: unknown): AuthMe | null {
 		avatarCropViewY: asNullableNumber(user.avatarCropViewY),
 		roles: asStringArray<RoleKey>(user.roles),
 		perms: asStringArray<PermissionKey>(user.perms),
+		accessExpiresAt: asNullableString(payload.accessExpiresAt),
 	}
 }
