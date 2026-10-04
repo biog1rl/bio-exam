@@ -43,9 +43,9 @@ test('набор прав роли admin из ROLE_REGISTRY открывает �
 	for (const section of ALL_SECTIONS) assert.equal(canAccessSection(perms, section), true, section)
 })
 
-test('набор прав роли user (users.read) не открывает ни один раздел', () => {
+test('роль user без прав не открывает ни один раздел', () => {
 	const perms = rolePerms('user')
-	assert.deepEqual([...perms], ['users.read'])
+	assert.deepEqual([...perms], [])
 	for (const section of ALL_SECTIONS) assert.equal(canAccessSection(perms, section), false, section)
 })
 

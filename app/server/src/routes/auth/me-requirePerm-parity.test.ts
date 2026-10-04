@@ -37,7 +37,7 @@ beforeAll(async () => {
 		['parity_role_deny_admin', ['admin']],
 		['parity_user', ['user']],
 		['parity_allow_user', ['user']],
-		['parity_deny_user', ['user']],
+		['parity_deny_user', ['admin']],
 	]
 	for (const [name, roles] of seeds) {
 		ids.set(name, await seedUser(ctx, { login: name, roles, password: PASSWORD }))
@@ -111,7 +111,7 @@ describe('parity /api/auth/me ↔ requirePermKey', () => {
 
 	test('user: все ключи совпадают', async () => {
 		const perms = await assertParity('parity_user')
-		assert.ok(perms.has('users.read'))
+		assert.ok(!perms.has('users.read'))
 		assert.ok(!perms.has('tests.read'))
 	})
 
@@ -120,9 +120,10 @@ describe('parity /api/auth/me ↔ requirePermKey', () => {
 		assert.ok(perms.has('tests.read'))
 	})
 
-	test('user + deny users.read в rbac_user_grants: все ключи совпадают, users.read нет', async () => {
+	test('admin + deny users.read в rbac_user_grants: все ключи совпадают, users.read нет', async () => {
 		const perms = await assertParity('parity_deny_user')
 		assert.ok(!perms.has('users.read'))
+		assert.ok(perms.has('users.edit'))
 	})
 
 	test('admin + deny settings.manage в rbac_role_grants: все ключи совпадают, settings.manage нет', async () => {
@@ -169,7 +170,7 @@ describe('GET /api/rbac/user/:id/grants через модуль прав', () =>
 		const adminJar = await signIn('parity_admin')
 		const grants = await grantsOf(adminJar, 'parity_allow_user')
 		assert.deepEqual(grants.roles, ['user'])
-		assert.deepEqual(grants.roleKeys, ['users.read'])
+		assert.deepEqual(grants.roleKeys, [])
 		assert.deepEqual(grants.userOverrides, [{ domain: 'tests', action: 'read', allow: true }])
 		const me = await call(ctx, 'GET', '/api/auth/me', { cookies: await signIn('parity_allow_user') })
 		const perms = (me.body.user as { perms: string[] }).perms

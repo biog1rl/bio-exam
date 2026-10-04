@@ -8,7 +8,7 @@ type Json = Record<string, unknown>
 const PASSWORD = 'users-list-password-1'
 const PERSONAL_KEYS = ['login', 'phone', 'email', 'telegram', 'birthdate', 'roles', 'isActive']
 
-const KNOWN_DEFECTS = new Set<string>(['PRIV-user-gets-users'])
+const KNOWN_DEFECTS = new Set<string>()
 
 function defectTest(id: string, title: string, fn: () => Promise<void>, timeout?: number): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test

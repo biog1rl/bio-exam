@@ -175,6 +175,6 @@ describe('createAccessPolicy с in-memory загрузчиком', () => {
 	test('по умолчанию используется ROLE_REGISTRY пакета', async () => {
 		const loader = createInMemoryGrantsLoader(new Map([['u', snapshot(['user'])]]))
 		const access = await createAccessPolicy({ loader }).accessFor('u')
-		expect(sorted(access.permissions)).toEqual(['users.read'])
+		expect(sorted(access.permissions)).toEqual([])
 	})
 })

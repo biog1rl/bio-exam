@@ -31,4 +31,10 @@ describe('@bio-exam/rbac', () => {
 		expect(rbac.can(perms, 'users', 'edit')).toBe(false)
 		expect(rbac.can(perms, 'tests.read')).toBe(false)
 	})
+
+	test('роль user без прав', () => {
+		expect(rbac.ROLE_REGISTRY.user.grants).toEqual({})
+		const keys = Object.values(rbac.ROLE_REGISTRY.user.grants as Record<string, readonly string[]>).flat()
+		expect(keys).toEqual([])
+	})
 })

@@ -25,7 +25,7 @@ export const ROLE_REGISTRY = {
 	user: {
 		key: 'user',
 		name: 'Пользователь',
-		grants: { users: ['read'] },
+		grants: {},
 		order: 10,
 	},
 } as const satisfies Record<string, Omit<RoleConfig, 'key'> & { key: string }>

@@ -1,7 +1,7 @@
 import type { RoleKey } from '@bio-exam/rbac'
 import { ROLE_KEYS } from '@bio-exam/rbac'
 
-import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, or, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -23,7 +23,9 @@ import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { AssignTestSchema } from '../../schemas/assignments.js'
 import { PatchUserSchema } from '../../schemas/users.js'
+import { canReadUser } from '../../services/access-policy/index.js'
 import { revokeUserSessions } from '../../services/session/index.js'
+import { avatarUrl } from '../../services/storage/links.js'
 import type { UserRow } from '../../types/db/users.js'
 import avatarRouter from './avatar.js'
 import loginThrottleRouter from './login-throttle.js'
@@ -37,6 +39,74 @@ router.use('/profile', profileRouter)
 router.use('/avatar', avatarRouter)
 router.use('/', sessionsRouter)
 router.use('/', loginThrottleRouter)
+
+const DIRECTORY_MIN_QUERY = 2
+const DIRECTORY_DEFAULT_LIMIT = 10
+const DIRECTORY_MAX_LIMIT = 20
+
+function escapeLikePattern(value: string): string {
+	return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+router.get('/directory', sessionRequired(), async (req, res, next) => {
+	try {
+		const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+		if (q.length < DIRECTORY_MIN_QUERY) {
+			return res.status(400).json({ error: 'Укажите не меньше 2 символов для поиска' })
+		}
+		const limit = Math.min(
+			Math.max(Math.trunc(Number(req.query.limit)) || DIRECTORY_DEFAULT_LIMIT, 1),
+			DIRECTORY_MAX_LIMIT
+		)
+		const escaped = escapeLikePattern(q)
+		const contains = `%${escaped}%`
+		const prefix = `${escaped}%`
+		const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
+
+		const rows = await db
+			.select({
+				id: users.id,
+				name: users.name,
+				firstName: users.firstName,
+				lastName: users.lastName,
+				initials: users.initials,
+				avatarColor: users.avatarColor,
+				avatarCropped: users.avatarCropped,
+			})
+			.from(users)
+			.where(
+				and(
+					eq(users.isActive, true),
+					or(
+						sql`${users.name} ilike ${contains} escape '\\'`,
+						sql`${users.firstName} ilike ${contains} escape '\\'`,
+						sql`${users.lastName} ilike ${contains} escape '\\'`,
+						sql`${fullName} ilike ${contains} escape '\\'`
+					)
+				)
+			)
+			.orderBy(
+				sql`case when lower(${users.name}) = lower(${q}) then 0 when ${users.name} ilike ${prefix} escape '\\' then 1 else 2 end`,
+				asc(users.name),
+				asc(users.id)
+			)
+			.limit(limit)
+
+		return res.json({
+			users: rows.map((row) => ({
+				id: row.id,
+				name: row.name,
+				firstName: row.firstName,
+				lastName: row.lastName,
+				initials: row.initials,
+				avatarColor: row.avatarColor,
+				avatarCropped: avatarUrl(row.avatarCropped),
+			})),
+		})
+	} catch (e) {
+		next(e)
+	}
+})
 
 // GET /api/users — JWT + RBAC ('users.read')
 router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res, next) => {
@@ -113,8 +183,8 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 			firstName: r.firstName,
 			lastName: r.lastName,
 			name: r.name,
-			avatar: r.avatar,
-			avatarCropped: r.avatarCropped,
+			avatar: avatarUrl(r.avatar),
+			avatarCropped: avatarUrl(r.avatarCropped),
 			avatarColor: r.avatarColor,
 			initials: r.initials,
 			isActive: Boolean(r.isActive),
@@ -130,7 +200,10 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 			groupName: r.groupName ?? null,
 		}))
 
-		res.json({ rows: result, users: result, total })
+		const readable = await Promise.all(result.map((row) => canReadUser(req, row.id)))
+		const visible = result.filter((_, index) => readable[index])
+
+		res.json({ rows: visible, users: visible, total })
 	} catch (e) {
 		next(e)
 	}
