@@ -605,10 +605,12 @@ export const studentGroups = pgTable(
 		id: uuid('id').primaryKey().defaultRandom(),
 		name: text('name').notNull(),
 		createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+		ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'set null' }),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		updatedAt: timestamp('updated_at').notNull().defaultNow(),
 	},
-	() => ({
+	(t) => ({
+		ownerIdIdx: index('idx_student_groups_owner_id').on(t.ownerId),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()
@@ -628,6 +630,36 @@ export const userGroups = pgTable(
 		pk: primaryKey({ columns: [t.groupId, t.userId] }),
 		groupIdx: index('user_groups_group_idx').on(t.groupId),
 		userIdx: index('user_groups_user_idx').on(t.userId),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
+export const teacherTopics = pgTable(
+	'teacher_topics',
+	{
+		teacherId: uuid('teacher_id').notNull(),
+		topicId: uuid('topic_id').notNull(),
+		assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+		assignedBy: uuid('assigned_by'),
+	},
+	(t) => ({
+		pk: primaryKey({ name: 'teacher_topics_pkey', columns: [t.teacherId, t.topicId] }),
+		teacherIdFk: foreignKey({
+			name: 'teacher_topics_teacher_id_fkey',
+			columns: [t.teacherId],
+			foreignColumns: [users.id],
+		}).onDelete('cascade'),
+		topicIdFk: foreignKey({
+			name: 'teacher_topics_topic_id_fkey',
+			columns: [t.topicId],
+			foreignColumns: [topics.id],
+		}).onDelete('cascade'),
+		assignedByFk: foreignKey({
+			name: 'teacher_topics_assigned_by_fkey',
+			columns: [t.assignedBy],
+			foreignColumns: [users.id],
+		}).onDelete('set null'),
+		topicIdIdx: index('idx_teacher_topics_topic_id').on(t.topicId),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

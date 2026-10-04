@@ -200,6 +200,14 @@
       "sha256": "caa886d35aaa04844dd65d142dd71cb12c13929e3ef92785f385a211ce2755d3",
       "when": 1791121706458,
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "tag": "0025_teacher_zones",
+      "file": "0025_teacher_zones.sql",
+      "sha256": "2dbe45923c68da464f82c01c3c9cb9a486db4d9cab8246142a35f8011f50099b",
+      "when": 1791139459249,
+      "breakpoints": true
     }
   ]
 }

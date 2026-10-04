@@ -34,6 +34,7 @@ beforeAll(async () => {
 	ctx = await startAuthApp('test_auth_parity')
 	const seeds: Array<[string, string[]]> = [
 		['parity_admin', ['admin']],
+		['parity_teacher', ['teacher']],
 		['parity_role_deny_admin', ['admin']],
 		['parity_user', ['user']],
 		['parity_allow_user', ['user']],
@@ -107,6 +108,21 @@ describe('parity /api/auth/me ↔ requirePermKey', () => {
 	test('admin: все ключи PERMISSION_DOMAINS совпадают, у admin есть каждый ключ', async () => {
 		const perms = await assertParity('parity_admin')
 		assert.deepEqual([...perms].sort(), [...ALL_KEYS].sort())
+		assert.ok(ALL_KEYS.includes('zone.all'))
+		assert.ok(perms.has('zone.all'))
+	})
+
+	test('teacher: все ключи совпадают, права ровно D-02 без zone.all', async () => {
+		const perms = await assertParity('parity_teacher')
+		assert.deepEqual([...perms].sort(), [
+			'groups.manage_groups',
+			'tests.manage_assignments',
+			'tests.read',
+			'tests.write',
+			'users.invite',
+			'users.read',
+		])
+		assert.ok(!perms.has('zone.all'))
 	})
 
 	test('user: все ключи совпадают', async () => {

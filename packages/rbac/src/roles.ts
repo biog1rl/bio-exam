@@ -12,6 +12,7 @@ export type RoleConfig = {
 	color?: string
 	order?: number
 	inherits?: RoleKey[]
+	staff?: boolean
 	grants: RoleGrant
 }
 
@@ -19,12 +20,24 @@ export const ROLE_REGISTRY = {
 	admin: {
 		key: 'admin',
 		name: 'Администратор',
-		grants: { users: ['*'], rbac: ['*'], settings: ['*'], tests: ['*'], groups: ['*'] },
+		grants: { users: ['*'], rbac: ['*'], settings: ['*'], tests: ['*'], groups: ['*'], zone: ['*'] },
 		order: 0,
+		staff: true,
+	},
+	teacher: {
+		key: 'teacher',
+		name: 'Учитель',
+		grants: {
+			tests: ['read', 'write', 'manage_assignments'],
+			groups: ['manage_groups'],
+			users: ['read', 'invite'],
+		},
+		order: 5,
+		staff: true,
 	},
 	user: {
 		key: 'user',
-		name: 'Пользователь',
+		name: 'Ученик',
 		grants: {},
 		order: 10,
 	},
@@ -37,6 +50,12 @@ export const ROLE_KEYS = Object.keys(ROLE_REGISTRY) as RoleKey[]
 export const ROLES_LIST: ReadonlyArray<RoleConfig> = (
 	Object.values(ROLE_REGISTRY) as Array<Omit<RoleConfig, 'key'> & { key: RoleKey }>
 ).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)) as ReadonlyArray<RoleConfig>
+
+export const STUDENT_ROLE_KEY: RoleKey = ROLE_REGISTRY.user.key
+
+export const STAFF_ROLE_KEYS: readonly RoleKey[] = ROLES_LIST.filter((role) => role.staff === true).map(
+	(role) => role.key
+)
 
 // Перегрузка: можно передавать и raw string (вернём key как есть, если не найдём)
 export function roleDisplayName(key: RoleKey): string

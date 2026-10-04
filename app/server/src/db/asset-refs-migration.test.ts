@@ -111,7 +111,7 @@ describe('question_asset_refs migration applied over existing questions', () => 
 		const target = assetRefsEntry()
 		const manifest = readManifest()
 		assert.equal(await migrationCount(), manifest.length)
-		assert.equal(manifest.at(-1)?.idx, target.idx)
+		assert.ok(manifest.some((migration) => migration.idx === target.idx))
 		const entry = manifest.find((migration) => migration.idx === target.idx)
 		assert.ok(entry)
 		assert.equal(entry.tag, target.tag)

@@ -22,6 +22,8 @@ const EXPECTED_EXPORTS = [
 	'ROLES_LIST',
 	'ROLE_KEYS',
 	'ROLE_REGISTRY',
+	'STAFF_ROLE_KEYS',
+	'STUDENT_ROLE_KEY',
 	'accessRuleToSerializable',
 	'can',
 	'createAccessRule',

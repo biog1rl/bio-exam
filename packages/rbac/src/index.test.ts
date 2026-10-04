@@ -8,6 +8,8 @@ const RUNTIME_EXPORTS = [
 	'ROLE_REGISTRY',
 	'ROLE_KEYS',
 	'ROLES_LIST',
+	'STUDENT_ROLE_KEY',
+	'STAFF_ROLE_KEYS',
 	'roleDisplayName',
 	'can',
 	'normaliseRoleKeys',
@@ -20,7 +22,7 @@ const RUNTIME_EXPORTS = [
 ]
 
 describe('@bio-exam/rbac', () => {
-	test('экспортирует ровно 13 рантайм-имён', () => {
+	test('экспортирует ровно 15 рантайм-имён', () => {
 		expect(Object.keys(rbac).sort()).toEqual([...RUNTIME_EXPORTS].sort())
 	})
 
@@ -36,5 +38,50 @@ describe('@bio-exam/rbac', () => {
 		expect(rbac.ROLE_REGISTRY.user.grants).toEqual({})
 		const keys = Object.values(rbac.ROLE_REGISTRY.user.grants as Record<string, readonly string[]>).flat()
 		expect(keys).toEqual([])
+	})
+
+	test('три роли в порядке admin, teacher, user', () => {
+		expect(rbac.ROLE_KEYS).toEqual(['admin', 'teacher', 'user'])
+		expect(rbac.ROLES_LIST.map((role) => role.key)).toEqual(['admin', 'teacher', 'user'])
+	})
+
+	test('названия ролей учителя и ученика', () => {
+		expect(rbac.roleDisplayName('user')).toBe('Ученик')
+		expect(rbac.roleDisplayName('teacher')).toBe('Учитель')
+		expect(rbac.roleDisplayName('admin')).toBe('Администратор')
+	})
+
+	test('домен zone с единственным действием all', () => {
+		expect(rbac.PERMISSION_DOMAINS.zone.actions).toEqual(['all'])
+		expect(rbac.can(new Set<rbac.PermissionKey>(['zone.all']), 'zone', 'all')).toBe(true)
+		expect(rbac.can(new Set<rbac.PermissionKey>(['tests.read']), 'zone.all')).toBe(false)
+	})
+
+	test('роль ученика и роли персонала', () => {
+		expect(rbac.STUDENT_ROLE_KEY).toBe('user')
+		expect(rbac.STAFF_ROLE_KEYS).toEqual(['admin', 'teacher'])
+		expect(rbac.STAFF_ROLE_KEYS).toEqual(rbac.ROLES_LIST.filter((role) => role.staff === true).map((role) => role.key))
+	})
+
+	test('гранты учителя ровно по D-02', () => {
+		expect(rbac.ROLE_REGISTRY.teacher.grants).toEqual({
+			tests: ['read', 'write', 'manage_assignments'],
+			groups: ['manage_groups'],
+			users: ['read', 'invite'],
+		})
+		expect(rbac.ROLE_REGISTRY.teacher.order).toBe(5)
+		expect(rbac.ROLE_REGISTRY.teacher.staff).toBe(true)
+	})
+
+	test('admin получает всю зону', () => {
+		expect(rbac.ROLE_REGISTRY.admin.grants).toEqual({
+			users: ['*'],
+			rbac: ['*'],
+			settings: ['*'],
+			tests: ['*'],
+			groups: ['*'],
+			zone: ['*'],
+		})
+		expect(rbac.ROLE_REGISTRY.admin.staff).toBe(true)
 	})
 })

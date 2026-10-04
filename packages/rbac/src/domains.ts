@@ -4,6 +4,7 @@ export const PERMISSION_DOMAINS = {
 	settings: { actions: ['manage'] as const },
 	tests: { actions: ['read', 'write', 'manage_assignments'] as const },
 	groups: { actions: ['manage_groups'] as const },
+	zone: { actions: ['all'] as const },
 } as const
 
 export type PermissionDomain = keyof typeof PERMISSION_DOMAINS
