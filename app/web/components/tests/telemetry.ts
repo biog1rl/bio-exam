@@ -1,30 +1,7 @@
-export type QuestionTelemetry = {
-	timeSpentMs: number
-	focusLossCount: number
-	visitCount: number
-}
+import type { QuestionTelemetry, TelemetryMap } from '@bio-exam/exam-core'
 
-export type TelemetryMap = Record<string, QuestionTelemetry>
-
-export function mergeTelemetryMaps(...snapshots: Array<TelemetryMap | null | undefined>): TelemetryMap {
-	const merged: TelemetryMap = {}
-
-	for (const snapshot of snapshots) {
-		if (!snapshot) continue
-		for (const [questionId, entry] of Object.entries(snapshot)) {
-			const current = merged[questionId]
-			merged[questionId] = current
-				? {
-						timeSpentMs: Math.max(current.timeSpentMs, entry.timeSpentMs),
-						focusLossCount: Math.max(current.focusLossCount, entry.focusLossCount),
-						visitCount: Math.max(current.visitCount, entry.visitCount),
-					}
-				: { ...entry }
-		}
-	}
-
-	return merged
-}
+export { mergeTelemetryMaps } from '@bio-exam/exam-core'
+export type { QuestionTelemetry, TelemetryMap } from '@bio-exam/exam-core'
 
 function getQuestionTelemetryEntry(telemetry: TelemetryMap, questionId: string): QuestionTelemetry {
 	return (

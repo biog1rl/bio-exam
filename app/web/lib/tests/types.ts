@@ -1,3 +1,5 @@
+import type { AnswerValue as TestAnswerValue, QuestionTelemetry } from '@bio-exam/exam-core'
+
 export type TestQuestionType = string
 export type QuestionUiTemplate = 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits'
 
@@ -49,31 +51,12 @@ export type PublicTestQuestion = {
 	promptText: string
 }
 
-export type TestAnswerValue = string | string[] | Record<string, string>
-
-// Shape mirrors SubmitResultSchema in app/server/src/lib/tests/submit-result.ts
-// Keep in sync manually (no shared package for these types)
-export type SubmitResultItem = {
-	questionId: string
-	isCorrect: boolean
-	points: number
-	earnedPoints: number
-	userAnswer: unknown
-	correctAnswer: unknown
-	explanationText: string | null
-}
-
-// Shape mirrors SubmitResultSchema in app/server/src/lib/tests/submit-result.ts
-// Keep in sync manually (no shared package for these types)
-export type SubmitResult = {
-	attemptId: string
-	submittedAt: string
-	earnedPoints: number
-	totalPoints: number
-	scorePercentage: number
-	passed: boolean
-	results: SubmitResultItem[]
-}
+export type {
+	AnswerValue as TestAnswerValue,
+	QuestionTelemetry,
+	SubmitResult,
+	SubmitResultItem,
+} from '@bio-exam/exam-core'
 
 export type TestAttemptSummary = {
 	id: string
@@ -90,12 +73,6 @@ export type SessionInfo = {
 	draftAnswers?: Record<string, TestAnswerValue> | null
 	draftLastQuestionId?: string | null
 	draftTelemetry?: Record<string, QuestionTelemetry> | null
-}
-
-export type QuestionTelemetry = {
-	timeSpentMs: number
-	focusLossCount: number
-	visitCount: number
 }
 
 // Shape mirrors testAttempts row returned by GET /api/tests/admin/attempts/:id

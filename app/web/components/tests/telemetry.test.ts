@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit, mergeTelemetryMaps } from './telemetry'
+import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit } from './telemetry'
 
 const initial = {
 	q1: {
@@ -54,22 +54,4 @@ test('incrementQuestionFocusLoss: увеличивает счётчик поте
 			visitCount: 2,
 		},
 	})
-})
-
-test('mergeTelemetryMaps: берёт максимумы по вопросам и добавляет новые вопросы', () => {
-	assert.deepEqual(
-		mergeTelemetryMaps(
-			{
-				q1: { timeSpentMs: 5000, focusLossCount: 1, visitCount: 2 },
-			},
-			{
-				q1: { timeSpentMs: 7000, focusLossCount: 0, visitCount: 3 },
-				q2: { timeSpentMs: 1500, focusLossCount: 1, visitCount: 1 },
-			}
-		),
-		{
-			q1: { timeSpentMs: 7000, focusLossCount: 1, visitCount: 3 },
-			q2: { timeSpentMs: 1500, focusLossCount: 1, visitCount: 1 },
-		}
-	)
 })

@@ -1,3 +1,5 @@
+import type { TelemetryMap } from '@bio-exam/exam-core'
+
 import { relations, sql } from 'drizzle-orm'
 import {
 	pgTable,
@@ -19,13 +21,6 @@ import {
 
 import type { QuestionTypeScoringRule, QuestionUiTemplate } from '../lib/tests/question-types.js'
 import type { TestScoringRules } from '../lib/tests/scoring.js'
-
-export type QuestionTelemetry = {
-	timeSpentMs: number
-	focusLossCount: number
-	visitCount: number
-}
-export type TelemetryMap = Record<string, QuestionTelemetry>
 
 /**
  * Политика deny_direct_access из миграции 0018: прямой доступ через API Supabase закрыт,

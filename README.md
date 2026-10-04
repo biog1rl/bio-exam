@@ -2,7 +2,7 @@
 
 Платформа тестирования по биологии: администраторы и преподаватели составляют тесты из вопросов пяти шаблонов,
 назначают их группам и пользователям, а ученики проходят попытки и смотрят разбор. Монорепозиторий на Yarn 4:
-веб-клиент на Next.js (`app/web`), API на Express с PostgreSQL и Drizzle (`app/server`), общий пакет прав (`packages/rbac`).
+веб-клиент на Next.js (`app/web`), API на Express с PostgreSQL и Drizzle (`app/server`), общий пакет прав (`packages/rbac`), общий пакет доменной логики экзамена (`packages/exam-core`).
 
 ## Что нужно установить
 
@@ -69,7 +69,7 @@ yarn verify
 3. `docs-commands`: команды `yarn ...` в README и `AGENTS.md` существуют;
 4. `ci-workflow`: CI только читает репозиторий: без записи, секретов и публикации;
 5. `format-check`: `oxfmt --check .`, форматирование репозитория;
-6. `lint-typecheck-test`: `turbo run lint typecheck test` по `packages/rbac`, `app/server` и `app/web`;
+6. `lint-typecheck-test`: `turbo run lint typecheck test` по `packages/rbac`, `packages/exam-core`, `app/server` и `app/web`;
 7. `migrations`: цепочка миграций Drizzle с нуля совпадает со схемой;
 8. `script-tests`: тесты корневых скриптов.
 
@@ -92,7 +92,7 @@ yarn playwright install chromium
 yarn e2e
 ```
 
-Браузер ставится один раз. Дальше `yarn e2e` собирает `packages/rbac`, поднимает одноразовую базу, применяет
+Браузер ставится один раз. Дальше `yarn e2e` собирает `packages/rbac` и `packages/exam-core`, поднимает одноразовую базу, применяет
 миграции, заполняет её детерминированными данными, собирает web и запускает Playwright на настольном и мобильном
 профилях. `yarn e2e --grep @flow1` передаёт аргументы в Playwright, `yarn e2e --seed-only` останавливается после
 заполнения базы. `yarn e2e` не входит в `yarn verify`.
@@ -102,6 +102,7 @@ yarn e2e
 - `app/web`: веб-клиент на Next.js 16 и React 19;
 - `app/server`: Express API, схема и миграции Drizzle (`drizzle/`), сервисы, тесты;
 - `packages/rbac`: роли, домены и права, общие для web и сервера;
+- `packages/exam-core`: доменная логика экзамена, общая для web и сервера (ADR-0002);
 - `e2e`: сценарии Playwright и фикстуры;
 - `scripts`: `yarn verify`, `yarn e2e`, проверки репозитория и обёртка `with-test-db.mjs`;
 - `docs/adr`: архитектурные решения, читайте нужное перед правкой авторизации, домена экзаменов, хранилища и модулей;
