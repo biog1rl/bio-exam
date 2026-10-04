@@ -41,3 +41,16 @@ export async function hasPermission(req: Request, key: PermissionKey): Promise<b
 	const access = await requestAccess(req)
 	return access.permissions.has(key)
 }
+
+export {
+	canReadTest,
+	canReadUser,
+	canReviewAttempt,
+	canWriteTest,
+	canWriteTopic,
+	createAccessScope,
+	testScope,
+	type AccessScope,
+	type PermissionCheck,
+	type TestScope,
+} from './scope.js'
