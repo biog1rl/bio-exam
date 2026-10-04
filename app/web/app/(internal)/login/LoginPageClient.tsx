@@ -11,37 +11,22 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { normalizeLogin } from '@/lib/auth/validators'
-import { sessionClient } from '@/lib/session/client'
 import { safeCallbackPath } from '@/lib/session/redirect'
-
-async function fetchMe(): Promise<boolean> {
-	try {
-		return (await sessionClient.loadMe()).kind === 'ok'
-	} catch {
-		return false
-	}
-}
 
 export default function LoginPage() {
 	const router = useRouter()
 	const searchParams = useSearchParams()
-	const { refresh } = useAuth()
+	const { me } = useAuth()
 
 	const callbackUrl = useMemo(() => safeCallbackPath(searchParams.get('callbackUrl')), [searchParams])
 
-	const [bootLoading, setBootLoading] = useState(true)
 	const [showPassword, setShowPassword] = useState(false)
 	const [error, setError] = useState('')
 	const [submitting, setSubmitting] = useState(false)
 
-	// если уже авторизован через cookie — редиректим
 	useEffect(() => {
-		;(async () => {
-			const ok = await fetchMe()
-			if (ok) router.replace(callbackUrl)
-			else setBootLoading(false)
-		})()
-	}, [router, callbackUrl])
+		if (me) router.replace(callbackUrl)
+	}, [me, router, callbackUrl])
 
 	const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
@@ -75,15 +60,7 @@ export default function LoginPage() {
 				return
 			}
 
-			// Обновляем состояние авторизации после успешного входа
-			await refresh()
-			const target = callbackUrl
-			const isReady = await fetchMe()
-			if (!isReady) {
-				setError('Сессия не установилась. Обновите страницу и попробуйте снова.')
-				return
-			}
-			window.location.assign(target)
+			window.location.assign(callbackUrl)
 		} catch {
 			setError('Не удалось связаться с сервером')
 		} finally {
@@ -91,7 +68,7 @@ export default function LoginPage() {
 		}
 	}
 
-	if (bootLoading) {
+	if (me) {
 		return (
 			<div className="grid h-screen place-items-center">
 				<LoaderComponent className="size-6 animate-spin" />

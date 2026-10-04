@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
@@ -14,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AvatarEditor } from '@/components/users/AvatarEditor'
-import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
+import { apiFetch } from '@/lib/api-fetch'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -75,8 +74,7 @@ function FormField({ id, label, children }: { id: string; label: string; childre
 }
 
 export function ProfileClient({ initialData }: ProfileClientProps) {
-	const router = useRouter()
-	const { me, refresh } = useAuth()
+	const { me, refresh, logout } = useAuth()
 	const [isLoading, setIsLoading] = useState(false)
 	const [isPasswordLoading, setIsPasswordLoading] = useState(false)
 
@@ -208,21 +206,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	}
 
 	const handleLogout = async () => {
-		try {
-			try {
-				await apiFetch('/api/auth/logout', { method: 'POST' })
-			} catch (error) {
-				if (!(error instanceof AuthExpiredError)) throw error
-			}
-			await refresh()
-			localStorage.setItem('logout', Date.now().toString())
-			setTimeout(() => {
-				localStorage.removeItem('logout')
-			}, 100)
-			router.push('/login')
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка при выходе из аккаунта')
-		}
+		await logout()
 	}
 
 	return (

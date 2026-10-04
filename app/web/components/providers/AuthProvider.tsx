@@ -3,9 +3,10 @@
 import type { PermissionKey, PermissionDomain, ActionOf } from '@bio-exam/rbac'
 import { can as canRbac } from '@bio-exam/rbac'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { sessionClient, type AuthMe, type LoadMeOutcome } from '@/lib/session/client'
+import { createKeepAlive, type KeepAlive } from '@/lib/session/keep-alive'
 
 type Me = AuthMe
 
@@ -15,6 +16,7 @@ type AuthContextValue = {
 	loading: boolean
 	avatarVersion: number
 	refresh: () => Promise<void>
+	logout: () => Promise<void>
 	can: {
 		<D extends PermissionDomain>(domain: D, action: ActionOf<D>): boolean
 		(key: PermissionKey): boolean
@@ -34,11 +36,11 @@ async function fetchMeOnce(): Promise<LoadMeOutcome> {
 
 export function AuthProvider({ children, initialMe }: { children: React.ReactNode; initialMe?: Me | null }) {
 	const [me, setMe] = useState<Me | null>(initialMe ?? null)
-	const [loading, setLoading] = useState<boolean>(initialMe == null)
+	const [loading, setLoading] = useState<boolean>(initialMe === undefined)
 	const [avatarVersion, setAvatarVersion] = useState<number>(Date.now())
 
 	// берём perms с сервера
-	const perms = useMemo<ReadonlySet<PermissionKey>>(() => new Set((me?.perms ?? []) as PermissionKey[]), [me])
+	const perms = useMemo<ReadonlySet<PermissionKey>>(() => new Set((me?.perms ?? []) as PermissionKey[]), [me?.perms])
 
 	const refresh = useCallback(async () => {
 		const outcome = await fetchMeOnce()
@@ -66,27 +68,44 @@ export function AuthProvider({ children, initialMe }: { children: React.ReactNod
 	}, [])
 
 	useEffect(() => {
-		if (initialMe == null) {
+		if (initialMe === undefined) {
 			void refresh()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
-	useEffect(() => {
-		if (!me) return
-		const migrationKey = 'auth_refresh_cookie_migrated_v2'
-		if (localStorage.getItem(migrationKey)) return
+	const accessExpiresAt = me?.accessExpiresAt ?? null
+	const keepAliveRef = useRef<KeepAlive | null>(null)
 
-		void fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-			.then((response) => {
-				if (!response.ok) return
-				localStorage.setItem(migrationKey, '1')
+	useEffect(() => {
+		const keepAlive = createKeepAlive({
+			refresh: () => sessionClient.refreshOnce(),
+			onRefreshed: (nextExpiresAt) => {
+				setMe((current) => (current ? { ...current, accessExpiresAt: nextExpiresAt } : current))
+			},
+			onSessionEnded: () => {
 				void refresh()
-			})
-			.catch(() => {
-				// ignore migration errors
-			})
-	}, [me, refresh])
+			},
+			doc: document,
+		})
+		keepAliveRef.current = keepAlive
+		return () => {
+			keepAlive.stop()
+			keepAliveRef.current = null
+		}
+	}, [refresh])
+
+	useEffect(() => {
+		keepAliveRef.current?.update(accessExpiresAt)
+	}, [accessExpiresAt])
+
+	const logout = useCallback(async () => {
+		await sessionClient.logout()
+		setMe(null)
+		localStorage.setItem('logout', Date.now().toString())
+		localStorage.removeItem('logout')
+		window.location.assign('/login')
+	}, [])
 
 	// Автоматический рефреш при разлогинивании
 	useEffect(() => {
@@ -147,6 +166,7 @@ export function AuthProvider({ children, initialMe }: { children: React.ReactNod
 		loading,
 		avatarVersion,
 		refresh,
+		logout,
 		can: canOverload as AuthContextValue['can'],
 		canKey: (key: PermissionKey) => canRbac(perms, key),
 	}

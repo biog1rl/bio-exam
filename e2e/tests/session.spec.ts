@@ -74,7 +74,7 @@ test.describe.serial('D8: server page refresh @session', () => {
 test.describe.serial('D3: one /api/auth/me per load @session', () => {
 	let context: BrowserContext | undefined
 
-	test('D3 setup: student logs in through the API @session @known-defect', async ({ browser }, testInfo) => {
+	test('D3 setup: student logs in through the API @session', async ({ browser }, testInfo) => {
 		context = await loginContext(browser, testInfo, 'user')
 		expect(await cookieNames(context)).toContain(SESSION_COOKIE)
 	})
@@ -83,24 +83,21 @@ test.describe.serial('D3: one /api/auth/me per load @session', () => {
 		await context?.close()
 	})
 
-	test.fail(
-		'D3 — fixed in Phase 4 (AUTH-10): a page load with a live session makes no browser /api/auth/me or /api/auth/refresh request @session @known-defect',
-		async () => {
-			const page = await context!.newPage()
-			const counts = { me: 0, refresh: 0 }
-			page.on('request', (request) => {
-				const url = request.url()
-				if (url.includes('/api/auth/me')) counts.me++
-				if (url.includes('/api/auth/refresh')) counts.refresh++
-			})
-			await page.goto('/dashboard')
-			await page.waitForLoadState('networkidle')
-			expect(counts, 'browser /api/auth/me and /api/auth/refresh requests on /dashboard load').toEqual({
-				me: 0,
-				refresh: 0,
-			})
-		}
-	)
+	test('D3: a page load with a live session makes no browser /api/auth/me or /api/auth/refresh request @session', async () => {
+		const page = await context!.newPage()
+		const counts = { me: 0, refresh: 0 }
+		page.on('request', (request) => {
+			const url = request.url()
+			if (url.includes('/api/auth/me')) counts.me++
+			if (url.includes('/api/auth/refresh')) counts.refresh++
+		})
+		await page.goto('/dashboard')
+		await page.waitForLoadState('networkidle')
+		expect(counts, 'browser /api/auth/me and /api/auth/refresh requests on /dashboard load').toEqual({
+			me: 0,
+			refresh: 0,
+		})
+	})
 })
 
 test.describe.serial('AUTH-04: logout revokes the access token @session', () => {

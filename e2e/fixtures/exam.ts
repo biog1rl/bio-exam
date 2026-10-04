@@ -59,7 +59,7 @@ export function projectKey(testInfo: TestInfo): ProjectKey {
 export async function newSessionContext(browser: Browser, testInfo: TestInfo, role: RoleKey): Promise<BrowserContext> {
 	const { login } = sessionAccount(projectKey(testInfo), role)
 	const use = testInfo.project.use
-	const context = await browser.newContext({
+	return browser.newContext({
 		storageState: storageStatePath(login),
 		baseURL: use.baseURL,
 		viewport: use.viewport ?? undefined,
@@ -68,18 +68,6 @@ export async function newSessionContext(browser: Browser, testInfo: TestInfo, ro
 		isMobile: use.isMobile,
 		hasTouch: use.hasTouch,
 	})
-	// AuthProvider при первой загрузке профиля без этого ключа в localStorage вызывает /api/auth/refresh
-	// (миграция cookie), а сохранённое состояние хранит только cookie. Эффект срабатывает дважды, второй
-	// вызов приходит со старым refresh-токеном и получает 401, после чего сохранение вопроса падает.
-	// Ключ ставится заранее, как у уже мигрировавшего браузера.
-	await context.addInitScript(() => {
-		try {
-			localStorage.setItem('auth_refresh_cookie_migrated_v2', '1')
-		} catch {
-			/* localStorage недоступен на служебных страницах */
-		}
-	})
-	return context
 }
 
 /** Тест со страницами студента и администратора своего проекта */

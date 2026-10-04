@@ -17,12 +17,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
 import { getInitials } from '@/helpers/getAvatarColor'
-import { apiFetch, AuthExpiredError } from '@/lib/api-fetch'
 
 export function NavUser() {
 	const { isMobile } = useSidebar()
 	const router = useRouter()
-	const { me, refresh, avatarVersion } = useAuth()
+	const { me, logout, avatarVersion } = useAuth()
 
 	// Получаем данные пользователя из AuthProvider или используем переданные
 	const displayName = me?.firstName && me?.lastName ? `${me.firstName} ${me.lastName}` : me?.login
@@ -36,29 +35,8 @@ export function NavUser() {
 	const backgroundColor = avatarColor || '#3B82F6'
 
 	const handleLogout = async () => {
-		try {
-			try {
-				await apiFetch('/api/auth/logout', {
-					method: 'POST',
-				})
-			} catch (error) {
-				if (!(error instanceof AuthExpiredError)) throw error
-			}
-
-			// Принудительно обновляем состояние авторизации
-			await refresh()
-
-			// Уведомляем другие вкладки о разлогинивании
-			localStorage.setItem('logout', Date.now().toString())
-			setTimeout(() => {
-				localStorage.removeItem('logout')
-			}, 100)
-
-			router.push('/login')
-			toast.success('Вы вышли из аккаунта')
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка при выходе из аккаунта')
-		}
+		toast.success('Вы вышли из аккаунта')
+		await logout()
 	}
 
 	const handleProfileClick = () => {
