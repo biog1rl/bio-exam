@@ -13,7 +13,6 @@ import { AuthProvider } from '@/components/providers/AuthProvider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { Toaster } from '@/components/ui/sonner'
 import { SESSION_REFRESH_HEADER, SESSION_REFRESH_UNAVAILABLE } from '@/lib/session/proxy-refresh'
 import { getServerMe, type ServerMe } from '@/lib/session/server'
 
@@ -77,7 +76,6 @@ export default async function AppLayout({
 					</BreadcrumbsProvider>
 				</AuthProvider>
 			</Providers>
-			<Toaster />
 		</>
 	)
 }
