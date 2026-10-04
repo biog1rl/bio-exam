@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { normalizeIdArray } from '../normalize'
 import { ALLOWED_MISTAKE_METRICS_BY_TEMPLATE } from '../registry'
 import { MISTAKES_UNSCORABLE, type TemplateAdapter } from './types'
+import { choiceOptionVerdicts, resolveMistakes } from './verdicts'
 
 export const multiChoiceAdapter: TemplateAdapter<string[]> = {
 	template: 'multi_choice',
@@ -28,5 +29,22 @@ export const multiChoiceAdapter: TemplateAdapter<string[]> = {
 		}
 
 		return Math.max(missingCount, extraCount)
+	},
+	verdicts({ metric, key, answer, content }) {
+		const selected = multiChoiceAdapter.normalizeAnswer(answer) ?? []
+		const correct = multiChoiceAdapter.readKey(key, metric)
+		const parts = choiceOptionVerdicts(selected, Array.isArray(correct) ? correct : null, content)
+		const verdicts = { template: 'multi_choice' as const, parts }
+		return {
+			...verdicts,
+			mistakes: resolveMistakes(multiChoiceAdapter.countMistakes(metric, answer, key), verdicts),
+		}
+	},
+	isAnswered(answer) {
+		return Array.isArray(answer) && answer.length > 0
+	},
+	readKey(raw, metric) {
+		if (metric !== 'set_distance') return null
+		return normalizeIdArray(raw)
 	},
 }

@@ -7,7 +7,17 @@ export {
 	singleChoiceAdapter,
 	TEMPLATE_ADAPTERS,
 } from './adapters/index'
-export type { TemplateAdapter } from './adapters/index'
+export type {
+	ChoiceOptionVerdict,
+	MatchingPairVerdict,
+	QuestionContent,
+	QuestionContentItem,
+	QuestionVerdicts,
+	SequencePositionVerdict,
+	ShortTextVerdict,
+	TemplateAdapter,
+	VerdictsInput,
+} from './adapters/types'
 export { AnswerValueSchema, SubmitResultItemSchema, SubmitResultSchema } from './attempt-result'
 export type { AnswerValue, SubmitResult, SubmitResultItem } from './attempt-result'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
@@ -45,6 +55,16 @@ export type {
 	QuestionUiTemplate,
 	ScoringFormula,
 } from './registry'
+export {
+	allPartsCorrect,
+	answerIdList,
+	computeVerdicts,
+	errorUnits,
+	isAnswered,
+	normalizeKeyValue,
+	readKey,
+} from './review'
+export type { ComputeVerdictsInput } from './review'
 export { countMistakes, MISTAKES_UNSCORABLE, normalizeScoringRule, scoreByRule, scoreQuestionByType } from './scoring'
 export type { RuntimeQuestionTypeConfig, ScoreQuestionByTypeInput, ScoreQuestionResult } from './scoring'
 export { mergeTelemetryMaps, QuestionTelemetrySchema, TelemetryMapSchema } from './telemetry'

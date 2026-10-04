@@ -1,8 +1,43 @@
 import { z } from 'zod'
 
-import { normalizeDigitsSequence } from '../normalize'
+import { normalizeCompactString, normalizeDigitsSequence, normalizeIdValue } from '../normalize'
 import { ALLOWED_MISTAKE_METRICS_BY_TEMPLATE } from '../registry'
-import { MISTAKES_UNSCORABLE, type TemplateAdapter } from './types'
+import { MISTAKES_UNSCORABLE, type SequencePositionVerdict, type TemplateAdapter } from './types'
+import { resolveMistakes } from './verdicts'
+
+function findAdjacentSwap(user: string, correct: string): [number, number] | null {
+	if (correct.length <= 3 || user.length !== correct.length) return null
+	const mismatched: number[] = []
+	for (let i = 0; i < correct.length; i++) {
+		if (user[i] !== correct[i]) mismatched.push(i)
+	}
+	if (mismatched.length !== 2) return null
+	const [first, second] = mismatched
+	const isSwap = second === first + 1 && user[first] === correct[second] && user[second] === correct[first]
+	return isSwap ? [first, second] : null
+}
+
+function sequencePositionVerdicts(user: string, correct: string): SequencePositionVerdict[] {
+	const swap = findAdjacentSwap(user, correct)
+	const length = Math.max(user.length, correct.length)
+	const parts: SequencePositionVerdict[] = []
+	for (let i = 0; i < length; i++) {
+		const given = i < user.length ? user[i] : null
+		const expected = i < correct.length ? correct[i] : null
+		const kind: SequencePositionVerdict['kind'] =
+			swap && (i === swap[0] || i === swap[1])
+				? 'swapped'
+				: given == null
+					? 'missing'
+					: expected == null
+						? 'extra'
+						: given === expected
+							? 'correct'
+							: 'wrong'
+		parts.push({ position: i + 1, kind, given, expected })
+	}
+	return parts
+}
 
 export const sequenceDigitsAdapter: TemplateAdapter<string> = {
 	template: 'sequence_digits',
@@ -38,5 +73,22 @@ export const sequenceDigitsAdapter: TemplateAdapter<string> = {
 		}
 
 		return mistakes
+	},
+	verdicts({ metric, key, answer }) {
+		const correct = normalizeDigitsSequence(key)
+		const user = normalizeDigitsSequence(answer) ?? normalizeCompactString(answer) ?? ''
+		const parts = correct ? sequencePositionVerdicts(user, correct) : []
+		const verdicts = { template: 'sequence_digits' as const, parts }
+		return {
+			...verdicts,
+			mistakes: resolveMistakes(sequenceDigitsAdapter.countMistakes(metric, answer, key), verdicts),
+		}
+	},
+	isAnswered(answer) {
+		return typeof answer === 'string' && answer.trim().length > 0
+	},
+	readKey(raw, metric) {
+		if (metric !== 'hamming_digits') return null
+		return normalizeIdValue(raw)
 	},
 }

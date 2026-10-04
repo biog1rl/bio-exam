@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
-import { normalizeCompactString } from '../normalize'
+import { normalizeCompactString, normalizeIdValue } from '../normalize'
 import { ALLOWED_MISTAKE_METRICS_BY_TEMPLATE } from '../registry'
 import { MISTAKES_UNSCORABLE, type TemplateAdapter } from './types'
+import { resolveMistakes } from './verdicts'
 
 function countEqualMistakes(userAnswer: unknown, correctAnswer: unknown): number {
 	const userNormalized = shortTextAdapter.normalizeAnswer(userAnswer)
@@ -31,5 +32,21 @@ export const shortTextAdapter: TemplateAdapter<string> = {
 	countMistakes(metric, userAnswer, correctAnswer) {
 		if (metric === 'compact_text_in_set') return countInSetMistakes(userAnswer, correctAnswer)
 		return countEqualMistakes(userAnswer, correctAnswer)
+	},
+	verdicts({ metric, key, answer }) {
+		const counted = shortTextAdapter.countMistakes(metric, answer, key)
+		const verdicts = {
+			template: 'short_text' as const,
+			parts: [{ kind: counted === 0 ? 'correct' : 'wrong' } as const],
+		}
+		return { ...verdicts, mistakes: resolveMistakes(counted, verdicts) }
+	},
+	isAnswered(answer) {
+		return typeof answer === 'string' && answer.trim().length > 0
+	},
+	readKey(raw, metric) {
+		if (metric === 'compact_text_equal') return normalizeIdValue(raw)
+		if (metric !== 'compact_text_in_set' || !Array.isArray(raw)) return null
+		return raw.map((item) => normalizeIdValue(item)).filter((item): item is string => item != null)
 	},
 }

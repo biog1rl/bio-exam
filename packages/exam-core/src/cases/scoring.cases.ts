@@ -1,3 +1,4 @@
+import type { QuestionContent } from '../adapters/types'
 import { BUILTIN_QUESTION_TYPES } from '../registry'
 import { MISTAKES_UNSCORABLE, type RuntimeQuestionTypeConfig, type ScoreQuestionResult } from '../scoring'
 
@@ -7,6 +8,21 @@ export type ScoringCase = {
 	key: unknown
 	answer: unknown
 	expected: ScoreQuestionResult
+	content?: QuestionContent
+	validKey?: false
+}
+
+function options(...ids: string[]): QuestionContent {
+	return { options: ids.map((id) => ({ id, text: `Вариант ${id}` })) }
+}
+
+function pairs(left: string[], right: string[]): QuestionContent {
+	return {
+		matchingPairs: {
+			left: left.map((id) => ({ id, text: `Левый ${id}` })),
+			right: right.map((id) => ({ id, text: `Правый ${id}` })),
+		},
+	}
 }
 
 const UNSCORABLE = MISTAKES_UNSCORABLE
@@ -78,6 +94,7 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: 'option_a',
 		answer: 'option_a',
 		expected: { maxPoints: 1, earnedPoints: 1, isCorrect: true, mistakesCount: 0 },
+		content: options('option_a', 'option_b'),
 	},
 	{
 		name: 'radio: неверный вариант',
@@ -85,6 +102,7 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: 'option_a',
 		answer: 'option_b',
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: 1 },
+		content: options('option_a', 'option_b'),
 	},
 	{
 		name: 'radio: числовой ключ 1 против ответа "1"',
@@ -92,6 +110,7 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: 1,
 		answer: '1',
 		expected: { maxPoints: 1, earnedPoints: 1, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2'),
 	},
 	{
 		name: 'radio: числовой ответ 2 против ключа "2"',
@@ -99,6 +118,7 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: '2',
 		answer: 2,
 		expected: { maxPoints: 1, earnedPoints: 1, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2'),
 	},
 	{
 		name: 'radio: неотвеченный вопрос (null) — одна ошибка, 0 баллов',
@@ -106,6 +126,7 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: 'a',
 		answer: null,
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: 1 },
+		content: options('a', 'b'),
 	},
 	{
 		name: 'radio: ответ формы multi_choice — одна ошибка',
@@ -113,6 +134,7 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: 'a',
 		answer: ['a'],
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: 1 },
+		content: options('a', 'b'),
 	},
 	{
 		name: 'radio: неразбираемый ключ null — одна ошибка',
@@ -120,6 +142,8 @@ export const SINGLE_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: null,
 		answer: 'a',
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: 1 },
+		content: options('a', 'b'),
+		validKey: false,
 	},
 ]
 
@@ -130,6 +154,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2', '3'],
 		answer: ['1', '2', '3'],
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2', '3', '4'),
 	},
 	{
 		name: 'checkbox: одна ошибка',
@@ -137,6 +162,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2', '3'],
 		answer: ['1', '2', '4'],
 		expected: { maxPoints: 2, earnedPoints: 1, isCorrect: false, mistakesCount: 1 },
+		content: options('1', '2', '3', '4'),
 	},
 	{
 		name: 'checkbox: несколько ошибок',
@@ -144,6 +170,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2', '3'],
 		answer: ['1', '4', '5'],
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: 2 },
+		content: options('1', '2', '3', '4', '5'),
 	},
 	{
 		name: 'checkbox с числовыми ID в correctAnswer',
@@ -151,6 +178,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: [1, 2, 3],
 		answer: ['1', '2', '3'],
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2', '3', '4'),
 	},
 	{
 		name: 'checkbox: порядок выбора не важен',
@@ -158,6 +186,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2', '3'],
 		answer: ['3', '1', '2'],
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2', '3', '4'),
 	},
 	{
 		name: 'checkbox: лишний вариант — одна ошибка',
@@ -165,6 +194,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2', '3'],
 		answer: ['1', '2', '3', '4'],
 		expected: { maxPoints: 2, earnedPoints: 1, isCorrect: false, mistakesCount: 1 },
+		content: options('1', '2', '3', '4'),
 	},
 	{
 		name: 'checkbox: пропущенный вариант — одна ошибка',
@@ -172,6 +202,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2', '3'],
 		answer: ['1', '2'],
 		expected: { maxPoints: 2, earnedPoints: 1, isCorrect: false, mistakesCount: 1 },
+		content: options('1', '2', '3', '4'),
 	},
 	{
 		name: 'checkbox: повтор в ответе считается одним выбором',
@@ -179,6 +210,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1'],
 		answer: ['1', '1'],
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2'),
 	},
 	{
 		name: 'checkbox: числовые ID в ответе',
@@ -186,6 +218,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2'],
 		answer: [1, '2'],
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: options('1', '2', '3'),
 	},
 	{
 		name: 'checkbox: пустой выбор при двух верных — две ошибки',
@@ -193,6 +226,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2'],
 		answer: [],
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: 2 },
+		content: options('1', '2', '3'),
 	},
 	{
 		name: 'checkbox: неотвеченный вопрос (null)',
@@ -200,6 +234,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['1', '2'],
 		answer: null,
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: options('1', '2', '3'),
 	},
 	{
 		name: 'checkbox: ответ формы single_choice неразбираем',
@@ -207,6 +242,7 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: ['a'],
 		answer: 'a',
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: options('a', 'b'),
 	},
 	{
 		name: 'checkbox: ключ-строка неразбираем',
@@ -214,6 +250,8 @@ export const MULTI_CHOICE_SCORING_CASES: ScoringCase[] = [
 		key: '1',
 		answer: ['1'],
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: options('1', '2'),
+		validKey: false,
 	},
 ]
 
@@ -224,6 +262,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: { a: '1', b: '2', c: '3' },
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3']),
 	},
 	{
 		name: 'matching: одна ошибка',
@@ -231,6 +270,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: { a: '1', b: '3', c: '3' },
 		expected: { maxPoints: 2, earnedPoints: 1, isCorrect: false, mistakesCount: 1 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3']),
 	},
 	{
 		name: 'matching: несколько ошибок',
@@ -238,6 +278,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: { a: '2', b: '3', c: '1' },
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: 3 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3']),
 	},
 	{
 		name: 'matching: числовые значения в ответе',
@@ -245,6 +286,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: { a: 1, b: 2, c: 3 },
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3']),
 	},
 	{
 		name: 'matching: неполное отображение — пропущенная пара считается ошибкой',
@@ -252,6 +294,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: { a: '1', b: '2' },
 		expected: { maxPoints: 2, earnedPoints: 1, isCorrect: false, mistakesCount: 1 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3']),
 	},
 	{
 		name: 'matching: лишняя пара в ответе не считается',
@@ -259,6 +302,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: { a: '1', b: '2', c: '3', d: '4' },
 		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3', '4']),
 	},
 	{
 		name: 'matching: пустое отображение — ошибка на каждую пару ключа',
@@ -266,6 +310,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2', c: '3' },
 		answer: {},
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: 3 },
+		content: pairs(['a', 'b', 'c'], ['1', '2', '3']),
 	},
 	{
 		name: 'matching: неотвеченный вопрос (null)',
@@ -273,6 +318,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1' },
 		answer: null,
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: pairs(['a'], ['1']),
 	},
 	{
 		name: 'matching: ответ-массив неразбираем',
@@ -280,6 +326,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1' },
 		answer: ['1'],
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: pairs(['a'], ['1']),
 	},
 	{
 		name: 'matching: значение null в паре делает ответ неразбираемым',
@@ -287,6 +334,7 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: { a: '1', b: '2' },
 		answer: { a: '1', b: null },
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: pairs(['a', 'b'], ['1', '2']),
 	},
 	{
 		name: 'matching: пустой ключ неразбираем',
@@ -294,6 +342,8 @@ export const MATCHING_SCORING_CASES: ScoringCase[] = [
 		key: {},
 		answer: { a: '1' },
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		content: pairs(['a'], ['1']),
+		validKey: false,
 	},
 ]
 
@@ -367,6 +417,7 @@ export const SHORT_TEXT_SCORING_CASES: ScoringCase[] = [
 		key: 'митоз',
 		answer: 'митоз',
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		validKey: false,
 	},
 	{
 		name: 'D-12: compact_text_equal с ключом-массивом неразбираем',
@@ -374,6 +425,7 @@ export const SHORT_TEXT_SCORING_CASES: ScoringCase[] = [
 		key: ['митоз'],
 		answer: 'митоз',
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		validKey: false,
 	},
 	{
 		name: 'short_answer_variants: нестроковые элементы ключа пропускаются',
@@ -388,6 +440,7 @@ export const SHORT_TEXT_SCORING_CASES: ScoringCase[] = [
 		key: [],
 		answer: 'митоз',
 		expected: { maxPoints: 1, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		validKey: false,
 	},
 	{
 		name: 'short_answer: неотвеченный вопрос (null)',
@@ -706,5 +759,6 @@ export const SEQUENCE_SCORING_CASES: ScoringCase[] = [
 		key: 1.5,
 		answer: '15',
 		expected: { maxPoints: 2, earnedPoints: 0, isCorrect: false, mistakesCount: UNSCORABLE },
+		validKey: false,
 	},
 ]
