@@ -67,7 +67,9 @@ const PAYLOADS: Array<{ name: string; source: string; compiled: boolean }> = [
 	},
 	{
 		name: 'элемент script',
-		source: `<script>globalThis.__mdxPwned = 'script'</script>`,
+		source: `<script>globalThis.__mdxPwned = 'script'</script>
+
+абзац`,
 		compiled: true,
 	},
 	{
@@ -90,14 +92,6 @@ const PAYLOADS: Array<{ name: string; source: string; compiled: boolean }> = [
 		compiled: true,
 	},
 ]
-
-const KNOWN_HOLES = new Set([
-	'выражение в блоке',
-	'выражение в абзаце',
-	'выражение в атрибуте onError',
-	'элемент script',
-	'iframe srcdoc со скриптом',
-])
 
 const LEGIT_FIXTURES: Array<{ name: string; source: string; expected: string[] }> = [
 	{
@@ -164,12 +158,12 @@ const EXPRESSION_CONTENT: Array<{ name: string; source: string; expected: string
 	{
 		name: 'выражения в тексте',
 		source: `число {2} и {' '} и {"{"}`,
-		expected: '<p>число 2 и   и {</p>',
+		expected: '<p>число  и  и </p>',
 	},
 	{
 		name: 'объектный style',
 		source: `<span style={{ color: 'red' }}>x</span>`,
-		expected: '<span style="color:red">x</span>',
+		expected: '<span>x</span>',
 	},
 ]
 
@@ -185,19 +179,60 @@ for (const payload of PAYLOADS) {
 		assert.ok(html.length > 0)
 	})
 
-	if (KNOWN_HOLES.has(payload.name)) {
-		test.fails(`${payload.name} не исполняется — исправляется в Группе 4 (DEP-03)`, async () => {
-			const { html } = await renderUntrusted(payload.source)
-			assert.equal(pwned.__mdxPwned, undefined)
-			assertInert(html)
-		})
-	} else {
-		test(`${payload.name} не исполняется`, async () => {
-			const { html } = await renderUntrusted(payload.source)
-			assert.equal(pwned.__mdxPwned, undefined)
-			assertInert(html)
-		})
-	}
+	test(`${payload.name} не исполняется`, async () => {
+		const { html } = await renderUntrusted(payload.source)
+		assert.equal(pwned.__mdxPwned, undefined)
+		assertInert(html)
+	})
+}
+
+const STRIPPED_JSX: Array<{ name: string; source: string; forbidden: RegExp; kept: string }> = [
+	{
+		name: 'блочный script',
+		source: `до
+
+<script>globalThis.__mdxPwned = 'flow-script'</script>
+
+после`,
+		forbidden: /script|__mdxPwned/i,
+		kept: 'после',
+	},
+	{
+		name: 'строчный script',
+		source: `до <script>globalThis.__mdxPwned = 'text-script'</script> после`,
+		forbidden: /script|__mdxPwned/i,
+		kept: 'после',
+	},
+	{
+		name: 'script в верхнем регистре',
+		source: `<SCRIPT>globalThis.__mdxPwned = 'upper'</SCRIPT>
+
+после`,
+		forbidden: /script|__mdxPwned/i,
+		kept: 'после',
+	},
+	{
+		name: 'srcdoc в любом регистре',
+		source: `<iframe srcDoc="<b>x</b>" title="кадр"></iframe>`,
+		forbidden: /srcdoc/i,
+		kept: 'кадр',
+	},
+	{
+		name: 'строковые on*',
+		source: `<img src="/a.png" alt="картинка" onerror="globalThis.__mdxPwned='onerror'" />
+
+<div ONCLICK="globalThis.__mdxPwned='click'">x</div>`,
+		forbidden: /\bon(error|click)\b|__mdxPwned/i,
+		kept: 'картинка',
+	},
+]
+
+for (const item of STRIPPED_JSX) {
+	test(`remarkStripUnsafeJsx вырезает из скомпилированного кода: ${item.name}`, async () => {
+		const { compiledSource } = await serialize(normalizeMdxSource(item.source.trim()), buildMdxOptions())
+		assert.doesNotMatch(compiledSource, item.forbidden)
+		assert.ok(compiledSource.includes(item.kept), `нет ${item.kept} в ${compiledSource}`)
+	})
 }
 
 for (const fixture of LEGIT_FIXTURES) {
