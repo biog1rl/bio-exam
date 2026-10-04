@@ -140,9 +140,20 @@ test.each<[string, string | undefined]>([
 	assert.equal(requests.length, 0)
 })
 
-test('профиль: пользователь без роли admin получает not-found', async () => {
-	await load({ body: { ok: true, user: { id: 'student', roles: ['student'], perms: ['tests.read'] } } })
+test('профиль: без права tests.manage_assignments — not-found', async () => {
+	await load({ body: { ok: true, user: { id: 'student', roles: ['user'], perms: ['tests.read'] } } })
 	await assert.rejects(profile(), /not-found/)
+})
+
+test('профиль: роль admin без права tests.manage_assignments — not-found', async () => {
+	await load({ body: { ok: true, user: { id: 'admin-id', roles: ['admin'], perms: ['users.read', 'tests.read'] } } })
+	await assert.rejects(profile(), /not-found/)
+})
+
+test('профиль: право tests.manage_assignments без роли admin открывает чужой профиль', async () => {
+	await load({ body: { ok: true, user: { id: 'teacher', roles: ['user'], perms: ['tests.manage_assignments'] } } })
+	const rendered = await profile()
+	assert.ok(rendered)
 })
 
 test('модуль не содержит локальной реализации getMeData и isAuthenticated', async () => {

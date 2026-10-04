@@ -1,7 +1,5 @@
 'use client'
 
-import type { RoleKey } from '@bio-exam/rbac'
-
 import { useMemo, type ReactNode } from 'react'
 
 import {
@@ -178,8 +176,7 @@ function EmptyPanel({ children }: { children: ReactNode }) {
 
 export default function DashboardClient() {
 	const { me, can } = useAuth()
-	const isAdmin = (me?.roles ?? []).includes('admin' as RoleKey)
-	const canReadTests = isAdmin || can('tests', 'read')
+	const canReadTests = can('tests', 'read')
 
 	const testsQuery = useSWR(canReadTests ? null : 'dashboard-public-tests', fetchPublicTestsList)
 	const tests = useMemo(() => testsQuery.data?.tests ?? [], [testsQuery.data?.tests])

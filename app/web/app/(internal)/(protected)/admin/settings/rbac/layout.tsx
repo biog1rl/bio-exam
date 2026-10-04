@@ -1,7 +1,7 @@
-import AuthGuard from '@/components/auth/AuthGuard'
+import { requireSectionAccess } from '@/lib/session/section-access'
 
-const RBACLayout = ({ children }: { children: React.ReactNode }) => {
-	return <AuthGuard requireAny={['rbac.read', 'rbac.write']}>{children}</AuthGuard>
+export default async function RBACLayout({ children }: { children: React.ReactNode }) {
+	const me = await requireSectionAccess('rbac')
+	if (!me) return null
+	return <>{children}</>
 }
-
-export default RBACLayout

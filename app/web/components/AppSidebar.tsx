@@ -65,13 +65,6 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 			<SidebarHeader className="border-b border-[#e4dccf] px-4 py-4 text-2xl font-semibold">
 				<div className="flex items-center justify-center transition-colors">
 					<LogoSidebar />
-					{/* <AuthGuard requireAny={['settings.manage']}>
-						<Link href="/admin/sidebar" className="transition group-data-[collapsible=icon]:opacity-0">
-							<Button variant="outline" size="icon">
-								<Icons.SettingsIcon size="4" />
-							</Button>
-						</Link>
-					</AuthGuard> */}
 				</div>
 			</SidebarHeader>
 			<SidebarContent className="px-2 py-5">

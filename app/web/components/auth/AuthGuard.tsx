@@ -1,43 +1,34 @@
 'use client'
 
-import type { PermissionKey, RoleKey } from '@bio-exam/rbac'
-
 import type { ReactNode } from 'react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import { buildLoginRedirect } from '@/lib/session/redirect'
+import { canAccessSection, sectionForPath } from '@/lib/session/route-permissions'
 
 type AuthGuardProps = {
 	children: ReactNode
 	fallback?: ReactNode
-	/** Все перечисленные права обязательны */
-	requireAll?: PermissionKey[]
-	/** Достаточно иметь хотя бы одно из перечисленных прав */
-	requireAny?: PermissionKey[]
-	/** Куда редиректить неавторизованного пользователя */
 	redirectTo?: string
-	/** Пути, на которых guard пропускается (например /login) */
 	skipPaths?: string[]
-	/** Префиксы путей, на которых guard пропускается (например /invite) */
 	skipPathPrefixes?: string[]
 }
 
 export default function AuthGuard({
 	children,
 	fallback = null,
-	requireAll,
-	requireAny,
 	redirectTo,
 	skipPaths,
 	skipPathPrefixes,
 }: AuthGuardProps) {
-	const { me, loading, sessionError, can } = useAuth()
+	const { me, loading, sessionError, perms } = useAuth()
 	const router = useRouter()
 	const pathname = usePathname()
 	const searchParams = useSearchParams()
+	const refreshedFor = useRef<string | null>(null)
 
 	const isSkipped = useMemo(() => {
 		if (!pathname) return false
@@ -46,6 +37,10 @@ export default function AuthGuard({
 		return false
 	}, [pathname, skipPaths, skipPathPrefixes])
 
+	const permsKey = useMemo(() => [...perms].sort().join(','), [perms])
+	const section = redirectTo && pathname ? sectionForPath(pathname) : null
+	const sectionDenied = Boolean(me && section && !canAccessSection(perms, section))
+
 	useEffect(() => {
 		if (!redirectTo || isSkipped || loading || me || sessionError) return
 		const query = searchParams?.toString()
@@ -53,28 +48,19 @@ export default function AuthGuard({
 		router.replace(buildLoginRedirect(callbackUrl))
 	}, [redirectTo, isSkipped, loading, me, sessionError, pathname, router, searchParams])
 
+	useEffect(() => {
+		if (!sectionDenied || isSkipped || loading) return
+		if (refreshedFor.current === permsKey) return
+		refreshedFor.current = permsKey
+		router.refresh()
+	}, [sectionDenied, isSkipped, loading, permsKey, router])
+
 	if (isSkipped) return <>{children}</>
 
 	if (loading) return null
 	if (!me) {
-		const hasRequirements = Boolean(requireAll?.length || requireAny?.length)
-		if (sessionError && !hasRequirements) return <>{children}</>
+		if (sessionError) return <>{children}</>
 		return <>{fallback}</>
-	}
-
-	// === Админ-бэйпас: администратору разрешаем всё ===
-	const isAdmin = (me.roles ?? []).includes('admin' as RoleKey)
-	if (isAdmin) return <>{children}</>
-
-	// === Дальше — обычные проверки прав ===
-	if (Array.isArray(requireAll) && requireAll.length > 0) {
-		const okAll = requireAll.every((k) => can(k))
-		if (!okAll) return <>{fallback}</>
-	}
-
-	if (Array.isArray(requireAny) && requireAny.length > 0) {
-		const okAny = requireAny.some((k) => can(k))
-		if (!okAny) return <>{fallback}</>
 	}
 
 	return <>{children}</>

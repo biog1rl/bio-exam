@@ -1,3 +1,5 @@
+import { can } from '@bio-exam/rbac'
+
 import { notFound, redirect } from 'next/navigation'
 
 import UserProfileAssignmentsPage from '@/components/users/UserProfileAssignmentsPage'
@@ -12,9 +14,7 @@ export default async function ProfileByIdPage({ params }: { params: Promise<{ id
 		redirect(buildLoginRedirect(`/profile/${encodeURIComponent(login)}`))
 	}
 
-	const isAdmin = me.roles?.includes('admin') ?? false
-
-	if (!isAdmin) {
+	if (!can(new Set(me.perms), 'tests.manage_assignments')) {
 		notFound()
 	}
 

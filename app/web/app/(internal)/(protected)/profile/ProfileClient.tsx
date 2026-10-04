@@ -74,7 +74,7 @@ function FormField({ id, label, children }: { id: string; label: string; childre
 }
 
 export function ProfileClient({ initialData }: ProfileClientProps) {
-	const { me, refresh, logout } = useAuth()
+	const { me, refresh, logout, can } = useAuth()
 	const [isLoading, setIsLoading] = useState(false)
 	const [isPasswordLoading, setIsPasswordLoading] = useState(false)
 
@@ -104,7 +104,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 		confirmPassword: '',
 	})
 
-	const isAdmin = me?.roles?.includes('admin') ?? false
+	const canEditAvatar = can('users', 'edit')
 
 	const { data: myGroupData } = useSWR<{ group: { id: string; name: string } | null }>('/api/groups/my', fetcher)
 	const myGroup = myGroupData?.group ?? null
@@ -222,7 +222,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 			</section>
 
 			<div className="grid gap-6 tab:grid-cols-2">
-				{isAdmin && (
+				{canEditAvatar && (
 					<div className="space-y-6">
 						<ProfilePanel
 							kicker="визуальный маркер"
@@ -253,7 +253,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 					</div>
 				)}
 
-				<div className={`space-y-6 ${!isAdmin ? 'max-w-xl tab:col-span-2' : ''}`}>
+				<div className={`space-y-6 ${!canEditAvatar ? 'max-w-xl tab:col-span-2' : ''}`}>
 					<ProfilePanel kicker="данные" title="Основная информация" description="Редактируйте свои данные">
 						<div className="space-y-4">
 							<div className="grid gap-4 mob:grid-cols-2">

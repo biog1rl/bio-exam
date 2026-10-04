@@ -1,3 +1,5 @@
+import { can } from '@bio-exam/rbac'
+
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
@@ -39,8 +41,7 @@ export default async function AdminUserPageRedirect({ params }: { params: Promis
 		redirect(buildLoginRedirect(`/admin/users/${encodeURIComponent(id)}`))
 	}
 
-	const isAdmin = me.roles?.includes('admin') ?? false
-	if (!isAdmin) {
+	if (!can(new Set(me.perms), 'tests.manage_assignments')) {
 		notFound()
 	}
 

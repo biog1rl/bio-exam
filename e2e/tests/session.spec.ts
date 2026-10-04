@@ -133,6 +133,8 @@ test('role user does not see the /admin/users section @session', async ({ studen
 	await page.goto('/admin/users')
 	await page.waitForLoadState('networkidle')
 	expect(new URL(page.url()).pathname).toBe('/admin/users')
+	await expect(page.getByText('PAGE NOT FOUND')).toBeVisible()
+	expect(await page.locator('header').count()).toBeGreaterThanOrEqual(1)
 	await expect(page.getByRole('heading', { name: 'Пользователи' })).toHaveCount(0)
 	await expect(page.locator('table')).toHaveCount(0)
 })
