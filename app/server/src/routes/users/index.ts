@@ -23,7 +23,6 @@ import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { AssignTestSchema } from '../../schemas/assignments.js'
 import { PatchUserSchema } from '../../schemas/users.js'
-import { invalidateRBACCache } from '../../services/rbac/rbac.js'
 import type { UserRow } from '../../types/db/users.js'
 import avatarRouter from './avatar.js'
 import profileRouter from './profile.js'
@@ -144,8 +143,6 @@ router.patch('/:id', validateUUID('id'), sessionRequired(), requirePerm('users',
 		const existing = await db.query.users.findFirst({ where: eq(users.id, id) })
 		if (!existing) return res.status(404).json({ error: ERROR_MESSAGES.USER_NOT_FOUND })
 
-		let rolesChanged = false
-
 		const updates: Partial<typeof users.$inferInsert> = {}
 		if (body.firstName !== undefined) updates.firstName = body.firstName
 		if (body.lastName !== undefined) updates.lastName = body.lastName
@@ -169,12 +166,8 @@ router.patch('/:id', validateUUID('id'), sessionRequired(), requirePerm('users',
 				if (roleKeys.length > 0) {
 					await tx.insert(userRoles).values(roleKeys.map((rk: RoleKey) => ({ userId: id, roleKey: rk })))
 				}
-				rolesChanged = true
 			}
 		})
-
-		// ВАЖНО: если роли менялись — инвалидируем кэш прав
-		if (rolesChanged) invalidateRBACCache()
 
 		return res.json({ ok: true })
 	} catch (e) {
@@ -241,9 +234,6 @@ router.delete('/:id', validateUUID('id'), sessionRequired(), requirePerm('users'
 
 		// Удаляем пользователя (каскадное удаление обработает связанные записи)
 		await db.delete(users).where(eq(users.id, id))
-
-		// Инвалидируем кэш RBAC, так как пользователь удален
-		invalidateRBACCache()
 
 		return res.json({ ok: true })
 	} catch (e) {

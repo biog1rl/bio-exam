@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, test } from 'vitest'
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 
 const KNOWN_DEFECTS = new Set([
-	'AUTH-01-db-error',
 	'AUTH-02-role-removed',
 	'AUTH-03-d4-allow',
 	'AUTH-04-logout',
@@ -93,24 +92,20 @@ describe('AUTH-01-db-error: ошибка БД прав', () => {
 		adminJar = admin.jar
 	})
 
-	defectTest(
-		'AUTH-01-db-error',
-		'при недоступной rbac_user_grants /api/auth/me и /api/rbac/roles отвечают ошибкой без запасного набора — исправляется в 04-04',
-		async () => {
-			const jar = required(adminJar, 'admin session')
-			await ctx.pgPool.query('ALTER TABLE rbac_user_grants RENAME TO rbac_user_grants_off')
-			try {
-				const me = await call(ctx, 'GET', '/api/auth/me', { cookies: jar })
-				const roles = await call(ctx, 'GET', '/api/rbac/roles', { cookies: jar })
-				assert.ok(
-					me.status >= 500 && roles.status >= 500,
-					`/api/auth/me status ${me.status}, /api/rbac/roles status ${roles.status}`
-				)
-			} finally {
-				await ctx.pgPool.query('ALTER TABLE rbac_user_grants_off RENAME TO rbac_user_grants')
-			}
+	test('AUTH-01-db-error: при недоступной rbac_user_grants /api/auth/me и /api/rbac/roles отвечают ошибкой без запасного набора', async () => {
+		const jar = required(adminJar, 'admin session')
+		await ctx.pgPool.query('ALTER TABLE rbac_user_grants RENAME TO rbac_user_grants_off')
+		try {
+			const me = await call(ctx, 'GET', '/api/auth/me', { cookies: jar })
+			const roles = await call(ctx, 'GET', '/api/rbac/roles', { cookies: jar })
+			assert.ok(
+				me.status >= 500 && roles.status >= 500,
+				`/api/auth/me status ${me.status}, /api/rbac/roles status ${roles.status}`
+			)
+		} finally {
+			await ctx.pgPool.query('ALTER TABLE rbac_user_grants_off RENAME TO rbac_user_grants')
 		}
-	)
+	})
 })
 
 describe('AUTH-02-role-removed: снятие роли после входа', () => {

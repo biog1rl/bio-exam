@@ -17,7 +17,7 @@ import {
 	PageRuleSchema,
 	PatchPageRuleSchema,
 } from '../../schemas/rbac.js'
-import { invalidateRBACCache, buildPermissionSet, isValidAction } from '../../services/rbac/rbac.js'
+import { accessPolicy, isValidAction } from '../../services/access-policy/index.js'
 
 const router = Router()
 
@@ -57,7 +57,6 @@ router.post('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (re
 				set: { allow },
 			})
 
-		invalidateRBACCache()
 		res.json({ ok: true })
 	} catch (e) {
 		next(e)
@@ -79,7 +78,6 @@ router.delete('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (
 				and(eq(rbacRoleGrants.roleKey, roleKey), eq(rbacRoleGrants.domain, domain), eq(rbacRoleGrants.action, action))
 			)
 
-		invalidateRBACCache()
 		res.json({ ok: true })
 	} catch (e) {
 		next(e)
@@ -96,36 +94,17 @@ router.get(
 	async (req, res, next) => {
 		try {
 			const userId = req.params.id as string
-
-			// роли пользователя
-			const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
-			const roles = rs.map((r) => r.role as RoleKey)
-
-			// права по ролям (с учётом role-overrides allow/deny)
-			const rolePerms = await buildPermissionSet(roles)
-			const roleKeys = Array.from(rolePerms.values())
-
-			// пользовательские overrides (allow/deny)
-			const userRows = await db.select().from(rbacUserGrants).where(eq(rbacUserGrants.userId, userId))
-			const userOverrides = userRows.map((r) => ({
-				domain: r.domain,
-				action: r.action,
-				allow: Boolean(r.allow),
-			}))
-
-			// Эффективность: старт с rolePerms, затем применить userOverrides (allow=add, deny=delete)
-			const eff = new Set<string>(roleKeys)
-			for (const o of userOverrides) {
-				const k = `${o.domain}.${o.action}`
-				if (o.allow) eff.add(k)
-				else eff.delete(k)
-			}
+			const access = await accessPolicy.accessFor(userId)
 
 			res.json({
-				roles,
-				roleKeys,
-				userOverrides, // [{domain, action, allow}]
-				effective: Array.from(eff),
+				roles: access.snapshot.roles,
+				roleKeys: Array.from(access.rolePermissions),
+				userOverrides: access.snapshot.userGrants.map((row) => ({
+					domain: row.domain,
+					action: row.action,
+					allow: row.allow,
+				})),
+				effective: Array.from(access.permissions),
 			})
 		} catch (e) {
 			next(e)
@@ -156,7 +135,6 @@ router.post('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), asyn
 				set: { allow },
 			})
 
-		invalidateRBACCache()
 		res.json({ ok: true })
 	} catch (e) {
 		next(e)
@@ -177,7 +155,6 @@ router.delete('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), as
 				and(eq(rbacUserGrants.userId, userId), eq(rbacUserGrants.domain, domain), eq(rbacUserGrants.action, action))
 			)
 
-		invalidateRBACCache()
 		res.json({ ok: true })
 	} catch (e) {
 		next(e)

@@ -1,10 +1,8 @@
-import type { RoleKey } from '@bio-exam/rbac'
-
 import { Router } from 'express'
 import { z } from 'zod'
 
 import { sessionRequired } from '../middleware/auth/session.js'
-import { buildPermissionSetForUser } from '../services/rbac/rbac.js'
+import { requestAccess } from '../services/access-policy/index.js'
 import { searchDatabase, type SearchScope } from '../services/search/database-search.js'
 
 const router = Router()
@@ -23,15 +21,15 @@ router.get('/', sessionRequired(), async (req, res, next) => {
 		}
 
 		const user = req.authUser!
-		const permissions = await buildPermissionSetForUser(user.id)
+		const access = await requestAccess(req)
 		const result = await searchDatabase({
 			query: parsed.data.q,
 			scope: parsed.data.scope as SearchScope,
 			limit: parsed.data.limit,
 			access: {
 				userId: user.id,
-				roles: user.roles as RoleKey[],
-				permissions,
+				roles: access.roles,
+				permissions: access.permissions,
 			},
 		})
 
