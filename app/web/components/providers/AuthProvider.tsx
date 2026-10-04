@@ -14,6 +14,7 @@ type AuthContextValue = {
 	me: Me | null
 	perms: ReadonlySet<PermissionKey>
 	loading: boolean
+	sessionError: boolean
 	avatarVersion: number
 	refresh: () => Promise<void>
 	logout: () => Promise<void>
@@ -34,9 +35,18 @@ async function fetchMeOnce(): Promise<LoadMeOutcome> {
 	}
 }
 
-export function AuthProvider({ children, initialMe }: { children: React.ReactNode; initialMe?: Me | null }) {
+export function AuthProvider({
+	children,
+	initialMe,
+	sessionError: initialSessionError = false,
+}: {
+	children: React.ReactNode
+	initialMe?: Me | null
+	sessionError?: boolean
+}) {
 	const [me, setMe] = useState<Me | null>(initialMe ?? null)
 	const [loading, setLoading] = useState<boolean>(initialMe === undefined)
+	const [sessionError, setSessionError] = useState<boolean>(initialSessionError)
 	const [avatarVersion, setAvatarVersion] = useState<number>(Date.now())
 
 	// берём perms с сервера
@@ -62,6 +72,7 @@ export function AuthProvider({ children, initialMe }: { children: React.ReactNod
 		}
 
 		setMe(next)
+		setSessionError(false)
 		setAvatarVersion(newVersion)
 		setLoading(false) // Завершаем загрузку (актуально только для первого раза)
 		localStorage.setItem('lastAuthUpdate', Date.now().toString())
@@ -164,6 +175,7 @@ export function AuthProvider({ children, initialMe }: { children: React.ReactNod
 		me,
 		perms,
 		loading,
+		sessionError,
 		avatarVersion,
 		refresh,
 		logout,

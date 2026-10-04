@@ -1,9 +1,9 @@
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
-import { getServerMe } from '@/lib/auth/getServerMe'
 import { absoluteUrl } from '@/lib/http/absoluteUrl'
 import { buildLoginRedirect } from '@/lib/session/redirect'
+import { getServerMe } from '@/lib/session/server'
 
 type UserLite = {
 	id: string

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getSessionCookieCandidates } from '@/lib/auth/sessionCookie'
+import { getSessionCookieCandidates, readSessionCookieValue } from '@/lib/auth/sessionCookie'
+import { needsRefresh } from '@/lib/session/access-token'
+import { refreshForProxy } from '@/lib/session/proxy-refresh'
+import { buildLoginRedirect } from '@/lib/session/redirect'
 
-const SESSION_COOKIE_CANDIDATES = getSessionCookieCandidates(process.env.SESSION_COOKIE_NAME)
 const REFRESH_COOKIE_NAME = 'refresh_token'
 
 const PUBLIC_PATHS = new Set(['/login'])
@@ -13,20 +15,51 @@ function isPublicPath(pathname: string): boolean {
 	return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 }
 
-export function proxy(req: NextRequest) {
+function loginRedirect(req: NextRequest): NextResponse {
 	const { pathname, search } = req.nextUrl
-	const hasSession = SESSION_COOKIE_CANDIDATES.some((cookieName) => Boolean(req.cookies.get(cookieName)?.value))
+	return NextResponse.redirect(new URL(buildLoginRedirect(`${pathname}${search}`), req.url))
+}
+
+function clearSessionCookies(response: NextResponse): void {
+	const names = [...getSessionCookieCandidates(process.env.SESSION_COOKIE_NAME), REFRESH_COOKIE_NAME]
+	for (const name of names) {
+		response.headers.append('set-cookie', `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`)
+	}
+}
+
+export async function proxy(req: NextRequest) {
+	const isPublic = isPublicPath(req.nextUrl.pathname)
+	const accessToken = readSessionCookieValue(req.cookies, process.env.SESSION_COOKIE_NAME)
 	const hasRefresh = Boolean(req.cookies.get(REFRESH_COOKIE_NAME)?.value)
 
-	if (isPublicPath(pathname)) {
+	if (needsRefresh({ accessToken, hasRefresh, nowSec: Math.floor(Date.now() / 1000) })) {
+		const outcome = await refreshForProxy({ cookieHeader: req.headers.get('cookie') ?? '' })
+
+		if (outcome.kind === 'refreshed') {
+			for (const [name, value] of Object.entries(outcome.values)) {
+				req.cookies.set(name, value)
+			}
+			const response = NextResponse.next({ request: { headers: new Headers(req.headers) } })
+			for (const line of outcome.setCookies) {
+				response.headers.append('set-cookie', line)
+			}
+			return response
+		}
+
+		if (outcome.kind === 'rejected') {
+			const response = isPublic ? NextResponse.next() : loginRedirect(req)
+			clearSessionCookies(response)
+			return response
+		}
+
 		return NextResponse.next()
 	}
 
-	if (hasSession || hasRefresh) return NextResponse.next()
+	if (isPublic) return NextResponse.next()
 
-	const loginUrl = new URL('/login', req.url)
-	loginUrl.searchParams.set('callbackUrl', `${pathname}${search}`)
-	return NextResponse.redirect(loginUrl)
+	if (accessToken || hasRefresh) return NextResponse.next()
+
+	return loginRedirect(req)
 }
 
 export const config = {

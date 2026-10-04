@@ -1,3 +1,5 @@
+import { unstable_rethrow } from 'next/navigation'
+
 import { Providers } from '@/app/providers'
 import { AppSidebar } from '@/components/AppSidebar'
 import Breadcrumbs from '@/components/Breadcrumbs'
@@ -11,20 +13,27 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
-import { getServerMe } from '@/lib/auth/getServerMe'
+import { getServerMe, type ServerMe } from '@/lib/session/server'
 
 export default async function AppLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode
 }>) {
-	const me = await getServerMe()
+	let me: ServerMe | null = null
+	let sessionError = false
+	try {
+		me = await getServerMe()
+	} catch (error) {
+		unstable_rethrow(error)
+		sessionError = true
+	}
 
 	return (
 		<>
 			<Providers>
 				{/* RBAC-провайдер с SSR-инициализацией */}
-				<AuthProvider initialMe={me}>
+				<AuthProvider initialMe={me} sessionError={sessionError}>
 					<BreadcrumbsProvider>
 						<SidebarProvider className="items-center justify-center bg-[#fbfaf7]">
 							<AuthGuard>

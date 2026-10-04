@@ -1,8 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 
 import UserProfileAssignmentsPage from '@/components/users/UserProfileAssignmentsPage'
-import { getServerMe } from '@/lib/auth/getServerMe'
 import { buildLoginRedirect } from '@/lib/session/redirect'
+import { getServerMe } from '@/lib/session/server'
 
 export default async function ProfileByIdPage({ params }: { params: Promise<{ id: string }> }) {
 	const { id: login } = await params

@@ -34,7 +34,7 @@ export default function AuthGuard({
 	skipPaths,
 	skipPathPrefixes,
 }: AuthGuardProps) {
-	const { me, loading, can } = useAuth()
+	const { me, loading, sessionError, can } = useAuth()
 	const router = useRouter()
 	const pathname = usePathname()
 	const searchParams = useSearchParams()
@@ -47,16 +47,20 @@ export default function AuthGuard({
 	}, [pathname, skipPaths, skipPathPrefixes])
 
 	useEffect(() => {
-		if (!redirectTo || isSkipped || loading || me) return
+		if (!redirectTo || isSkipped || loading || me || sessionError) return
 		const query = searchParams?.toString()
 		const callbackUrl = `${pathname || '/'}${query ? `?${query}` : ''}`
 		router.replace(buildLoginRedirect(callbackUrl))
-	}, [redirectTo, isSkipped, loading, me, pathname, router, searchParams])
+	}, [redirectTo, isSkipped, loading, me, sessionError, pathname, router, searchParams])
 
 	if (isSkipped) return <>{children}</>
 
 	if (loading) return null
-	if (!me) return <>{fallback}</>
+	if (!me) {
+		const hasRequirements = Boolean(requireAll?.length || requireAny?.length)
+		if (sessionError && !hasRequirements) return <>{children}</>
+		return <>{fallback}</>
+	}
 
 	// === Админ-бэйпас: администратору разрешаем всё ===
 	const isAdmin = (me.roles ?? []).includes('admin' as RoleKey)

@@ -37,7 +37,7 @@ async function cookieNames(context: BrowserContext): Promise<string[]> {
 test.describe.serial('D8: server page refresh @session', () => {
 	let context: BrowserContext | undefined
 
-	test('D8 setup: admin logs in through the API @session @known-defect', async ({ browser }, testInfo) => {
+	test('D8 setup: admin logs in through the API @session', async ({ browser }, testInfo) => {
 		context = await loginContext(browser, testInfo, 'admin')
 		const names = await cookieNames(context)
 		expect(names).toContain(SESSION_COOKIE)
@@ -48,27 +48,32 @@ test.describe.serial('D8: server page refresh @session', () => {
 		await context?.close()
 	})
 
-	test.fail(
-		'D8 — fixed in Phase 4 (AUTH-11): a server page with an expired access token and a live refresh token opens without /login @session @known-defect',
-		async () => {
-			const testInfo = test.info()
-			await context!.clearCookies({ name: SESSION_COOKIE })
-			const page = await context!.newPage()
-			const navigations: string[] = []
-			page.on('framenavigated', (frame) => {
-				if (frame === page.mainFrame()) navigations.push(frame.url())
-			})
-			const profilePath = `/profile/${sessionAccount(projectKey(testInfo), 'user').login}`
-			await page.goto(profilePath)
-			await page.waitForLoadState('networkidle')
-			const finalPath = new URL(page.url()).pathname
-			const loginNavigations = navigations.filter((url) => new URL(url).pathname === '/login')
-			expect(
-				{ navigations: loginNavigations, finalPath },
-				`main frame navigations: ${navigations.join(' -> ')}`
-			).toEqual({ navigations: [], finalPath: profilePath })
-		}
-	)
+	test('D8: a server page with an expired access token and a live refresh token opens without /login @session', async () => {
+		const testInfo = test.info()
+		await context!.clearCookies({ name: SESSION_COOKIE })
+		const refreshBefore = (await context!.cookies()).find((cookie) => cookie.name === REFRESH_COOKIE)?.value
+		expect(refreshBefore, REFRESH_COOKIE).toBeTruthy()
+		const page = await context!.newPage()
+		const navigations: string[] = []
+		page.on('framenavigated', (frame) => {
+			if (frame === page.mainFrame()) navigations.push(frame.url())
+		})
+		const profilePath = `/profile/${sessionAccount(projectKey(testInfo), 'user').login}`
+		await page.goto(profilePath)
+		await page.waitForLoadState('networkidle')
+		const finalPath = new URL(page.url()).pathname
+		const loginNavigations = navigations.filter((url) => new URL(url).pathname === '/login')
+		await testInfo.attach('D8 main frame navigations', { body: navigations.join('\n'), contentType: 'text/plain' })
+		expect({ navigations: loginNavigations, finalPath }, `main frame navigations: ${navigations.join(' -> ')}`).toEqual(
+			{ navigations: [], finalPath: profilePath }
+		)
+		expect(await cookieNames(context!), 'the access cookie set by the proxy refresh reaches the browser').toContain(
+			SESSION_COOKIE
+		)
+		const refreshAfter = (await context!.cookies()).find((cookie) => cookie.name === REFRESH_COOKIE)?.value
+		expect(refreshAfter, 'the rotated refresh cookie set by the proxy reaches the browser').toBeTruthy()
+		expect(refreshAfter).not.toBe(refreshBefore)
+	})
 })
 
 test.describe.serial('D3: one /api/auth/me per load @session', () => {

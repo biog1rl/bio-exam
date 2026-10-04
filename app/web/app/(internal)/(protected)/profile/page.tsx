@@ -1,4 +1,4 @@
-import { getServerMe } from '@/lib/auth/getServerMe'
+import { getServerMe } from '@/lib/session/server'
 
 import { ProfileClient } from './ProfileClient'
 
