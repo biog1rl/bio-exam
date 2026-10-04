@@ -148,6 +148,13 @@
       "when": 1784985600000,
       "tag": "0020_short_answer_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791095839799,
+      "tag": "0021_auth_sessions",
+      "breakpoints": true
     }
   ]
 }

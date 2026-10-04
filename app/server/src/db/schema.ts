@@ -598,6 +598,27 @@ export const userGroups = pgTable(
 	})
 ).enableRLS()
 
+export const authSessions = pgTable(
+	'auth_sessions',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		userId: uuid('user_id').notNull(),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		lastRefreshedAt: timestamp('last_refreshed_at', { withTimezone: true }).notNull().defaultNow(),
+		revokedAt: timestamp('revoked_at', { withTimezone: true }),
+		revokeReason: text('revoke_reason'),
+	},
+	(t) => ({
+		userIdIdx: index('idx_auth_sessions_user_id').on(t.userId),
+		userIdFk: foreignKey({
+			name: 'auth_sessions_user_id_fkey',
+			columns: [t.userId],
+			foreignColumns: [users.id],
+		}).onDelete('cascade'),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
 /** Refresh tokens for session management */
 export const refreshTokens = pgTable(
 	'refresh_tokens',
@@ -609,16 +630,39 @@ export const refreshTokens = pgTable(
 		revokedAt: timestamp('revoked_at', { withTimezone: true }),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		createdByIp: text('created_by_ip'),
+		sessionId: uuid('session_id'),
+		usedAt: timestamp('used_at', { withTimezone: true }),
 	},
 	(t) => ({
 		tokenHashIdx: index('idx_refresh_tokens_token_hash').on(t.tokenHash),
 		expiresAtIdx: index('idx_refresh_tokens_expires_at').on(t.expiresAt),
+		sessionIdIdx: index('idx_refresh_tokens_session_id').on(t.sessionId),
 		// Имя внешнего ключа из миграции 0003 (REFERENCES без имени даёт *_fkey)
 		userIdFk: foreignKey({
 			name: 'refresh_tokens_user_id_fkey',
 			columns: [t.userId],
 			foreignColumns: [users.id],
 		}).onDelete('cascade'),
+		sessionIdFk: foreignKey({
+			name: 'refresh_tokens_session_id_fkey',
+			columns: [t.sessionId],
+			foreignColumns: [authSessions.id],
+		}).onDelete('cascade'),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
+export const loginThrottle = pgTable(
+	'login_throttle',
+	{
+		bucketKey: text('bucket_key').primaryKey(),
+		login: text('login'),
+		failures: integer('failures').notNull().default(0),
+		blockedUntil: timestamp('blocked_until', { withTimezone: true }),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		loginIdx: index('idx_login_throttle_login').on(t.login),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

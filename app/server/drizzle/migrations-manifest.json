@@ -168,6 +168,14 @@
       "sha256": "1a3777e02e255a6647f0c1cfef46eb4a846074cb88ec8579a89cd03d0aaefa36",
       "when": 1784985600000,
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "tag": "0021_auth_sessions",
+      "file": "0021_auth_sessions.sql",
+      "sha256": "df9b6078490ce592c2632dc9eda949e8ba59aa3692e893cf0b23509521399314",
+      "when": 1791095839799,
+      "breakpoints": true
     }
   ]
 }

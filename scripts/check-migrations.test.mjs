@@ -71,10 +71,15 @@ test('manifest: one changed byte in an applied migration fails and names the fil
 })
 
 test('manifest: an extra unjournaled migration fails and names the file', async (t) => {
-	const dir = await fixture(t, (d) => fsp.writeFile(path.join(d, '0021_x.sql'), 'SELECT 1;\n'))
+	let file = ''
+	const dir = await fixture(t, async (d) => {
+		const journal = await readJson(path.join(d, 'meta/_journal.json'))
+		file = `${nextPrefix(journal)}_x.sql`
+		await fsp.writeFile(path.join(d, file), 'SELECT 1;\n')
+	})
 	const result = await checkManifest(dir)
 	assert.equal(result.ok, false)
-	assert.match(joined(result), /0021_x\.sql/)
+	assert.ok(joined(result).includes(file), joined(result))
 })
 
 test('manifest: two swapped journal entries fail', async (t) => {
@@ -134,20 +139,26 @@ test('manifest: an edited breakpoints on an applied journal entry fails', async 
 	assert.match(joined(result), /0003_refresh_tokens breakpoints false differs from the manifest true/)
 })
 
-/** Дописывает в копию полностью оформленную миграцию 0021 (файл, журнал, манифест) с when = when(0020) + delta */
-async function appendMigration(d, tag, delta) {
+function nextPrefix(journal) {
+	return String(journal.entries.at(-1).idx + 1).padStart(4, '0')
+}
+
+/** Дописывает в копию полностью оформленную следующую миграцию (файл, журнал, манифест) с when = when(последней записи) + delta */
+async function appendMigration(d, name, delta) {
 	const sql = 'SELECT 1;\n'
-	await fsp.writeFile(path.join(d, `${tag}.sql`), sql)
 	const journalFile = path.join(d, 'meta/_journal.json')
 	const journal = await readJson(journalFile)
 	const last = journal.entries.at(-1)
+	const idx = last.idx + 1
+	const tag = `${nextPrefix(journal)}_${name}`
+	await fsp.writeFile(path.join(d, `${tag}.sql`), sql)
 	const when = last.when + delta
-	journal.entries.push({ ...last, idx: 21, tag, when })
+	journal.entries.push({ ...last, idx, tag, when })
 	await writeJson(journalFile, journal)
 	const manifestFile = path.join(d, 'migrations-manifest.json')
 	const manifest = await readJson(manifestFile)
 	manifest.migrations.push({
-		idx: 21,
+		idx,
 		tag,
 		file: `${tag}.sql`,
 		sha256: crypto.createHash('sha256').update(sql).digest('hex'),
@@ -155,24 +166,28 @@ async function appendMigration(d, tag, delta) {
 		breakpoints: true,
 	})
 	await writeJson(manifestFile, manifest)
+	return { tag, previousTag: last.tag }
 }
 
 test('manifest: a new entry whose when is not greater than the previous one fails', async (t) => {
 	// Ошибка только в when: drizzle 0.45.3 в production молча пропустил бы такую миграцию
 	for (const delta of [0, -1]) {
-		const dir = await fixture(t, (d) => appendMigration(d, '0021_late_entry', delta))
+		let tags = { tag: '', previousTag: '' }
+		const dir = await fixture(t, async (d) => {
+			tags = await appendMigration(d, 'late_entry', delta)
+		})
 		const result = await checkManifest(dir)
 		assert.equal(result.ok, false, `delta ${delta}`)
 		assert.equal(result.lines.length, 1, joined(result))
 		assert.match(
 			joined(result),
-			/0021_late_entry when \d+ is not greater than the previous entry 0020_short_answer_variants/
+			new RegExp(`${tags.tag} when \\d+ is not greater than the previous entry ${tags.previousTag}\\b`)
 		)
 	}
 })
 
 test('manifest: a correctly appended entry with a greater when passes', async (t) => {
-	const dir = await fixture(t, (d) => appendMigration(d, '0021_next_entry', 1))
+	const dir = await fixture(t, (d) => appendMigration(d, 'next_entry', 1))
 	const result = await checkManifest(dir)
 	assert.equal(result.ok, true, joined(result))
 })
@@ -183,8 +198,13 @@ test('generate-no-diff: the restored snapshot produces no new file', async (t) =
 	assert.equal(result.ok, true, joined(result))
 })
 
-test('generate-no-diff: without meta/0020_snapshot.json the destructive diff stops the check', async (t) => {
-	const dir = await fixture(t, (d) => fsp.rm(path.join(d, 'meta/0020_snapshot.json')))
+test('generate-no-diff: without snapshots newer than 0015 the destructive diff stops the check', async (t) => {
+	const dir = await fixture(t, async (d) => {
+		for (const file of await fsp.readdir(path.join(d, 'meta'))) {
+			const match = /^(\d{4})_snapshot\.json$/.exec(file)
+			if (match && Number(match[1]) > 15) await fsp.rm(path.join(d, 'meta', file))
+		}
+	})
 	const before = (await fsp.readdir(dir)).sort()
 	const result = await checkGenerateNoDiff(dir)
 	assert.equal(result.ok, false)
