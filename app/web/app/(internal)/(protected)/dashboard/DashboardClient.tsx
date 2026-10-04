@@ -21,6 +21,7 @@ import Link from 'next/link'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import useSWR from 'swr'
 
+import { StudentProgressSection } from '@/components/progress/StudentProgressSection'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
@@ -566,6 +567,7 @@ export default function DashboardClient() {
 				</section>
 			) : null}
 
+			{canReadTests ? null : <StudentProgressSection />}
 			{/* <section>
         <SoftPanel className="p-unit-mob tab-sm:p-unit">
           <SectionTitle kicker="график" title="Динамика результатов" />
