@@ -12,6 +12,7 @@ type Profile =
 	| 'student'
 	| 'stranger'
 	| 'allow_tests_read'
+	| 'allow_tests_read_no_zone'
 	| 'allow_settings_manage'
 	| 'allow_tests_write'
 	| 'admin_deny_tests_read'
@@ -28,6 +29,15 @@ const PROFILES: Array<{ name: Profile; roles: string[]; grants: Grant[]; assigne
 	{ name: 'stranger', roles: ['user'], grants: [], assigned: false },
 	{
 		name: 'allow_tests_read',
+		roles: ['user'],
+		grants: [
+			{ domain: 'tests', action: 'read', allow: true },
+			{ domain: 'zone', action: 'all', allow: true },
+		],
+		assigned: false,
+	},
+	{
+		name: 'allow_tests_read_no_zone',
 		roles: ['user'],
 		grants: [{ domain: 'tests', action: 'read', allow: true }],
 		assigned: false,
@@ -157,6 +167,7 @@ describe('чтение теста: GET /api/tests/public/topics/:topicSlug/tests
 		['student', 'free', 403],
 		['stranger', 'assigned', 403],
 		['allow_tests_read', 'free', 200],
+		['allow_tests_read_no_zone', 'free', 403],
 		['admin_deny_tests_read', 'free', 403],
 		['admin_deny_tests_read', 'assigned', 200],
 	]
@@ -182,6 +193,7 @@ describe('списки: GET /api/tests/public/tests и /topics/:slug/tests', () 
 		['student', ['assigned']],
 		['stranger', []],
 		['allow_tests_read', ['assigned', 'free']],
+		['allow_tests_read_no_zone', []],
 		['admin_deny_tests_read', ['assigned']],
 	]
 

@@ -52,13 +52,19 @@ async function person(
 	return id
 }
 
-async function profile(name: string, roles: string[], grant?: boolean): Promise<void> {
+async function profile(name: string, roles: string[], grant?: boolean, zoneAll = false): Promise<void> {
 	const id = await seedUser(ctx, { login: name, roles, password: PASSWORD })
 	ids.set(name, id)
 	if (grant !== undefined) {
 		await ctx.pgPool.query(
 			"INSERT INTO rbac_user_grants (user_id, domain, action, allow) VALUES ($1, 'users', 'read', $2)",
 			[id, grant]
+		)
+	}
+	if (zoneAll) {
+		await ctx.pgPool.query(
+			"INSERT INTO rbac_user_grants (user_id, domain, action, allow) VALUES ($1, 'zone', 'all', true)",
+			[id]
 		)
 	}
 	const reply = await login(ctx, name, PASSWORD)
@@ -75,7 +81,8 @@ beforeAll(async () => {
 	ctx = await startAuthApp('test_users_directory')
 	await profile('dir_admin', ['admin'])
 	await profile('dir_user', ['user'])
-	await profile('dir_user_allow_users_read', ['user'], true)
+	await profile('dir_user_allow_users_read', ['user'], true, true)
+	await profile('dir_user_allow_users_read_no_zone', ['user'], true)
 	await profile('dir_admin_deny_users_read', ['admin'], false)
 
 	await person('ivanov', {
@@ -147,6 +154,13 @@ describe('матрица прав GET /api/users', () => {
 		for (const row of rows) {
 			for (const key of FULL_KEYS) assert.ok(key in row, `нет поля ${key}`)
 		}
+	})
+
+	test('user + allow users.read без zone.all → 200 без строк', async () => {
+		const reply = await call(ctx, 'GET', '/api/users?limit=500', { cookies: jar('dir_user_allow_users_read_no_zone') })
+		assert.equal(reply.status, 200)
+		assert.deepEqual(reply.body.rows, [])
+		assert.deepEqual(reply.body.users, [])
 	})
 
 	test('admin + deny users.read → 403', async () => {

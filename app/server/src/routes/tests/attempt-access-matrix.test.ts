@@ -11,7 +11,13 @@ import {
 } from '../../test-support/attempt-world.js'
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 
-type Profile = 'admin' | 'student' | 'stranger' | 'allow_tests_read' | 'admin_deny_tests_read'
+type Profile =
+	| 'admin'
+	| 'student'
+	| 'stranger'
+	| 'allow_tests_read'
+	| 'allow_tests_read_no_zone'
+	| 'admin_deny_tests_read'
 
 type TestKey = 'assigned' | 'free'
 
@@ -27,6 +33,15 @@ const PROFILES: Array<{ name: Profile; roles: string[]; grants: Grant[]; assigne
 	{ name: 'stranger', roles: ['user'], grants: [], assigned: false },
 	{
 		name: 'allow_tests_read',
+		roles: ['user'],
+		grants: [
+			{ domain: 'tests', action: 'read', allow: true },
+			{ domain: 'zone', action: 'all', allow: true },
+		],
+		assigned: false,
+	},
+	{
+		name: 'allow_tests_read_no_zone',
 		roles: ['user'],
 		grants: [{ domain: 'tests', action: 'read', allow: true }],
 		assigned: false,
@@ -48,6 +63,7 @@ const EXPECTED: Array<[Profile, TestKey, number]> = [
 	['stranger', 'free', 403],
 	['allow_tests_read', 'assigned', 200],
 	['allow_tests_read', 'free', 200],
+	['allow_tests_read_no_zone', 'free', 403],
 	['admin_deny_tests_read', 'assigned', 200],
 	['admin_deny_tests_read', 'free', 403],
 ]

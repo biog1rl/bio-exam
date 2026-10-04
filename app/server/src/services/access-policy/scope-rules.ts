@@ -99,13 +99,53 @@ export function createAccessScope(check: PermissionCheck, zones: ZoneLoader): Ac
 		}
 	}
 
+	async function topicInZone(req: Request, userId: string, topicId: string | null): Promise<boolean> {
+		if (topicId === null) return false
+		return (await myTopicIds(req, userId)).includes(topicId)
+	}
+
+	async function zoned(
+		req: Request,
+		key: PermissionKey,
+		inZone: (userId: string) => Promise<boolean>
+	): Promise<boolean> {
+		const userId = req.authUser?.id
+		if (!userId) return false
+		if (!(await check(req, key))) return false
+		if (await check(req, 'zone.all')) return true
+		return inZone(userId)
+	}
+
+	const canReadTest = (req: Request, testId: string) =>
+		zoned(req, 'tests.read', async (userId) => topicInZone(req, userId, await zones.topicOfTest(testId)))
+
+	const canWriteTest = (req: Request, testId: string) =>
+		zoned(req, 'tests.write', async (userId) => topicInZone(req, userId, await zones.topicOfTest(testId)))
+
+	const canWriteTopic = (req: Request, topicId: string) =>
+		zoned(req, 'tests.write', (userId) => topicInZone(req, userId, topicId))
+
+	const canReviewAttempt = (req: Request, attemptId: string) =>
+		zoned(req, 'tests.read', async (userId) => topicInZone(req, userId, await zones.topicOfAttempt(attemptId)))
+
+	const canReadUser = (req: Request, targetId: string) =>
+		zoned(req, 'users.read', (userId) => zones.isMemberOfOwnedGroup(userId, targetId))
+
+	async function testScope(req: Request): Promise<TestScope> {
+		const userId = req.authUser?.id
+		if (!userId) return { all: false, topicIds: [] }
+		if (!(await check(req, 'tests.read'))) return { all: false, topicIds: [] }
+		if (await check(req, 'zone.all')) return { all: true }
+		return { all: false, topicIds: [...(await myTopicIds(req, userId))] }
+	}
+
 	return {
-		canReadTest: (req, _testId) => check(req, 'tests.read'),
-		canWriteTest: (req, _testId) => check(req, 'tests.write'),
-		canWriteTopic: (req, _topicId) => check(req, 'tests.write'),
-		canReadUser: (req, _userId) => check(req, 'users.read'),
-		canReviewAttempt: (req, _attemptId) => check(req, 'tests.read'),
-		testScope: async (req) => ((await check(req, 'tests.read')) ? { all: true } : { all: false, topicIds: [] }),
+		canReadTest,
+		canWriteTest,
+		canWriteTopic,
+		canReadUser,
+		canReviewAttempt,
+		testScope,
 		canManageCatalog: async (req) => {
 			if (!req.authUser?.id) return false
 			return (await check(req, 'tests.write')) && (await check(req, 'zone.all'))

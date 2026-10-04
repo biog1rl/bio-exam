@@ -57,9 +57,10 @@ beforeAll(async () => {
 	await db
 		.insert(schema.tests)
 		.values({ topicId: topic.id, slug: 'defects-free', title: 'Тест без назначения', isPublished: true })
-	await db
-		.insert(schema.rbacUserGrants)
-		.values({ userId: userId('defect_d4_grantee'), domain: 'tests', action: 'read', allow: true })
+	await db.insert(schema.rbacUserGrants).values([
+		{ userId: userId('defect_d4_grantee'), domain: 'tests', action: 'read', allow: true },
+		{ userId: userId('defect_d4_grantee'), domain: 'zone', action: 'all', allow: true },
+	])
 }, 60_000)
 
 afterAll(async () => {
