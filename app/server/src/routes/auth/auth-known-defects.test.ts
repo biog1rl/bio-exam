@@ -3,13 +3,7 @@ import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 
-const KNOWN_DEFECTS = new Set([
-	'AUTH-02-role-removed',
-	'AUTH-03-d4-allow',
-	'AUTH-04-logout',
-	'AUTH-05-parallel-refresh',
-	'AUTH-06-foreign-ip',
-])
+const KNOWN_DEFECTS = new Set(['AUTH-04-logout', 'AUTH-05-parallel-refresh', 'AUTH-06-foreign-ip'])
 
 const PASSWORD = 'defects-password-1'
 const ATTACKER_IP = '203.0.113.10'
@@ -49,6 +43,7 @@ beforeAll(async () => {
 	const seeds: Array<[string, string[]]> = [
 		['defect_db_probe', ['admin']],
 		['defect_db_admin', ['admin']],
+		['defect_session_db_user', ['user']],
 		['defect_role_admin', ['admin']],
 		['defect_d4_admin', ['admin']],
 		['defect_d4_grantee', ['user']],
@@ -119,21 +114,39 @@ describe('AUTH-02-role-removed: снятие роли после входа', ()
 		adminJar = admin.jar
 	})
 
-	defectTest(
-		'AUTH-02-role-removed',
-		'после снятия роли admin в user_roles следующий запрос получает 403 — исправляется в 04-05',
-		async () => {
-			const jar = required(adminJar, 'admin session')
-			const id = userId('defect_role_admin')
-			await ctx.pgPool.query("DELETE FROM user_roles WHERE user_id = $1 AND role_key = 'admin'", [id])
-			await ctx.pgPool.query("INSERT INTO user_roles (user_id, role_key) VALUES ($1, 'user') ON CONFLICT DO NOTHING", [
-				id,
-			])
-			const roles = await call(ctx, 'GET', '/api/rbac/roles', { cookies: jar })
-			const settings = await call(ctx, 'GET', '/api/settings/chart-default-range', { cookies: jar })
-			assert.deepEqual([roles.status, settings.status], [403, 403])
+	test('AUTH-02-role-removed: после снятия роли admin в user_roles следующий запрос получает 403', async () => {
+		const jar = required(adminJar, 'admin session')
+		const id = userId('defect_role_admin')
+		await ctx.pgPool.query("DELETE FROM user_roles WHERE user_id = $1 AND role_key = 'admin'", [id])
+		await ctx.pgPool.query("INSERT INTO user_roles (user_id, role_key) VALUES ($1, 'user') ON CONFLICT DO NOTHING", [
+			id,
+		])
+		const roles = await call(ctx, 'GET', '/api/rbac/roles', { cookies: jar })
+		const settings = await call(ctx, 'GET', '/api/settings/chart-default-range', { cookies: jar })
+		assert.deepEqual([roles.status, settings.status], [403, 403])
+	})
+})
+
+describe('ошибка БД при проверке сессии', () => {
+	let userJar: CookieJar | null = null
+
+	test('подготовка: вход прошёл, /api/auth/me отвечает 200', async () => {
+		const user = await login(ctx, 'defect_session_db_user', PASSWORD)
+		assert.equal(user.status, 200)
+		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: user.jar })).status, 200)
+		userJar = user.jar
+	})
+
+	test('при недоступной users /api/auth/me с действующей cookie отвечает 500, а не 401', async () => {
+		const jar = required(userJar, 'user session')
+		await ctx.pgPool.query('ALTER TABLE users RENAME TO users_off')
+		try {
+			const me = await call(ctx, 'GET', '/api/auth/me', { cookies: jar })
+			assert.equal(me.status, 500)
+		} finally {
+			await ctx.pgPool.query('ALTER TABLE users_off RENAME TO users')
 		}
-	)
+	})
 })
 
 describe('AUTH-03-d4-allow: allow tests.read без назначения', () => {
@@ -156,17 +169,13 @@ describe('AUTH-03-d4-allow: allow tests.read без назначения', () =>
 		granteeJar = grantee.jar
 	})
 
-	defectTest(
-		'AUTH-03-d4-allow',
-		'пользователь с allow tests.read без назначения получает тест 200 — исправляется в 04-05',
-		async () => {
-			const jar = required(granteeJar, 'grantee session')
-			const reply = await call(ctx, 'GET', `/api/tests/public/topics/${topicSlug}/tests/defects-free`, {
-				cookies: jar,
-			})
-			assert.equal(reply.status, 200)
-		}
-	)
+	test('AUTH-03-d4-allow: пользователь с allow tests.read без назначения получает тест 200', async () => {
+		const jar = required(granteeJar, 'grantee session')
+		const reply = await call(ctx, 'GET', `/api/tests/public/topics/${topicSlug}/tests/defects-free`, {
+			cookies: jar,
+		})
+		assert.equal(reply.status, 200)
+	})
 })
 
 describe('AUTH-04-logout: access-токен после выхода', () => {

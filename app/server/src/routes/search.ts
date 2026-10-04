@@ -28,7 +28,6 @@ router.get('/', sessionRequired(), async (req, res, next) => {
 			limit: parsed.data.limit,
 			access: {
 				userId: user.id,
-				roles: access.roles,
 				permissions: access.permissions,
 			},
 		})

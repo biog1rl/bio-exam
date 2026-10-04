@@ -8,6 +8,7 @@ import { z } from 'zod'
 
 import { db } from '../db/index.js'
 import { appSettings } from '../db/schema.js'
+import { requirePerm } from '../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../middleware/auth/session.js'
 
 const router = Router()
@@ -17,14 +18,8 @@ const CHART_RANGE_KEY = 'chart_default_range'
 const ChartRangeValueSchema = z.enum(['week', 'month', 'all'])
 
 // GET /api/settings/chart-default-range
-router.get('/chart-default-range', sessionRequired(), async (req, res, next) => {
+router.get('/chart-default-range', sessionRequired(), requirePerm('settings', 'manage'), async (req, res, next) => {
 	try {
-		const userId = req.authUser?.id
-		if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-		const isAdmin = req.authUser?.roles?.includes('admin') ?? false
-		if (!isAdmin) return res.status(403).json({ error: 'Forbidden' })
-
 		let row: { value: string } | undefined
 		try {
 			row = await db.query.appSettings.findFirst({
@@ -43,14 +38,8 @@ router.get('/chart-default-range', sessionRequired(), async (req, res, next) => 
 })
 
 // PUT /api/settings/chart-default-range
-router.put('/chart-default-range', sessionRequired(), async (req, res, next) => {
+router.put('/chart-default-range', sessionRequired(), requirePerm('settings', 'manage'), async (req, res, next) => {
 	try {
-		const userId = req.authUser?.id
-		if (!userId) return res.status(401).json({ error: 'Unauthorized' })
-
-		const isAdmin = req.authUser?.roles?.includes('admin') ?? false
-		if (!isAdmin) return res.status(403).json({ error: 'Forbidden' })
-
 		const parsed = z.object({ value: ChartRangeValueSchema }).safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })

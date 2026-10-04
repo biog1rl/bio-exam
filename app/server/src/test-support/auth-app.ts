@@ -29,7 +29,7 @@ export type Reply = {
 	headers: Headers
 }
 
-const ENV_KEYS = ['TEST_DATABASE_URL', 'AUTH_SESSION_ENFORCE_DB'] as const
+const ENV_KEYS = ['TEST_DATABASE_URL'] as const
 
 let ipCounter = 0
 
@@ -46,7 +46,6 @@ export async function startAuthApp(prefix: string): Promise<AuthApp> {
 	try {
 		await migrateTestDatabase(scratch.url)
 		process.env.TEST_DATABASE_URL = scratch.url
-		process.env.AUTH_SESSION_ENFORCE_DB = '1'
 		vi.resetModules()
 		const app = (await import('../app.js')).default
 		const dbModule: DbModule = await import('../db/index.js')

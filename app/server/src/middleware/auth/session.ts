@@ -1,16 +1,13 @@
-import { normaliseRoleKeys, type RoleKey } from '@bio-exam/rbac'
-
 import { eq } from 'drizzle-orm'
 import { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 
 import { AUTH_CONFIG } from '../../config/auth.js'
 import { db } from '../../db/index.js'
-import { userRoles, users } from '../../db/schema.js'
+import { users } from '../../db/schema.js'
 
 export type SessionUser = {
 	id: string
-	roles: RoleKey[]
 	login?: string | null
 }
 
@@ -58,66 +55,50 @@ export function clearSessionCookie(res: Response) {
 	res.setHeader('Set-Cookie', parts.join('; '))
 }
 
-type JwtPayload = { sub: string; roles?: string[] } // роли в токене могут быть строками
-type JwtPayloadExt = JwtPayload & { login?: string | null }
+type JwtPayload = { sub?: string }
 
-const enforceDbSessionCheck = process.env.AUTH_SESSION_ENFORCE_DB === '1' || process.env.NODE_ENV === 'production'
+function verifiedUserId(token: string): string | null {
+	try {
+		const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
+		return typeof payload.sub === 'string' && payload.sub ? payload.sub : null
+	} catch {
+		return null
+	}
+}
 
 export function sessionOptional() {
 	return async (req: Request, _res: Response, next: NextFunction) => {
+		const token = readCookie(req, COOKIE)
+		const userId = token ? verifiedUserId(token) : null
+		if (!userId) {
+			req.authUser = null
+			return next()
+		}
+
 		try {
-			const token = readCookie(req, COOKIE)
-			if (!token) {
-				req.authUser = null
-				return next()
-			}
-
-			const payload = jwt.verify(token, JWT_SECRET) as JwtPayloadExt
-			const userId = payload.sub
-			if (!userId) {
-				req.authUser = null
-				return next()
-			}
-
-			const jwtRoles = payload.roles ? normaliseRoleKeys(payload.roles) : []
-			if (!enforceDbSessionCheck) {
-				req.authUser = { id: userId, roles: jwtRoles, login: payload.login ?? null }
-				return next()
-			}
-
-			const [u, rs] = await Promise.all([
-				db.query.users.findFirst({ where: eq(users.id, userId) }),
-				db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId)),
-			])
+			const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
 			if (!u || !u.isActive) {
 				req.authUser = null
 				return next()
 			}
 
-			// Роли из БД -> нормализуем в RoleKey[]
-			const dbRoles = normaliseRoleKeys(rs.map((r) => r.role as string))
-			const rolesSet = new Set<RoleKey>([...dbRoles, ...jwtRoles])
-			const roles: RoleKey[] = Array.from(rolesSet)
-
-			req.authUser = { id: userId, roles, login: u.login }
-			next()
-		} catch {
-			req.authUser = null
-			next()
+			req.authUser = { id: userId, login: u.login }
+		} catch (error) {
+			return next(error)
 		}
+		next()
 	}
 }
 
 export function sessionRequired() {
 	const opt = sessionOptional()
 	return async (req: Request, res: Response, next: NextFunction) => {
-		if (req.authUser !== undefined) {
+		const proceed = (error?: unknown) => {
+			if (error) return next(error)
 			if (!req.authUser) return res.status(401).json({ error: 'Unauthorized' })
-			return next()
+			next()
 		}
-
-		await opt(req, res, () => {})
-		if (!req.authUser) return res.status(401).json({ error: 'Unauthorized' })
-		next()
+		if (req.authUser !== undefined) return proceed()
+		await opt(req, res, proceed)
 	}
 }

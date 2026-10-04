@@ -28,6 +28,7 @@ import { ApiError } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
+import { hasPermission } from '../../services/access-policy/index.js'
 import { storageService } from '../../services/storage/storage.js'
 
 const router = Router()
@@ -149,7 +150,7 @@ router.get('/topics', async (_req, res, next) => {
 router.get('/tests', sessionRequired(), async (req, res, next) => {
 	try {
 		const userId = req.authUser!.id
-		const isAdmin = req.authUser!.roles?.includes('admin') ?? false
+		const canReadAll = await hasPermission(req, 'tests.read')
 
 		const baseQuery = db
 			.select({
@@ -171,7 +172,7 @@ router.get('/tests', sessionRequired(), async (req, res, next) => {
 			.where(eq(tests.isPublished, true))
 			.$dynamic()
 
-		const query = isAdmin
+		const query = canReadAll
 			? baseQuery
 			: baseQuery.innerJoin(
 					testAssignments,
@@ -193,7 +194,7 @@ router.get('/topics/:slug/tests', sessionRequired(), async (req, res, next) => {
 	try {
 		const { slug } = req.params as { slug: string }
 		const userId = req.authUser!.id
-		const isAdmin = req.authUser!.roles?.includes('admin') ?? false
+		const canReadAll = await hasPermission(req, 'tests.read')
 
 		const topic = await db.query.topics.findFirst({
 			where: and(eq(topics.slug, slug), eq(topics.isActive, true)),
@@ -218,7 +219,7 @@ router.get('/topics/:slug/tests', sessionRequired(), async (req, res, next) => {
 			.where(and(eq(tests.topicId, topic.id), eq(tests.isPublished, true)))
 			.$dynamic()
 
-		const query = isAdmin
+		const query = canReadAll
 			? baseQuery
 			: baseQuery.innerJoin(
 					testAssignments,
@@ -298,10 +299,10 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 			return res.status(404).json({ error: 'Test not found' })
 		}
 
-		// Проверить что тест назначен текущему пользователю (или пользователь — admin/teacher)
+		// Проверить что тест назначен текущему пользователю (или у пользователя есть право tests.read)
 		const userId = req.authUser!.id
-		const isAdmin = req.authUser!.roles?.some((r) => ['admin', 'teacher'].includes(r)) ?? false
-		if (!isAdmin) {
+		const canReadAll = await hasPermission(req, 'tests.read')
+		if (!canReadAll) {
 			const assignment = await withTransientDbRetry('public test assignment check', () =>
 				db
 					.select()
@@ -404,10 +405,10 @@ router.get('/tests/:id', validateUUID('id'), sessionRequired(), async (req, res,
 			return res.status(404).json({ error: 'Test not found' })
 		}
 
-		// Проверить что тест назначен текущему пользователю (или пользователь — admin/teacher)
+		// Проверить что тест назначен текущему пользователю (или у пользователя есть право tests.read)
 		const userId2 = req.authUser!.id
-		const isAdmin2 = req.authUser!.roles?.some((r) => ['admin', 'teacher'].includes(r)) ?? false
-		if (!isAdmin2) {
+		const canReadAll2 = await hasPermission(req, 'tests.read')
+		if (!canReadAll2) {
 			const assignment = await db
 				.select()
 				.from(testAssignments)

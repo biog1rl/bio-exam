@@ -62,7 +62,7 @@ export default defineConfig({
 	webServer: [
 		{
 			// Express: development только здесь (Pitfall 12: cookie без Secure по HTTP),
-			// проверка сессий и RBAC в БД включена явно, как в production
+			// проверка сессий и прав в БД работает всегда, как в production
 			command: 'yarn workspace @bio-exam/server tsx src/index.ts',
 			cwd: REPO_ROOT,
 			url: `${apiOrigin}/healthz`,
@@ -70,8 +70,6 @@ export default defineConfig({
 				NODE_ENV: 'development',
 				PORT: String(apiPort),
 				ALLOWED_ORIGIN: webOrigin,
-				AUTH_SESSION_ENFORCE_DB: '1',
-				RBAC_USE_DB_OVERRIDES: '1',
 				BIO_EXAM_ISOLATED_ENV: '1',
 			},
 			reuseExistingServer: false,

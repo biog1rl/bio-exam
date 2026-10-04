@@ -1,4 +1,4 @@
-import type { PermissionKey, RoleKey } from '@bio-exam/rbac'
+import type { PermissionKey } from '@bio-exam/rbac'
 
 import { pgPool } from '../../db/index.js'
 import { transliterate } from '../../lib/transliterate.js'
@@ -32,7 +32,6 @@ export type SearchResponse = {
 
 type SearchAccess = {
 	userId: string
-	roles: RoleKey[]
 	permissions: ReadonlySet<PermissionKey>
 }
 
@@ -80,11 +79,7 @@ function queryAlt(query: string): string {
 }
 
 function isPrivileged(access: SearchAccess): boolean {
-	return (
-		access.roles.includes('admin') ||
-		access.permissions.has('tests.write') ||
-		access.permissions.has('groups.manage_groups')
-	)
+	return access.permissions.has('tests.write') || access.permissions.has('groups.manage_groups')
 }
 
 function canRunScope(scope: Exclude<SearchScope, 'all'>, access: SearchAccess): boolean {
