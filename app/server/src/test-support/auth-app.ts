@@ -39,12 +39,19 @@ export function nextIp(): string {
 	return `198.${18 + Math.floor(third / 256)}.${third % 256}.${(ipCounter % 250) + 1}`
 }
 
-export async function startAuthApp(prefix: string): Promise<AuthApp> {
+export type StartAuthAppOptions = {
+	env?: Record<string, string>
+}
+
+export async function startAuthApp(prefix: string, options: StartAuthAppOptions = {}): Promise<AuthApp> {
 	requireTestDatabaseUrl()
 	const scratch = await createScratchDatabase(prefix)
-	const previous = new Map<string, string | undefined>(ENV_KEYS.map((key) => [key, process.env[key]]))
+	const extraEnv = options.env ?? {}
+	const keys = new Set<string>([...ENV_KEYS, ...Object.keys(extraEnv)])
+	const previous = new Map<string, string | undefined>(Array.from(keys, (key) => [key, process.env[key]]))
 	try {
 		await migrateTestDatabase(scratch.url)
+		for (const [key, value] of Object.entries(extraEnv)) process.env[key] = value
 		process.env.TEST_DATABASE_URL = scratch.url
 		vi.resetModules()
 		const app = (await import('../app.js')).default

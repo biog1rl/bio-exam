@@ -23,6 +23,8 @@ import { canReadTest, testScope } from '../../services/access-policy/index.js'
 import {
 	checkAttemptAccess,
 	isAssignedOrPrivileged,
+	saveSessionDraft,
+	startAttemptSession,
 	visibleTestsFilter,
 } from '../../services/attempt-sessions/index.js'
 import { storageService } from '../../services/storage/storage.js'
@@ -523,34 +525,7 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 
-		// Return existing open session or create new one
-		const existing = await db.query.testSessions.findFirst({
-			where: and(eq(testSessions.testId, testId), eq(testSessions.userId, userId), isNull(testSessions.submittedAt)),
-			orderBy: [desc(testSessions.startedAt)],
-		})
-
-		if (existing) {
-			return res.json({
-				startedAt: existing.startedAt.toISOString(),
-				sessionId: existing.id,
-				draftAnswers: existing.draftAnswers ?? null,
-				draftLastQuestionId: existing.draftLastQuestionId ?? null,
-				draftTelemetry: existing.draftTelemetry ?? null,
-			})
-		}
-
-		const [session] = await db
-			.insert(testSessions)
-			.values({ testId, userId })
-			.returning({ id: testSessions.id, startedAt: testSessions.startedAt })
-
-		res.json({
-			startedAt: session.startedAt.toISOString(),
-			sessionId: session.id,
-			draftAnswers: null,
-			draftLastQuestionId: null,
-			draftTelemetry: null,
-		})
+		res.json(await startAttemptSession({ testId, userId, timeLimitMinutes: access.test.timeLimitMinutes }))
 	} catch (e) {
 		next(e)
 	}
@@ -594,36 +569,17 @@ router.patch(
 			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 			if (!access.ok) return denyAttemptAccess(res, access.status)
 
-			// Подтвердить что сессия принадлежит пользователю и ещё не submit-нута
-			const session = await db.query.testSessions.findFirst({
-				where: and(
-					eq(testSessions.id, sessionId),
-					eq(testSessions.testId, testId),
-					eq(testSessions.userId, userId),
-					isNull(testSessions.submittedAt)
-				),
+			const saved = await saveSessionDraft({
+				testId,
+				userId,
+				testSessionId: sessionId,
+				questionId,
+				value,
+				telemetry,
 			})
-			if (!session) {
+			if (saved === 'not_found') {
 				return res.status(404).json({ error: 'Session not found or already submitted' })
 			}
-
-			// Immutable merge: строим новый объект draft вместо мутации
-			const existingDraft =
-				session.draftAnswers && typeof session.draftAnswers === 'object' && !Array.isArray(session.draftAnswers)
-					? (session.draftAnswers as Record<string, unknown>)
-					: {}
-			const nextDraft =
-				questionId !== undefined && value !== undefined ? { ...existingDraft, [questionId]: value } : existingDraft
-			const nextTelemetry = mergeTelemetryMaps(session.draftTelemetry, telemetry)
-
-			await db
-				.update(testSessions)
-				.set({
-					...(questionId !== undefined ? { draftAnswers: nextDraft, draftLastQuestionId: questionId } : {}),
-					...(telemetry !== undefined ? { draftTelemetry: nextTelemetry } : {}),
-					draftUpdatedAt: new Date(),
-				})
-				.where(eq(testSessions.id, sessionId))
 
 			res.json({ ok: true })
 		} catch (e) {
