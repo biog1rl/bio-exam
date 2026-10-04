@@ -93,13 +93,3 @@ export function rateLimiter(options: RateLimiterOptions = {}) {
 		next()
 	}
 }
-
-/**
- * Преднастроенный rate limiter для эндпоинта логина
- * 5 попыток в минуту на IP
- */
-export const loginRateLimiter = rateLimiter({
-	maxAttempts: 5,
-	windowMs: 60 * 1000,
-	keyPrefix: 'login',
-})

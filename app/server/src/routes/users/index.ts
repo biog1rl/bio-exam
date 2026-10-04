@@ -26,6 +26,7 @@ import { PatchUserSchema } from '../../schemas/users.js'
 import { revokeUserSessions } from '../../services/session/index.js'
 import type { UserRow } from '../../types/db/users.js'
 import avatarRouter from './avatar.js'
+import loginThrottleRouter from './login-throttle.js'
 import profileRouter from './profile.js'
 import sessionsRouter from './sessions.js'
 
@@ -35,6 +36,7 @@ const router = Router()
 router.use('/profile', profileRouter)
 router.use('/avatar', avatarRouter)
 router.use('/', sessionsRouter)
+router.use('/', loginThrottleRouter)
 
 // GET /api/users — JWT + RBAC ('users.read')
 router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res, next) => {

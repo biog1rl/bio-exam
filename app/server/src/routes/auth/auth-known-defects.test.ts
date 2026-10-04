@@ -3,8 +3,6 @@ import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 
-const KNOWN_DEFECTS = new Set(['AUTH-06-foreign-ip'])
-
 const PASSWORD = 'defects-password-1'
 const ATTACKER_IP = '203.0.113.10'
 const OWNER_IP = '198.51.100.20'
@@ -12,12 +10,6 @@ const OWNER_IP = '198.51.100.20'
 let ctx: AuthApp
 let topicSlug = ''
 const ids = new Map<string, string>()
-
-function defectTest(id: string, title: string, fn: () => Promise<void>): void {
-	const name = `${id}: ${title}`
-	if (KNOWN_DEFECTS.has(id)) test.fails(name, fn)
-	else test(name, fn)
-}
 
 function userId(name: string): string {
 	const id = ids.get(name)
@@ -191,7 +183,7 @@ describe('AUTH-04-logout: access-токен после выхода', () => {
 		assert.ok(oldSession)
 	})
 
-	defectTest('AUTH-04-logout', 'после выхода старый bio_exam_session получает 401 на /api/auth/me', async () => {
+	test('AUTH-04-logout: после выхода старый bio_exam_session получает 401 на /api/auth/me', async () => {
 		const session = required(oldSession, 'old session')
 		const reply = await call(ctx, 'GET', '/api/auth/me', { cookies: `bio_exam_session=${session}` })
 		assert.equal(reply.status, 401)
@@ -234,12 +226,8 @@ describe('AUTH-06-foreign-ip: неудачи с чужого IP', () => {
 		}
 	})
 
-	defectTest(
-		'AUTH-06-foreign-ip',
-		'владелец входит с другого IP верным паролем 200 после пяти чужих неудач — исправляется в 04-08',
-		async () => {
-			const reply = await login(ctx, 'defect_lock_owner', PASSWORD, { ip: OWNER_IP })
-			assert.equal(reply.status, 200)
-		}
-	)
+	test('AUTH-06-foreign-ip: владелец входит с другого IP верным паролем 200 после пяти чужих неудач', async () => {
+		const reply = await login(ctx, 'defect_lock_owner', PASSWORD, { ip: OWNER_IP })
+		assert.equal(reply.status, 200)
+	})
 })

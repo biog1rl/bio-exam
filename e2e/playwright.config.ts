@@ -5,8 +5,8 @@
  * собирает web с e2e API_ORIGIN и передаёт сюда окружение Next целиком в E2E_WEB_ENV.
  * Конфиг не выводит окружение web заново и не читает переменную живой базы по имени.
  *
- * Проекты: setup (вход каждого аккаунта со storageState один раз за прогон, лимит входа
- * 5 в минуту), chromium-desktop и chromium-mobile (оба зависят от setup).
+ * Проекты: setup (вход каждого аккаунта со storageState один раз за прогон; троттлинг считает
+ * только неудачные входы), chromium-desktop и chromium-mobile (оба зависят от setup).
  */
 import { defineConfig, devices } from '@playwright/test'
 

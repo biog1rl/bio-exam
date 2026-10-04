@@ -20,7 +20,6 @@ export const ERROR_MESSAGES = {
 	// Auth
 	INVALID_CREDENTIALS: 'Invalid credentials',
 	MISSING_CREDENTIALS: 'Missing credentials',
-	ACCOUNT_LOCKED: 'Account is locked. Try again later.',
 	ACCOUNT_NOT_ACTIVATED: 'Account is not activated',
 	UNAUTHORIZED: 'Unauthorized',
 	TOO_MANY_REQUESTS: 'Too many requests. Please try again later.',
