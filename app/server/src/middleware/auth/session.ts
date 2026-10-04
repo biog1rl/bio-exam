@@ -6,6 +6,7 @@ export type SessionUser = {
 	id: string
 	login?: string | null
 	sessionId: string
+	accessExpiresAt?: Date | null
 }
 
 declare module 'express-serve-static-core' {
@@ -25,7 +26,9 @@ export function sessionOptional() {
 
 		try {
 			const user = await loadSessionUser(claims.sessionId, claims.userId)
-			req.authUser = user ? { id: user.id, login: user.login, sessionId: claims.sessionId } : null
+			req.authUser = user
+				? { id: user.id, login: user.login, sessionId: claims.sessionId, accessExpiresAt: claims.expiresAt }
+				: null
 		} catch (error) {
 			return next(error)
 		}

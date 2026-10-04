@@ -23,15 +23,18 @@ import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { AssignTestSchema } from '../../schemas/assignments.js'
 import { PatchUserSchema } from '../../schemas/users.js'
+import { revokeUserSessions } from '../../services/session/index.js'
 import type { UserRow } from '../../types/db/users.js'
 import avatarRouter from './avatar.js'
 import profileRouter from './profile.js'
+import sessionsRouter from './sessions.js'
 
 const router = Router()
 
 // Подключаем роуты профиля
 router.use('/profile', profileRouter)
 router.use('/avatar', avatarRouter)
+router.use('/', sessionsRouter)
 
 // GET /api/users — JWT + RBAC ('users.read')
 router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res, next) => {
@@ -156,6 +159,10 @@ router.patch('/:id', validateUUID('id'), sessionRequired(), requirePerm('users',
 		await db.transaction(async (tx) => {
 			if (Object.keys(updates).length > 0) {
 				await tx.update(users).set(updates).where(eq(users.id, id))
+			}
+
+			if (body.isActive === false) {
+				await revokeUserSessions(id, { reason: 'deactivated' }, tx)
 			}
 
 			if (body.roles) {

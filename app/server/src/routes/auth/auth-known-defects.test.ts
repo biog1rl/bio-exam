@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 
-const KNOWN_DEFECTS = new Set(['AUTH-05-parallel-refresh', 'AUTH-06-foreign-ip'])
+const KNOWN_DEFECTS = new Set(['AUTH-06-foreign-ip'])
 
 const PASSWORD = 'defects-password-1'
 const ATTACKER_IP = '203.0.113.10'
@@ -209,25 +209,21 @@ describe('AUTH-05-parallel-refresh: два одновременных refresh', 
 		assert.equal(await countRefreshTokens(userId('defect_refresh_user')), 1)
 	})
 
-	defectTest(
-		'AUTH-05-parallel-refresh',
-		'два одновременных refresh одним токеном дают ровно одного преемника — исправляется в 04-07',
-		async () => {
-			const token = required(refreshToken, 'refresh token')
-			const cookies = `refresh_token=${token}`
-			const replies = await Promise.all([
-				call(ctx, 'POST', '/api/auth/refresh', { cookies }),
-				call(ctx, 'POST', '/api/auth/refresh', { cookies }),
-			])
-			assert.deepEqual(
-				replies.map((reply) => reply.status),
-				[200, 200]
-			)
-			assert.equal(await countRefreshTokens(userId('defect_refresh_user')), 2)
-			const issued = replies.filter((reply) => (reply.setCookies.get('refresh_token')?.value ?? '') !== '')
-			assert.equal(issued.length, 1)
-		}
-	)
+	test('AUTH-05-parallel-refresh: два одновременных refresh одним токеном дают ровно одного преемника', async () => {
+		const token = required(refreshToken, 'refresh token')
+		const cookies = `refresh_token=${token}`
+		const replies = await Promise.all([
+			call(ctx, 'POST', '/api/auth/refresh', { cookies }),
+			call(ctx, 'POST', '/api/auth/refresh', { cookies }),
+		])
+		assert.deepEqual(
+			replies.map((reply) => reply.status),
+			[200, 200]
+		)
+		assert.equal(await countRefreshTokens(userId('defect_refresh_user')), 2)
+		const issued = replies.filter((reply) => (reply.setCookies.get('refresh_token')?.value ?? '') !== '')
+		assert.equal(issued.length, 1)
+	})
 })
 
 describe('AUTH-06-foreign-ip: неудачи с чужого IP', () => {

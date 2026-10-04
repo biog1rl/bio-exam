@@ -110,7 +110,7 @@ router.post('/', async (req, res, next) => {
 		})
 		setSessionCookies(res, { accessToken: session.accessToken, refreshToken: session.refreshToken })
 
-		res.json({ ok: true })
+		res.json({ ok: true, accessExpiresAt: session.accessExpiresAt.toISOString() })
 	} catch (e) {
 		next(e)
 	}

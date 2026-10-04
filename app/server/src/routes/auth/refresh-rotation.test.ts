@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import assert from 'node:assert/strict'
-import { afterAll, beforeAll, describe, test } from 'vitest'
+import crypto from 'node:crypto'
+import { afterAll, beforeAll, describe, test, vi } from 'vitest'
 
 import { AUTH_CONFIG } from '../../config/auth.js'
 import {
@@ -84,6 +85,10 @@ function assertCleared(reply: Reply): void {
 	}
 }
 
+function hashOf(raw: string): string {
+	return crypto.createHash('sha256').update(raw).digest('hex')
+}
+
 function signLegacy(payload: Record<string, unknown>, expiresIn: number): string {
 	return jwt.sign(payload, AUTH_CONFIG.jwtSecret, { expiresIn })
 }
@@ -116,6 +121,12 @@ beforeAll(async () => {
 		'rot_claims',
 		'rot_revoked',
 		'rot_inactive',
+		'rot_window',
+		'rot_replay_late',
+		'rot_replay_successor',
+		'rot_replay_revoked',
+		'rot_parallel',
+		'rot_replay_log',
 	]) {
 		ids.set(name, await seedUser(ctx, { login: name, roles: ['user'], password: PASSWORD }))
 	}
@@ -222,14 +233,14 @@ describe('refresh: атомарный захват', () => {
 		assert.equal(sessionIdOf(mergeCookies(jar, reply.setCookies)), sid)
 	})
 
-	test('два refresh одним токеном последовательно: 200, затем 401; в сессии ровно два токена', async () => {
+	test('два refresh одним токеном последовательно: оба 200, второй без нового refresh; в сессии ровно два токена', async () => {
 		const jar = await signIn('rot_sequential')
 		const sid = sessionIdOf(jar)
 		const cookies = `${REFRESH}=${jar.get(REFRESH)}`
 		const first = await call(ctx, 'POST', '/api/auth/refresh', { cookies })
 		const second = await call(ctx, 'POST', '/api/auth/refresh', { cookies })
-		assert.deepEqual([first.status, second.status], [200, 401])
-		assert.equal(second.setCookies.size, 0)
+		assert.deepEqual([first.status, second.status], [200, 200])
+		assert.equal(second.setCookies.has(REFRESH), false)
 		assert.equal((await sessionTokens(sid)).length, 2)
 	})
 
@@ -318,5 +329,150 @@ describe('проверка access-токена', () => {
 		assert.equal(reply.status, 401)
 		assert.equal(reply.setCookies.size, 0)
 		assert.equal((await tokenRow(raw))?.used_at, null)
+	})
+})
+
+async function countSessionTokens(sessionId: string): Promise<number> {
+	return (await sessionTokens(sessionId)).length
+}
+
+async function shiftUsedAt(raw: string, seconds: number): Promise<void> {
+	const result = await ctx.pgPool.query(
+		"UPDATE refresh_tokens SET used_at = used_at - make_interval(secs => $2) WHERE token_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex') AND used_at IS NOT NULL",
+		[raw, seconds]
+	)
+	assert.equal(result.rowCount, 1)
+}
+
+async function rotate(raw: string): Promise<Reply> {
+	return call(ctx, 'POST', '/api/auth/refresh', { cookies: `${REFRESH}=${raw}` })
+}
+
+function refreshOf(reply: Reply): string {
+	const value = reply.setCookies.get(REFRESH)?.value
+	assert.ok(value, 'no refresh token in reply')
+	return value
+}
+
+describe('refresh: окно гонки и replay', () => {
+	test('повтор захваченного токена через 1 с: 200, только новый access той же сессии, новых токенов нет, сессия жива', async () => {
+		const jar = await signIn('rot_window')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		refreshOf(first)
+		await new Promise((resolve) => setTimeout(resolve, 1000))
+		const repeated = await rotate(t0)
+		assert.equal(repeated.status, 200)
+		assert.deepEqual(Array.from(repeated.setCookies.keys()), [ACCESS])
+		assert.equal(claimsOf(repeated.setCookies.get(ACCESS)?.value).sid, sid)
+		assert.equal(await countSessionTokens(sid), 2)
+		assert.equal((await sessionRow(sid))?.revoked_at, null)
+		const me = await call(ctx, 'GET', '/api/auth/me', { cookies: mergeCookies(new Map(), repeated.setCookies) })
+		assert.equal(me.status, 200)
+	})
+
+	test('повтор позже 30 с: 401, сессия отозвана с replay, преемник отозван; затем refresh преемником и access сессии 401', async () => {
+		const jar = await signIn('rot_replay_late')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const t1 = refreshOf(first)
+		const current = mergeCookies(jar, first.setCookies)
+		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: current })).status, 200)
+		await shiftUsedAt(t0, 31)
+		const replay = await rotate(t0)
+		assert.equal(replay.status, 401)
+		assert.equal(replay.setCookies.size, 0)
+		const session = await sessionRow(sid)
+		assert.ok(session?.revoked_at, 'session is not revoked')
+		assert.equal(session.revoke_reason, 'replay')
+		assert.ok((await tokenRow(t1))?.revoked_at, 'successor is not revoked')
+		assert.equal(await countSessionTokens(sid), 2)
+		assert.equal((await rotate(t1)).status, 401)
+		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: current })).status, 401)
+	})
+
+	test('повтор токена, у которого преемник уже использован: 401 и отзыв сессии с replay', async () => {
+		const jar = await signIn('rot_replay_successor')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const second = await rotate(refreshOf(first))
+		assert.equal(second.status, 200)
+		refreshOf(second)
+		await shiftUsedAt(t0, 5)
+		const replay = await rotate(t0)
+		assert.equal(replay.status, 401)
+		const session = await sessionRow(sid)
+		assert.ok(session?.revoked_at, 'session is not revoked')
+		assert.equal(session.revoke_reason, 'replay')
+		assert.ok((await sessionTokens(sid)).every((token) => token.revoked_at !== null))
+	})
+
+	test('повтор токена из отозванной сессии: 401 без новых строк и без смены причины отзыва', async () => {
+		const jar = await signIn('rot_replay_revoked')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const current = mergeCookies(jar, first.setCookies)
+		assert.equal((await call(ctx, 'POST', '/api/auth/logout', { cookies: current })).status, 200)
+		const replay = await rotate(t0)
+		assert.equal(replay.status, 401)
+		assert.equal(replay.setCookies.size, 0)
+		assert.equal(await countSessionTokens(sid), 2)
+		assert.equal((await sessionRow(sid))?.revoke_reason, 'logout')
+	})
+
+	test('пять параллельных refresh одним токеном: все 200, ровно один преемник и ровно один ответ с refresh_token', async () => {
+		const jar = await signIn('rot_parallel')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const replies = await Promise.all(Array.from({ length: 5 }, () => rotate(t0)))
+		assert.deepEqual(
+			replies.map((reply) => reply.status),
+			[200, 200, 200, 200, 200]
+		)
+		assert.equal(await countSessionTokens(sid), 2)
+		const issued = replies.filter((reply) => (reply.setCookies.get(REFRESH)?.value ?? '') !== '')
+		assert.equal(issued.length, 1)
+		for (const reply of replies) assert.equal(claimsOf(reply.setCookies.get(ACCESS)?.value).sid, sid)
+		assert.equal((await sessionRow(sid))?.revoked_at, null)
+	})
+
+	test('событие replay пишется через req.log.warn с userId и sessionId, без токена и хэша', async () => {
+		const { logger } = await import('../../lib/logger.js')
+		const jar = await signIn('rot_replay_log')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const t1 = refreshOf(first)
+		await shiftUsedAt(t0, 31)
+		const warn = vi.spyOn(logger, 'warn')
+		try {
+			const replay = await rotate(t0)
+			assert.equal(replay.status, 401)
+			const events = warn.mock.calls.filter(
+				([payload]) => typeof payload === 'object' && payload !== null && 'event' in payload
+			)
+			assert.equal(events.length, 1)
+			const [payload] = events[0] ?? []
+			assert.deepEqual(payload, { userId: userId('rot_replay_log'), sessionId: sid, event: 'refresh_replay' })
+			const logged = JSON.stringify(warn.mock.calls)
+			for (const secret of [t0, t1, hashOf(t0), hashOf(t1)]) assert.equal(logged.includes(secret), false)
+		} finally {
+			warn.mockRestore()
+		}
 	})
 })

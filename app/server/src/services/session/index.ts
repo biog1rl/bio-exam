@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm'
 
 import { AUTH_CONFIG } from '../../config/auth.js'
 import { db } from '../../db/index.js'
@@ -26,7 +26,20 @@ export type IssuedSession = {
 	refreshToken: string
 }
 
-export type RotationResult = { outcome: 'rejected' } | ({ outcome: 'rotated' } & IssuedSession)
+export type ReusedSession = {
+	userId: string
+	sessionId: string
+	accessToken: string
+	accessExpiresAt: Date
+}
+
+export type RotationResult =
+	| { outcome: 'rejected' }
+	| ({ outcome: 'rotated' } & IssuedSession)
+	| ({ outcome: 'reused' } & ReusedSession)
+	| { outcome: 'replay'; userId: string; sessionId: string }
+
+export const REFRESH_REUSE_WINDOW_MS = 30_000
 
 export type SessionUserRecord = { id: string; login: string | null }
 
@@ -104,18 +117,66 @@ export function openSession(input: {
 	})
 }
 
+type SessionOwner = { userId: string; sessionId: string; login: string | null }
+
+type CaptureOutcome =
+	| { kind: 'rotated'; owner: SessionOwner }
+	| { kind: 'reused'; owner: SessionOwner }
+	| { kind: 'replay'; userId: string; sessionId: string }
+	| { kind: 'rejected' }
+
+const reuseWindow = sql`now() - (${sql.raw(String(REFRESH_REUSE_WINDOW_MS))} * interval '1 millisecond')`
+
+async function classifyRepeat(tx: Tx, tokenHash: string): Promise<CaptureOutcome> {
+	const [token] = await tx
+		.select({
+			userId: refreshTokens.userId,
+			sessionId: refreshTokens.sessionId,
+			used: sql<boolean>`${refreshTokens.usedAt} IS NOT NULL`,
+			withinWindow: sql<boolean>`coalesce(${refreshTokens.usedAt} > ${reuseWindow}, false)`,
+			successorUsed: sql<boolean>`EXISTS (SELECT 1 FROM refresh_tokens successor WHERE successor.session_id = refresh_tokens.session_id AND successor.created_at > refresh_tokens.created_at AND successor.used_at IS NOT NULL)`,
+		})
+		.from(refreshTokens)
+		.where(
+			and(
+				eq(refreshTokens.tokenHash, tokenHash),
+				isNull(refreshTokens.revokedAt),
+				gt(refreshTokens.expiresAt, sql`now()`)
+			)
+		)
+		.limit(1)
+	if (!token || !token.sessionId || !token.used) return { kind: 'rejected' }
+
+	const [live] = await tx
+		.select({ login: users.login, active: users.isActive })
+		.from(authSessions)
+		.innerJoin(users, eq(users.id, authSessions.userId))
+		.where(
+			and(eq(authSessions.id, token.sessionId), eq(authSessions.userId, token.userId), isNull(authSessions.revokedAt))
+		)
+		.limit(1)
+	if (!live || !live.active) return { kind: 'rejected' }
+
+	if (token.withinWindow && !token.successorUsed) {
+		return { kind: 'reused', owner: { userId: token.userId, sessionId: token.sessionId, login: live.login } }
+	}
+	await revokeSession(token.sessionId, 'replay', tx)
+	return { kind: 'replay', userId: token.userId, sessionId: token.sessionId }
+}
+
 export function rotateRefreshToken(input: { raw: string; ip: string | null }): Promise<RotationResult> {
 	return guarded(async () => {
 		const successor = newRefreshToken()
-		let owner: { userId: string; sessionId: string; login: string | null } | null
+		const tokenHash = hashRefreshToken(input.raw)
+		let result: CaptureOutcome
 		try {
-			owner = await db.transaction(async (tx) => {
+			result = await db.transaction(async (tx): Promise<CaptureOutcome> => {
 				const [captured] = await tx
 					.update(refreshTokens)
 					.set({ usedAt: sql`now()` })
 					.where(
 						and(
-							eq(refreshTokens.tokenHash, hashRefreshToken(input.raw)),
+							eq(refreshTokens.tokenHash, tokenHash),
 							isNull(refreshTokens.usedAt),
 							isNull(refreshTokens.revokedAt),
 							gt(refreshTokens.expiresAt, sql`now()`)
@@ -126,7 +187,7 @@ export function rotateRefreshToken(input: { raw: string; ip: string | null }): P
 						userId: refreshTokens.userId,
 						sessionId: refreshTokens.sessionId,
 					})
-				if (!captured) return null
+				if (!captured) return classifyRepeat(tx, tokenHash)
 
 				let sessionId = captured.sessionId
 				if (!sessionId) {
@@ -161,14 +222,30 @@ export function rotateRefreshToken(input: { raw: string; ip: string | null }): P
 					.update(authSessions)
 					.set({ lastRefreshedAt: sql`now()` })
 					.where(eq(authSessions.id, sessionId))
-				return { userId: captured.userId, sessionId, login: user.login }
+				return { kind: 'rotated', owner: { userId: captured.userId, sessionId, login: user.login } }
 			})
 		} catch (error) {
 			if (error instanceof RotationRejected) return { outcome: 'rejected' }
 			throw error
 		}
-		if (!owner) return { outcome: 'rejected' }
-		return { outcome: 'rotated', ...issue(owner, successor.raw) }
+		switch (result.kind) {
+			case 'rotated':
+				return { outcome: 'rotated', ...issue(result.owner, successor.raw) }
+			case 'reused': {
+				const access = signAccessToken(result.owner)
+				return {
+					outcome: 'reused',
+					userId: result.owner.userId,
+					sessionId: result.owner.sessionId,
+					accessToken: access.token,
+					accessExpiresAt: access.expiresAt,
+				}
+			}
+			case 'replay':
+				return { outcome: 'replay', userId: result.userId, sessionId: result.sessionId }
+			case 'rejected':
+				return { outcome: 'rejected' }
+		}
 	})
 }
 
@@ -184,6 +261,31 @@ export function revokeSession(sessionId: string, reason: string, tx?: Tx): Promi
 			.set({ revokedAt: sql`now()` })
 			.where(and(eq(refreshTokens.sessionId, sessionId), isNull(refreshTokens.revokedAt)))
 		return revoked.length > 0
+	}
+	return guarded(() => (tx ? run(tx) : db.transaction(run)))
+}
+
+export function revokeUserSessions(
+	userId: string,
+	options: { exceptSessionId?: string; reason: string },
+	tx?: Tx
+): Promise<number> {
+	const run = async (executor: Tx): Promise<number> => {
+		const conditions = [eq(authSessions.userId, userId), isNull(authSessions.revokedAt)]
+		if (options.exceptSessionId) conditions.push(ne(authSessions.id, options.exceptSessionId))
+		const revoked = await executor
+			.update(authSessions)
+			.set({ revokedAt: sql`now()`, revokeReason: options.reason })
+			.where(and(...conditions))
+			.returning({ id: authSessions.id })
+		const sessionIds = revoked.map((row) => row.id)
+		if (sessionIds.length > 0) {
+			await executor
+				.update(refreshTokens)
+				.set({ revokedAt: sql`now()` })
+				.where(and(inArray(refreshTokens.sessionId, sessionIds), isNull(refreshTokens.revokedAt)))
+		}
+		return sessionIds.length
 	}
 	return guarded(() => (tx ? run(tx) : db.transaction(run)))
 }

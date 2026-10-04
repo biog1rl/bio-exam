@@ -11,10 +11,22 @@ router.post('/', async (req, res, next) => {
 		if (!raw) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 
 		const result = await rotateRefreshToken({ raw, ip: req.ip || req.socket.remoteAddress || null })
-		if (result.outcome !== 'rotated') return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
-
-		setSessionCookies(res, { accessToken: result.accessToken, refreshToken: result.refreshToken })
-		res.json({ ok: true })
+		switch (result.outcome) {
+			case 'rotated':
+				setSessionCookies(res, { accessToken: result.accessToken, refreshToken: result.refreshToken })
+				return res.json({ ok: true, accessExpiresAt: result.accessExpiresAt.toISOString() })
+			case 'reused':
+				setSessionCookies(res, { accessToken: result.accessToken })
+				return res.json({ ok: true, accessExpiresAt: result.accessExpiresAt.toISOString() })
+			case 'replay':
+				req.log?.warn?.(
+					{ userId: result.userId, sessionId: result.sessionId, event: 'refresh_replay' },
+					'refresh token replay, session revoked'
+				)
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+			default:
+				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
+		}
 	} catch (e) {
 		next(e)
 	}

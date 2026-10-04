@@ -41,6 +41,7 @@ router.get('/', async (req, res, next) => {
 				roles,
 				perms,
 			},
+			accessExpiresAt: u.accessExpiresAt?.toISOString() ?? null,
 		})
 	} catch (e) {
 		next(e)

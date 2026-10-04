@@ -7,6 +7,7 @@ import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
+import { revokeUserSessions } from '../../services/session/index.js'
 
 const router = Router()
 
@@ -148,7 +149,10 @@ router.post(
 			const newPasswordHash = await bcrypt.hash(newPassword, 10)
 
 			// Обновляем пароль
-			await db.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, userId))
+			await db.transaction(async (tx) => {
+				await tx.update(users).set({ passwordHash: newPasswordHash }).where(eq(users.id, userId))
+				await revokeUserSessions(userId, { exceptSessionId: req.authUser?.sessionId, reason: 'password_change' }, tx)
+			})
 
 			res.json({ message: 'Пароль успешно изменен' })
 		} catch (error: unknown) {
