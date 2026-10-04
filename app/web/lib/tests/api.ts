@@ -2,7 +2,6 @@ import type { AttemptView, SubmitAttemptRequest } from '@bio-exam/exam-core'
 
 import { apiFetch } from '../api-fetch'
 import type {
-	AttemptReviewData,
 	PublicTestDetail,
 	PublicTestListItem,
 	PublicTestQuestion,
@@ -168,10 +167,4 @@ export async function submitPublicTestAnswers(testId: string, request: SubmitAtt
 		method: 'POST',
 		body: JSON.stringify(request),
 	})
-}
-
-export async function fetchAttemptReview(attemptId: string) {
-	const res = await apiFetch(`/api/tests/admin/attempts/${attemptId}`)
-	if (!res.ok) throw new Error('Failed to fetch attempt')
-	return res.json() as Promise<{ attempt: AttemptReviewData; questions: PublicTestQuestion[] }>
 }

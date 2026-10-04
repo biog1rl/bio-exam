@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils/cn'
 
 import {
 	getChoiceReview,
+	getCorrectLines,
 	getMatchingReview,
 	getTextReview,
 	sequencePositionLabel,
@@ -29,6 +30,22 @@ const CHOICE_LABEL_CLASS: Record<ChoiceReviewModel['rows'][number]['tone'], stri
 	missed: 'bg-amber-100 text-amber-900',
 	wrong: 'bg-red-100 text-red-900',
 	neutral: null,
+}
+
+function CorrectAnswerCard({ lines, className }: { lines: string[]; className?: string }) {
+	return (
+		<div className={cn('rounded-2xl border border-green-500/40 bg-green-50/80 p-4 text-sm', className)}>
+			<p className="mb-2 font-medium">Правильный ответ</p>
+			{lines.map((line, index) => (
+				<p key={index}>{line}</p>
+			))}
+		</div>
+	)
+}
+
+function KeyCard(props: Props) {
+	const lines = getCorrectLines(props.question, props.view)
+	return lines ? <CorrectAnswerCard lines={lines} className="mt-4" /> : null
 }
 
 function ChoiceAnswerReview(props: Props) {
@@ -157,21 +174,28 @@ function TextAnswerReview(props: Props) {
 				{review.swapHint ? <p className="mt-1 text-xs">Соседняя перестановка считается одной ошибкой.</p> : null}
 				{review.cells ? <SequencePositionCells parts={review.cells} keyVisible={review.cellsKeyVisible} /> : null}
 			</div>
-			{review.correctLines ? (
-				<div className="rounded-2xl border border-green-500/40 bg-green-50/80 p-4 text-sm">
-					<p className="mb-2 font-medium">Правильный ответ</p>
-					{review.correctLines.map((line, index) => (
-						<p key={index}>{line}</p>
-					))}
-				</div>
-			) : null}
+			{review.correctLines ? <CorrectAnswerCard lines={review.correctLines} /> : null}
 		</div>
 	)
 }
 
 export function QuestionAnswerReview(props: Props) {
 	const template = props.question.questionUiTemplate
-	if (template === 'single_choice' || template === 'multi_choice') return <ChoiceAnswerReview {...props} />
-	if (template === 'matching') return <MatchingAnswerReview {...props} />
+	if (template === 'single_choice' || template === 'multi_choice') {
+		return (
+			<>
+				<ChoiceAnswerReview {...props} />
+				<KeyCard {...props} />
+			</>
+		)
+	}
+	if (template === 'matching') {
+		return (
+			<>
+				<MatchingAnswerReview {...props} />
+				<KeyCard {...props} />
+			</>
+		)
+	}
 	return <TextAnswerReview {...props} />
 }

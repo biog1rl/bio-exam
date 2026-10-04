@@ -17,8 +17,6 @@ import {
 	SUBMIT_ERROR_CODES,
 	SubmitAttemptErrorSchema,
 	SubmitAttemptRequestSchema,
-	SubmitResultItemSchema,
-	SubmitResultSchema,
 } from './attempt-result'
 
 const ATTEMPT = '11111111-1111-4111-8111-111111111111'
@@ -69,50 +67,6 @@ const rejectedAnswers: Array<{ name: string; value: unknown }> = [
 for (const row of rejectedAnswers) {
 	test(`AnswerValueSchema: отклоняет — ${row.name}`, () => {
 		assert.equal(AnswerValueSchema.safeParse(row.value).success, false)
-	})
-}
-
-test('SubmitResultSchema: принимает текущий ответ submit', () => {
-	assert.deepEqual(SubmitResultSchema.parse(validResult), validResult)
-})
-
-test('SubmitResultSchema: принимает пустой список results', () => {
-	assert.equal(SubmitResultSchema.safeParse({ ...validResult, results: [] }).success, true)
-})
-
-test('SubmitResultSchema: лишние поля не требуются и не ломают разбор', () => {
-	assert.equal(SubmitResultSchema.safeParse({ ...validResult, extra: 1 }).success, true)
-})
-
-test('SubmitResultItemSchema: принимает произвольные userAnswer и correctAnswer и текст пояснения', () => {
-	const item = {
-		...validItem,
-		userAnswer: { l1: 'r1' },
-		correctAnswer: ['a', 'b'],
-		explanationText: 'Пояснение',
-	}
-	assert.deepEqual(SubmitResultItemSchema.parse(item), item)
-})
-
-const rejectedResults: Array<{ name: string; value: unknown }> = [
-	{
-		name: 'элемент results без questionId',
-		value: { ...validResult, results: [{ ...validItem, questionId: undefined }] },
-	},
-	{ name: 'questionId не uuid', value: { ...validResult, results: [{ ...validItem, questionId: 'q1' }] } },
-	{ name: 'attemptId не uuid', value: { ...validResult, attemptId: 'x' } },
-	{ name: 'нет passed', value: { ...validResult, passed: undefined } },
-	{
-		name: 'explanationText не nullable-строка',
-		value: { ...validResult, results: [{ ...validItem, explanationText: 1 }] },
-	},
-	{ name: 'нет explanationText', value: { ...validResult, results: [{ ...validItem, explanationText: undefined }] } },
-	{ name: 'scorePercentage строкой', value: { ...validResult, scorePercentage: '100' } },
-]
-
-for (const row of rejectedResults) {
-	test(`SubmitResultSchema: отклоняет — ${row.name}`, () => {
-		assert.equal(SubmitResultSchema.safeParse(row.value).success, false)
 	})
 }
 
@@ -358,7 +312,6 @@ test('AttemptQuestionViewSchema: отклоняет вид без status и с �
 test('AttemptViewSchema: прежние поля submit плюс поля вида', () => {
 	const view = { ...validResult, results: [validQuestionView] }
 	assert.deepEqual(AttemptViewSchema.parse(view), view)
-	assert.equal(SubmitResultSchema.safeParse(view).success, true)
 	assert.equal(AttemptViewSchema.safeParse({ ...view, attemptId: 'x' }).success, false)
 	assert.equal(AttemptViewSchema.safeParse({ ...view, results: [validItem] }).success, false)
 })

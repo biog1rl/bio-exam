@@ -848,10 +848,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 										<QuestionAnswerReview
 											question={question}
 											studentAnswer={questionResult.userAnswer}
-											correctAnswer={test.showCorrectAnswer ? questionResult.correctAnswer : null}
-											isCorrect={questionResult.isCorrect}
-											earnedPoints={questionResult.earnedPoints}
-											showCorrectAnswer={test.showCorrectAnswer}
+											view={questionResult}
 										/>
 										{questionResult.explanationText ? (
 											<MdxRenderer

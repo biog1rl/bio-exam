@@ -1,8 +1,12 @@
 import {
+	allPartsCorrect,
 	BUILTIN_QUESTION_TYPES,
-	scoreQuestionByType,
+	questionStatus,
+	scoreQuestionFacts,
+	type AttemptQuestionView,
 	type QuestionUiTemplate,
 	type RuntimeQuestionTypeConfig,
+	type ScoreQuestionFactsResult,
 } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
@@ -123,30 +127,56 @@ const ROWS: Row[] = [
 
 type Viewer = 'admin' | 'student_with_key' | 'student_without_key'
 
-const VIEWERS: Record<
-	Viewer,
-	(key: unknown, isCorrect: boolean) => Pick<ReviewInput, 'correctAnswer' | 'showCorrectAnswer'>
-> = {
-	admin: (key) => ({ correctAnswer: key, showCorrectAnswer: true }),
-	student_with_key: (key, isCorrect) => ({ correctAnswer: isCorrect ? null : key, showCorrectAnswer: true }),
-	student_without_key: () => ({ correctAnswer: null, showCorrectAnswer: false }),
+type KeyDisclosure = Pick<AttemptQuestionView, 'keyVisible' | 'correctAnswer' | 'verdicts' | 'mistakes'>
+
+const VIEWERS: Record<Viewer, (fact: ScoreQuestionFactsResult) => KeyDisclosure> = {
+	admin: (fact) => ({ keyVisible: true, correctAnswer: fact.key, verdicts: fact.verdicts, mistakes: fact.mistakes }),
+	student_with_key: (fact) => ({
+		keyVisible: fact.key != null,
+		correctAnswer: fact.isCorrect ? null : fact.key,
+		verdicts: fact.verdicts,
+		mistakes: fact.mistakes,
+	}),
+	student_without_key: (fact) =>
+		fact.isCorrect
+			? {
+					keyVisible: false,
+					correctAnswer: null,
+					verdicts: fact.verdicts && allPartsCorrect(fact.verdicts) ? fact.verdicts : null,
+					mistakes: 0,
+				}
+			: { keyVisible: false, correctAnswer: null, verdicts: null, mistakes: null },
 }
 
 function score(row: Row) {
 	const q = QUESTIONS[row.template]
-	return scoreQuestionByType({
-		questionType: q.type,
+	return scoreQuestionFacts({
+		typeConfig: QUESTION_TYPES_MAP[q.type],
+		rawKey: row.key,
 		userAnswer: row.answer,
-		correctAnswer: row.key,
 		fallbackMaxPoints: q.points,
-		questionTypesMap: QUESTION_TYPES_MAP,
+		content: { options: q.options, matchingPairs: q.matchingPairs },
 	})
+}
+
+function viewFor(viewer: Viewer, row: Row, fact: ScoreQuestionFactsResult): AttemptQuestionView {
+	return {
+		questionId: QUESTIONS[row.template].id,
+		isCorrect: fact.isCorrect,
+		points: fact.points,
+		earnedPoints: fact.earnedPoints,
+		userAnswer: row.answer,
+		explanationText: null,
+		status: questionStatus(fact),
+		...VIEWERS[viewer](fact),
+	}
 }
 
 for (const viewer of Object.keys(VIEWERS) as Viewer[]) {
 	for (const row of ROWS) {
 		test(`${viewer} · ${row.template} · ${row.outcome}`, () => {
-			const { isCorrect, earnedPoints } = score(row)
+			const fact = score(row)
+			const { isCorrect, earnedPoints } = fact
 			if (row.outcome === 'верно') assert.equal(isCorrect, true)
 			if (row.outcome === 'частично') {
 				assert.equal(isCorrect, false)
@@ -159,9 +189,7 @@ for (const viewer of Object.keys(VIEWERS) as Viewer[]) {
 			const model = row.review({
 				question: QUESTIONS[row.template],
 				studentAnswer: row.answer,
-				isCorrect,
-				earnedPoints,
-				...VIEWERS[viewer](row.key, isCorrect),
+				view: viewFor(viewer, row, fact),
 			})
 			expect(model).toMatchSnapshot()
 		})

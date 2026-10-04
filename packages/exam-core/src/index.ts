@@ -47,8 +47,6 @@ export {
 	SUBMIT_ERROR_CODES,
 	SubmitAttemptErrorSchema,
 	SubmitAttemptRequestSchema,
-	SubmitResultItemSchema,
-	SubmitResultSchema,
 } from './attempt-result'
 export type {
 	AdminAttemptView,
@@ -61,8 +59,6 @@ export type {
 	ScoredQuestionFact,
 	SubmitAttemptError,
 	SubmitAttemptRequest,
-	SubmitResult,
-	SubmitResultItem,
 } from './attempt-result'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
 export type { QuestionKeyPayload, QuestionMatchingPairs, QuestionOption } from './content'

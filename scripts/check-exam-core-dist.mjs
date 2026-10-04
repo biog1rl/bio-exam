@@ -37,8 +37,6 @@ const EXPECTED_EXPORTS = [
 	'ScoringTierSchema',
 	'SubmitAttemptErrorSchema',
 	'SubmitAttemptRequestSchema',
-	'SubmitResultItemSchema',
-	'SubmitResultSchema',
 	'TEMPLATE_ADAPTERS',
 	'TelemetryMapSchema',
 	'allPartsCorrect',
