@@ -1,0 +1,2 @@
+ALTER TABLE "test_attempts" ADD COLUMN "results_version" smallint DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "test_attempts" ADD CONSTRAINT "test_attempts_results_version_check" CHECK ("test_attempts"."results_version" IN (1, 2));

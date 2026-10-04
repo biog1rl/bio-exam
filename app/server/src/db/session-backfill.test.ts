@@ -144,18 +144,20 @@ afterAll(async () => {
 })
 
 describe('0021_auth_sessions applied over existing refresh tokens', () => {
-	test('the real migrator applies only 0021 and records its manifest sha256', async () => {
-		assert.equal(await migrationCount(), 22)
+	test('the real migrator applies 0021 and the rest of the chain and records the manifest sha256 of 0021', async () => {
 		const manifest = JSON.parse(fs.readFileSync(path.join(MIGRATIONS_FOLDER, 'migrations-manifest.json'), 'utf8')) as {
 			migrations: Array<{ idx: number; tag: string; sha256: string; when: number }>
 		}
+		assert.equal(await migrationCount(), manifest.migrations.length)
 		const entry = manifest.migrations.find((migration) => migration.idx === 21)
 		assert.ok(entry)
 		assert.equal(entry.tag, MIGRATION_TAG)
 		assert.equal(entry.sha256, crypto.createHash('sha256').update(fs.readFileSync(MIGRATION_FILE)).digest('hex'))
 		const { rows } = await db().query<{ hash: string; created_at: string }>(
-			'SELECT hash, created_at::text AS created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1'
+			'SELECT hash, created_at::text AS created_at FROM __drizzle_migrations WHERE created_at = $1',
+			[entry.when]
 		)
+		assert.equal(rows.length, 1)
 		assert.equal(rows[0]?.hash, entry.sha256)
 		assert.equal(Number(rows[0]?.created_at), entry.when)
 	})
