@@ -4,13 +4,15 @@ import { keyShapeFor } from '@bio-exam/exam-core'
 
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Check, CircleAlert, Loader2, Plus, Trash2 } from 'lucide-react'
 
 import { Editor } from '@/components/editor/editor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { type AutosaveStatusView, RETRY_SAVE_LABEL } from '@/lib/drafts/draft-ui'
+import { cn } from '@/lib/utils'
 
 import type { Question, QuestionType, QuestionTypeDefinition, QuestionUiTemplate } from '../types'
 import { createDefaultMatchingPairs, generateId } from '../types'
@@ -27,7 +29,11 @@ interface Props {
 	docPath?: string
 	headerActions?: ReactNode
 	isSaving?: boolean
+	autosaveStatus?: { view: AutosaveStatusView; onRetry: () => void } | null
+	leaving?: boolean
 }
+
+const AUTOSAVE_ICON = { check: Check, loader: Loader2, alert: CircleAlert } as const
 
 function resolveTemplate(
 	type: string,
@@ -46,6 +52,8 @@ export default function QuestionEditor({
 	docPath,
 	headerActions,
 	isSaving,
+	autosaveStatus,
+	leaving,
 }: Props) {
 	const [form, setForm] = useState<Question>({ ...question })
 	const availableQuestionTypes = questionTypes.filter((item) => item.isActive || item.key === form.type)
@@ -134,12 +142,26 @@ export default function QuestionEditor({
 							Настройте формулировку, варианты ответа и правила проверки.
 						</p>
 					</div>
-					<div className="flex flex-wrap gap-2">
+					<div className={cn('flex flex-wrap gap-2', autosaveStatus !== undefined && 'items-center tab:justify-end')}>
+						{autosaveStatus ? <AutosaveStatusLine status={autosaveStatus} /> : null}
 						{headerActions}
-						<Button variant="secondary" onClick={onCancel} className="rounded-full">
-							Отмена
+						<Button
+							variant="secondary"
+							onClick={onCancel}
+							className={leaving ? 'relative rounded-full' : 'rounded-full'}
+							aria-label={leaving ? 'Отмена' : undefined}
+							aria-busy={leaving || undefined}
+						>
+							{leaving ? (
+								<>
+									<span className="invisible">Отмена</span>
+									<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
+								</>
+							) : (
+								'Отмена'
+							)}
 						</Button>
-						<Button className="relative rounded-full" onClick={handleSave}>
+						<Button className="relative rounded-full" onClick={handleSave} disabled={leaving}>
 							<span className={isSaving ? 'invisible' : ''}>Сохранить вопрос</span>
 							{isSaving && (
 								<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
@@ -287,6 +309,30 @@ export default function QuestionEditor({
 					</div>
 				)}
 			</AdminTestsSectionCard>
+		</div>
+	)
+}
+
+function AutosaveStatusLine({ status }: { status: { view: AutosaveStatusView; onRetry: () => void } }) {
+	const { view, onRetry } = status
+	const Icon = AUTOSAVE_ICON[view.icon]
+	return (
+		<div className="flex min-h-9 w-full flex-wrap items-center gap-2 text-sm tab:w-auto">
+			<span
+				role="status"
+				aria-live="polite"
+				className={cn('flex items-start gap-2', view.tone === 'error' ? 'text-red-600' : 'text-muted-foreground')}
+			>
+				<span className="flex h-5 items-center">
+					<Icon className={cn('size-4 shrink-0', view.icon === 'loader' && 'animate-spin')} aria-hidden="true" />
+				</span>
+				<span>{view.text}</span>
+			</span>
+			{view.canRetry ? (
+				<Button variant="outline" size="sm" className="h-11 rounded-full tab:h-8" onClick={onRetry}>
+					{RETRY_SAVE_LABEL}
+				</Button>
+			) : null}
 		</div>
 	)
 }

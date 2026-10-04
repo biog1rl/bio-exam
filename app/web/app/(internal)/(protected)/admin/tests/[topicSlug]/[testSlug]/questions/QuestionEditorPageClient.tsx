@@ -11,6 +11,7 @@ import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { UnsavedChangesDialog } from '@/components/Buttons/UnsavedChangesDialog'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import {
 	Dialog,
@@ -24,8 +25,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiFetch } from '@/lib/api-fetch'
 import { createBeforeUnloadGuard } from '@/lib/drafts/before-unload'
-import { UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
-import { useUnsavedChanges } from '@/store/unsavedChanges.store'
+import { type AutosaveStatusView, autosaveStatusView, UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
+import type { QuestionDraftAutosave } from '@/lib/drafts/question-draft-autosave'
+import { useQuestionDraftAutosave } from '@/lib/drafts/use-question-draft-autosave'
+import { type LeaveDecision, useUnsavedChanges } from '@/store/unsavedChanges.store'
 
 import QuestionEditor from '../../../components/QuestionEditor'
 import { validateQuestion } from '../../../question-validation'
@@ -38,9 +41,7 @@ import type {
 	TopicsResponse,
 } from '../../../types'
 import { createDefaultQuestion, normalizeQuestionForSave } from '../../../types'
-import { questionFormKey } from './question-draft-payload'
-
-const QUESTION_DRAFT_SAVE_DEBOUNCE_MS = 700
+import { questionFormKey, toQuestionDraftPayload } from './question-draft-payload'
 
 const fetcher = async (url: string) => {
 	const res = await fetch(url, { credentials: 'include' })
@@ -98,6 +99,16 @@ function extractQuestionFromDraftPayload(payload: unknown, order: number): Quest
 	})
 }
 
+function questionFromDraftPayload(payload: unknown, order: number): Question {
+	return extractQuestionFromDraftPayload(payload, order) ?? createDefaultQuestion(order)
+}
+
+function statusFor(view: AutosaveStatusView | null, onRetry: () => void) {
+	return view ? { view, onRetry } : null
+}
+
+type DraftForm = { source: QuestionDraftAutosave; question: Question; version: number }
+
 interface Props {
 	topicSlug: string
 	testSlug: string
@@ -108,21 +119,21 @@ interface Props {
 export default function QuestionEditorPageClient({ topicSlug, testSlug, questionId, questionDraftId }: Props) {
 	const router = useRouter()
 	const pathname = usePathname() || '/'
+	const { me } = useAuth()
 	const setUnsavedDirty = useUnsavedChanges((s) => s.setDirty)
 	const clearUnsaved = useUnsavedChanges((s) => s.clear)
+	const leaveUnsaved = useUnsavedChanges((s) => s.leave)
+	const isLeaving = useUnsavedChanges((s) => !!s.leavingByPath[pathname])
 	const [isSaving, setIsSaving] = useState(false)
 	const [isFormDirty, setIsFormDirty] = useState(false)
 	const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
+	const [leaveDescription, setLeaveDescription] = useState(UNSAVED_CHANGES_TEXT.description)
+	const handledLeaveRef = useRef<Promise<LeaveDecision> | null>(null)
 	const [moving, setMoving] = useState(false)
 	const [moveDialogOpen, setMoveDialogOpen] = useState(false)
 	const [targetTopicId, setTargetTopicId] = useState('')
 	const [targetTestId, setTargetTestId] = useState('')
-	const [draftQuestion, setDraftQuestion] = useState<Question | null>(null)
-	const [draftLockVersion, setDraftLockVersion] = useState(0)
-	const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-	const isDraftHydratedRef = useRef(false)
-	const latestDraftQuestionRef = useRef<Question | null>(null)
-	const lockVersionRef = useRef(0)
+	const [draftForm, setDraftForm] = useState<DraftForm | null>(null)
 	const isDraftMode = Boolean(questionDraftId)
 	const isNewQuestion = questionId === undefined
 	const isEditingExistingQuestion = Boolean(questionId)
@@ -140,53 +151,48 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	)
 	const { data: topicsData } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
 	const { data: testsData } = useSWR<TestsResponse>('/api/tests', fetcher)
-	const {
-		data: questionDraftData,
-		error: questionDraftError,
-		isLoading: questionDraftLoading,
-		mutate: mutateQuestionDraft,
-	} = useSWR<QuestionDraftDetailResponse>(
+	const { data: questionDraftData, error: questionDraftError } = useSWR<QuestionDraftDetailResponse>(
 		isDraftMode && testData?.test?.id ? `/api/tests/${testData.test.id}/question-drafts/${questionDraftId}` : null,
 		fetcher,
 		{ revalidateOnFocus: false }
 	)
 
-	useEffect(() => {
-		lockVersionRef.current = draftLockVersion
-	}, [draftLockVersion])
+	const draftOrder = testData?.questions.length ?? 0
 
-	useEffect(() => {
-		if (!isDraftMode) return
-		if (questionDraftData === undefined) return
-
-		const nextLockVersion = questionDraftData?.draft?.lockVersion ?? 0
-		setDraftLockVersion(nextLockVersion)
-		lockVersionRef.current = nextLockVersion
-
-		// Гидратируем локальную форму только один раз, иначе revalidate может
-		// перезаписать несохранённые изменения после возврата во вкладку.
-		if (isDraftHydratedRef.current) return
-
-		const order = testData?.questions.length ?? 0
-		const parsed = extractQuestionFromDraftPayload(questionDraftData?.draft?.payload, order)
-		if (parsed) {
-			setDraftQuestion(parsed)
-			latestDraftQuestionRef.current = parsed
-		} else {
-			setDraftQuestion(createDefaultQuestion(order))
-			latestDraftQuestionRef.current = createDefaultQuestion(order)
+	const serverDraft = useMemo(() => {
+		if (!isDraftMode || !questionDraftData || !testData) return undefined
+		const order = testData.questions.length
+		return {
+			payload: toQuestionDraftPayload(questionFromDraftPayload(questionDraftData.draft?.payload, order), order),
+			lockVersion: questionDraftData.draft?.lockVersion ?? 0,
 		}
-		isDraftHydratedRef.current = true
-	}, [isDraftMode, questionDraftData, testData?.questions.length])
+	}, [isDraftMode, questionDraftData, testData])
 
-	useEffect(() => {
-		return () => {
-			if (draftAutosaveTimerRef.current) {
-				clearTimeout(draftAutosaveTimerRef.current)
-				draftAutosaveTimerRef.current = null
-			}
-		}
-	}, [])
+	const restoreDraftCopy = useCallback(
+		(payload: unknown) => {
+			setDraftForm((prev) =>
+				prev ? { ...prev, question: questionFromDraftPayload(payload, draftOrder), version: prev.version + 1 } : prev
+			)
+		},
+		[draftOrder]
+	)
+
+	const { autosave, snapshot: autosaveSnapshot } = useQuestionDraftAutosave({
+		testId: testData?.test?.id,
+		draftId: questionDraftId,
+		userId: me?.id,
+		serverDraft,
+		pathname,
+		onRestoreCopy: restoreDraftCopy,
+	})
+
+	if (autosave && draftForm?.source !== autosave) {
+		setDraftForm({
+			source: autosave,
+			question: questionFromDraftPayload(autosave.initialPayload, draftOrder),
+			version: 0,
+		})
+	}
 
 	const availableTopics = useMemo(() => {
 		const allTopics = topicsData?.topics ?? []
@@ -202,11 +208,11 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	const currentQuestion = useMemo(() => {
 		if (!testData) return null
-		if (isDraftMode) return draftQuestion ?? createDefaultQuestion(testData.questions.length)
+		if (isDraftMode) return draftForm?.question ?? null
 		if (isNewQuestion) return createDefaultQuestion(testData.questions.length)
 		const found = testData.questions.find((question) => question.id === questionId) ?? null
 		return found ? normalizeQuestionForSave(found) : null
-	}, [testData, isDraftMode, draftQuestion, isNewQuestion, questionId])
+	}, [testData, isDraftMode, draftForm?.question, isNewQuestion, questionId])
 
 	const savedFormKey = useMemo(
 		() => (isEditMode && currentQuestion ? questionFormKey(currentQuestion) : null),
@@ -272,78 +278,46 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		router.push(`/admin/tests/${topicSlug}/${testSlug}`)
 	}, [router, topicSlug, testSlug])
 
+	const leaveDraft = useCallback(async () => {
+		const pending = leaveUnsaved(pathname)
+		if (handledLeaveRef.current === pending) return
+		handledLeaveRef.current = pending
+		try {
+			const decision = await pending
+			if (decision.kind === 'navigate') {
+				backToTestEditor()
+				return
+			}
+			setLeaveDescription(decision.description)
+			setLeaveDialogOpen(true)
+		} finally {
+			if (handledLeaveRef.current === pending) handledLeaveRef.current = null
+		}
+	}, [leaveUnsaved, pathname, backToTestEditor])
+
 	const handleCancel = useCallback(() => {
+		if (isDraftMode) {
+			void leaveDraft()
+			return
+		}
 		if (isEditMode && isFormDirty) {
+			setLeaveDescription(UNSAVED_CHANGES_TEXT.description)
 			setLeaveDialogOpen(true)
 			return
 		}
 		backToTestEditor()
-	}, [isEditMode, isFormDirty, backToTestEditor])
+	}, [isDraftMode, leaveDraft, isEditMode, isFormDirty, backToTestEditor])
 
 	const leaveWithoutSaving = useCallback(() => {
 		clearUnsaved(pathname)
 		backToTestEditor()
 	}, [clearUnsaved, pathname, backToTestEditor])
 
-	const persistDraftQuestion = useCallback(
-		async (nextQuestion: Question) => {
-			if (!isDraftMode || !questionDraftId || !testData?.test?.id) return
-
-			const payloadQuestion = {
-				...normalizeQuestionForSave(nextQuestion),
-				id: undefined,
-				order: testData.questions.length,
-			}
-			const res = await apiFetch(`/api/tests/${testData.test.id}/question-drafts/${questionDraftId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					payload: { question: payloadQuestion },
-					lockVersion: lockVersionRef.current,
-				}),
-			})
-
-			if (!res.ok) {
-				const data = (await res.json().catch(() => null)) as { error?: string } | null
-				if (res.status === 409) {
-					toast.error(data?.error || 'Черновик изменен в другой вкладке, загружаю актуальную версию')
-					await mutateQuestionDraft()
-					return
-				}
-				throw new Error(data?.error || 'Ошибка автосохранения черновика вопроса')
-			}
-
-			const data = (await res.json().catch(() => null)) as {
-				lockVersion?: number
-				draft?: { lockVersion?: number }
-			} | null
-			const nextLockVersion = data?.draft?.lockVersion ?? data?.lockVersion
-			if (typeof nextLockVersion === 'number') {
-				lockVersionRef.current = nextLockVersion
-				setDraftLockVersion(nextLockVersion)
-			}
-		},
-		[isDraftMode, questionDraftId, testData?.test?.id, testData?.questions.length, mutateQuestionDraft]
-	)
-
 	const handleQuestionDraftChange = useCallback(
 		(nextQuestion: Question) => {
-			if (!isDraftMode) return
-			latestDraftQuestionRef.current = nextQuestion
-			if (!isDraftHydratedRef.current) return
-
-			if (draftAutosaveTimerRef.current) {
-				clearTimeout(draftAutosaveTimerRef.current)
-			}
-
-			draftAutosaveTimerRef.current = setTimeout(() => {
-				if (!latestDraftQuestionRef.current) return
-				void persistDraftQuestion(latestDraftQuestionRef.current).catch((err) => {
-					console.warn('Failed to autosave question draft', err)
-				})
-			}, QUESTION_DRAFT_SAVE_DEBOUNCE_MS)
+			autosave?.change(toQuestionDraftPayload(nextQuestion, draftOrder))
 		},
-		[isDraftMode, persistDraftQuestion]
+		[autosave, draftOrder]
 	)
 
 	const openMoveDialog = useCallback(() => {
@@ -430,6 +404,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			})
 
 			setIsSaving(true)
+			if (isDraftMode) await autosave?.closeForSave()
+			let questionStored = false
 			try {
 				const endpoint = appendAsNew
 					? `/api/tests/${testData.test.id}/questions`
@@ -445,6 +421,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 					const data = await res.json().catch(() => null)
 					throw new Error(data?.error || 'Ошибка сохранения вопроса')
 				}
+				questionStored = true
 
 				if (isDraftMode && questionDraftId) {
 					const deleteRes = await apiFetch(`/api/tests/${testData.test.id}/question-drafts/${questionDraftId}`, {
@@ -453,6 +430,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 					if (!deleteRes.ok) {
 						console.warn('Failed to delete question draft after save', questionDraftId)
 					}
+					autosave?.discardCopy()
+					clearUnsaved(pathname)
 				}
 
 				await mutate()
@@ -463,6 +442,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				}
 				backToTestEditor()
 			} catch (err) {
+				if (isDraftMode && !questionStored) autosave?.reopen()
 				toast.error(err instanceof Error ? err.message : 'Ошибка сохранения вопроса')
 			} finally {
 				setIsSaving(false)
@@ -472,6 +452,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			testData,
 			questionTypesData,
 			isDraftMode,
+			autosave,
 			isNewQuestion,
 			isEditMode,
 			questionId,
@@ -483,7 +464,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		]
 	)
 
-	if (isLoading || (isDraftMode && questionDraftLoading && !isDraftHydratedRef.current)) {
+	if (isLoading || (isDraftMode && !draftForm && !questionDraftError && !error)) {
 		return (
 			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
 				<Loader2 className="size-8 animate-spin text-primary" />
@@ -525,6 +506,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		<div className={isSaving ? 'pointer-events-none opacity-80' : undefined}>
 			<SetBreadcrumbsLabels labels={breadcrumbLabels} />
 			<QuestionEditor
+				key={isDraftMode ? `draft-${draftForm?.version ?? 0}` : undefined}
 				question={currentQuestion}
 				questionTypes={questionTypesData?.questionTypes ?? []}
 				onSave={handleSaveQuestion}
@@ -539,13 +521,21 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 					) : undefined
 				}
 				isSaving={isSaving}
+				autosaveStatus={
+					isDraftMode
+						? autosave && autosaveSnapshot
+							? statusFor(autosaveStatusView(autosaveSnapshot), autosave.retry)
+							: null
+						: undefined
+				}
+				leaving={isDraftMode && isLeaving}
 			/>
 
-			{isEditMode ? (
+			{isEditMode || isDraftMode ? (
 				<UnsavedChangesDialog
 					open={leaveDialogOpen}
 					onOpenChange={setLeaveDialogOpen}
-					description={UNSAVED_CHANGES_TEXT.description}
+					description={leaveDescription}
 					onLeave={leaveWithoutSaving}
 				/>
 			) : null}

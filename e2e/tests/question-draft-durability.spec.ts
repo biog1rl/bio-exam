@@ -66,10 +66,7 @@ test.describe.serial('LIFE-04: черновик вопроса пережива�
 		}
 	})
 
-	test('LIFE-04 known defect (чинит 06-08): правка и сразу «Отмена» сохраняют последнюю правку @known-defect @life04', async ({
-		adminPage: page,
-	}, testInfo) => {
-		test.fail()
+	test('LIFE-04: правка и сразу «Отмена» сохраняют последнюю правку @life04', async ({ adminPage: page }, testInfo) => {
 		const slug = seedTest(projectKey(testInfo), 'authoring').slug
 		const prompt = `Черновик e2e отмена ${projectKey(testInfo)}`
 		const testId = await testIdOf(page, slug)
@@ -86,10 +83,9 @@ test.describe.serial('LIFE-04: черновик вопроса пережива�
 		}
 	})
 
-	test('LIFE-04 known defect (чинит 06-08): перезагрузка во время задержанного PATCH сохраняет последнюю правку @known-defect @life04', async ({
+	test('LIFE-04: перезагрузка во время задержанного PATCH сохраняет последнюю правку @life04', async ({
 		adminPage: page,
 	}, testInfo) => {
-		test.fail()
 		const slug = seedTest(projectKey(testInfo), 'authoring').slug
 		const prompt = `Черновик e2e перезагрузка ${projectKey(testInfo)}`
 		const testId = await testIdOf(page, slug)
