@@ -2,10 +2,12 @@
  * API роуты для управления тестами
  */
 import {
+	QUESTION_UI_TEMPLATES,
 	QuestionTypeDefinitionSchema,
 	QuestionTypeScoringRuleSchema,
 	QuestionTypeValidationSchema,
 	isMistakeMetricAllowedForTemplate,
+	type QuestionUiTemplate,
 } from '@bio-exam/exam-core'
 
 import crypto from 'crypto'
@@ -94,7 +96,7 @@ const CreateQuestionTypePayloadSchema = z.object({
 	key: QuestionTypeKeySchema,
 	title: z.string().min(1).max(120),
 	description: z.string().max(500).optional().nullable(),
-	uiTemplate: z.enum(['single_choice', 'multi_choice', 'matching', 'short_text', 'sequence_digits']),
+	uiTemplate: z.enum(QUESTION_UI_TEMPLATES),
 	validationSchema: QuestionTypeValidationSchema,
 	scoringRule: QuestionTypeScoringRuleSchema,
 	isActive: z.boolean().optional(),
@@ -103,7 +105,7 @@ const CreateQuestionTypePayloadSchema = z.object({
 const UpdateQuestionTypePayloadSchema = z.object({
 	title: z.string().min(1).max(120).optional(),
 	description: z.string().max(500).optional().nullable(),
-	uiTemplate: z.enum(['single_choice', 'multi_choice', 'matching', 'short_text', 'sequence_digits']).optional(),
+	uiTemplate: z.enum(QUESTION_UI_TEMPLATES).optional(),
 	validationSchema: QuestionTypeValidationSchema.optional(),
 	scoringRule: QuestionTypeScoringRuleSchema.optional(),
 	isActive: z.boolean().optional(),
@@ -116,7 +118,7 @@ const PutTestQuestionTypeOverrideSchema = z.object({
 })
 
 function validateScoringRuleTemplateCompatibility(params: {
-	uiTemplate: 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits'
+	uiTemplate: QuestionUiTemplate
 	scoringRule: z.infer<typeof QuestionTypeScoringRuleSchema>
 }): string | null {
 	if (!isMistakeMetricAllowedForTemplate(params.uiTemplate, params.scoringRule.mistakeMetric)) {

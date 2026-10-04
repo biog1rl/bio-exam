@@ -148,22 +148,13 @@ test('SaveTestSchema: опубликованный тест с short_answer_vari
 	assert.equal(publishedWithShortAnswerVariants.success, true)
 })
 
-test('SaveTestSchema: short_answer_variants со скалярным ответом отклоняется', () => {
+test('SaveTestSchema: short_answer_variants со скалярным ключом проходит zod, правило ключа проверяет пакет', () => {
 	const shortAnswerVariantsWithScalar = SaveTestSchema.safeParse({
 		...basePayload,
 		isPublished: true,
 		questions: [{ ...shortAnswerVariantsQuestion, correct: 'эксперимент' }],
 	})
-	assert.equal(shortAnswerVariantsWithScalar.success, false)
-})
-
-test('SaveTestSchema: short_answer_variants с дублями вариантов отклоняется', () => {
-	const shortAnswerVariantsWithDuplicate = SaveTestSchema.safeParse({
-		...basePayload,
-		isPublished: true,
-		questions: [{ ...shortAnswerVariantsQuestion, correct: ['Эксперимент', ' эксперимент '] }],
-	})
-	assert.equal(shortAnswerVariantsWithDuplicate.success, false)
+	assert.equal(shortAnswerVariantsWithScalar.success, true)
 })
 
 test('SaveTestSchema: опубликованный тест с sequence допустим', () => {
@@ -191,15 +182,6 @@ test('SaveTestSchema: кастомный тип вопроса допустим'
 		questions: [customQuestionType],
 	})
 	assert.equal(publishedCustomType.success, true)
-})
-
-test('SaveTestSchema: sequence с нецифровым ответом отклоняется', () => {
-	const invalidSequence = SaveTestSchema.safeParse({
-		...basePayload,
-		isPublished: true,
-		questions: [{ ...sequenceQuestion, correct: '23a4' }],
-	})
-	assert.equal(invalidSequence.success, false)
 })
 
 test('SaveTestSchema: payload без scoringRules допустим', () => {

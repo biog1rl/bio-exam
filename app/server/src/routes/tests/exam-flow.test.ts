@@ -1,3 +1,5 @@
+import { minOptionsMessage } from '@bio-exam/exam-core'
+
 import { and, count, eq, type SQL } from 'drizzle-orm'
 import type { PgTable } from 'drizzle-orm/pg-core'
 import assert from 'node:assert/strict'
@@ -234,6 +236,23 @@ function correctOf(size: number): string[] {
 	return Array.from({ length: size }, (_, index) => `o${index + 1}`)
 }
 
+const D13_EMPTY_OPTION_TEXT: Json = {
+	options: [
+		{ id: 'a', text: '' },
+		{ id: 'b', text: 'Мейоз' },
+		{ id: 'c', text: 'Амитоз' },
+	],
+}
+
+const D13_BLANK_LEFT_ITEM: Json = {
+	matchingPairs: {
+		left: [{ id: 'l1', text: '  ' }, ...MATCHING_PAIRS.left.slice(1)],
+		right: MATCHING_PAIRS.right,
+	},
+}
+
+const D13_BLANK_PROMPT: Json = { promptText: '   ' }
+
 describe('сквозной путь через app.ts', () => {
 	test('последовательность: сохранение, submit и сохранённый результат', async () => {
 		const testId = await createTest()
@@ -339,6 +358,15 @@ describe('POST /api/tests/:id/questions: отказы', () => {
 			assert.equal(await questionCount(testId), before)
 		})
 	}
+
+	test("radio с одним вариантом и ключом '': 400 с первой ошибкой по порядку пакета", async () => {
+		const before = await questionCount(testId)
+		const payload = validQuestion('radio', { options: [OPTIONS[0]], correct: '' })
+		const reply = await request('POST', `/api/tests/${testId}/questions`, payload, adminCookie)
+		assert.equal(reply.status, 400)
+		assert.equal(reply.body.error, minOptionsMessage(2))
+		assert.equal(await questionCount(testId), before)
+	})
 })
 
 describe('пользовательский тип custom_multi_3 с validationSchema', () => {
@@ -419,7 +447,7 @@ describe('правила, которые меняет D-13', () => {
 		testId = await createTest()
 	})
 
-	test('D-13 (меняется в 03-09): radio с пустым текстом одного варианта сейчас сохраняется', async () => {
+	test('D-13: radio с пустым текстом одного варианта: 400, строк questions не прибавилось', async () => {
 		const before = await questionCount(testId)
 		const payload = validQuestion('radio', {
 			options: [
@@ -429,11 +457,11 @@ describe('правила, которые меняет D-13', () => {
 			],
 		})
 		const reply = await request('POST', `/api/tests/${testId}/questions`, payload, adminCookie)
-		assert.equal(reply.status, 201)
-		assert.equal(await questionCount(testId), before + 1)
+		assert.equal(reply.status, 400)
+		assert.equal(await questionCount(testId), before)
 	})
 
-	test('D-13 (меняется в 03-09): matching с текстом левого элемента из пробелов сейчас сохраняется', async () => {
+	test('D-13: matching с текстом левого элемента из пробелов: 400, строк questions не прибавилось', async () => {
 		const before = await questionCount(testId)
 		const payload = validQuestion('matching', {
 			matchingPairs: {
@@ -442,16 +470,16 @@ describe('правила, которые меняет D-13', () => {
 			},
 		})
 		const reply = await request('POST', `/api/tests/${testId}/questions`, payload, adminCookie)
-		assert.equal(reply.status, 201)
-		assert.equal(await questionCount(testId), before + 1)
+		assert.equal(reply.status, 400)
+		assert.equal(await questionCount(testId), before)
 	})
 
-	test('D-13 (меняется в 03-09): формулировка из одних пробелов сейчас сохраняется', async () => {
+	test('D-13: формулировка из одних пробелов: 400, строк questions не прибавилось', async () => {
 		const before = await questionCount(testId)
 		const payload = validQuestion('sequence', { promptText: '   ' })
 		const reply = await request('POST', `/api/tests/${testId}/questions`, payload, adminCookie)
-		assert.equal(reply.status, 201)
-		assert.equal(await questionCount(testId), before + 1)
+		assert.equal(reply.status, 400)
+		assert.equal(await questionCount(testId), before)
 	})
 })
 
@@ -481,6 +509,32 @@ describe('PATCH /api/tests/:id/questions/:questionId', () => {
 				{ version: 2, isActive: true, key: '4321' },
 			]
 		)
+	})
+
+	async function expectPatchRejected(type: string, bad: Json): Promise<void> {
+		const questionId = await createQuestion(testId, validQuestion(type))
+		const before = await keyRows(questionId)
+		assert.equal(before.length, 1)
+		const reply = await request(
+			'PATCH',
+			`/api/tests/${testId}/questions/${questionId}`,
+			validQuestion(type, bad),
+			adminCookie
+		)
+		assert.equal(reply.status, 400)
+		assert.deepEqual(await keyRows(questionId), before)
+	}
+
+	test('D-13 PATCH: radio с пустым текстом одного варианта: 400, активный ключ не изменился', async () => {
+		await expectPatchRejected('radio', D13_EMPTY_OPTION_TEXT)
+	})
+
+	test('D-13 PATCH: matching с текстом левого элемента из пробелов: 400, активный ключ не изменился', async () => {
+		await expectPatchRejected('matching', D13_BLANK_LEFT_ITEM)
+	})
+
+	test('D-13 PATCH: формулировка из одних пробелов: 400, активный ключ не изменился', async () => {
+		await expectPatchRejected('sequence', D13_BLANK_PROMPT)
 	})
 
 	test("некорректная правка ключа '12a4': 400, активный ключ не изменился", async () => {
@@ -537,6 +591,28 @@ describe('POST /api/tests/save', () => {
 			[testId]
 		)
 		assert.equal(rows[0]?.total, 6)
+	})
+
+	async function expectSaveRejected(slug: string, type: string, bad: Json): Promise<void> {
+		const questions = validQuestions()
+		const index = TYPES.indexOf(type)
+		assert.ok(index >= 0)
+		questions[index] = { ...questions[index], ...bad }
+		const reply = await request('POST', '/api/tests/save', savePayload(slug, questions), adminCookie)
+		assert.equal(reply.status, 400)
+		assert.equal(await testIdBySlug(slug), null)
+	}
+
+	test('D-13 /save: radio с пустым текстом одного варианта: 400, теста нет', async () => {
+		await expectSaveRejected('save-d13-option', 'radio', D13_EMPTY_OPTION_TEXT)
+	})
+
+	test('D-13 /save: matching с текстом левого элемента из пробелов: 400, теста нет', async () => {
+		await expectSaveRejected('save-d13-matching', 'matching', D13_BLANK_LEFT_ITEM)
+	})
+
+	test('D-13 /save: формулировка из одних пробелов: 400, теста нет', async () => {
+		await expectSaveRejected('save-d13-prompt', 'sequence', D13_BLANK_PROMPT)
 	})
 
 	const rejected = [

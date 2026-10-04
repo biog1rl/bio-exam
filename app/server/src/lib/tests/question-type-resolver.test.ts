@@ -1,3 +1,5 @@
+import { AUTHORING_MESSAGES } from '@bio-exam/exam-core'
+
 import assert from 'node:assert/strict'
 import { test, vi } from 'vitest'
 
@@ -21,6 +23,21 @@ const questionTypesMap: RuntimeQuestionTypesMap = {
 		isSystem: true,
 		isActive: true,
 	},
+	sequence_disabled: {
+		key: 'sequence_disabled',
+		title: 'Последовательность (отключена)',
+		description: null,
+		uiTemplate: 'sequence_digits',
+		validationSchema: null,
+		scoringRule: {
+			formula: 'one_mistake_partial',
+			mistakeMetric: 'hamming_digits',
+			correctPoints: 2,
+			oneMistakePoints: 1,
+		},
+		isSystem: false,
+		isActive: false,
+	},
 }
 
 test('short_answer_variants: непустые варианты проходят валидацию', () => {
@@ -28,6 +45,7 @@ test('short_answer_variants: непустые варианты проходят 
 		validateQuestionWithType(
 			{
 				type: 'short_answer_variants',
+				promptText: 'Назовите метод исследования',
 				options: null,
 				matchingPairs: null,
 				correct: ['эксперимент', 'моделирование'],
@@ -39,16 +57,49 @@ test('short_answer_variants: непустые варианты проходят 
 })
 
 test('short_answer_variants: пустой вариант отклоняется', () => {
-	assert.match(
+	assert.equal(
 		validateQuestionWithType(
 			{
 				type: 'short_answer_variants',
+				promptText: 'Назовите метод исследования',
 				options: null,
 				matchingPairs: null,
 				correct: ['эксперимент', ''],
 			},
 			questionTypesMap
-		) ?? '',
-		/непустых/
+		),
+		AUTHORING_MESSAGES.shortTextVariantEmpty
+	)
+})
+
+test('неизвестный ключ типа отклоняется до проверки пакетом', () => {
+	assert.equal(
+		validateQuestionWithType(
+			{
+				type: 'no_such_type',
+				promptText: 'Расположите стадии по порядку',
+				options: null,
+				matchingPairs: null,
+				correct: '2314',
+			},
+			questionTypesMap
+		),
+		'Неизвестный тип вопроса: no_such_type'
+	)
+})
+
+test('отключённый тип отклоняется до проверки пакетом', () => {
+	assert.equal(
+		validateQuestionWithType(
+			{
+				type: 'sequence_disabled',
+				promptText: 'Расположите стадии по порядку',
+				options: null,
+				matchingPairs: null,
+				correct: '2314',
+			},
+			questionTypesMap
+		),
+		'Тип вопроса отключён: Последовательность (отключена)'
 	)
 })

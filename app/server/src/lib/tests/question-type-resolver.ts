@@ -3,7 +3,8 @@ import {
 	QuestionTypeValidationSchema,
 	createDefaultScoringRuleForTemplate,
 	isMistakeMetricAllowedForTemplate,
-	type MistakeMetric,
+	validateQuestionForSave,
+	type QuestionContent,
 	type QuestionTypeDefinition,
 	type QuestionTypeScoringRule,
 	type QuestionUiTemplate,
@@ -36,8 +37,6 @@ type RuntimeQuestionTypeOverride = {
 	scoringRuleOverride: QuestionTypeScoringRule | null
 	isDisabled: boolean
 }
-
-const EMPTY_VALIDATION_SCHEMA: ValidationSchema = {}
 
 function parseValidationSchema(value: unknown): ValidationSchema | null {
 	if (value == null) return null
@@ -151,136 +150,10 @@ export async function getQuestionTypeMapForTest(params: {
 	return Object.fromEntries(list.map((item) => [item.key, item]))
 }
 
-function stringIdsArray(value: unknown): string[] | null {
-	if (!Array.isArray(value)) return null
-	if (value.some((item) => typeof item !== 'string')) return null
-	return value
-}
-
-function isRecordOfStrings(value: unknown): value is Record<string, string> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-	return Object.values(value).every((entry) => typeof entry === 'string')
-}
-
-function hasDuplicates(values: string[]): boolean {
-	return new Set(values).size !== values.length
-}
-
-function normalizeCompactAnswer(value: string): string {
-	return value.replace(/\s+/g, '').toLowerCase()
-}
-
-function validateOptionsCount(optionsCount: number, validationSchema: ValidationSchema | null): string | null {
-	const validation = validationSchema ?? EMPTY_VALIDATION_SCHEMA
-	if (typeof validation.minOptions === 'number' && optionsCount < validation.minOptions) {
-		return `Минимум вариантов: ${validation.minOptions}`
-	}
-	if (typeof validation.maxOptions === 'number' && optionsCount > validation.maxOptions) {
-		return `Максимум вариантов: ${validation.maxOptions}`
-	}
-	return null
-}
-
-function validateByTemplate(params: {
-	template: QuestionUiTemplate
-	mistakeMetric: MistakeMetric
-	validationSchema: ValidationSchema | null
-	options: unknown
-	matchingPairs: unknown
-	correct: unknown
-}): string | null {
-	const { template, mistakeMetric, validationSchema, options, matchingPairs, correct } = params
-
-	if (template === 'single_choice' || template === 'multi_choice') {
-		if (!Array.isArray(options) || options.length < 2) return 'Нужно минимум 2 варианта ответа'
-		const optionIds = options
-			.map((option) => (option && typeof option === 'object' ? (option as { id?: unknown }).id : null))
-			.filter((id): id is string => typeof id === 'string')
-		if (optionIds.length !== options.length) return 'Все варианты должны иметь строковый id'
-		if (hasDuplicates(optionIds)) return 'ID вариантов ответа должны быть уникальными'
-
-		const optionsCountError = validateOptionsCount(options.length, validationSchema)
-		if (optionsCountError) return optionsCountError
-
-		if (template === 'single_choice') {
-			if (typeof correct !== 'string' || !optionIds.includes(correct)) {
-				return 'Нужен один корректный вариант из списка'
-			}
-			return null
-		}
-
-		const selected = stringIdsArray(correct)
-		if (!selected || selected.length === 0) return 'Для множественного выбора нужен список правильных вариантов'
-		if (selected.some((item) => !optionIds.includes(item))) return 'correct содержит несуществующий id варианта'
-		if (hasDuplicates(selected)) return 'В correct не должно быть дубликатов'
-
-		const validation = validationSchema ?? EMPTY_VALIDATION_SCHEMA
-		if (typeof validation.exactChoiceCount === 'number' && selected.length !== validation.exactChoiceCount) {
-			return `Нужно выбрать ровно ${validation.exactChoiceCount} вариантов`
-		}
-		return null
-	}
-
-	if (template === 'matching') {
-		const pairs = matchingPairs as
-			| {
-					left?: Array<{ id?: unknown; text?: unknown }>
-					right?: Array<{ id?: unknown; text?: unknown }>
-			  }
-			| null
-			| undefined
-		if (!pairs || !Array.isArray(pairs.left) || !Array.isArray(pairs.right)) {
-			return 'Для сопоставления нужны left/right массивы'
-		}
-		if (pairs.left.length < 2 || pairs.right.length < 2) {
-			return 'Для сопоставления нужно минимум 2 элемента слева и справа'
-		}
-
-		const leftIds = pairs.left.map((item) => item.id).filter((id): id is string => typeof id === 'string')
-		const rightIds = pairs.right.map((item) => item.id).filter((id): id is string => typeof id === 'string')
-		if (leftIds.length !== pairs.left.length || rightIds.length !== pairs.right.length) {
-			return 'Каждый элемент matching должен иметь строковый id'
-		}
-		if (hasDuplicates(leftIds) || hasDuplicates(rightIds)) return 'ID элементов matching должны быть уникальными'
-
-		if (!isRecordOfStrings(correct)) return 'correct для matching должен быть объектом соответствий'
-		for (const leftId of leftIds) {
-			const mapped = correct[leftId]
-			if (!mapped || !rightIds.includes(mapped)) {
-				return 'Для каждого элемента слева нужно указать корректный элемент справа'
-			}
-		}
-		return null
-	}
-
-	if (template === 'short_text') {
-		if (mistakeMetric === 'compact_text_in_set') {
-			const answers = stringIdsArray(correct)
-			if (!answers || answers.length < 2 || answers.some((answer) => answer.trim().length === 0)) {
-				return 'Для краткого ответа укажите минимум два непустых варианта'
-			}
-			if (hasDuplicates(answers.map(normalizeCompactAnswer))) {
-				return 'Варианты правильного ответа не должны повторяться'
-			}
-			return null
-		}
-
-		if (typeof correct !== 'string' || correct.trim().length === 0) {
-			return 'Для краткого ответа нужен непустой строковый correct'
-		}
-		return null
-	}
-
-	// sequence_digits
-	if (typeof correct !== 'string') return 'Для последовательности correct должен быть строкой'
-	const normalized = correct.replace(/\s+/g, '')
-	if (!/^\d+$/.test(normalized)) return 'Для последовательности используйте только цифры без пробелов'
-	return null
-}
-
 export function validateQuestionWithType(
 	question: {
 		type: string
+		promptText: string
 		options?: unknown
 		matchingPairs?: unknown
 		correct: unknown
@@ -291,13 +164,18 @@ export function validateQuestionWithType(
 	if (!resolvedType) return `Неизвестный тип вопроса: ${question.type}`
 	if (!resolvedType.isActive) return `Тип вопроса отключён: ${resolvedType.title}`
 
-	return validateByTemplate({
-		template: resolvedType.uiTemplate,
-		mistakeMetric: resolvedType.scoringRule.mistakeMetric,
-		validationSchema: resolvedType.validationSchema,
-		options: question.options,
-		matchingPairs: question.matchingPairs,
-		correct: question.correct,
+	return validateQuestionForSave({
+		config: {
+			uiTemplate: resolvedType.uiTemplate,
+			mistakeMetric: resolvedType.scoringRule.mistakeMetric,
+			validationSchema: resolvedType.validationSchema,
+		},
+		promptText: question.promptText,
+		content: {
+			options: question.options as QuestionContent['options'],
+			matchingPairs: question.matchingPairs as QuestionContent['matchingPairs'],
+		},
+		key: question.correct,
 	})
 }
 
