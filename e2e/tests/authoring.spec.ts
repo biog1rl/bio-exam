@@ -1,7 +1,6 @@
 /**
  * D-14 flow 4: администратор создаёт вопросы каждого шаблона, который сегодня сохраняется,
- * в тесте authoring-<p> и видит их в списке вопросов после перезагрузки страницы. Плюс известный
- * дефект D5 (краткий ответ с несколькими допустимыми вариантами не сохраняется) как ожидаемое падение.
+ * в тесте authoring-<p> и видит их в списке вопросов после перезагрузки страницы.
  *
  * Тест authoring-<p> принадлежит только этим проверкам и только своему проекту, поэтому ни порядок
  * тестов, ни второй проект не видят изменённых данных.
@@ -201,17 +200,13 @@ test.describe.serial('flow 4: question authoring', () => {
 
 const D5_PROMPT = 'Автор e2e несколько вариантов'
 
-test.describe.serial('known defect D5: short answer with several accepted variants', () => {
+test.describe.serial('D5: short answer with several accepted variants', () => {
 	let admin: BrowserContext | undefined
 	let page: Page | undefined
 	let slug = ''
 
 	// Подготовка: форма нового вопроса, тип «несколько вариантов», формулировка и два варианта.
-	// Обычный тест: test.fail() засчитывает даже ошибку beforeAll как ожидаемую (проверено пробой), а
-	// упавший обычный тест красный всегда, поэтому любой сбой здесь валит прогон, а не маскируется под D5.
-	test('D5 setup: admin opens a new question and fills the variants type @known-defect', async ({
-		browser,
-	}, testInfo) => {
+	test('D5 setup: admin opens a new question and fills the variants type', async ({ browser }, testInfo) => {
 		slug = seedTest(projectKey(testInfo), 'authoring').slug
 		admin = await newSessionContext(browser, testInfo, 'admin')
 		page = await admin.newPage()
@@ -228,15 +223,18 @@ test.describe.serial('known defect D5: short answer with several accepted varian
 		await admin?.close()
 	})
 
-	// Ожидаемо падает единственная проверка ниже: редактор не сохраняет вопрос с несколькими вариантами.
-	// validateQuestion в QuestionEditorPageClient принимает за ключ только строку, а здесь ключ — массив,
-	// поэтому показывается «Укажите правильный краткий ответ», запрос не уходит, страница остаётся на черновике.
-	test.fail(
-		'D5 — fixed in Phase 3 (EXAM-07): a short answer with two accepted variants saves @known-defect',
-		async () => {
-			await saveQuestion(page!, slug)
-			await page!.reload()
-			await expect(page!.getByText(D5_PROMPT), 'the saved question appears in the list after reload').toBeVisible()
-		}
-	)
+	test('D5: a short answer with two accepted variants saves', async () => {
+		await saveQuestion(page!, slug)
+		await page!.reload()
+		await expect(page!.getByText(D5_PROMPT), 'the saved question appears in the list after reload').toBeVisible()
+
+		const stored = (await savedQuestions(page!, slug)).find((question) => question.promptText.includes(D5_PROMPT))
+		expect(stored, `question "${D5_PROMPT}" is stored for the test`).toBeDefined()
+		expect(stored!.type).toBe('short_answer_variants')
+		expect(stored!.correct).toEqual(['эксперимент', 'моделирование'])
+
+		await page!.goto(`${testPageUrl(slug)}/questions/${stored!.id}`)
+		await expect(page!.getByLabel('Вариант 1', { exact: true })).toHaveValue('эксперимент')
+		await expect(page!.getByLabel('Вариант 2', { exact: true })).toHaveValue('моделирование')
+	})
 })

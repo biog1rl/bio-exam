@@ -1,5 +1,7 @@
 'use client'
 
+import { keyShapeFor } from '@bio-exam/exam-core'
+
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 
 import { Loader2, Plus, Trash2 } from 'lucide-react'
@@ -50,7 +52,10 @@ export default function QuestionEditor({
 	const activeQuestionType = questionTypes.find((item) => item.key === form.type)
 	const activeTemplate = resolveTemplate(form.type, questionTypes, form.questionUiTemplate ?? null)
 	const acceptsMultipleShortAnswers =
-		activeTemplate === 'short_text' && activeQuestionType?.scoringRule.mistakeMetric === 'compact_text_in_set'
+		activeTemplate !== null &&
+		activeQuestionType !== undefined &&
+		keyShapeFor({ uiTemplate: activeTemplate, mistakeMetric: activeQuestionType.scoringRule.mistakeMetric }) ===
+			'text_variants'
 	const acceptedAnswers = Array.isArray(form.correct) ? form.correct.map(String) : ['', '']
 
 	useEffect(() => {

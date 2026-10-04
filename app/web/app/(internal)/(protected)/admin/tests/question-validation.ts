@@ -1,57 +1,31 @@
-import type { Question } from './types'
-import { isValidSequenceCorrectValue, normalizeShortTextCorrectValue, resolveQuestionTemplate } from './types'
+import { toCanonicalKey, validateQuestionForSave } from '@bio-exam/exam-core'
+import type { TemplateConfig } from '@bio-exam/exam-core'
 
-export function validateQuestion(question: Question): string | null {
-	const template = resolveQuestionTemplate(question)
-	if (!template) {
-		return 'Тип вопроса не настроен в БД'
-	}
+import type { Question, QuestionTypeDefinition } from './types'
 
-	if (!question.promptText.trim()) {
-		return 'Введите текст вопроса'
+function resolveTemplateConfig(question: Question, questionTypes: QuestionTypeDefinition[]): TemplateConfig | null {
+	const questionType = questionTypes.find((item) => item.key === question.type)
+	if (!questionType) return null
+	const uiTemplate = question.questionUiTemplate ?? questionType.uiTemplate
+	if (!uiTemplate) return null
+	return {
+		uiTemplate,
+		mistakeMetric: questionType.scoringRule.mistakeMetric,
+		validationSchema: questionType.validationSchema ?? null,
 	}
-	if (template === 'single_choice' || template === 'multi_choice') {
-		if (!question.options || question.options.length < 2) {
-			return 'Добавьте минимум 2 варианта ответа'
-		}
-		if (question.options.some((option) => !option.text.trim())) {
-			return 'Заполните все варианты ответа'
-		}
-		if (template === 'single_choice' && !question.correct) {
-			return 'Выберите правильный ответ'
-		}
-		if (template === 'multi_choice' && (!Array.isArray(question.correct) || question.correct.length === 0)) {
-			return 'Выберите правильные ответы'
-		}
-	}
-	if (template === 'matching') {
-		if (!question.matchingPairs || question.matchingPairs.left.length < 2 || question.matchingPairs.right.length < 2) {
-			return 'Добавьте минимум 2 пары для сопоставления'
-		}
-		if (
-			question.matchingPairs.left.some((pair) => !pair.text.trim()) ||
-			question.matchingPairs.right.some((pair) => !pair.text.trim())
-		) {
-			return 'Заполните все элементы сопоставления'
-		}
-		if (
-			typeof question.correct !== 'object' ||
-			Array.isArray(question.correct) ||
-			Object.keys(question.correct).length === 0
-		) {
-			return 'Укажите правильные соответствия'
-		}
-	}
-	if (template === 'short_text') {
-		const normalized = normalizeShortTextCorrectValue(question.correct)
-		if (!normalized || !normalized.trim()) {
-			return 'Укажите правильный краткий ответ'
-		}
-	}
-	if (template === 'sequence_digits') {
-		if (!isValidSequenceCorrectValue(question.correct)) {
-			return 'Для последовательности используйте только цифры без пробелов'
-		}
-	}
-	return null
+}
+
+export function validateQuestion(
+	question: Question,
+	questionTypes: QuestionTypeDefinition[] | undefined
+): string | null {
+	if (questionTypes === undefined) return null
+	const config = resolveTemplateConfig(question, questionTypes)
+	const key = config ? toCanonicalKey({ uiTemplate: config.uiTemplate, key: question.correct }) : question.correct
+	return validateQuestionForSave({
+		config,
+		promptText: question.promptText,
+		content: { options: question.options, matchingPairs: question.matchingPairs },
+		key,
+	})
 }

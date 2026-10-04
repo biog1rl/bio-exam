@@ -1,5 +1,7 @@
 'use client'
 
+import { normalizeKeyValue } from '@bio-exam/exam-core'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowRightLeft, Loader2 } from 'lucide-react'
@@ -67,14 +69,6 @@ function normalizeDraftMatchingPairs(value: unknown): Question['matchingPairs'] 
 	return { left, right }
 }
 
-function normalizeDraftCorrect(value: unknown): Question['correct'] {
-	if (typeof value === 'string') return value
-	if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value
-	if (!isRecord(value)) return ''
-	const entries = Object.entries(value).filter(([, entryValue]) => typeof entryValue === 'string')
-	return Object.fromEntries(entries) as Record<string, string>
-}
-
 function extractQuestionFromDraftPayload(payload: unknown, order: number): Question | null {
 	const payloadRecord = isRecord(payload) ? payload : null
 	const candidate = payloadRecord && 'question' in payloadRecord ? payloadRecord.question : payload
@@ -95,7 +89,7 @@ function extractQuestionFromDraftPayload(payload: unknown, order: number): Quest
 				: null,
 		options: normalizeDraftOptions(candidate.options),
 		matchingPairs: normalizeDraftMatchingPairs(candidate.matchingPairs),
-		correct: normalizeDraftCorrect(candidate.correct),
+		correct: normalizeKeyValue(candidate.correct),
 	})
 }
 
@@ -368,7 +362,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		async (nextQuestion: Question) => {
 			if (!testData?.test?.id) return
 
-			const validationError = validateQuestion(nextQuestion)
+			const validationError = validateQuestion(nextQuestion, questionTypesData?.questionTypes)
 			if (validationError) {
 				toast.error(validationError)
 				return
@@ -416,7 +410,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				setIsSaving(false)
 			}
 		},
-		[testData, isDraftMode, isNewQuestion, questionId, questionDraftId, mutate, backToTestEditor]
+		[testData, questionTypesData, isDraftMode, isNewQuestion, questionId, questionDraftId, mutate, backToTestEditor]
 	)
 
 	if (isLoading || (isDraftMode && questionDraftLoading && !isDraftHydratedRef.current)) {

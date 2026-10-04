@@ -14,6 +14,7 @@ import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type {
 	QuestionDraft,
 	QuestionDraftsResponse,
+	QuestionTypesResponse,
 	TestDetailResponse,
 	TestFormData,
 	TopicsResponse,
@@ -94,6 +95,10 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		assignments: StudentAssignment[]
 	}>(testId ? `/api/tests/${testId}/assignments` : null, fetcher)
 	const { data: allUsersData } = useSWR<{ rows: UserItem[]; total: number }>(testId ? '/api/users' : null, fetcher)
+	const { data: questionTypesData } = useSWR<QuestionTypesResponse>(
+		isCreateMode ? '/api/tests/question-types?includeInactive=true' : null,
+		fetcher
+	)
 
 	const [assigningUserId, setAssigningUserId] = useState<string | null>(null)
 	const [removingUserId, setRemovingUserId] = useState<string | null>(null)
@@ -194,7 +199,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			throw new Error(baseValidationError)
 		}
 
-		const questionsValidationError = getCreateQuestionsValidationError(form.questions)
+		const questionsValidationError = getCreateQuestionsValidationError(form.questions, questionTypesData?.questionTypes)
 		if (questionsValidationError) {
 			throw new Error(questionsValidationError)
 		}
@@ -223,7 +228,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			testSlug: createdTestSlug,
 			forcedDraft: shouldForceDraft,
 		}
-	}, [form, topics])
+	}, [form, topics, questionTypesData])
 
 	const handleCreateTopic = () => setTopicDialogOpen(true)
 

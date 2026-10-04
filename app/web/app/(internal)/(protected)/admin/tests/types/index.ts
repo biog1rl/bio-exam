@@ -2,17 +2,30 @@
 // Types for Test Management
 // =============================================================================
 
+import { toCanonicalKey } from '@bio-exam/exam-core'
+import type {
+	MistakeMetric,
+	QuestionTypeScoringRule,
+	QuestionTypeValidation,
+	QuestionUiTemplate,
+} from '@bio-exam/exam-core'
+
+export {
+	ALLOWED_MISTAKE_METRICS_BY_TEMPLATE,
+	createDefaultScoringRuleForTemplate as createDefaultQuestionTypeScoringRule,
+	getAllowedMistakeMetricsForTemplate,
+	isMistakeMetricAllowedForTemplate as isMetricAllowedForTemplate,
+} from '@bio-exam/exam-core'
+export type {
+	MistakeMetric,
+	QuestionTypeScoringRule,
+	QuestionTypeValidation as QuestionTypeValidationSchema,
+	QuestionUiTemplate,
+	ScoringFormula as DynamicScoringFormula,
+} from '@bio-exam/exam-core'
+
 export type QuestionType = string
-export type QuestionUiTemplate = 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits'
 export type ScoringFormula = 'exact_match' | 'one_mistake_partial'
-export type DynamicScoringFormula = 'exact_match' | 'one_mistake_partial' | 'tiers'
-export type MistakeMetric =
-	| 'boolean_correct'
-	| 'set_distance'
-	| 'pair_mismatch_count'
-	| 'compact_text_equal'
-	| 'compact_text_in_set'
-	| 'hamming_digits'
 
 export interface QuestionScoringRule {
 	formula: ScoringFormula
@@ -28,18 +41,7 @@ export interface TestScoringRules {
 	sequence: QuestionScoringRule
 }
 
-export interface QuestionTypeTier {
-	maxMistakes: number
-	points: number
-}
-
-export interface QuestionTypeScoringRule {
-	formula: DynamicScoringFormula
-	mistakeMetric: MistakeMetric
-	correctPoints: number
-	oneMistakePoints?: number
-	tiers?: QuestionTypeTier[]
-}
+export type QuestionTypeTier = NonNullable<QuestionTypeScoringRule['tiers']>[number]
 
 export const TEMPLATE_META: Record<
 	QuestionUiTemplate,
@@ -97,37 +99,8 @@ export const MISTAKE_METRIC_DESCRIPTIONS: Record<MistakeMetric, string> = {
 	pair_mismatch_count: 'Каждая неверная пара добавляет 1 ошибку.',
 	compact_text_equal: 'Сравнивается строка после нормализации пробелов и регистра.',
 	compact_text_in_set: 'Ответ совпадает хотя бы с одной допустимой строкой без учёта пробелов и регистра.',
-	hamming_digits: 'Считаются несовпадения по позициям и разница длины.',
-}
-
-export const ALLOWED_MISTAKE_METRICS_BY_TEMPLATE: Record<QuestionUiTemplate, MistakeMetric[]> = {
-	single_choice: ['boolean_correct'],
-	multi_choice: ['set_distance'],
-	matching: ['pair_mismatch_count'],
-	short_text: ['compact_text_equal', 'compact_text_in_set'],
-	sequence_digits: ['hamming_digits'],
-}
-
-export function getAllowedMistakeMetricsForTemplate(template: QuestionUiTemplate): MistakeMetric[] {
-	return ALLOWED_MISTAKE_METRICS_BY_TEMPLATE[template]
-}
-
-export function isMetricAllowedForTemplate(template: QuestionUiTemplate, metric: MistakeMetric): boolean {
-	return ALLOWED_MISTAKE_METRICS_BY_TEMPLATE[template].includes(metric)
-}
-
-export function createDefaultQuestionTypeScoringRule(template: QuestionUiTemplate): QuestionTypeScoringRule {
-	const metric = getAllowedMistakeMetricsForTemplate(template)[0]
-	if (template === 'single_choice' || template === 'short_text') {
-		return { formula: 'exact_match', mistakeMetric: metric, correctPoints: 1 }
-	}
-	return { formula: 'one_mistake_partial', mistakeMetric: metric, correctPoints: 2, oneMistakePoints: 1 }
-}
-
-export interface QuestionTypeValidationSchema {
-	minOptions?: number
-	maxOptions?: number
-	exactChoiceCount?: number
+	hamming_digits:
+		'Считаются несовпадения по позициям и разница длины. Соседняя перестановка при длине больше 3 считается одной ошибкой.',
 }
 
 export interface QuestionTypeDefinition {
@@ -135,7 +108,7 @@ export interface QuestionTypeDefinition {
 	title: string
 	description?: string | null
 	uiTemplate: QuestionUiTemplate
-	validationSchema?: QuestionTypeValidationSchema | null
+	validationSchema?: QuestionTypeValidation | null
 	scoringRule: QuestionTypeScoringRule
 	isSystem: boolean
 	isActive: boolean
@@ -274,51 +247,12 @@ export function resolveQuestionTemplate(question: Pick<Question, 'questionUiTemp
 	return question.questionUiTemplate ?? null
 }
 
-export function normalizeSequenceCorrectValue(value: unknown): string | null {
-	if (typeof value === 'number' && Number.isFinite(value)) {
-		return String(value).replace(/\s+/g, '')
-	}
-	if (typeof value === 'string') {
-		return value.replace(/\s+/g, '')
-	}
-	return null
-}
-
-export function normalizeShortTextCorrectValue(value: unknown): string | null {
-	if (typeof value === 'number' && Number.isFinite(value)) {
-		return String(value)
-	}
-	if (typeof value === 'string') {
-		return value
-	}
-	return null
-}
-
-export function isValidSequenceCorrectValue(value: unknown): boolean {
-	const normalized = normalizeSequenceCorrectValue(value)
-	if (!normalized) return false
-	return /^\d+$/.test(normalized)
-}
-
 export function normalizeQuestionForSave(question: Question): Question {
 	const template = resolveQuestionTemplate(question)
-	if (template === 'short_text') {
-		const normalized = normalizeShortTextCorrectValue(question.correct)
-		if (normalized == null) return question
-		return {
-			...question,
-			correct: normalized,
-		}
-	}
-
-	if (template !== 'sequence_digits') return question
-
-	const normalized = normalizeSequenceCorrectValue(question.correct)
-	if (!normalized) return question
-
+	if (!template) return question
 	return {
 		...question,
-		correct: normalized,
+		correct: toCanonicalKey({ uiTemplate: template, key: question.correct }) as Question['correct'],
 	}
 }
 
