@@ -205,6 +205,35 @@
 					"published": false,
 					"assignedTo": [],
 					"questions": []
+				},
+				{
+					"slug": "assets-desktop",
+					"title": "Картинки в вопросах (desktop)",
+					"published": true,
+					"assignedTo": ["student-desktop"],
+					"questions": [
+						{
+							"key": "assets-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая структура клетки содержит хлорофилл?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Вакуоль"
+								},
+								{
+									"id": "3",
+									"text": "Ядро"
+								}
+							],
+							"correct": "1"
+						}
+					]
 				}
 			]
 		},
@@ -406,6 +435,35 @@
 					"published": false,
 					"assignedTo": [],
 					"questions": []
+				},
+				{
+					"slug": "assets-mobile",
+					"title": "Картинки в вопросах (mobile)",
+					"published": true,
+					"assignedTo": ["student-mobile"],
+					"questions": [
+						{
+							"key": "assets-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая структура клетки содержит хлорофилл?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Вакуоль"
+								},
+								{
+									"id": "3",
+									"text": "Ядро"
+								}
+							],
+							"correct": "1"
+						}
+					]
 				}
 			]
 		}
