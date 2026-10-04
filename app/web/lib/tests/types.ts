@@ -52,10 +52,11 @@ export type PublicTestQuestion = {
 
 export type {
 	AnswerValue as TestAnswerValue,
+	AttemptQuestionView,
+	AttemptView,
+	QuestionStatus,
 	QuestionTelemetry,
 	QuestionUiTemplate,
-	SubmitResult,
-	SubmitResultItem,
 } from '@bio-exam/exam-core'
 
 export type TestAttemptSummary = {

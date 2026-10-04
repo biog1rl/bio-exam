@@ -1,4 +1,4 @@
-import type { SubmitAttemptRequest } from '@bio-exam/exam-core'
+import type { AttemptView, SubmitAttemptRequest } from '@bio-exam/exam-core'
 
 import { apiFetch } from '../api-fetch'
 import type {
@@ -8,7 +8,6 @@ import type {
 	PublicTestQuestion,
 	QuestionTelemetry,
 	SessionInfo,
-	SubmitResult,
 	TestAnswerValue,
 	TestAttemptSummary,
 } from './types'
@@ -26,6 +25,53 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	if (!response.ok) {
 		const text = await response.text()
 		throw new Error(text || `HTTP ${response.status}`)
+	}
+
+	return (await response.json()) as T
+}
+
+export class AttemptRequestError extends Error {
+	readonly status: number
+	readonly code: string | null
+	readonly attemptId: string | null
+
+	constructor(status: number, code: string | null, attemptId: string | null) {
+		super(`HTTP ${status}`)
+		this.name = 'AttemptRequestError'
+		this.status = status
+		this.code = code
+		this.attemptId = attemptId
+	}
+}
+
+function readAttemptErrorBody(text: string): { code: string | null; attemptId: string | null } {
+	try {
+		const body: unknown = JSON.parse(text)
+		if (!body || typeof body !== 'object' || Array.isArray(body)) return { code: null, attemptId: null }
+		const record = body as Record<string, unknown>
+		return {
+			code: typeof record.error === 'string' ? record.error : null,
+			attemptId: typeof record.attemptId === 'string' ? record.attemptId : null,
+		}
+	} catch {
+		return { code: null, attemptId: null }
+	}
+}
+
+async function fetchAttemptJson<T>(url: string, init?: RequestInit): Promise<T> {
+	const response = await apiFetch(url, {
+		cache: 'no-store',
+		...init,
+		headers: {
+			'Content-Type': 'application/json',
+			...(init?.headers ?? {}),
+		},
+	})
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '')
+		const { code, attemptId } = readAttemptErrorBody(text)
+		throw new AttemptRequestError(response.status, code, attemptId)
 	}
 
 	return (await response.json()) as T
@@ -89,7 +135,7 @@ export async function fetchTopicTests(topicSlug: string) {
 }
 
 export async function startTestSession(testId: string): Promise<SessionInfo> {
-	return fetchJson<SessionInfo>(`/api/tests/public/tests/${testId}/start`, { method: 'POST' })
+	return fetchAttemptJson<SessionInfo>(`/api/tests/public/tests/${testId}/start`, { method: 'POST' })
 }
 
 export async function saveAnswer(
@@ -117,8 +163,8 @@ export async function saveSessionTelemetry(testId: string, sessionId: string, te
 	})
 }
 
-export async function submitPublicTestAnswers(testId: string, request: SubmitAttemptRequest) {
-	return fetchJson<SubmitResult>(`/api/tests/public/tests/${testId}/submit`, {
+export async function submitPublicTestAnswers(testId: string, request: SubmitAttemptRequest): Promise<AttemptView> {
+	return fetchAttemptJson<AttemptView>(`/api/tests/public/tests/${testId}/submit`, {
 		method: 'POST',
 		body: JSON.stringify(request),
 	})
