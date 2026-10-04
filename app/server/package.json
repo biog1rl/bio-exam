@@ -17,6 +17,7 @@
 		"seed": "tsx src/db/seed.ts",
 		"search:backfill": "tsx src/scripts/backfill-question-search.ts",
 		"assets:refs": "tsx src/scripts/asset-refs.ts",
+		"storage:reconcile": "tsx src/scripts/storage-reconcile.ts",
 		"bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts"
 	},
 	"dependencies": {

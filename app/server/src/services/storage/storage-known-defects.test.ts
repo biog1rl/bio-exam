@@ -96,14 +96,9 @@ describe('storage known defects (D-23)', () => {
 		20_000
 	)
 
-	test('readFile of a missing object gives an empty string', async () => {
-		const { storageService } = await import('./storage.js')
-		assert.equal(await storageService.readFile('topics/t/s/questions/q/missing.md'), '')
-	})
-
 	test('the Supabase client is created from SUPABASE_URL outside isolation', async () => {
-		const { storageService } = await import('./storage.js')
-		await storageService.readFile('topics/t/s/questions/q/missing.md')
+		const { storage } = await import('./index.js')
+		assert.equal(await storage().readText('topics/t/s/questions/q/missing.md'), null)
 		assert.ok(createClientSpy.mock.calls.length >= 1)
 		assert.equal(createClientSpy.mock.calls[0]?.[0], FAKE_SUPABASE_URL)
 	})

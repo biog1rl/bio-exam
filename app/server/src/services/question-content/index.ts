@@ -66,6 +66,13 @@ export {
 	type TopicUpdateInput,
 } from './relocate.js'
 export {
+	ORPHAN_MIN_AGE_MS,
+	reconcileStorage,
+	type ReconcileMissingPointer,
+	type ReconcileOptions,
+	type ReconcileReport,
+} from './reconcile.js'
+export {
 	REORDER_SET_MISMATCH_MESSAGE,
 	collectContentKeys,
 	deleteQuestion,

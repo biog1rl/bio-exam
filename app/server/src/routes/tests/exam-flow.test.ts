@@ -14,27 +14,6 @@ import {
 	type ScratchDatabase,
 } from '../../test-support/test-database.js'
 
-const files = vi.hoisted(() => new Map<string, string>())
-
-vi.mock('../../services/storage/storage.js', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('../../services/storage/storage.js')>()
-	const fake = Object.create(actual.storageService) as typeof actual.storageService
-	fake.isConfigured = () => true
-	fake.writeFile = async (path: string, content: string) => {
-		files.set(path, content)
-	}
-	fake.writeJson = async (path: string, data: unknown) => {
-		files.set(path, JSON.stringify(data))
-	}
-	fake.readFile = async (path: string) => files.get(path) ?? ''
-	fake.deleteFiles = async (paths: string[]) => {
-		for (const path of paths) files.delete(path)
-	}
-	fake.moveDirectory = async () => {}
-	fake.listFiles = async () => []
-	return { ...actual, storageService: fake }
-})
-
 type DbModule = typeof import('../../db/index.js')
 type SchemaModule = typeof import('../../db/schema.js')
 type Json = Record<string, unknown>
