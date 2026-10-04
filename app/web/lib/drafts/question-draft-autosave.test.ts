@@ -605,6 +605,66 @@ test('409 и сбой перечитывания версии → автопов
 	autosave.dispose()
 })
 
+test('CR-02: p1 в полёте, change(p2), dispose, сервер применил p2 первым, p1 получил 409 → повтор несёт p2, на сервере p2', async () => {
+	const first = deferred()
+	const second = deferred()
+	const { autosave, calls, lockReads } = setup([first, second])
+	autosave.start()
+	autosave.change(P1)
+	await vi.advanceTimersByTimeAsync(700)
+	assert.equal(calls.length, 1)
+	autosave.change(P2)
+	autosave.dispose()
+	assert.deepEqual(
+		calls.map(({ payload, lockVersion }) => [payload, lockVersion]),
+		[
+			[P1, 1],
+			[P2, 1],
+		]
+	)
+	second.resolve({ kind: 'ok', lockVersion: 2 })
+	await settle()
+	lockReads.push(2)
+	first.resolve({ kind: 'conflict' })
+	await settle()
+	await vi.advanceTimersByTimeAsync(10_000)
+	assert.deepEqual(
+		calls.map(({ payload, lockVersion }) => [payload, lockVersion]),
+		[
+			[P1, 1],
+			[P2, 1],
+			[P2, 2],
+		]
+	)
+	assert.deepEqual(calls.at(-1)?.payload, P2)
+})
+
+test('CR-02: 409 при ожидающей правке p2 → повтор шлёт p2, conflict-resolved, повторной записи p1 нет', async () => {
+	const gate = deferred()
+	const { autosave, calls, lockReads, notices, store } = setup([gate])
+	autosave.start()
+	autosave.change(P1)
+	await vi.advanceTimersByTimeAsync(700)
+	assert.equal(calls.length, 1)
+	autosave.change(P2)
+	lockReads.push(2)
+	gate.resolve({ kind: 'conflict' })
+	await settle()
+	assert.deepEqual(
+		calls.map(({ payload, lockVersion }) => [payload, lockVersion]),
+		[
+			[P1, 1],
+			[P2, 2],
+		]
+	)
+	assert.deepEqual(notices, ['conflict-resolved'])
+	await vi.advanceTimersByTimeAsync(10_000)
+	assert.equal(calls.length, 2)
+	assert.equal(autosave.getSnapshot().status, 'saved')
+	assert.equal(readCopy(store!.map), null)
+	autosave.dispose()
+})
+
 test('403 → error forbidden без повторов, копия помечена и не восстанавливается при следующем открытии (R-10)', async () => {
 	const { autosave, calls, notices, store, page } = setup([{ kind: 'forbidden' }])
 	autosave.start()

@@ -33,6 +33,7 @@ import {
 	recordPosition,
 	updateWal,
 	writeWal,
+	type WalRecord,
 } from './wal'
 
 export type AttemptPhase =
@@ -108,6 +109,7 @@ export type AttemptLifecycle = {
 	confirmStart(): Promise<void>
 	answer(questionId: string, value: AnswerValue): void
 	navigate(questionId: string): void
+	setQuestionIds(questionIds: readonly string[]): void
 	submit(options?: { auto?: boolean }): Promise<void>
 	retake(): void
 	dispose(): void
@@ -149,7 +151,7 @@ export function toSaveOutcome(result: AttemptDraftSaveResult): SaveOutcome {
 }
 
 export function createAttemptLifecycle(options: AttemptLifecycleOptions): AttemptLifecycle {
-	const { testId, userId, questionIds, timeLimitMinutes, storage, api, visibility, onNotice, createId } = options
+	const { testId, userId, timeLimitMinutes, storage, api, visibility, onNotice, createId } = options
 	const {
 		now = () => Date.now(),
 		setTimer = (callback: () => void, ms: number) => setTimeout(callback, ms),
@@ -157,7 +159,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	}: Partial<AttemptClock> = options.clock ?? {}
 	const clock: AttemptClock = { now, setTimer, clearTimer }
 	const keys = attemptStorageKeys(testId, userId)
-	const knownQuestions = new Set(questionIds)
+	let questionIds: readonly string[] = [...options.questionIds]
+	let knownQuestions = new Set(questionIds)
 	const listeners = new Set<() => void>()
 
 	let initialized = false
@@ -266,6 +269,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	function enqueuePending(): void {
 		if (!queue || !session) return
 		for (const questionId of pending) {
+			if (!knownQuestions.has(questionId)) continue
 			const value = answers[questionId]
 			if (value !== undefined) queue.set(questionId, value)
 		}
@@ -413,6 +417,23 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		persistAll(server.sessionId)
 	}
 
+	function mergeServerDraft(server: AttemptSession): void {
+		const local: WalRecord = {
+			v: 2,
+			sessionId: null,
+			answers,
+			pending: Object.keys(answers),
+			position,
+			telemetry,
+			telemetryPending,
+		}
+		const merged = resolveRestoredDraft({ server, wal: local, cachedSessionId: null, questionIds })
+		answers = merged.answers
+		pending = new Set(merged.pending)
+		telemetry = merged.telemetry
+		telemetryPending = merged.telemetryPending
+	}
+
 	function blockStart(cached: CachedSession | null): void {
 		const cachedSessionId = cached?.sessionId ?? null
 		clearAttemptKeys(storage, keys, 'start-not-assigned')
@@ -477,6 +498,13 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		phase = 'starting'
 		emit()
 		await runStart(current)
+		if (!activeIn(gen, current.sessionId)) return
+		submitFailed = true
+		emit()
+	}
+
+	function activeIn(gen: number, sessionId: string): boolean {
+		return gen === generation && phase === 'active' && session?.sessionId === sessionId
 	}
 
 	function isAbandonedExpired(cached: CachedSession): boolean {
@@ -564,10 +592,15 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			return null
 		}
 		if (gen !== generation) return null
+		mergeServerDraft(server)
 		session = { sessionId: server.sessionId, startedAt: server.startedAt }
 		writeCachedSession(storage, keys.session, session)
 		persistAll(session.sessionId)
 		return session
+	}
+
+	function knownAnswers(): Record<string, AnswerValue> {
+		return Object.fromEntries(Object.entries(answers).filter(([questionId]) => knownQuestions.has(questionId)))
 	}
 
 	async function sendSubmit(current: CachedSession, auto: boolean): Promise<'settled' | 'retry' | 'stale'> {
@@ -575,7 +608,12 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		const clientAttemptId = resolveClientAttemptId(storage, keys.clientAttemptId, current.sessionId, createId)
 		let view: AttemptView
 		try {
-			view = await api.submit(testId, { sessionId: current.sessionId, clientAttemptId, answers, telemetry })
+			view = await api.submit(testId, {
+				sessionId: current.sessionId,
+				clientAttemptId,
+				answers: knownAnswers(),
+				telemetry,
+			})
 		} catch (error) {
 			if (gen !== generation) return 'stale'
 			return applySubmitFailure(classifySubmitFailure(error), current, auto)
@@ -784,6 +822,17 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			recordPosition(storage, keys.wal, { sessionId: session?.sessionId ?? null, position })
 			queueTelemetry()
 			void queue?.flush()
+			emit()
+		},
+		setQuestionIds(ids) {
+			if (ids.length === questionIds.length && ids.every((id, index) => id === questionIds[index])) return
+			questionIds = [...ids]
+			knownQuestions = new Set(questionIds)
+			if (position !== null && !knownQuestions.has(position)) {
+				closeSegment()
+				position = questionIds[0] ?? null
+				openSegment()
+			}
 			emit()
 		},
 		async submit(submitOptions) {

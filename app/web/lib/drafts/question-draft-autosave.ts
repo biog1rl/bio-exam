@@ -288,12 +288,14 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 		const fresh = await readFreshLockVersion()
 		if (fresh === null) return RETRY
 		lockVersion = fresh
-		const second = await callSave(payload, lockVersion, false)
+		const retryPayload = latestPayload
+		const retrySerial = latestSerial
+		const second = await callSave(retryPayload, lockVersion, false)
 		if (second.kind === 'conflict') {
 			notice('conflict-repeated')
 			return STOP_CONFLICT
 		}
-		const outcome = applyResult(second, serial)
+		const outcome = applyResult(second, retrySerial)
 		if (second.kind === 'ok') notice('conflict-resolved')
 		return outcome
 	}

@@ -35,6 +35,12 @@ async function testIdOf(page: Page, slug: string): Promise<string> {
 	return ((await response.json()) as { test: { id: string } }).test.id
 }
 
+async function currentUserId(page: Page): Promise<string> {
+	const response = await page.request.get('/api/auth/me')
+	expect(response.ok(), 'read current user').toBe(true)
+	return ((await response.json()) as { user: { id: string } }).user.id
+}
+
 async function deleteDraft(page: Page, testId: string, draftId: string): Promise<void> {
 	const response = await page.request.delete(`/api/tests/${testId}/question-drafts/${draftId}`)
 	expect([200, 404], `cleanup: delete draft ${draftId}`).toContain(response.status())
@@ -76,6 +82,16 @@ test.describe.serial('LIFE-04: черновик вопроса пережива�
 			await page.keyboard.type(prompt)
 			await page.getByRole('button', { name: 'Отмена', exact: true }).click()
 			await expect(page).toHaveURL(new RegExp(`${testPageUrl(slug)}/?$`))
+			const draft = await page.request.get(`/api/tests/${testId}/question-drafts/${draftId}`)
+			expect(draft.ok(), `read draft ${draftId}`).toBe(true)
+			const { draft: saved } = (await draft.json()) as { draft: { payload: unknown } }
+			expect(JSON.stringify(saved.payload)).toContain(prompt)
+			const userId = await currentUserId(page)
+			const copy = await page.evaluate(
+				(key) => window.localStorage.getItem(key),
+				`question-draft-wal-${draftId}-${userId}`
+			)
+			expect(copy, 'local copy of the draft after leave').toBeNull()
 			await page.goto(url)
 			await expect(promptEditor(page)).toContainText(prompt)
 		} finally {

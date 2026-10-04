@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
 import { saveAttemptDraft, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import type { PublicTestDetail, PublicTestQuestion } from '@/lib/tests/types'
@@ -83,11 +83,15 @@ function createNoticeChannel(): NoticeChannel {
 	}
 }
 
+function orderedQuestionIds(questions: readonly PublicTestQuestion[]): string[] {
+	return [...questions].sort((a, b) => a.order - b.order).map((question) => question.id)
+}
+
 function createBrowserAttemptLifecycle(input: UseAttemptLifecycleInput, channel: NoticeChannel): AttemptLifecycle {
 	return createAttemptLifecycle({
 		testId: input.test.id,
 		userId: input.userId,
-		questionIds: [...input.questions].sort((a, b) => a.order - b.order).map((question) => question.id),
+		questionIds: orderedQuestionIds(input.questions),
 		timeLimitMinutes: input.test.timeLimitMinutes ?? null,
 		storage: browserAttemptStorage(),
 		visibility: browserVisibility(),
@@ -102,10 +106,14 @@ export function useAttemptLifecycle(input: UseAttemptLifecycleInput): {
 } {
 	const [channel] = useState(createNoticeChannel)
 	const [lifecycle] = useState(() => createBrowserAttemptLifecycle(input, channel))
-	const { onNotice } = input
+	const { onNotice, questions } = input
+	const questionIds = useMemo(() => orderedQuestionIds(questions), [questions])
 	useEffect(() => {
 		channel.setHandler(onNotice)
 	}, [channel, onNotice])
+	useEffect(() => {
+		lifecycle.setQuestionIds(questionIds)
+	}, [lifecycle, questionIds])
 	useEffect(() => {
 		lifecycle.init()
 		return () => lifecycle.dispose()

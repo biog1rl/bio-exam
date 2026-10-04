@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 
 import {
+	attemptViewOf,
 	deferred,
 	fakeAttemptApi,
 	KEYS,
@@ -705,5 +706,54 @@ describe('ревью C-01: navigate вне фазы active', () => {
 		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q2)
 		assert.equal(storage.data.get(KEYS.wal), before)
 		assert.equal(fakeApi.saveDraft.mock.calls.length, 0)
+	})
+})
+
+describe('CR-11: список вопросов меняется во время прохождения', () => {
+	const Q4 = '55555555-5555-4555-8555-555555555555'
+
+	test('новый вопрос после setQuestionIds: answer пишет WAL и уходит в очередь, navigate на него работает', async () => {
+		const { lifecycle, storage, fakeApi } = setupLifecycle()
+		lifecycle.init()
+		await settle()
+		lifecycle.answer(Q4, 'before')
+		assert.deepEqual(lifecycle.getSnapshot().answers, {})
+		lifecycle.setQuestionIds([Q1, Q2, Q3, Q4])
+		lifecycle.answer(Q4, 'd')
+		assert.deepEqual(lifecycle.getSnapshot().answers, { [Q4]: 'd' })
+		const wal = readJson(storage, KEYS.wal) as { answers: object; pending: string[] }
+		assert.deepEqual(wal.answers, { [Q4]: 'd' })
+		assert.deepEqual(wal.pending, [Q4])
+		await vi.advanceTimersByTimeAsync(600)
+		assert.deepEqual(fakeApi.savedBodies(), [{ questionId: Q4, value: 'd' }])
+		lifecycle.navigate(Q4)
+		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q4)
+	})
+
+	test('ответ на исчезнувший вопрос не попадает в тело submit, позиция с него уходит на первый вопрос', async () => {
+		const { lifecycle, fakeApi } = setupLifecycle()
+		lifecycle.init()
+		await settle()
+		lifecycle.answer(Q1, 'a')
+		lifecycle.navigate(Q3)
+		lifecycle.answer(Q3, 'c')
+		await vi.advanceTimersByTimeAsync(600)
+		lifecycle.setQuestionIds([Q1, Q2])
+		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q1)
+		lifecycle.answer(Q3, 'late')
+		fakeApi.queueSubmit(attemptViewOf())
+		await lifecycle.submit()
+		assert.deepEqual(fakeApi.submitRequests()[0]?.answers, { [Q1]: 'a' })
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+	})
+
+	test('тот же список повторно не вызывает уведомления подписчиков', async () => {
+		const { lifecycle } = setupLifecycle()
+		lifecycle.init()
+		await settle()
+		const listener = vi.fn()
+		lifecycle.subscribe(listener)
+		lifecycle.setQuestionIds([Q1, Q2, Q3])
+		assert.equal(listener.mock.calls.length, 0)
 	})
 })

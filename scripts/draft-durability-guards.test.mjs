@@ -67,6 +67,22 @@ const TEST_RUNNER_CHECKS = [
 		label: 'isClientExpired: истечение сессии решает сервер',
 		match: (line) => /\bisClientExpired\b/.test(line),
 	},
+	{
+		label: 'setTimeout: отложенный ответ в TestRunner, ответ сразу пишет модуль',
+		match: (line) => /\bsetTimeout\b/.test(line),
+	},
+	{
+		label: 'saveAttemptDraft: черновик попытки отправляет модуль',
+		match: (line) => /\bsaveAttemptDraft\b/.test(line),
+	},
+	{
+		label: 'submitPublicTestAnswers: отправку попытки ведёт модуль',
+		match: (line) => /\bsubmitPublicTestAnswers\b/.test(line),
+	},
+	{
+		label: 'startTestSession: сессию попытки открывает модуль',
+		match: (line) => /\bstartTestSession\b/.test(line),
+	},
 ]
 
 const TEST_RUNNER_REQUIRED = [
@@ -220,6 +236,12 @@ test('детекторы находят запрещённые строки и �
 		`import { getClientAttemptId } from ${q}./client-attempt-id${q}`,
 		'for (const key of storageKeysToClear(test.id)) remove(key)',
 		'if (isClientExpired(session)) reset()',
+		'const timer = setTimeout(() => lifecycle.answer(questionId, value), 300)',
+		'const timer = window.setTimeout(flush, 300)',
+		`import { saveAttemptDraft } from ${q}@/lib/tests/api${q}`,
+		'await saveAttemptDraft(test.id, sessionId, body, { keepalive: false })',
+		'const view = await submitPublicTestAnswers(test.id, request)',
+		'const session = await startTestSession(test.id)',
 	]) {
 		assert.ok(matchesAny(TEST_RUNNER_CHECKS, sample), sample)
 	}
@@ -227,6 +249,9 @@ test('детекторы находят запрещённые строки и �
 		'const { lifecycle, snapshot } = useAttemptLifecycle({ test, questions, userId, onNotice })',
 		'const anonymousCount = 0',
 		'const view = saveIndicatorView(snapshot)',
+		'void lifecycle.submit()',
+		'void lifecycle.confirmStart()',
+		'lifecycle.answer(questionId, value)',
 	]) {
 		assert.ok(!matchesAny(TEST_RUNNER_CHECKS, sample), sample)
 	}
@@ -324,6 +349,23 @@ test('проба: вставка запрещённой строки в копи
 		const runner = testRunnerViolations(tmp)
 		assert.equal(runner.length, 1, runner.join('\n'))
 		assert.match(runner[0], /^app\/web\/components\/tests\/TestRunner\.tsx:\d+: .*localStorage/)
+
+		copyWith(TEST_RUNNER, 'const probeTimer = setTimeout(() => lifecycle.answer(probeId, probeValue), 300)')
+		const delayed = testRunnerViolations(tmp)
+		assert.equal(delayed.length, 1, delayed.join('\n'))
+		assert.match(delayed[0], /^app\/web\/components\/tests\/TestRunner\.tsx:\d+: .*setTimeout/)
+
+		copyWith(
+			TEST_RUNNER,
+			`import { saveAttemptDraft, startTestSession, submitPublicTestAnswers } from ${q}@/lib/tests/api${q}`,
+			true
+		)
+		const direct = testRunnerViolations(tmp)
+		assert.equal(direct.length, 1, direct.join('\n'))
+		assert.match(
+			direct[0],
+			/^app\/web\/components\/tests\/TestRunner\.tsx:1: .*saveAttemptDraft.*submitPublicTestAnswers.*startTestSession/
+		)
 
 		const purity = modulePurityViolations(tmp)
 		assert.equal(purity.length, 1, purity.join('\n'))

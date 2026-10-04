@@ -77,6 +77,34 @@ test('у каждого навыка есть SKILL.md с name, равным и�
 	}
 })
 
+function frontmatterKeys(text) {
+	const frontmatter = /^---\n([\s\S]*?)\n---/.exec(text)
+	if (!frontmatter) return null
+	return frontmatter[1]
+		.split('\n')
+		.map((line) => /^([^\s:#][^:]*):/.exec(line)?.[1])
+		.filter((key) => key !== undefined)
+		.sort()
+}
+
+test('во frontmatter каждого навыка только name и description', () => {
+	for (const name of SKILLS) {
+		const file = `.agents/skills/${name}/SKILL.md`
+		assert.deepEqual(frontmatterKeys(read(file)), ['description', 'name'], `${file}: frontmatter keys`)
+	}
+})
+
+test('разбор frontmatter навыка находит лишние ключи', () => {
+	assert.deepEqual(frontmatterKeys('---\nname: a\ndescription: b\n---\n# a'), ['description', 'name'])
+	assert.deepEqual(frontmatterKeys('---\nname: a\ndescription: b\nlicense: MIT\n---\n'), [
+		'description',
+		'license',
+		'name',
+	])
+	assert.deepEqual(frontmatterKeys('---\nname: a\nallowed-tools:\n  - Read\n---\n'), ['allowed-tools', 'name'])
+	assert.equal(frontmatterKeys('# no frontmatter'), null)
+})
+
 test('каждый путь репозитория в обратных кавычках внутри навыков существует', () => {
 	for (const name of SKILLS) {
 		const file = `.agents/skills/${name}/SKILL.md`

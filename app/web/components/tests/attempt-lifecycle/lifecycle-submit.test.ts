@@ -160,7 +160,7 @@ describe('отправка через модуль', () => {
 		assert.deepEqual(fakeApi.submitRequests()[0], {
 			sessionId: 's2',
 			clientAttemptId: 'client-1',
-			answers: { [Q1]: 'a' },
+			answers: { [Q1]: 'a', [Q2]: 'server' },
 			telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } },
 		})
 		assert.equal(lifecycle.getSnapshot().phase, 'submitting')
@@ -168,6 +168,44 @@ describe('отправка через модуль', () => {
 		await submitting
 		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
 		assert.deepEqual(presentKeys(storage), [])
+	})
+
+	test('CR-04: отправка без сессии, /start вернул черновик той же сессии с другого устройства → тело submit с ответами обоих, локальный побеждает', async () => {
+		const fakeApi = fakeAttemptApi([new TypeError('Failed to fetch')])
+		const { lifecycle, storage, onNotice } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		lifecycle.answer(Q1, 'local')
+		lifecycle.answer(Q3, 'only-local')
+		fakeApi.queueStart(
+			sessionOf('s1', undefined, {
+				answers: { [Q1]: 'server', [Q2]: 'from-laptop' },
+				telemetry: { [Q2]: { timeSpentMs: 5000, focusLossCount: 1, visitCount: 2 } },
+			})
+		)
+		const pendingSubmit = deferred<ReturnType<typeof attemptViewOf> | Error>()
+		fakeApi.queueSubmit(pendingSubmit)
+		const submitting = lifecycle.submit()
+		await settle()
+		assert.deepEqual(fakeApi.submitRequests()[0], {
+			sessionId: 's1',
+			clientAttemptId: 'client-1',
+			answers: { [Q1]: 'local', [Q2]: 'from-laptop', [Q3]: 'only-local' },
+			telemetry: {
+				[Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 },
+				[Q2]: { timeSpentMs: 5000, focusLossCount: 1, visitCount: 2 },
+			},
+		})
+		const wal = readJson(storage, KEYS.wal) as { sessionId: string; answers: object; pending: string[] }
+		assert.equal(wal.sessionId, 's1')
+		assert.deepEqual(wal.answers, { [Q1]: 'local', [Q2]: 'from-laptop', [Q3]: 'only-local' })
+		assert.deepEqual([...wal.pending].sort(), [Q1, Q3].sort())
+		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q1)
+		assert.deepEqual(onNotice.mock.calls, [])
+		pendingSubmit.resolve(attemptViewOf())
+		await submitting
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
 	})
 
 	test('submit вне фазы active ничего не делает', async () => {
