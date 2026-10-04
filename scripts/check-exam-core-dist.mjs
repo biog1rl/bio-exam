@@ -10,6 +10,7 @@ const EXPECTED_EXPORTS = [
 	'ALLOWED_MISTAKE_METRICS_BY_TEMPLATE',
 	'ATTEMPT_GRACE_PERIOD_MINUTES',
 	'AUTHORING_MESSAGES',
+	'AdminAttemptViewSchema',
 	'AnswerValueSchema',
 	'AttemptFactsSchema',
 	'AttemptQuestionViewSchema',

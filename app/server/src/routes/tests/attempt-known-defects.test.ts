@@ -19,20 +19,12 @@ import {
 } from '../../test-support/attempt-world.js'
 import { call, startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 
-const KNOWN_DEFECTS = new Set<string>(['SCORE-03-d1-key-change'])
-
 type Student = { id: string; cookie: string }
 
 let ctx: AuthApp
 let world: AttemptWorld
 let student: Student
 let stranger: Student
-
-function defectTest(id: string, title: string, fn: () => Promise<void>): void {
-	const name = `${id}: ${title}`
-	if (KNOWN_DEFECTS.has(id)) test.fails(name, fn)
-	else test(name, fn)
-}
 
 async function sessionsOf(testId: string, userId: string): Promise<number> {
 	return countRows(world, 'SELECT count(*)::int AS count FROM test_sessions WHERE test_id = $1 AND user_id = $2', [
@@ -75,16 +67,12 @@ describe('ATT-01: доступ к попытке неназначенного п
 		assert.equal(await sessionsOf(testId, student.id), 1)
 	})
 
-	defectTest(
-		'ATT-01-unassigned-start',
-		'неназначенный пользователь получает 403 на /start и сессия не создаётся',
-		async () => {
-			const { testId } = await prepareAssignedRadio('att01-start')
-			const reply = await startSession(world, stranger.cookie, testId)
-			assert.equal(reply.status, 403)
-			assert.equal(await sessionsOf(testId, stranger.id), 0)
-		}
-	)
+	test('ATT-01-unassigned-start: неназначенный пользователь получает 403 на /start и сессия не создаётся', async () => {
+		const { testId } = await prepareAssignedRadio('att01-start')
+		const reply = await startSession(world, stranger.cookie, testId)
+		assert.equal(reply.status, 403)
+		assert.equal(await sessionsOf(testId, stranger.id), 0)
+	})
 })
 
 describe('ATT-01: черновик и отправка неназначенного пользователя', () => {
@@ -99,24 +87,20 @@ describe('ATT-01: черновик и отправка неназначенно�
 		assert.equal(reply.status, 200)
 	})
 
-	defectTest(
-		'ATT-01-unassigned-patch',
-		'неназначенный пользователь получает 403 на PATCH черновика и черновик не пишется',
-		async () => {
-			const { testId, questionId } = await prepareAssignedRadio('att01-patch')
-			const sessionId = await insertOpenSession(world, testId, stranger.id)
-			const reply = await saveDraft(world, stranger.cookie, testId, sessionId, { questionId, value: 'a' })
-			assert.equal(reply.status, 403)
-			assert.equal(
-				await countRows(
-					world,
-					'SELECT count(*)::int AS count FROM test_sessions WHERE id = $1 AND draft_answers IS NULL',
-					[sessionId]
-				),
-				1
-			)
-		}
-	)
+	test('ATT-01-unassigned-patch: неназначенный пользователь получает 403 на PATCH черновика и черновик не пишется', async () => {
+		const { testId, questionId } = await prepareAssignedRadio('att01-patch')
+		const sessionId = await insertOpenSession(world, testId, stranger.id)
+		const reply = await saveDraft(world, stranger.cookie, testId, sessionId, { questionId, value: 'a' })
+		assert.equal(reply.status, 403)
+		assert.equal(
+			await countRows(
+				world,
+				'SELECT count(*)::int AS count FROM test_sessions WHERE id = $1 AND draft_answers IS NULL',
+				[sessionId]
+			),
+			1
+		)
+	})
 
 	test('подготовка ATT-01-unassigned-submit: назначенный студент отправляет попытку', async () => {
 		const { testId, questionId } = await prepareAssignedRadio('att01-submit-ok')
@@ -131,21 +115,17 @@ describe('ATT-01: черновик и отправка неназначенно�
 		assert.equal(await attemptsOf(testId, student.id), 1)
 	})
 
-	defectTest(
-		'ATT-01-unassigned-submit',
-		'неназначенный пользователь получает 403 на submit и попытка не пишется',
-		async () => {
-			const { testId, questionId } = await prepareAssignedRadio('att01-submit')
-			const sessionId = await insertOpenSession(world, testId, stranger.id)
-			const reply = await submitAttempt(world, stranger.cookie, testId, {
-				sessionId,
-				clientAttemptId: crypto.randomUUID(),
-				answers: { [questionId]: 'b' },
-			})
-			assert.equal(reply.status, 403)
-			assert.equal(await attemptsOf(testId, stranger.id), 0)
-		}
-	)
+	test('ATT-01-unassigned-submit: неназначенный пользователь получает 403 на submit и попытка не пишется', async () => {
+		const { testId, questionId } = await prepareAssignedRadio('att01-submit')
+		const sessionId = await insertOpenSession(world, testId, stranger.id)
+		const reply = await submitAttempt(world, stranger.cookie, testId, {
+			sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [questionId]: 'b' },
+		})
+		assert.equal(reply.status, 403)
+		assert.equal(await attemptsOf(testId, stranger.id), 0)
+	})
 })
 
 describe('ATT-02: сессия с лимитом времени', () => {
@@ -168,7 +148,7 @@ describe('ATT-02: сессия с лимитом времени', () => {
 		await startExpiredSession('att02-restart-ok')
 	})
 
-	defectTest('ATT-02-expired-restart', 'после просрочки /start открывает новую сессию', async () => {
+	test('ATT-02-expired-restart: после просрочки /start открывает новую сессию', async () => {
 		const { testId, firstSessionId } = await startExpiredSession('att02-restart')
 		const second = await startSession(world, student.cookie, testId)
 		assert.equal(second.status, 200)
@@ -181,20 +161,16 @@ describe('ATT-02: сессия с лимитом времени', () => {
 		assert.equal(reply.status, 200)
 	})
 
-	defectTest(
-		'ATT-02-no-session',
-		'submit теста с лимитом без открытой сессии получает 404 и попытка не пишется',
-		async () => {
-			const { testId, questionId } = await prepareAssignedRadio('att02-nosession', { timeLimitMinutes: 10 })
-			const reply = await submitAttempt(world, student.cookie, testId, {
-				sessionId: crypto.randomUUID(),
-				clientAttemptId: crypto.randomUUID(),
-				answers: { [questionId]: 'b' },
-			})
-			assert.equal(reply.status, 404)
-			assert.equal(await attemptsOf(testId, student.id), 0)
-		}
-	)
+	test('ATT-02-no-session: submit теста с лимитом без открытой сессии получает 404 и попытка не пишется', async () => {
+		const { testId, questionId } = await prepareAssignedRadio('att02-nosession', { timeLimitMinutes: 10 })
+		const reply = await submitAttempt(world, student.cookie, testId, {
+			sessionId: crypto.randomUUID(),
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [questionId]: 'b' },
+		})
+		assert.equal(reply.status, 404)
+		assert.equal(await attemptsOf(testId, student.id), 0)
+	})
 })
 
 describe('ATT-04: вторая попытка в той же сессии', () => {
@@ -218,22 +194,18 @@ describe('ATT-04: вторая попытка в той же сессии', () =
 		assert.equal(await attemptsOf(testId, student.id), 1)
 	})
 
-	defectTest(
-		'ATT-04-double-attempt',
-		'вторая отправка той же сессии с другим clientAttemptId получает 409',
-		async () => {
-			const { testId, questionId, sessionId, firstAttemptId } = await submitFirst('att04-double')
-			const second = await submitAttempt(world, student.cookie, testId, {
-				sessionId,
-				clientAttemptId: crypto.randomUUID(),
-				answers: { [questionId]: 'a' },
-			})
-			assert.equal(second.status, 409)
-			assert.equal(second.body.error, 'ATTEMPT_ALREADY_SUBMITTED')
-			assert.equal(second.body.attemptId, firstAttemptId)
-			assert.equal(await attemptsOf(testId, student.id), 1)
-		}
-	)
+	test('ATT-04-double-attempt: вторая отправка той же сессии с другим clientAttemptId получает 409', async () => {
+		const { testId, questionId, sessionId, firstAttemptId } = await submitFirst('att04-double')
+		const second = await submitAttempt(world, student.cookie, testId, {
+			sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [questionId]: 'a' },
+		})
+		assert.equal(second.status, 409)
+		assert.equal(second.body.error, 'ATTEMPT_ALREADY_SUBMITTED')
+		assert.equal(second.body.attemptId, firstAttemptId)
+		assert.equal(await attemptsOf(testId, student.id), 1)
+	})
 })
 
 describe('SCORE-03: разбор администратора после правки ключа', () => {
@@ -269,7 +241,7 @@ describe('SCORE-03: разбор администратора после пра�
 		assert.deepEqual(keys.rows, [{ version: 2, correct_answer: 'a' }])
 	})
 
-	defectTest('SCORE-03-d1-key-change', 'разбор администратора не меняется после правки ключа', async () => {
+	test('SCORE-03-d1-key-change: разбор администратора не меняется после правки ключа', async () => {
 		const { attemptId, before } = await reviewAndChangeKey('score03-key')
 		const after = await adminReview(world, attemptId)
 		assert.equal(after.status, 200)

@@ -32,6 +32,7 @@ export {
 } from './authoring'
 export type { ValidateQuestionForSaveInput } from './authoring'
 export {
+	AdminAttemptViewSchema,
 	AnswerValueSchema,
 	ATTEMPT_GRACE_PERIOD_MINUTES,
 	AttemptFactsSchema,
@@ -50,6 +51,7 @@ export {
 	SubmitResultSchema,
 } from './attempt-result'
 export type {
+	AdminAttemptView,
 	AnswerValue,
 	AttemptFacts,
 	AttemptQuestionView,

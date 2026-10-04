@@ -166,12 +166,20 @@ export const AttemptViewSchema = z.object({
 	results: z.array(AttemptQuestionViewSchema),
 })
 
+export const AdminAttemptViewSchema = AttemptViewSchema.extend({
+	testId: z.string().uuid(),
+	userId: z.string().uuid(),
+	answers: z.record(z.string(), z.unknown()),
+	telemetry: TelemetryMapSchema.nullable(),
+})
+
 export type AnswerValue = z.infer<typeof AnswerValueSchema>
 export type ScoredQuestionFact = z.infer<typeof ScoredQuestionFactSchema>
 export type AttemptFacts = z.infer<typeof AttemptFactsSchema>
 export type LegacyAttemptResultItem = z.infer<typeof LegacyAttemptResultItemSchema>
 export type AttemptQuestionView = z.infer<typeof AttemptQuestionViewSchema>
 export type AttemptView = z.infer<typeof AttemptViewSchema>
+export type AdminAttemptView = z.infer<typeof AdminAttemptViewSchema>
 export type SubmitResultItem = z.infer<typeof SubmitResultItemSchema>
 export type SubmitResult = z.infer<typeof SubmitResultSchema>
 export type SubmitAttemptRequest = z.infer<typeof SubmitAttemptRequestSchema>

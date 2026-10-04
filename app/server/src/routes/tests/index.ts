@@ -57,6 +57,8 @@ import {
 	UpdateQuestionDraftSchema,
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
+import { canReviewAttempt } from '../../services/access-policy/scope.js'
+import { readAdminAttemptView } from '../../services/scored-attempt/index.js'
 import {
 	updateQuestionSearchDocumentLocation,
 	upsertQuestionSearchDocument,
@@ -2612,25 +2614,13 @@ router.get(
 		try {
 			const attemptId = req.params.attemptId as string
 
-			const [attempt] = await db
-				.select({
-					id: testAttempts.id,
-					testId: testAttempts.testId,
-					userId: testAttempts.userId,
-					answers: testAttempts.answers,
-					results: testAttempts.results,
-					earnedPoints: testAttempts.earnedPoints,
-					totalPoints: testAttempts.totalPoints,
-					scorePercentage: testAttempts.scorePercentage,
-					passed: testAttempts.passed,
-					submittedAt: testAttempts.submittedAt,
-					telemetry: testAttempts.telemetry,
-				})
-				.from(testAttempts)
-				.where(eq(testAttempts.id, attemptId))
-				.limit(1)
+			if (!(await canReviewAttempt(req, attemptId))) {
+				return res.status(403).json({ error: 'Forbidden' })
+			}
 
-			if (!attempt) {
+			const review = await readAdminAttemptView(attemptId)
+
+			if (!review) {
 				return res.status(404).json({ error: 'Attempt not found' })
 			}
 
@@ -2646,14 +2636,14 @@ router.get(
 					promptPath: questions.promptPath,
 				})
 				.from(questions)
-				.where(eq(questions.testId, attempt.testId))
+				.where(eq(questions.testId, review.testId))
 				.orderBy(asc(questions.order))
 
-			const questionTypesMap = await getQuestionTypeMapForTest({ testId: attempt.testId, includeInactive: true })
+			const questionTypesMap = await getQuestionTypeMapForTest({ testId: review.testId, includeInactive: true })
 
 			// Load prompt text for each question
 			const testRow = await db.query.tests.findFirst({
-				where: eq(tests.id, attempt.testId),
+				where: eq(tests.id, review.testId),
 				columns: { id: true, slug: true },
 				with: {
 					topic: { columns: { slug: true } },
@@ -2694,40 +2684,7 @@ router.get(
 				})
 			)
 
-			// For admin review always include correct answers regardless of showCorrectAnswer setting
-			const questionIds = questionRows.map((q) => q.id)
-			const answerKeyRows =
-				questionIds.length > 0
-					? await db
-							.select({ questionId: answerKeys.questionId, correctAnswer: answerKeys.correctAnswer })
-							.from(answerKeys)
-							.where(and(inArray(answerKeys.questionId, questionIds), eq(answerKeys.isActive, true)))
-					: []
-			const answerKeysMap = new Map(answerKeyRows.map((ak) => [ak.questionId, ak.correctAnswer]))
-
-			const resultsWithCorrectAnswers = Array.isArray(attempt.results)
-				? (attempt.results as Array<Record<string, unknown>>).map((r) => ({
-						...r,
-						correctAnswer: r.correctAnswer ?? answerKeysMap.get(r.questionId as string) ?? null,
-					}))
-				: attempt.results
-
-			res.json({
-				attempt: {
-					id: attempt.id,
-					testId: attempt.testId,
-					userId: attempt.userId,
-					answers: attempt.answers,
-					results: resultsWithCorrectAnswers,
-					earnedPoints: attempt.earnedPoints,
-					totalPoints: attempt.totalPoints,
-					scorePercentage: attempt.scorePercentage,
-					passed: attempt.passed,
-					submittedAt: attempt.submittedAt instanceof Date ? attempt.submittedAt.toISOString() : attempt.submittedAt,
-					telemetry: attempt.telemetry ?? null,
-				},
-				questions: questionsWithTexts,
-			})
+			res.json({ attempt: review, questions: questionsWithTexts })
 		} catch (e) {
 			next(e)
 		}

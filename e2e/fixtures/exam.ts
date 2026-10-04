@@ -48,6 +48,10 @@ export type SubmitPayload = {
 		earnedPoints: number
 		userAnswer: unknown
 		correctAnswer: unknown
+		status: string
+		keyVisible: boolean
+		mistakes: number | null
+		verdicts: unknown
 	}[]
 }
 

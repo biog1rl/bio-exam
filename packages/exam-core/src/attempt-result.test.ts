@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
 import {
+	AdminAttemptViewSchema,
 	AnswerValueSchema,
 	ATTEMPT_GRACE_PERIOD_MINUTES,
 	AttemptFactsSchema,
@@ -360,4 +361,22 @@ test('AttemptViewSchema: прежние поля submit плюс поля вид
 	assert.equal(SubmitResultSchema.safeParse(view).success, true)
 	assert.equal(AttemptViewSchema.safeParse({ ...view, attemptId: 'x' }).success, false)
 	assert.equal(AttemptViewSchema.safeParse({ ...view, results: [validItem] }).success, false)
+})
+
+test('AdminAttemptViewSchema: вид попытки плюс testId, userId, answers и telemetry', () => {
+	const view = {
+		...validResult,
+		results: [validQuestionView],
+		testId: ATTEMPT,
+		userId: Q1,
+		answers: { [Q1]: '2315' },
+		telemetry: { [Q1]: { timeSpentMs: 1200, focusLossCount: 0, visitCount: 1 } },
+	}
+	assert.deepEqual(AdminAttemptViewSchema.parse(view), view)
+	assert.deepEqual(AdminAttemptViewSchema.parse({ ...view, telemetry: null }).telemetry, null)
+	assert.equal(AttemptViewSchema.safeParse(view).success, true)
+	assert.equal(AdminAttemptViewSchema.safeParse({ ...view, testId: 'x' }).success, false)
+	assert.equal(AdminAttemptViewSchema.safeParse({ ...view, userId: undefined }).success, false)
+	assert.equal(AdminAttemptViewSchema.safeParse({ ...view, telemetry: undefined }).success, false)
+	assert.equal(AdminAttemptViewSchema.safeParse({ ...view, answers: [] }).success, false)
 })
