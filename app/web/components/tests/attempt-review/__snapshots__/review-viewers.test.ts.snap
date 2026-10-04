@@ -1,0 +1,1206 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`admin · matching · верно 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Фотосинтез",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Дыхание",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Синтез белка",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+  ],
+  "summary": "Верных пар: 3 / 3",
+}
+`;
+
+exports[`admin · matching · неверно 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Дыхание",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Фотосинтез",
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Синтез белка",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Дыхание",
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Фотосинтез",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Синтез белка",
+    },
+  ],
+  "summary": "Верных пар: 0 / 3",
+}
+`;
+
+exports[`admin · matching · частично 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Фотосинтез",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Дыхание",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Фотосинтез",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Синтез белка",
+    },
+  ],
+  "summary": "Верных пар: 2 / 3",
+}
+`;
+
+exports[`admin · multi_choice · верно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "correct",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Амитоз",
+      "tone": "correct",
+    },
+    {
+      "id": "d",
+      "label": null,
+      "selected": false,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 2 · из них верно: 2 · неверно: 0",
+}
+`;
+
+exports[`admin · multi_choice · неверно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Митоз",
+      "tone": "missed",
+    },
+    {
+      "id": "b",
+      "label": "Выбран · неверно",
+      "selected": true,
+      "text": "Мейоз",
+      "tone": "wrong",
+    },
+    {
+      "id": "c",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "missed",
+    },
+    {
+      "id": "d",
+      "label": "Выбран · неверно",
+      "selected": true,
+      "text": "Эндомитоз",
+      "tone": "wrong",
+    },
+  ],
+  "summary": "Выбрано: 2 · из них верно: 0 · неверно: 2 · пропущено верных: 2",
+}
+`;
+
+exports[`admin · multi_choice · частично 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "correct",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "missed",
+    },
+    {
+      "id": "d",
+      "label": null,
+      "selected": false,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1 · из них верно: 1 · неверно: 0 · пропущено верных: 1",
+}
+`;
+
+exports[`admin · sequence_digits · верно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": true,
+  "correctLines": null,
+  "studentLines": [
+    "2314",
+  ],
+  "studentTitle": "Ответ студента · верно",
+  "studentTone": "correct",
+  "summaryText": "Ошибок: 0",
+  "swapHint": false,
+}
+`;
+
+exports[`admin · sequence_digits · неверно 1`] = `
+{
+  "cells": [
+    {
+      "expected": "2",
+      "given": "4",
+      "kind": "wrong",
+      "position": 1,
+    },
+    {
+      "expected": "3",
+      "given": "1",
+      "kind": "wrong",
+      "position": 2,
+    },
+    {
+      "expected": "1",
+      "given": "3",
+      "kind": "wrong",
+      "position": 3,
+    },
+    {
+      "expected": "4",
+      "given": "2",
+      "kind": "wrong",
+      "position": 4,
+    },
+  ],
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "2314",
+  ],
+  "studentLines": [
+    "4132",
+  ],
+  "studentTitle": "Ответ студента · неверно",
+  "studentTone": "wrong",
+  "summaryText": "Ошибок: 4",
+  "swapHint": false,
+}
+`;
+
+exports[`admin · sequence_digits · частично 1`] = `
+{
+  "cells": [
+    {
+      "expected": "2",
+      "given": "2",
+      "kind": "correct",
+      "position": 1,
+    },
+    {
+      "expected": "3",
+      "given": "3",
+      "kind": "correct",
+      "position": 2,
+    },
+    {
+      "expected": "1",
+      "given": "1",
+      "kind": "correct",
+      "position": 3,
+    },
+    {
+      "expected": "4",
+      "given": "5",
+      "kind": "wrong",
+      "position": 4,
+    },
+  ],
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "2314",
+  ],
+  "studentLines": [
+    "2315",
+  ],
+  "studentTitle": "Ответ студента · частично",
+  "studentTone": "partial",
+  "summaryText": "Ошибок: 1",
+  "swapHint": false,
+}
+`;
+
+exports[`admin · short_text · верно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": true,
+  "correctLines": null,
+  "studentLines": [
+    "Митоз",
+  ],
+  "studentTitle": "Ответ студента · верно",
+  "studentTone": "correct",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`admin · short_text · неверно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "Митоз",
+  ],
+  "studentLines": [
+    "Мейоз",
+  ],
+  "studentTitle": "Ответ студента · неверно",
+  "studentTone": "wrong",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`admin · short_text · нет ответа 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "Митоз",
+  ],
+  "studentLines": [
+    "Нет ответа",
+  ],
+  "studentTitle": "Ответ студента · неверно",
+  "studentTone": "wrong",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`admin · single_choice · верно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Мейоз",
+      "tone": "correct",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1 · из них верно: 1 · неверно: 0",
+}
+`;
+
+exports[`admin · single_choice · неверно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран · неверно",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "wrong",
+    },
+    {
+      "id": "b",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "missed",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1 · из них верно: 0 · неверно: 1 · пропущено верных: 1",
+}
+`;
+
+exports[`admin · single_choice · нет ответа 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "missed",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 0 · из них верно: 0 · неверно: 0 · пропущено верных: 1",
+}
+`;
+
+exports[`student_with_key · matching · верно 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Фотосинтез",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Дыхание",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Синтез белка",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+  ],
+  "summary": "Верных пар: 3 / 3",
+}
+`;
+
+exports[`student_with_key · matching · неверно 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Дыхание",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Фотосинтез",
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Синтез белка",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Дыхание",
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Фотосинтез",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Синтез белка",
+    },
+  ],
+  "summary": "Верных пар: 0 / 3",
+}
+`;
+
+exports[`student_with_key · matching · частично 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Фотосинтез",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Дыхание",
+      "tone": "correct",
+      "verdictText": "Верно",
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Фотосинтез",
+      "tone": "wrong",
+      "verdictText": "Неверно · правильная пара: Синтез белка",
+    },
+  ],
+  "summary": "Верных пар: 2 / 3",
+}
+`;
+
+exports[`student_with_key · multi_choice · верно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "correct",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Амитоз",
+      "tone": "correct",
+    },
+    {
+      "id": "d",
+      "label": null,
+      "selected": false,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 2 · из них верно: 2 · неверно: 0",
+}
+`;
+
+exports[`student_with_key · multi_choice · неверно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Митоз",
+      "tone": "missed",
+    },
+    {
+      "id": "b",
+      "label": "Выбран · неверно",
+      "selected": true,
+      "text": "Мейоз",
+      "tone": "wrong",
+    },
+    {
+      "id": "c",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "missed",
+    },
+    {
+      "id": "d",
+      "label": "Выбран · неверно",
+      "selected": true,
+      "text": "Эндомитоз",
+      "tone": "wrong",
+    },
+  ],
+  "summary": "Выбрано: 2 · из них верно: 0 · неверно: 2 · пропущено верных: 2",
+}
+`;
+
+exports[`student_with_key · multi_choice · частично 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "correct",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "missed",
+    },
+    {
+      "id": "d",
+      "label": null,
+      "selected": false,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1 · из них верно: 1 · неверно: 0 · пропущено верных: 1",
+}
+`;
+
+exports[`student_with_key · sequence_digits · верно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "2314",
+  ],
+  "studentTitle": "Ответ студента · верно",
+  "studentTone": "correct",
+  "summaryText": "Ошибок: 0",
+  "swapHint": false,
+}
+`;
+
+exports[`student_with_key · sequence_digits · неверно 1`] = `
+{
+  "cells": [
+    {
+      "expected": "2",
+      "given": "4",
+      "kind": "wrong",
+      "position": 1,
+    },
+    {
+      "expected": "3",
+      "given": "1",
+      "kind": "wrong",
+      "position": 2,
+    },
+    {
+      "expected": "1",
+      "given": "3",
+      "kind": "wrong",
+      "position": 3,
+    },
+    {
+      "expected": "4",
+      "given": "2",
+      "kind": "wrong",
+      "position": 4,
+    },
+  ],
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "2314",
+  ],
+  "studentLines": [
+    "4132",
+  ],
+  "studentTitle": "Ответ студента · неверно",
+  "studentTone": "wrong",
+  "summaryText": "Ошибок: 4",
+  "swapHint": false,
+}
+`;
+
+exports[`student_with_key · sequence_digits · частично 1`] = `
+{
+  "cells": [
+    {
+      "expected": "2",
+      "given": "2",
+      "kind": "correct",
+      "position": 1,
+    },
+    {
+      "expected": "3",
+      "given": "3",
+      "kind": "correct",
+      "position": 2,
+    },
+    {
+      "expected": "1",
+      "given": "1",
+      "kind": "correct",
+      "position": 3,
+    },
+    {
+      "expected": "4",
+      "given": "5",
+      "kind": "wrong",
+      "position": 4,
+    },
+  ],
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "2314",
+  ],
+  "studentLines": [
+    "2315",
+  ],
+  "studentTitle": "Ответ студента · частично",
+  "studentTone": "partial",
+  "summaryText": "Ошибок: 1",
+  "swapHint": false,
+}
+`;
+
+exports[`student_with_key · short_text · верно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "Митоз",
+  ],
+  "studentTitle": "Ответ студента · верно",
+  "studentTone": "correct",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_with_key · short_text · неверно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "Митоз",
+  ],
+  "studentLines": [
+    "Мейоз",
+  ],
+  "studentTitle": "Ответ студента · неверно",
+  "studentTone": "wrong",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_with_key · short_text · нет ответа 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": true,
+  "correctLines": [
+    "Митоз",
+  ],
+  "studentLines": [
+    "Нет ответа",
+  ],
+  "studentTitle": "Ответ студента · неверно",
+  "studentTone": "wrong",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_with_key · single_choice · верно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": "Выбран · верно",
+      "selected": true,
+      "text": "Мейоз",
+      "tone": "correct",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1 · из них верно: 1 · неверно: 0",
+}
+`;
+
+exports[`student_with_key · single_choice · неверно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран · неверно",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "wrong",
+    },
+    {
+      "id": "b",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "missed",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1 · из них верно: 0 · неверно: 1 · пропущено верных: 1",
+}
+`;
+
+exports[`student_with_key · single_choice · нет ответа 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": "Верный ответ · пропущен",
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "missed",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 0 · из них верно: 0 · неверно: 0 · пропущено верных: 1",
+}
+`;
+
+exports[`student_without_key · matching · верно 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Фотосинтез",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Дыхание",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Синтез белка",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+  ],
+  "summary": null,
+}
+`;
+
+exports[`student_without_key · matching · неверно 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Дыхание",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Синтез белка",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Фотосинтез",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+  ],
+  "summary": null,
+}
+`;
+
+exports[`student_without_key · matching · частично 1`] = `
+{
+  "rows": [
+    {
+      "leftId": "l1",
+      "text": "Хлоропласт → Фотосинтез",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+    {
+      "leftId": "l2",
+      "text": "Митохондрия → Дыхание",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+    {
+      "leftId": "l3",
+      "text": "Рибосома → Фотосинтез",
+      "tone": "neutral",
+      "verdictText": null,
+    },
+  ],
+  "summary": null,
+}
+`;
+
+exports[`student_without_key · multi_choice · верно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "d",
+      "label": null,
+      "selected": false,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 2",
+}
+`;
+
+exports[`student_without_key · multi_choice · неверно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "d",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 2",
+}
+`;
+
+exports[`student_without_key · multi_choice · частично 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "d",
+      "label": null,
+      "selected": false,
+      "text": "Эндомитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1",
+}
+`;
+
+exports[`student_without_key · sequence_digits · верно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "2314",
+  ],
+  "studentTitle": "Ответ студента · верно",
+  "studentTone": "correct",
+  "summaryText": "Ошибок: 0",
+  "swapHint": false,
+}
+`;
+
+exports[`student_without_key · sequence_digits · неверно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "4132",
+  ],
+  "studentTitle": "Ответ студента",
+  "studentTone": "neutral",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_without_key · sequence_digits · частично 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "2315",
+  ],
+  "studentTitle": "Ответ студента",
+  "studentTone": "neutral",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_without_key · short_text · верно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "Митоз",
+  ],
+  "studentTitle": "Ответ студента · верно",
+  "studentTone": "correct",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_without_key · short_text · неверно 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "Мейоз",
+  ],
+  "studentTitle": "Ответ студента",
+  "studentTone": "neutral",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_without_key · short_text · нет ответа 1`] = `
+{
+  "cells": null,
+  "cellsKeyVisible": false,
+  "correctLines": null,
+  "studentLines": [
+    "Нет ответа",
+  ],
+  "studentTitle": "Ответ студента",
+  "studentTone": "neutral",
+  "summaryText": null,
+  "swapHint": false,
+}
+`;
+
+exports[`student_without_key · single_choice · верно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1",
+}
+`;
+
+exports[`student_without_key · single_choice · неверно 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": "Выбран",
+      "selected": true,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 1",
+}
+`;
+
+exports[`student_without_key · single_choice · нет ответа 1`] = `
+{
+  "rows": [
+    {
+      "id": "a",
+      "label": null,
+      "selected": false,
+      "text": "Митоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "b",
+      "label": null,
+      "selected": false,
+      "text": "Мейоз",
+      "tone": "neutral",
+    },
+    {
+      "id": "c",
+      "label": null,
+      "selected": false,
+      "text": "Амитоз",
+      "tone": "neutral",
+    },
+  ],
+  "summary": "Выбрано: 0",
+}
+`;

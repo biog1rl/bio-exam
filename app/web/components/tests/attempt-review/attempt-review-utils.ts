@@ -140,6 +140,164 @@ export function formatAnswerLines(question: PublicTestQuestion, value: unknown):
 	return ['Нет ответа']
 }
 
+export type ReviewInput = {
+	question: PublicTestQuestion
+	studentAnswer: unknown
+	correctAnswer: unknown
+	isCorrect: boolean
+	earnedPoints: number
+	showCorrectAnswer: boolean
+}
+
+export type TextReviewModel = {
+	studentTitle: string
+	studentTone: 'correct' | 'partial' | 'wrong' | 'neutral'
+	studentLines: string[]
+	summaryText: string | null
+	swapHint: boolean
+	cells: SequencePositionVerdict[] | null
+	cellsKeyVisible: boolean
+	correctLines: string[] | null
+}
+
+export function getTextReview(input: ReviewInput): TextReviewModel {
+	const { question, studentAnswer, correctAnswer, isCorrect, earnedPoints } = input
+	const sequenceReview =
+		question.questionUiTemplate === 'sequence_digits'
+			? getSequenceReview({ studentAnswer, correctAnswer, isCorrect })
+			: null
+	const studentTone: TextReviewModel['studentTone'] = isCorrect
+		? 'correct'
+		: correctAnswer == null
+			? 'neutral'
+			: earnedPoints > 0
+				? 'partial'
+				: 'wrong'
+	const suffix = isCorrect ? ' · верно' : correctAnswer == null ? '' : earnedPoints > 0 ? ' · частично' : ' · неверно'
+	const summaryText = sequenceReview?.summaryText ?? null
+
+	return {
+		studentTitle: `Ответ студента${suffix}`,
+		studentTone,
+		studentLines: formatAnswerLines(question, studentAnswer),
+		summaryText,
+		swapHint: summaryText != null && sequenceReview != null && sequenceReview.hasSwap,
+		cells: sequenceReview?.showCells ? sequenceReview.parts : null,
+		cellsKeyVisible: correctAnswer != null,
+		correctLines: correctAnswer != null && !isCorrect ? formatAnswerLines(question, correctAnswer) : null,
+	}
+}
+
+export type ChoiceReviewModel = {
+	summary: string
+	rows: Array<{
+		id: string
+		text: string
+		selected: boolean
+		tone: 'correct' | 'missed' | 'wrong' | 'neutral'
+		label: string | null
+	}>
+}
+
+function choiceLabel(isSelected: boolean, correct: boolean, missed: boolean, wrong: boolean): string | null {
+	if (missed) return 'Верный ответ · пропущен'
+	if (correct) return 'Выбран · верно'
+	if (wrong) return 'Выбран · неверно'
+	return isSelected ? 'Выбран' : null
+}
+
+export function getChoiceReview(input: ReviewInput): ChoiceReviewModel {
+	const { question, studentAnswer, correctAnswer, isCorrect, showCorrectAnswer } = input
+	const selected = answerIds(studentAnswer)
+	const rows = getChoiceOptionReviewRows(question, studentAnswer, correctAnswer)
+	const keyVisible = correctAnswer != null || (showCorrectAnswer && isCorrect)
+	const selectedCorrect = isCorrect
+		? selected.size
+		: rows.filter((row) => selected.has(row.id) && row.status === 'correct').length
+	const missedCorrect = keyVisible ? rows.filter((row) => !selected.has(row.id) && row.status === 'correct').length : 0
+	const summary =
+		`Выбрано: ${selected.size}` +
+		(keyVisible ? ` · из них верно: ${selectedCorrect} · неверно: ${selected.size - selectedCorrect}` : '') +
+		(missedCorrect > 0 ? ` · пропущено верных: ${missedCorrect}` : '')
+
+	return {
+		summary,
+		rows: rows.map((row) => {
+			const isSelected = selected.has(row.id)
+			const correct = keyVisible && (row.status === 'correct' || (isCorrect && isSelected))
+			const missed = correct && !isSelected
+			const wrong = keyVisible && isSelected && !correct
+			const tone: ChoiceReviewModel['rows'][number]['tone'] = missed
+				? 'missed'
+				: correct && isSelected
+					? 'correct'
+					: wrong
+						? 'wrong'
+						: 'neutral'
+			return {
+				id: row.id,
+				text: row.text,
+				selected: isSelected,
+				tone,
+				label: choiceLabel(isSelected, correct, missed, wrong),
+			}
+		}),
+	}
+}
+
+export type MatchingReviewModel = {
+	summary: string | null
+	rows: Array<{
+		leftId: string
+		text: string
+		tone: 'correct' | 'wrong' | 'neutral'
+		verdictText: string | null
+	}>
+}
+
+function answerMap(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+export function getMatchingReview(input: ReviewInput): MatchingReviewModel | null {
+	const { question, studentAnswer, correctAnswer, isCorrect, showCorrectAnswer } = input
+	const pairs = question.matchingPairs
+	if (!pairs) return null
+	const selected = answerMap(studentAnswer)
+	const correct = answerMap(correctAnswer)
+	const keyVisible = correctAnswer != null || (showCorrectAnswer && isCorrect)
+	const rightText = (value: unknown) => pairs.right.find((item) => item.id === String(value))?.text ?? 'Нет ответа'
+	const verdicts = computeVerdicts({
+		template: 'matching',
+		key: correctAnswer ?? null,
+		answer: studentAnswer,
+		content: { matchingPairs: pairs },
+	})
+	const correctLeftIds = new Set(
+		verdicts.template === 'matching'
+			? verdicts.parts.filter((part) => part.kind === 'correct').map((part) => part.leftId)
+			: []
+	)
+	const matched = isCorrect ? pairs.left.length : pairs.left.filter((left) => correctLeftIds.has(left.id)).length
+
+	return {
+		summary: keyVisible ? `Верных пар: ${matched} / ${pairs.left.length}` : null,
+		rows: pairs.left.map((left) => {
+			const pairCorrect = keyVisible && (isCorrect || correctLeftIds.has(left.id))
+			return {
+				leftId: left.id,
+				text: `${left.text} → ${rightText(selected[left.id])}`,
+				tone: pairCorrect ? 'correct' : keyVisible ? 'wrong' : 'neutral',
+				verdictText: keyVisible
+					? pairCorrect
+						? 'Верно'
+						: `Неверно · правильная пара: ${rightText(correct[left.id])}`
+					: null,
+			}
+		}),
+	}
+}
+
 export function formatDuration(ms: number): string {
 	if (ms > 0 && ms < 1000) return '<1с'
 	const seconds = Math.floor(ms / 1000)

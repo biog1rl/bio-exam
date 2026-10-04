@@ -106,11 +106,19 @@ test('sequencePositionLabel: цифра ключа звучит только п�
 })
 
 test('QuestionAnswerReview выводит summaryText как есть и не содержит прежней строки позиций', () => {
-	const source = readFileSync(fileURLToPath(new URL('./QuestionAnswerReview.tsx', import.meta.url)), 'utf8')
-	assert.ok(!source.includes('Совпало позиций'))
-	assert.ok(source.includes('getSequenceReview('))
-	assert.ok(source.includes('{sequenceReview.summaryText}'))
-	assert.ok(!/Ошибок:/.test(source))
+	const read = (name: string) => readFileSync(fileURLToPath(new URL(name, import.meta.url)), 'utf8')
+	const component = read('./QuestionAnswerReview.tsx')
+	const utils = read('./attempt-review-utils.ts')
+	assert.ok(!component.includes('Совпало позиций'))
+	assert.ok(!utils.includes('Совпало позиций'))
+	assert.ok(component.includes('getTextReview('))
+	assert.ok(component.includes('{review.summaryText}'))
+	assert.ok(!/Ошибок:/.test(component))
+	const start = utils.indexOf('export function getTextReview(')
+	assert.ok(start >= 0)
+	const end = utils.indexOf('\n}\n', start)
+	assert.ok(end > start)
+	assert.ok(utils.slice(start, end).includes('getSequenceReview('))
 })
 
 const threeOptionQuestion = {
