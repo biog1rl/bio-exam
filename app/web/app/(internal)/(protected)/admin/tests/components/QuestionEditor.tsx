@@ -94,7 +94,9 @@ export default function QuestionEditor({
 				{ id: generateId(), text: '' },
 			]
 			newForm.correct = template === 'multi_choice' ? [] : ''
-		} else if (template === 'short_text' && selectedType.scoringRule.mistakeMetric === 'compact_text_in_set') {
+		} else if (
+			keyShapeFor({ uiTemplate: template, mistakeMetric: selectedType.scoringRule.mistakeMetric }) === 'text_variants'
+		) {
 			// Switch to short answer with several accepted variants
 			newForm.matchingPairs = null
 			newForm.options = null

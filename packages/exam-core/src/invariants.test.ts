@@ -19,6 +19,7 @@ import {
 } from './cases/scoring.cases'
 import {
 	defaultMistakeMetricForTemplate,
+	isMistakeMetricAllowedForTemplate,
 	QUESTION_UI_TEMPLATES,
 	type MistakeMetric,
 	type QuestionUiTemplate,
@@ -81,6 +82,82 @@ function fromReview(template: QuestionUiTemplate | null, cases: ReviewRow[]): In
 		})
 }
 
+const FOREIGN_METRIC_ROWS: InvariantRow[] = [
+	{
+		name: 'чужая метрика: short_text + hamming_digits, 12/21',
+		template: 'short_text',
+		metric: 'hamming_digits',
+		key: '12',
+		answer: '21',
+	},
+	{
+		name: 'чужая метрика: short_text + hamming_digits, 12/12',
+		template: 'short_text',
+		metric: 'hamming_digits',
+		key: '12',
+		answer: '12',
+	},
+	{
+		name: 'чужая метрика: sequence_digits + compact_text_equal, 1243/1234',
+		template: 'sequence_digits',
+		metric: 'compact_text_equal',
+		key: '1243',
+		answer: '1234',
+	},
+	{
+		name: 'чужая метрика: matching + boolean_correct, одна неверная пара',
+		template: 'matching',
+		metric: 'boolean_correct',
+		key: { l1: 'r1', l2: 'r2' },
+		answer: { l1: 'r1', l2: 'r1' },
+		content: {
+			matchingPairs: {
+				left: [
+					{ id: 'l1', text: 'Л1' },
+					{ id: 'l2', text: 'Л2' },
+				],
+				right: [
+					{ id: 'r1', text: 'П1' },
+					{ id: 'r2', text: 'П2' },
+				],
+			},
+		},
+	},
+	{
+		name: 'чужая метрика: multi_choice + boolean_correct, верный набор',
+		template: 'multi_choice',
+		metric: 'boolean_correct',
+		key: ['a', 'b'],
+		answer: ['a', 'b'],
+		content: {
+			options: [
+				{ id: 'a', text: 'А' },
+				{ id: 'b', text: 'Б' },
+				{ id: 'c', text: 'В' },
+			],
+		},
+	},
+	{
+		name: 'чужая метрика: single_choice + set_distance, неверный вариант',
+		template: 'single_choice',
+		metric: 'set_distance',
+		key: 'a',
+		answer: 'b',
+		content: {
+			options: [
+				{ id: 'a', text: 'А' },
+				{ id: 'b', text: 'Б' },
+			],
+		},
+	},
+]
+
+function effectiveMetric(row: InvariantRow): MistakeMetric {
+	return isMistakeMetricAllowedForTemplate(row.template, row.metric)
+		? row.metric
+		: defaultMistakeMetricForTemplate(row.template)
+}
+
 const ROWS: InvariantRow[] = [
 	...fromScoring(SINGLE_CHOICE_SCORING_CASES),
 	...fromScoring(MULTI_CHOICE_SCORING_CASES),
@@ -91,6 +168,7 @@ const ROWS: InvariantRow[] = [
 	...fromReview('matching', MATCHING_REVIEW_CASES),
 	...fromReview('short_text', SHORT_TEXT_REVIEW_CASES),
 	...fromReview('sequence_digits', SEQUENCE_REVIEW_CASES),
+	...FOREIGN_METRIC_ROWS,
 ]
 
 function countByTemplate(rows: InvariantRow[]): string {
@@ -109,8 +187,9 @@ describe('инвариант «все части верны ⇔ ошибок 0»
 				answer: row.answer,
 				content: row.content,
 			})
-			const counted = countMistakes(row.metric, row.answer, row.key)
+			const counted = countMistakes(effectiveMetric(row), row.answer, row.key)
 			assert.equal(allPartsCorrect(verdicts), counted === 0, `${row.name}: allPartsCorrect при ${counted}`)
+			assert.equal(allPartsCorrect(verdicts), verdicts.mistakes === 0, `${row.name}: allPartsCorrect ⇔ mistakes 0`)
 			if (UNITS_EQUAL_TEMPLATES.includes(row.template) && counted < MISTAKES_UNSCORABLE) {
 				assert.equal(errorUnits(verdicts), counted, `${row.name}: errorUnits`)
 			}
@@ -125,6 +204,36 @@ describe('инвариант «все части верны ⇔ ошибок 0»
 				ROWS.some((row) => row.template === template),
 				template
 			)
+		}
+	})
+
+	test('у каждого шаблона есть строка с ошибками и строка без ошибок', () => {
+		for (const template of QUESTION_UI_TEMPLATES) {
+			const mistakes = ROWS.filter((row) => row.template === template).map(
+				(row) =>
+					computeVerdicts({
+						template: row.template,
+						metric: row.metric,
+						key: row.key,
+						answer: row.answer,
+						content: row.content,
+					}).mistakes
+			)
+			assert.ok(
+				mistakes.some((value) => value > 0 && value < MISTAKES_UNSCORABLE),
+				`${template}: нет строки с mistakes > 0`
+			)
+			assert.ok(
+				mistakes.some((value) => value === 0),
+				`${template}: нет строки с mistakes === 0`
+			)
+		}
+	})
+
+	test('строки с чужой метрикой есть и шаблоны у них разные', () => {
+		assert.ok(FOREIGN_METRIC_ROWS.length >= 5)
+		for (const row of FOREIGN_METRIC_ROWS) {
+			assert.equal(isMistakeMetricAllowedForTemplate(row.template, row.metric), false, row.name)
 		}
 	})
 

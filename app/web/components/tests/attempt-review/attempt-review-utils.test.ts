@@ -40,6 +40,15 @@ test('getSequenceReview: верный ответ при скрытом ключ�
 	assert.equal(review.hasSwap, false)
 })
 
+test('getSequenceReview: сохранённый isCorrect при другом текущем ключе даёт Ошибок: 0 без ячеек', () => {
+	const review = getSequenceReview({ studentAnswer: '1243', correctAnswer: '1234', isCorrect: true })
+	assert.equal(review.visible, true)
+	assert.equal(review.mistakes, 0)
+	assert.equal(review.summaryText, 'Ошибок: 0')
+	assert.equal(review.showCells, false)
+	assert.equal(review.hasSwap, false)
+})
+
 test('getSequenceReview: неверный ответ при скрытом ключе ничего не показывает', () => {
 	const review = getSequenceReview({ studentAnswer: '2315', correctAnswer: null, isCorrect: false })
 	assert.equal(review.visible, false)

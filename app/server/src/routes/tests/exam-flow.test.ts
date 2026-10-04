@@ -720,6 +720,14 @@ describe('оценка submit по шаблонам', () => {
 			isCorrect: true,
 		},
 		{
+			name: "short_answer_variants: 'эксперимент'",
+			question: 'short_answer_variants',
+			answer: 'эксперимент',
+			earned: 1,
+			points: 1,
+			isCorrect: true,
+		},
+		{
 			name: "short_answer_variants: 'наблюдение'",
 			question: 'short_answer_variants',
 			answer: 'наблюдение',

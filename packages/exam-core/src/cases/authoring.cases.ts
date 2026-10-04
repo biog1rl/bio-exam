@@ -903,6 +903,18 @@ export const MATCHING_AUTHORING_CASES: AuthoringCase[] = [
 		key: { l1: 'r1', l2: 'r2', l9: 'r1' },
 		expected: null,
 	},
+	{
+		name: 'пустое значение пары отклоняется, даже если справа есть элемент с id ""',
+		config: MATCHING,
+		promptText: 'Сопоставьте',
+		content: pairs(side('l', 2), [
+			{ id: 'r1', text: 'Пара 1' },
+			{ id: '', text: 'Пара 2' },
+		]),
+		key: { l1: 'r1', l2: '' },
+		expected: AUTHORING_MESSAGES.matchingKeyMissing,
+		serverRules: ['validateByTemplate matching: левый без правого'],
+	},
 ]
 
 export const SEQUENCE_AUTHORING_CASES: AuthoringCase[] = [
@@ -1169,13 +1181,14 @@ export const AUTHORING_CASE_GROUPS: ReadonlyArray<{ template: QuestionUiTemplate
 	{ template: 'sequence_digits', cases: SEQUENCE_AUTHORING_CASES },
 ]
 
-export const KEY_SHAPE_CASES: ReadonlyArray<{ config: TemplateConfig; expected: KeyShape }> = [
+export const KEY_SHAPE_CASES: ReadonlyArray<{ config: TemplateConfig; expected: KeyShape | null }> = [
 	{ config: SINGLE, expected: 'option_id' },
 	{ config: MULTI, expected: 'option_ids' },
 	{ config: MATCHING, expected: 'pairs' },
 	{ config: SHORT_TEXT_EQUAL, expected: 'text' },
 	{ config: SHORT_TEXT_IN_SET, expected: 'text_variants' },
 	{ config: SEQUENCE, expected: 'digits' },
+	{ config: { uiTemplate: 'essay' as QuestionUiTemplate, mistakeMetric: 'compact_text_equal' }, expected: null },
 ]
 
 export const TO_CANONICAL_KEY_CASES: ReadonlyArray<{

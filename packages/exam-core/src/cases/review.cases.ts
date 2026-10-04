@@ -741,6 +741,12 @@ export const IS_ANSWERED_CASES: IsAnsweredCase[] = [
 	{ name: 'sequence_digits: строка из пробелов', template: 'sequence_digits', answer: '  ', expected: false },
 	{ name: 'sequence_digits: число', template: 'sequence_digits', answer: 1243, expected: false },
 	{ name: 'шаблон null', template: null, answer: 'a', expected: false },
+	{
+		name: 'неизвестный шаблон essay',
+		template: 'essay' as QuestionUiTemplate,
+		answer: 'текст',
+		expected: false,
+	},
 ]
 
 export type ReadKeyCase = {
@@ -854,6 +860,13 @@ export const READ_KEY_CASES: ReadKeyCase[] = [
 		template: 'single_choice',
 		metric: 'set_distance',
 		raw: ['1'],
+		expected: null,
+	},
+	{
+		name: 'неизвестный шаблон essay',
+		template: 'essay' as QuestionUiTemplate,
+		metric: 'compact_text_equal',
+		raw: 'текст',
 		expected: null,
 	},
 ]

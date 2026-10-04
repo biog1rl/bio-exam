@@ -1,6 +1,5 @@
-import { getTemplateAdapter } from './adapters/index'
+import { TEMPLATE_ADAPTERS } from './adapters/index'
 import type { QuestionContent, QuestionVerdicts } from './adapters/types'
-import { resolveMistakes } from './adapters/verdicts'
 import type { AnswerValue } from './attempt-result'
 import {
 	defaultMistakeMetricForTemplate,
@@ -8,7 +7,6 @@ import {
 	type MistakeMetric,
 	type QuestionUiTemplate,
 } from './registry'
-import { countMistakes } from './scoring'
 
 export { allPartsCorrect, errorUnits } from './adapters/verdicts'
 
@@ -20,15 +18,22 @@ export type ComputeVerdictsInput = {
 	content?: QuestionContent | null
 }
 
+function isKnownTemplate(template: unknown): template is QuestionUiTemplate {
+	return typeof template === 'string' && Object.hasOwn(TEMPLATE_ADAPTERS, template)
+}
+
 export function computeVerdicts(input: ComputeVerdictsInput): QuestionVerdicts {
-	const metric = input.metric ?? defaultMistakeMetricForTemplate(input.template)
-	const verdicts = getTemplateAdapter(input.template).verdicts({
+	if (!isKnownTemplate(input.template)) throw new Error(`Неизвестный шаблон вопроса: ${String(input.template)}`)
+	const metric =
+		input.metric && isMistakeMetricAllowedForTemplate(input.template, input.metric)
+			? input.metric
+			: defaultMistakeMetricForTemplate(input.template)
+	return TEMPLATE_ADAPTERS[input.template].verdicts({
 		metric,
 		key: input.key,
 		answer: input.answer,
 		content: input.content ?? {},
 	})
-	return { ...verdicts, mistakes: resolveMistakes(countMistakes(metric, input.answer, input.key), verdicts) }
 }
 
 export function isAnswered(input: {
@@ -36,8 +41,8 @@ export function isAnswered(input: {
 	answer: unknown
 	content?: QuestionContent | null
 }): boolean {
-	if (!input.template) return false
-	return getTemplateAdapter(input.template).isAnswered(input.answer, input.content ?? {})
+	if (!isKnownTemplate(input.template)) return false
+	return TEMPLATE_ADAPTERS[input.template].isAnswered(input.answer, input.content ?? {})
 }
 
 export function readKey(input: {
@@ -45,8 +50,9 @@ export function readKey(input: {
 	metric: MistakeMetric
 	raw: unknown
 }): AnswerValue | null {
+	if (!isKnownTemplate(input.template)) return null
 	if (!isMistakeMetricAllowedForTemplate(input.template, input.metric)) return null
-	return getTemplateAdapter(input.template).readKey(input.raw, input.metric)
+	return TEMPLATE_ADAPTERS[input.template].readKey(input.raw, input.metric)
 }
 
 function isIdLike(value: unknown): value is string | number {

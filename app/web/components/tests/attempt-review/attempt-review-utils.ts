@@ -82,7 +82,7 @@ export function getSequenceReview(input: {
 	isCorrect: boolean
 }): SequenceReview {
 	const visible = input.correctAnswer != null || input.isCorrect
-	const key = input.correctAnswer != null ? input.correctAnswer : input.isCorrect ? input.studentAnswer : null
+	const key = input.isCorrect ? input.studentAnswer : input.correctAnswer
 	const verdicts = computeVerdicts({ template: 'sequence_digits', key, answer: input.studentAnswer })
 	const parts = verdicts.template === 'sequence_digits' ? verdicts.parts : []
 	const mistakes = verdicts.mistakes

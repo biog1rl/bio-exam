@@ -29,9 +29,9 @@ export function validateQuestionForSave({
 	return adapter.validateAuthoring({ config, content: content ?? {}, key })
 }
 
-export function keyShapeFor(config: TemplateConfig): KeyShape {
+export function keyShapeFor(config: TemplateConfig): KeyShape | null {
 	const adapter = adapterFor(config)
-	if (!adapter) throw new Error(`Неизвестный шаблон вопроса: ${String(config?.uiTemplate)}`)
+	if (!adapter) return null
 	return adapter.keyShape(config.mistakeMetric)
 }
 

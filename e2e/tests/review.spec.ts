@@ -289,8 +289,7 @@ test.describe.serial('known defect D1: admin review follows the current answer k
 		})
 		expect(patched.ok(), `answer key PATCH status ${patched.status()}`).toBe(true)
 		const reread = (await (await adminPage.request.get(detailUrl)).json()) as typeof detailBody
-		// Сервер хранит однозначный числовой ключ числом: JSONB отдаёт 1, а не "1"
-		expect(String(reread.questions.find((item) => item.id === target!.id)?.correct)).toBe('1')
+		expect(reread.questions.find((item) => item.id === target!.id)?.correct).toBe('1')
 	})
 
 	test.afterAll(async () => {

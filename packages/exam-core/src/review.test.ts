@@ -11,7 +11,7 @@ import {
 	SEQUENCE_REVIEW_CASES,
 	SHORT_TEXT_REVIEW_CASES,
 } from './cases/review.cases'
-import { QUESTION_UI_TEMPLATES } from './registry'
+import { QUESTION_UI_TEMPLATES, type QuestionUiTemplate } from './registry'
 import {
 	allPartsCorrect,
 	answerIdList,
@@ -112,6 +112,29 @@ describe('разбор short_text', () => {
 		)
 		assert.equal(verdicts.mistakes, row.mistakes)
 		assert.equal(errorUnits(verdicts), row.mistakes)
+	})
+})
+
+describe('метрика чужого шаблона', () => {
+	test('short_text + hamming_digits, ключ 12, ответ 21: части и ошибки от одного адаптера метрики по умолчанию', () => {
+		const verdicts = computeVerdicts({ template: 'short_text', metric: 'hamming_digits', key: '12', answer: '21' })
+		assert.equal(verdicts.template, 'short_text')
+		assert.deepEqual(
+			verdicts.parts.map((part) => part.kind),
+			['wrong']
+		)
+		assert.equal(verdicts.mistakes, 1)
+		assert.equal(errorUnits(verdicts), verdicts.mistakes)
+		assert.equal(allPartsCorrect(verdicts), false)
+		assert.deepEqual(verdicts, computeVerdicts({ template: 'short_text', key: '12', answer: '21' }))
+	})
+})
+
+describe('неизвестный шаблон', () => {
+	test('computeVerdicts бросает понятную ошибку', () => {
+		assert.throws(() => computeVerdicts({ template: 'essay' as QuestionUiTemplate, key: 'a', answer: 'a' }), {
+			message: 'Неизвестный шаблон вопроса: essay',
+		})
 	})
 })
 

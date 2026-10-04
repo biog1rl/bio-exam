@@ -87,7 +87,9 @@ export const matchingAdapter: TemplateAdapter<Record<string, string>> = {
 		if (Object.values(pairsKey).some((value) => typeof value !== 'string')) return AUTHORING_MESSAGES.matchingKeyMissing
 		for (const leftId of leftIds) {
 			const mapped = Object.hasOwn(pairsKey, leftId) ? pairsKey[leftId] : undefined
-			if (typeof mapped !== 'string' || !rightIds.includes(mapped)) return AUTHORING_MESSAGES.matchingKeyMissing
+			if (typeof mapped !== 'string' || mapped === '' || !rightIds.includes(mapped)) {
+				return AUTHORING_MESSAGES.matchingKeyMissing
+			}
 		}
 		return null
 	},
