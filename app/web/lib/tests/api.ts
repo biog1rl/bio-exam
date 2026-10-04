@@ -1,4 +1,4 @@
-import type { AttemptView, SubmitAttemptRequest } from '@bio-exam/exam-core'
+import type { AttemptView, SaveAttemptDraftRequest, SubmitAttemptRequest } from '@bio-exam/exam-core'
 
 import { apiFetch } from '../api-fetch'
 import type {
@@ -160,6 +160,33 @@ export async function saveSessionTelemetry(testId: string, sessionId: string, te
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ telemetry }),
 	})
+}
+
+export const KEEPALIVE_BODY_LIMIT_BYTES = 60_000
+
+export type AttemptDraftSaveResult = { kind: 'response'; status: number } | { kind: 'network' } | { kind: 'too-large' }
+
+export async function saveAttemptDraft(
+	testId: string,
+	sessionId: string,
+	body: SaveAttemptDraftRequest,
+	options: { keepalive: boolean }
+): Promise<AttemptDraftSaveResult> {
+	const json = JSON.stringify(body)
+	if (options.keepalive && new TextEncoder().encode(json).length > KEEPALIVE_BODY_LIMIT_BYTES) {
+		return { kind: 'too-large' }
+	}
+	try {
+		const response = await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: json,
+			keepalive: options.keepalive,
+		})
+		return { kind: 'response', status: response.status }
+	} catch {
+		return { kind: 'network' }
+	}
 }
 
 export async function submitPublicTestAnswers(testId: string, request: SubmitAttemptRequest): Promise<AttemptView> {

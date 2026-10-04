@@ -1,16 +1,10 @@
 /**
  * Публичные API роуты для прохождения тестов (для студентов)
  */
-import {
-	AnswerValueSchema,
-	SUBMIT_ERROR_CODES,
-	SubmitAttemptRequestSchema,
-	TelemetryMapSchema,
-} from '@bio-exam/exam-core'
+import { SaveAttemptDraftRequestSchema, SUBMIT_ERROR_CODES, SubmitAttemptRequestSchema } from '@bio-exam/exam-core'
 
 import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { Router, type Response } from 'express'
-import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import { appSettings, questions, testAttempts, tests, topics } from '../../db/schema.js'
@@ -526,23 +520,6 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 })
 
 // PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers - промежуточное сохранение черновика ответов в БД
-const SaveDraftAnswerSchema = z
-	.object({
-		questionId: z.string().uuid().optional(),
-		value: AnswerValueSchema.optional(),
-		telemetry: TelemetryMapSchema.optional(),
-	})
-	.superRefine((data, ctx) => {
-		const hasQuestion = data.questionId !== undefined
-		const hasValue = data.value !== undefined
-		if (hasQuestion !== hasValue || (!hasQuestion && data.telemetry === undefined)) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: 'Provide questionId with value, telemetry, or both',
-			})
-		}
-	})
-
 router.patch(
 	'/tests/:id/sessions/:sessionId/answers',
 	validateUUID('id'),
@@ -554,7 +531,7 @@ router.patch(
 			const sessionId = req.params.sessionId as string
 			const userId = req.authUser!.id
 
-			const parsed = SaveDraftAnswerSchema.safeParse(req.body)
+			const parsed = SaveAttemptDraftRequestSchema.safeParse(req.body)
 			if (!parsed.success) {
 				return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 			}
