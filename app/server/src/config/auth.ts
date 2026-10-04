@@ -21,7 +21,23 @@ export function parseAccessTokenTtl(raw: string | undefined): number {
 	return value
 }
 
-const sessionMaxAgeDays = Number(process.env.SESSION_MAX_AGE_DAYS ?? DEFAULTS.SESSION_MAX_AGE_DAYS)
+const DAYS_MIN = 1
+const DAYS_MAX = 365
+
+export function parseDays(key: string, raw: string | undefined, fallback: number): number {
+	if (raw === undefined) return fallback
+	const value = /^\d+$/.test(raw) ? Number(raw) : Number.NaN
+	if (!Number.isInteger(value) || value < DAYS_MIN || value > DAYS_MAX) {
+		throw new Error(`${key} must be an integer from ${DAYS_MIN} to ${DAYS_MAX} days`)
+	}
+	return value
+}
+
+const sessionMaxAgeDays = parseDays(
+	'SESSION_MAX_AGE_DAYS',
+	process.env.SESSION_MAX_AGE_DAYS,
+	DEFAULTS.SESSION_MAX_AGE_DAYS
+)
 
 // Fail-fast in production if secret is missing or left as default
 if (process.env.NODE_ENV === 'production') {
@@ -48,7 +64,11 @@ export const AUTH_CONFIG = {
 
 	accessTokenTtlSec: parseAccessTokenTtl(process.env.ACCESS_TOKEN_EXPIRES_SEC),
 
-	refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? sessionMaxAgeDays),
+	refreshTokenTtlDays: parseDays(
+		'REFRESH_TOKEN_EXPIRES_DAYS',
+		process.env.REFRESH_TOKEN_EXPIRES_DAYS,
+		sessionMaxAgeDays
+	),
 
 	/**
 	 * Время жизни сессии в секундах (вычисляемое)

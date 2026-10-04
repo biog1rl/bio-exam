@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getSessionCookieCandidates, readSessionCookieValue } from '@/lib/auth/sessionCookie'
 import { needsRefresh } from '@/lib/session/access-token'
-import { refreshForProxy } from '@/lib/session/proxy-refresh'
+import { refreshForProxy, SESSION_REFRESH_HEADER, SESSION_REFRESH_UNAVAILABLE } from '@/lib/session/proxy-refresh'
 import { buildLoginRedirect } from '@/lib/session/redirect'
 
 const REFRESH_COOKIE_NAME = 'refresh_token'
@@ -27,6 +27,18 @@ function clearSessionCookies(response: NextResponse): void {
 	}
 }
 
+function forwardedHeaders(req: NextRequest, sessionRefresh?: string): Headers {
+	const headers = new Headers(req.headers)
+	headers.delete(SESSION_REFRESH_HEADER)
+	if (sessionRefresh) headers.set(SESSION_REFRESH_HEADER, sessionRefresh)
+	return headers
+}
+
+function passThrough(req: NextRequest): NextResponse {
+	if (!req.headers.has(SESSION_REFRESH_HEADER)) return NextResponse.next()
+	return NextResponse.next({ request: { headers: forwardedHeaders(req) } })
+}
+
 export async function proxy(req: NextRequest) {
 	const isPublic = isPublicPath(req.nextUrl.pathname)
 	const accessToken = readSessionCookieValue(req.cookies, process.env.SESSION_COOKIE_NAME)
@@ -39,7 +51,7 @@ export async function proxy(req: NextRequest) {
 			for (const [name, value] of Object.entries(outcome.values)) {
 				req.cookies.set(name, value)
 			}
-			const response = NextResponse.next({ request: { headers: new Headers(req.headers) } })
+			const response = NextResponse.next({ request: { headers: forwardedHeaders(req) } })
 			for (const line of outcome.setCookies) {
 				response.headers.append('set-cookie', line)
 			}
@@ -47,17 +59,17 @@ export async function proxy(req: NextRequest) {
 		}
 
 		if (outcome.kind === 'rejected') {
-			const response = isPublic ? NextResponse.next() : loginRedirect(req)
+			const response = isPublic ? passThrough(req) : loginRedirect(req)
 			clearSessionCookies(response)
 			return response
 		}
 
-		return NextResponse.next()
+		return NextResponse.next({ request: { headers: forwardedHeaders(req, SESSION_REFRESH_UNAVAILABLE) } })
 	}
 
-	if (isPublic) return NextResponse.next()
+	if (isPublic) return passThrough(req)
 
-	if (accessToken || hasRefresh) return NextResponse.next()
+	if (accessToken || hasRefresh) return passThrough(req)
 
 	return loginRedirect(req)
 }

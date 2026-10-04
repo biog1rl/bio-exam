@@ -17,7 +17,7 @@ type AuthContextValue = {
 	sessionError: boolean
 	avatarVersion: number
 	refresh: () => Promise<void>
-	logout: () => Promise<void>
+	logout: () => Promise<boolean>
 	can: {
 		<D extends PermissionDomain>(domain: D, action: ActionOf<D>): boolean
 		(key: PermissionKey): boolean
@@ -111,11 +111,12 @@ export function AuthProvider({
 	}, [accessExpiresAt])
 
 	const logout = useCallback(async () => {
-		await sessionClient.logout()
+		if (!(await sessionClient.logout())) return false
 		setMe(null)
 		localStorage.setItem('logout', Date.now().toString())
 		localStorage.removeItem('logout')
 		window.location.assign('/login')
+		return true
 	}, [])
 
 	// Автоматический рефреш при разлогинивании

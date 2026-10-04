@@ -57,6 +57,25 @@ async function sessionRow(sessionId: string) {
 	return result.rows[0] ?? null
 }
 
+async function insertLegacyToken(name: string): Promise<string> {
+	const raw = crypto.randomBytes(32).toString('hex')
+	await ctx.pgPool.query(
+		"INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, encode(sha256(convert_to($2, 'UTF8')), 'hex'), now() + interval '1 day')",
+		[userId(name), raw]
+	)
+	return raw
+}
+
+async function legacyTokenRevoked(raw: string): Promise<boolean> {
+	const result = await ctx.pgPool.query<{ revoked_at: Date | null; session_id: string | null }>(
+		"SELECT revoked_at, session_id FROM refresh_tokens WHERE token_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')",
+		[raw]
+	)
+	const row = result.rows[0]
+	assert.ok(row, 'legacy token is missing')
+	return row.revoked_at !== null
+}
+
 async function sessionTokens(sessionId: string) {
 	const result = await ctx.pgPool.query<{ revoked_at: Date | null; used_at: Date | null }>(
 		'SELECT revoked_at, used_at FROM refresh_tokens WHERE session_id = $1',
@@ -83,6 +102,10 @@ beforeAll(async () => {
 		['rev_roles', ['user']],
 		['rev_target', ['user']],
 		['rev_expiry', ['user']],
+		['rev_legacy_admin', ['user']],
+		['rev_legacy_password', ['user']],
+		['rev_invite_accept', ['user']],
+		['rev_invite_active', ['user']],
 	]
 	for (const [name, roles] of seeds) {
 		ids.set(name, await seedUser(ctx, { login: name, roles, password: PASSWORD }))
@@ -225,4 +248,78 @@ describe('accessExpiresAt', () => {
 		const meAfter = await call(ctx, 'GET', '/api/auth/me', { cookies: current })
 		assertAccessExpiresAt(meAfter, current.get(ACCESS))
 	})
+})
+
+describe('refresh-токен без сессии', () => {
+	test('«завершить все сеансы» отзывает токен без session_id: refresh 401', async () => {
+		const legacy = await insertLegacyToken('rev_legacy_admin')
+		const reply = await call(ctx, 'POST', `/api/users/${userId('rev_legacy_admin')}/sessions/revoke`, {
+			cookies: adminJar,
+		})
+		assert.equal(reply.status, 200)
+		assert.equal(await legacyTokenRevoked(legacy), true)
+		assert.equal((await call(ctx, 'POST', '/api/auth/refresh', { cookies: `${REFRESH}=${legacy}` })).status, 401)
+	})
+
+	test('смена пароля отзывает токен без session_id, текущая сессия работает', async () => {
+		const legacy = await insertLegacyToken('rev_legacy_password')
+		const jar = await signIn('rev_legacy_password')
+		const changed = await call(ctx, 'POST', '/api/users/profile/password', {
+			cookies: jar,
+			body: { oldPassword: PASSWORD, newPassword: NEW_PASSWORD },
+		})
+		assert.equal(changed.status, 200)
+		assert.equal(await legacyTokenRevoked(legacy), true)
+		assert.equal((await call(ctx, 'POST', '/api/auth/refresh', { cookies: `${REFRESH}=${legacy}` })).status, 401)
+		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: jar })).status, 200)
+	})
+})
+
+describe('приглашения', () => {
+	function tokenOf(reply: Reply): string {
+		const link = reply.body.inviteLink
+		assert.equal(typeof link, 'string')
+		const token = (link as string).split('/invite/')[1]
+		assert.ok(token, `no token in ${link}`)
+		return token
+	}
+
+	test('POST /api/auth/invites для активного пользователя: 409, приглашение не создаётся', async () => {
+		const id = userId('rev_invite_active')
+		const reply = await call(ctx, 'POST', '/api/auth/invites', { cookies: adminJar, body: { userId: id } })
+		assert.equal(reply.status, 409)
+		assert.equal(typeof reply.body.error, 'string')
+		assert.ok((reply.body.error as string).length > 0)
+		const invites = await ctx.pgPool.query('SELECT id FROM invites WHERE user_id = $1', [id])
+		assert.equal(invites.rowCount, 0)
+	})
+
+	test('accept приглашения отзывает прежние сессии пользователя с password_change', async () => {
+		const id = userId('rev_invite_accept')
+		const deactivated = await call(ctx, 'PATCH', `/api/users/${id}`, { cookies: adminJar, body: { isActive: false } })
+		assert.equal(deactivated.status, 200)
+		const issued = await call(ctx, 'POST', '/api/auth/invites', { cookies: adminJar, body: { userId: id } })
+		assert.equal(issued.status, 200)
+		const token = tokenOf(issued)
+		const reactivated = await call(ctx, 'PATCH', `/api/users/${id}`, { cookies: adminJar, body: { isActive: true } })
+		assert.equal(reactivated.status, 200)
+
+		const jar = await signIn('rev_invite_accept')
+		const sid = sessionIdOf(jar)
+		const accepted = await call(ctx, 'POST', '/api/auth/invites/accept', {
+			body: { token, login: 'rev_invite_accept', password: NEW_PASSWORD },
+		})
+		assert.equal(accepted.status, 200)
+
+		const session = await sessionRow(sid)
+		assert.ok(session?.revoked_at, 'session is not revoked')
+		assert.equal(session.revoke_reason, 'password_change')
+		assert.ok((await sessionTokens(sid)).every((row) => row.revoked_at !== null))
+		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: jar })).status, 401)
+		assert.equal(
+			(await call(ctx, 'POST', '/api/auth/refresh', { cookies: `${REFRESH}=${jar.get(REFRESH)}` })).status,
+			401
+		)
+		assert.equal((await login(ctx, 'rev_invite_accept', NEW_PASSWORD)).status, 200)
+	}, 20_000)
 })

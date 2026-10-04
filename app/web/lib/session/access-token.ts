@@ -13,7 +13,7 @@ function decodeBase64Url(part: string): string {
 	return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
 }
 
-export function decodeAccessPayload(token: string | null | undefined): AccessPayload | null {
+function decodePayloadRecord(token: string | null | undefined): Record<string, unknown> | null {
 	if (typeof token !== 'string') return null
 	const parts = token.split('.')
 	if (parts.length !== 3 || !parts[1]) return null
@@ -24,11 +24,28 @@ export function decodeAccessPayload(token: string | null | undefined): AccessPay
 		return null
 	}
 	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
-	const record = payload as Record<string, unknown>
+	return payload as Record<string, unknown>
+}
+
+function finiteNumber(value: unknown): number | null {
+	return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function toAccessPayload(record: Record<string, unknown>): AccessPayload {
 	return {
 		sid: typeof record.sid === 'string' && record.sid.length > 0 ? record.sid : null,
-		exp: typeof record.exp === 'number' && Number.isFinite(record.exp) ? record.exp : null,
+		exp: finiteNumber(record.exp),
 	}
+}
+
+export function decodeAccessPayload(token: string | null | undefined): AccessPayload | null {
+	const record = decodePayloadRecord(token)
+	return record ? toAccessPayload(record) : null
+}
+
+function refreshThresholdSec(iat: number | null, exp: number): number {
+	if (iat === null || exp <= iat) return REFRESH_THRESHOLD_SEC
+	return Math.min(REFRESH_THRESHOLD_SEC, (exp - iat) / 2)
 }
 
 export function needsRefresh(input: {
@@ -38,7 +55,9 @@ export function needsRefresh(input: {
 }): boolean {
 	if (!input.hasRefresh) return false
 	if (!input.accessToken) return true
-	const payload = decodeAccessPayload(input.accessToken)
-	if (!payload || !payload.sid || payload.exp === null) return true
-	return payload.exp - input.nowSec <= REFRESH_THRESHOLD_SEC
+	const record = decodePayloadRecord(input.accessToken)
+	if (!record) return true
+	const payload = toAccessPayload(record)
+	if (!payload.sid || payload.exp === null) return true
+	return payload.exp - input.nowSec <= refreshThresholdSec(finiteNumber(record.iat), payload.exp)
 }

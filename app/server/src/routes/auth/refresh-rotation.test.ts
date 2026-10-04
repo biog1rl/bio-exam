@@ -127,6 +127,9 @@ beforeAll(async () => {
 		'rot_replay_revoked',
 		'rot_parallel',
 		'rot_replay_log',
+		'rot_parallel_replay',
+		'rot_replay_vs_rotation',
+		'rot_replay_other_session',
 	]) {
 		ids.set(name, await seedUser(ctx, { login: name, roles: ['user'], password: PASSWORD }))
 	}
@@ -474,5 +477,88 @@ describe('refresh: окно гонки и replay', () => {
 		} finally {
 			warn.mockRestore()
 		}
+	})
+
+	test('пять параллельных replay после окна: все 401, сессия отозвана один раз с replay, без 500', async () => {
+		const jar = await signIn('rot_parallel_replay')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const t1 = refreshOf(first)
+		await shiftUsedAt(t0, 31)
+		const replies = await Promise.all(Array.from({ length: 5 }, () => rotate(t0)))
+		assert.deepEqual(
+			replies.map((reply) => reply.status),
+			[401, 401, 401, 401, 401]
+		)
+		const session = await sessionRow(sid)
+		assert.ok(session?.revoked_at, 'session is not revoked')
+		assert.equal(session.revoke_reason, 'replay')
+		assert.ok((await sessionTokens(sid)).every((token) => token.revoked_at !== null))
+		assert.equal((await rotate(t1)).status, 401)
+	})
+
+	test('replay старого токена параллельно с ротацией преемника: без 500 и deadlock, сессия отозвана с replay', async () => {
+		const jar = await signIn('rot_replay_vs_rotation')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const t1 = refreshOf(first)
+		await shiftUsedAt(t0, 31)
+		const name = 'test_slow_refresh_insert'
+		await ctx.pgPool.query(
+			`CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.6); RETURN NEW; END $$`
+		)
+		await ctx.pgPool.query(
+			`CREATE TRIGGER ${name} AFTER INSERT ON refresh_tokens FOR EACH ROW EXECUTE FUNCTION ${name}()`
+		)
+		let rotation: Reply
+		let replay: Reply
+		try {
+			const rotating = rotate(t1)
+			await new Promise((resolve) => setTimeout(resolve, 200))
+			replay = await rotate(t0)
+			rotation = await rotating
+		} finally {
+			await ctx.pgPool.query(`DROP TRIGGER IF EXISTS ${name} ON refresh_tokens`)
+			await ctx.pgPool.query(`DROP FUNCTION IF EXISTS ${name}()`)
+		}
+		assert.equal(replay.status, 401)
+		assert.notEqual(rotation.status, 500)
+		const session = await sessionRow(sid)
+		assert.ok(session?.revoked_at, 'session is not revoked')
+		assert.equal(session.revoke_reason, 'replay')
+		if (rotation.status === 200) {
+			assert.equal((await rotate(refreshOf(rotation))).status, 401)
+			const access = mergeCookies(jar, rotation.setCookies)
+			assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: access })).status, 401)
+		}
+	}, 20_000)
+
+	test('replay в сессии A не трогает сессию B того же пользователя', async () => {
+		const jarA = await signIn('rot_replay_other_session')
+		const jarB = await signIn('rot_replay_other_session')
+		const sidA = sessionIdOf(jarA)
+		const sidB = sessionIdOf(jarB)
+		assert.notEqual(sidA, sidB)
+		const a0 = jarA.get(REFRESH)
+		assert.ok(a0)
+		const first = await rotate(a0)
+		assert.equal(first.status, 200)
+		await shiftUsedAt(a0, 31)
+		assert.equal((await rotate(a0)).status, 401)
+		assert.equal((await sessionRow(sidA))?.revoke_reason, 'replay')
+		assert.equal((await sessionRow(sidB))?.revoked_at, null)
+		assert.ok((await sessionTokens(sidB)).every((token) => token.revoked_at === null))
+		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: jarB })).status, 200)
+		const b0 = jarB.get(REFRESH)
+		assert.ok(b0)
+		const rotatedB = await rotate(b0)
+		assert.equal(rotatedB.status, 200)
+		assert.equal(claimsOf(rotatedB.setCookies.get(ACCESS)?.value).sid, sidB)
 	})
 })

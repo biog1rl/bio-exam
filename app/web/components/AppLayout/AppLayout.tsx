@@ -1,3 +1,4 @@
+import { headers } from 'next/headers'
 import { unstable_rethrow } from 'next/navigation'
 
 import { Providers } from '@/app/providers'
@@ -13,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
+import { SESSION_REFRESH_HEADER, SESSION_REFRESH_UNAVAILABLE } from '@/lib/session/proxy-refresh'
 import { getServerMe, type ServerMe } from '@/lib/session/server'
 
 export default async function AppLayout({
@@ -26,6 +28,9 @@ export default async function AppLayout({
 		me = await getServerMe()
 	} catch (error) {
 		unstable_rethrow(error)
+		sessionError = true
+	}
+	if (!me && (await headers()).get(SESSION_REFRESH_HEADER) === SESSION_REFRESH_UNAVAILABLE) {
 		sessionError = true
 	}
 

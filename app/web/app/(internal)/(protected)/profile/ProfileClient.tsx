@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AvatarEditor } from '@/components/users/AvatarEditor'
 import { apiFetch } from '@/lib/api-fetch'
+import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -206,7 +207,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	}
 
 	const handleLogout = async () => {
-		await logout()
+		if (!(await logout())) toast.error(LOGOUT_FAILED_MESSAGE)
 	}
 
 	return (

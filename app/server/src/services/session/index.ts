@@ -251,15 +251,15 @@ export function rotateRefreshToken(input: { raw: string; ip: string | null }): P
 
 export function revokeSession(sessionId: string, reason: string, tx?: Tx): Promise<boolean> {
 	const run = async (executor: Tx): Promise<boolean> => {
+		await executor
+			.update(refreshTokens)
+			.set({ revokedAt: sql`now()` })
+			.where(and(eq(refreshTokens.sessionId, sessionId), isNull(refreshTokens.revokedAt)))
 		const revoked = await executor
 			.update(authSessions)
 			.set({ revokedAt: sql`now()`, revokeReason: reason })
 			.where(and(eq(authSessions.id, sessionId), isNull(authSessions.revokedAt)))
 			.returning({ id: authSessions.id })
-		await executor
-			.update(refreshTokens)
-			.set({ revokedAt: sql`now()` })
-			.where(and(eq(refreshTokens.sessionId, sessionId), isNull(refreshTokens.revokedAt)))
 		return revoked.length > 0
 	}
 	return guarded(() => (tx ? run(tx) : db.transaction(run)))
@@ -273,19 +273,24 @@ export function revokeUserSessions(
 	const run = async (executor: Tx): Promise<number> => {
 		const conditions = [eq(authSessions.userId, userId), isNull(authSessions.revokedAt)]
 		if (options.exceptSessionId) conditions.push(ne(authSessions.id, options.exceptSessionId))
+		const liveSessions = executor
+			.select({ id: authSessions.id })
+			.from(authSessions)
+			.where(and(...conditions))
+		await executor
+			.update(refreshTokens)
+			.set({ revokedAt: sql`now()` })
+			.where(and(inArray(refreshTokens.sessionId, liveSessions), isNull(refreshTokens.revokedAt)))
+		await executor
+			.update(refreshTokens)
+			.set({ revokedAt: sql`now()` })
+			.where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.sessionId), isNull(refreshTokens.revokedAt)))
 		const revoked = await executor
 			.update(authSessions)
 			.set({ revokedAt: sql`now()`, revokeReason: options.reason })
 			.where(and(...conditions))
 			.returning({ id: authSessions.id })
-		const sessionIds = revoked.map((row) => row.id)
-		if (sessionIds.length > 0) {
-			await executor
-				.update(refreshTokens)
-				.set({ revokedAt: sql`now()` })
-				.where(and(inArray(refreshTokens.sessionId, sessionIds), isNull(refreshTokens.revokedAt)))
-		}
-		return sessionIds.length
+		return revoked.length
 	}
 	return guarded(() => (tx ? run(tx) : db.transaction(run)))
 }

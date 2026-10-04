@@ -52,6 +52,15 @@ describe('needsRefresh', () => {
 		['exp − now = 30', token({ sid: 's', exp: NOW + 30 }), true, true],
 		['access истёк', token({ sid: 's', exp: NOW - 1 }), true, true],
 		['exp через 10 минут', token({ sid: 's', exp: NOW + 600 }), true, false],
+		['TTL 60 с, только что выпущен', token({ sid: 's', iat: NOW, exp: NOW + 60 }), true, false],
+		['TTL 60 с, exp − now = 31', token({ sid: 's', iat: NOW - 29, exp: NOW + 31 }), true, false],
+		['TTL 60 с, exp − now = 30', token({ sid: 's', iat: NOW - 30, exp: NOW + 30 }), true, true],
+		['TTL 900 с, exp − now = 61', token({ sid: 's', iat: NOW - 839, exp: NOW + 61 }), true, false],
+		['TTL 900 с, exp − now = 60', token({ sid: 's', iat: NOW - 840, exp: NOW + 60 }), true, true],
+		['TTL 100 с, exp − now = 50', token({ sid: 's', iat: NOW - 50, exp: NOW + 50 }), true, true],
+		['TTL 100 с, exp − now = 51', token({ sid: 's', iat: NOW - 49, exp: NOW + 51 }), true, false],
+		['iat не число: порог 60 с', token({ sid: 's', iat: 'x', exp: NOW + 60 }), true, true],
+		['iat не раньше exp: порог 60 с', token({ sid: 's', iat: NOW + 60, exp: NOW + 60 }), true, true],
 	])('%s', (_name, accessToken, hasRefresh, expected) => {
 		assert.equal(needsRefresh({ accessToken, hasRefresh, nowSec: NOW }), expected)
 	})

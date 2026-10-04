@@ -28,5 +28,7 @@ export function safeCallbackPath(raw: string | null | undefined, fallback: strin
 	}
 	if (parsed.origin !== CALLBACK_BASE) return fallback
 
-	return `${parsed.pathname}${parsed.search}${parsed.hash}`
+	const path = `${parsed.pathname}${parsed.search}${parsed.hash}`
+	if (path.startsWith('//') || path.startsWith('/\\')) return fallback
+	return path
 }

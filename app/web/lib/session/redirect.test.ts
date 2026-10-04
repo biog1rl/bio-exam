@@ -36,6 +36,11 @@ describe('safeCallbackPath', () => {
 		null,
 		undefined,
 		'dashboard',
+		'/.//evil.com',
+		'/a/..//evil.com',
+		'/%2e//evil.com/x',
+		'/%2e%2e//evil.com/path',
+		'/./\\evil.com',
 	]
 	for (const value of rejected) {
 		test(`отклоняет ${JSON.stringify(value) ?? 'undefined'} и возвращает /dashboard`, () => {

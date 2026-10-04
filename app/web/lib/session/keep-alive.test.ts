@@ -274,3 +274,36 @@ test('срок уже прошёл: refresh сразу, если вкладка 
 	assert.equal(refresh.mock.calls.length, 1)
 	keepAlive.stop()
 })
+
+test('TTL 60 с: после ok следующий refresh не раньше чем через 30 с, в том числе после update()', async () => {
+	const { refresh, onRefreshed, keepAlive } = setup([
+		{ kind: 'ok', accessExpiresAt: iso(START + MINUTE) },
+		{ kind: 'ok', accessExpiresAt: iso(START + REFRESH_RETRY_MS + MINUTE) },
+	])
+	keepAlive.update(iso(START - MINUTE))
+	await vi.advanceTimersByTimeAsync(0)
+	assert.equal(refresh.mock.calls.length, 1)
+	assert.deepEqual(onRefreshed.mock.calls, [[iso(START + MINUTE)]])
+	keepAlive.update(iso(START + MINUTE))
+	await vi.advanceTimersByTimeAsync(REFRESH_RETRY_MS - 1)
+	assert.equal(refresh.mock.calls.length, 1)
+	await vi.advanceTimersByTimeAsync(1)
+	assert.equal(refresh.mock.calls.length, 2)
+	keepAlive.stop()
+})
+
+test('часы клиента спешат: срок после ok уже в прошлом, следующий refresh не раньше чем через 30 с', async () => {
+	const { refresh, keepAlive } = setup([
+		{ kind: 'ok', accessExpiresAt: iso(START - 5 * MINUTE) },
+		{ kind: 'ok', accessExpiresAt: iso(START + 40 * MINUTE) },
+	])
+	keepAlive.update(iso(START - MINUTE))
+	await vi.advanceTimersByTimeAsync(0)
+	assert.equal(refresh.mock.calls.length, 1)
+	keepAlive.update(iso(START - 5 * MINUTE))
+	await vi.advanceTimersByTimeAsync(REFRESH_RETRY_MS - 1)
+	assert.equal(refresh.mock.calls.length, 1)
+	await vi.advanceTimersByTimeAsync(1)
+	assert.equal(refresh.mock.calls.length, 2)
+	keepAlive.stop()
+})

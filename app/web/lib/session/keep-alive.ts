@@ -39,6 +39,7 @@ export function createKeepAlive({
 	let timer: unknown = null
 	let inFlight = false
 	let stopped = false
+	let lastOkAt: number | null = null
 
 	function clear(): void {
 		if (timer === null) return
@@ -53,7 +54,13 @@ export function createKeepAlive({
 	}
 
 	function scheduleIn(delayMs: number | null): void {
-		dueAt = delayMs === null ? null : now() + delayMs
+		if (delayMs === null) {
+			dueAt = null
+		} else {
+			const current = now()
+			const earliest = lastOkAt === null ? current : lastOkAt + REFRESH_RETRY_MS
+			dueAt = Math.max(current + delayMs, earliest)
+		}
 		arm()
 	}
 
@@ -85,6 +92,7 @@ export function createKeepAlive({
 		inFlight = false
 		if (stopped) return
 		if (outcome.kind === 'ok') {
+			lastOkAt = now()
 			scheduleIn(refreshDelayMs(outcome.accessExpiresAt, now()))
 			onRefreshed(outcome.accessExpiresAt)
 			return

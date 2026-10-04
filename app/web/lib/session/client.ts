@@ -12,6 +12,8 @@ export class AuthExpiredError extends Error {
 	}
 }
 
+export const LOGOUT_FAILED_MESSAGE = 'Не удалось выйти: нет связи с сервером. Попробуйте ещё раз'
+
 export type RefreshOutcome =
 	| { kind: 'ok'; accessExpiresAt: string | null }
 	| { kind: 'rejected' }
@@ -142,7 +144,7 @@ export function createSessionClient({ transport, navigate, currentPath }: Sessio
 		try {
 			const response = await transport.logout()
 			discard(response)
-			return response.ok || response.status === 401
+			return true
 		} catch {
 			return false
 		}

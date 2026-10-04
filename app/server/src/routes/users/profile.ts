@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
+import { BCRYPT_COST } from '../../lib/constants.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
 import { revokeUserSessions } from '../../services/session/index.js'
@@ -146,7 +147,7 @@ router.post(
 			}
 
 			// Хешируем новый пароль
-			const newPasswordHash = await bcrypt.hash(newPassword, 10)
+			const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_COST)
 
 			// Обновляем пароль
 			await db.transaction(async (tx) => {

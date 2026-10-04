@@ -7,8 +7,6 @@ import {
 	blockMs,
 	bucketKeys,
 	freeFailures,
-	ipKey,
-	loginKey,
 	pairKey,
 	type BucketKind,
 } from './progression.js'
@@ -119,21 +117,20 @@ export async function recordSuccess(
 	input: { login: string; ip: string },
 	ipTrusted: boolean = IP_TRUSTED
 ): Promise<void> {
+	const returned = bucketKeys(input.login, input.ip, ipTrusted).filter((bucket) => bucket.kind !== 'pair')
 	await db.transaction(async (tx) => {
-		await tx.execute(sql`DELETE FROM login_throttle WHERE bucket_key = ${pairKey(input.login, input.ip)}`)
-		const returned: Array<[string, BucketKind]> = [[loginKey(input.login), 'login']]
-		if (ipTrusted) returned.push([ipKey(input.ip), 'ip'])
-		for (const [key, kind] of returned) {
+		for (const bucket of returned) {
 			await tx.execute(sql`
 				UPDATE login_throttle
 				SET failures = greatest(failures - 1, 0),
 					blocked_until = CASE
-						WHEN greatest(failures - 1, 0) <= ${freeFailures(kind)} THEN NULL
+						WHEN greatest(failures - 1, 0) <= ${freeFailures(bucket.kind)} THEN NULL
 						ELSE blocked_until
 					END
-				WHERE bucket_key = ${key}
+				WHERE bucket_key = ${bucket.key}
 			`)
 		}
+		await tx.execute(sql`DELETE FROM login_throttle WHERE bucket_key = ${pairKey(input.login, input.ip)}`)
 	})
 }
 

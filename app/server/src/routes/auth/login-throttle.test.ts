@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs'
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
@@ -98,7 +99,7 @@ describe('пара (логин, IP)', () => {
 		}
 		assert.deepEqual(blocked[0]?.body, blocked[1]?.body)
 		assert.deepEqual(Object.keys(blocked[0]?.body ?? {}), ['error'])
-	})
+	}, 30_000)
 
 	test('после истечения окна следующая неудача 401 и окно 60 с, и снова 60 с: потолок пары равен LOGIN_CAP_MS', async () => {
 		for (let round = 0; round < 2; round += 1) {
@@ -253,4 +254,83 @@ describe('DELETE /api/users/:id/login-throttle', () => {
 		const missing = await call(ctx, 'DELETE', `/api/users/${crypto.randomUUID()}/login-throttle`, { cookies: admin })
 		assert.equal(missing.status, 404)
 	})
+})
+
+describe('проверка тела входа до троттлинга', () => {
+	async function throttleCount(): Promise<number> {
+		const result = await ctx.pgPool.query<{ count: string }>('SELECT count(*) AS count FROM login_throttle')
+		return Number(result.rows[0]?.count ?? 0)
+	}
+
+	test.each<[string, Record<string, unknown>]>([
+		['username числом', { username: 12345, password: PASSWORD }],
+		['username объектом', { username: { $ne: '' }, password: PASSWORD }],
+		['password массивом', { username: 'victim', password: ['a'] }],
+		['password объектом', { username: 'victim', password: { length: 1 } }],
+		['username длиннее 64', { username: 'a'.repeat(65), password: PASSWORD }],
+		['password длиннее 1024', { username: 'victim', password: 'p'.repeat(1025) }],
+		['username пустой', { username: '', password: PASSWORD }],
+		['username из пробелов', { username: '   ', password: PASSWORD }],
+		['password пустой', { username: 'victim', password: '' }],
+		['без полей', {}],
+	])('%s: 400, строк в login_throttle не добавилось', async (_name, body) => {
+		const before = await throttleCount()
+		const reply = await call(ctx, 'POST', '/api/auth/login', { body })
+		assert.equal(reply.status, 400)
+		assert.equal(typeof reply.body.error, 'string')
+		assert.equal(await throttleCount(), before)
+	})
+
+	test('username 64 символа и password 1024 символа проходят проверку и доходят до троттлинга', async () => {
+		const name = `n${'x'.repeat(63)}`
+		const reply = await call(ctx, 'POST', '/api/auth/login', { body: { username: name, password: 'p'.repeat(1024) } })
+		assert.equal(reply.status, 401)
+		assert.ok((await throttleRows(name)).length > 0)
+	})
+})
+
+describe('пересчёт хэша пароля при входе', () => {
+	async function seedWithCost(name: string, cost: number, isActive = true): Promise<string> {
+		const passwordHash = await bcrypt.hash(PASSWORD, cost)
+		const [created] = await ctx.db
+			.insert(ctx.schema.users)
+			.values({ login: name, passwordHash, isActive })
+			.returning({ id: ctx.schema.users.id })
+		assert.ok(created)
+		return created.id
+	}
+
+	async function storedHash(id: string): Promise<string> {
+		const result = await ctx.pgPool.query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [
+			id,
+		])
+		const hash = result.rows[0]?.password_hash
+		assert.ok(hash, 'password hash is missing')
+		return hash
+	}
+
+	test('вход со старым хэшем cost 10 пересчитывает хэш на cost 12, пароль подходит', async () => {
+		const id = await seedWithCost('rehash_owner', 10)
+		const before = await storedHash(id)
+		const reply = await login(ctx, 'rehash_owner', PASSWORD)
+		assert.equal(reply.status, 200)
+		const after = await storedHash(id)
+		assert.notEqual(after, before)
+		assert.equal(bcrypt.getRounds(after), 12)
+		assert.equal(await bcrypt.compare(PASSWORD, after), true)
+		assert.equal((await login(ctx, 'rehash_owner', PASSWORD)).status, 200)
+		assert.equal(await storedHash(id), after)
+	}, 20_000)
+
+	test('неверный пароль и неактивный пользователь хэш не трогают', async () => {
+		const activeId = await seedWithCost('rehash_wrong', 10)
+		const activeBefore = await storedHash(activeId)
+		assert.equal((await login(ctx, 'rehash_wrong', WRONG)).status, 401)
+		assert.equal(await storedHash(activeId), activeBefore)
+
+		const inactiveId = await seedWithCost('rehash_inactive', 10, false)
+		const inactiveBefore = await storedHash(inactiveId)
+		assert.equal((await login(ctx, 'rehash_inactive', PASSWORD)).status, 403)
+		assert.equal(await storedHash(inactiveId), inactiveBefore)
+	}, 20_000)
 })

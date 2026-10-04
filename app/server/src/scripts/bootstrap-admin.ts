@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { isIsolatedEnv } from '../config/test-database-url.js'
 import { db } from '../db/index.js'
 import { roles, userRoles, users } from '../db/schema.js'
+import { BCRYPT_COST } from '../lib/constants.js'
 
 // В изолированном режиме (BIO_EXAM_ISOLATED_ENV=1) .env не загружается:
 // ADMIN_BOOTSTRAP_* и SUPABASE_* приходят только от вызывающего процесса
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
 		throw new Error('Set ADMIN_BOOTSTRAP_PASSWORD or ADMIN_BOOTSTRAP_PASSWORD_HASH in app/server/.env')
 	}
 
-	const passwordHash = HASH ? HASH : await bcrypt.hash(PLAIN ?? '', 12)
+	const passwordHash = HASH ? HASH : await bcrypt.hash(PLAIN ?? '', BCRYPT_COST)
 
 	// 1) Убедимся, что есть роль admin
 	await db.insert(roles).values({ key: 'admin' }).onConflictDoNothing()

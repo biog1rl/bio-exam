@@ -5,9 +5,11 @@ import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import { invites, users, userRoles } from '../../db/schema.js'
+import { BCRYPT_COST } from '../../lib/constants.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
+import { revokeUserSessions } from '../../services/session/index.js'
 
 const router = Router()
 
@@ -105,6 +107,11 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			}
 			const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
 			if (!u) return res.status(404).json({ error: 'User not found' })
+			if (u.isActive) {
+				return res
+					.status(409)
+					.json({ error: 'Пользователь уже активен: приглашение выдаётся только неактивному пользователю' })
+			}
 
 			// Если перегенерируем ссылку для существующего пользователя и roleKey не указан,
 			// получаем первую роль пользователя из БД
@@ -203,7 +210,7 @@ router.post(
 			}
 
 			const { default: bcrypt } = await import('bcryptjs')
-			const passwordHash = await bcrypt.hash(password, 12)
+			const passwordHash = await bcrypt.hash(password, BCRYPT_COST)
 
 			await db.transaction(async (tx) => {
 				await tx
@@ -219,6 +226,7 @@ router.post(
 					.where(eq(users.id, inv.userId))
 
 				await tx.update(invites).set({ consumedAt: new Date() }).where(eq(invites.id, inv.id))
+				await revokeUserSessions(inv.userId, { reason: 'password_change' }, tx)
 			})
 
 			return res.json({ ok: true })

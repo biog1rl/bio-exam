@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, test } from 'vitest'
 
-import { AUTH_CONFIG, parseAccessTokenTtl } from '../../config/auth.js'
+import { AUTH_CONFIG, parseAccessTokenTtl, parseDays } from '../../config/auth.js'
 import {
 	ACCESS_COOKIE,
 	REFRESH_COOKIE,
@@ -167,5 +167,35 @@ describe('parseAccessTokenTtl', () => {
 
 	test('срок access в конфиге тестового процесса — значение по умолчанию', () => {
 		assert.equal(AUTH_CONFIG.accessTokenTtlSec, parseAccessTokenTtl(process.env.ACCESS_TOKEN_EXPIRES_SEC))
+	})
+})
+
+describe('parseDays', () => {
+	test('без значения — значение по умолчанию', () => {
+		assert.equal(parseDays('REFRESH_TOKEN_EXPIRES_DAYS', undefined, 30), 30)
+		assert.equal(parseDays('SESSION_MAX_AGE_DAYS', undefined, 7), 7)
+	})
+
+	for (const [raw, expected] of [
+		['1', 1],
+		['30', 30],
+		['365', 365],
+	] as const) {
+		test(`${raw} принимается`, () => {
+			assert.equal(parseDays('REFRESH_TOKEN_EXPIRES_DAYS', raw, 30), expected)
+		})
+	}
+
+	for (const key of ['REFRESH_TOKEN_EXPIRES_DAYS', 'SESSION_MAX_AGE_DAYS']) {
+		for (const raw of ['', '30d', '0', '-1', '1.5', ' 30', '366', 'NaN']) {
+			test(`${key}=${JSON.stringify(raw)} даёт ошибку с именем ключа`, () => {
+				assert.throws(() => parseDays(key, raw, 30), new RegExp(key))
+			})
+		}
+	}
+
+	test('сроки refresh и сессии в конфиге тестового процесса — целые дни', () => {
+		assert.ok(Number.isInteger(AUTH_CONFIG.refreshTokenTtlDays))
+		assert.ok(Number.isInteger(AUTH_CONFIG.sessionMaxAgeDays))
 	})
 })

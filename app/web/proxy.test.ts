@@ -21,13 +21,27 @@ function accessToken(expInSec: number, sid: string | null = 'session-id'): strin
 	return token({ sub: 'user-id', ...(sid ? { sid } : {}), exp: nowSec() + expInSec })
 }
 
-function request(path: string, cookies: Record<string, string> = {}): NextRequest {
+function request(
+	path: string,
+	cookies: Record<string, string> = {},
+	headers: Record<string, string> = {}
+): NextRequest {
 	const cookie = Object.entries(cookies)
 		.map(([name, value]) => `${name}=${value}`)
 		.join('; ')
 	return new NextRequest(new URL(path, 'http://web.example.test'), {
-		headers: cookie ? { cookie } : {},
+		headers: cookie ? { ...headers, cookie } : headers,
 	})
+}
+
+const SESSION_REFRESH_HEADER = 'x-session-refresh'
+
+function overriddenHeaderNames(response: Response): string[] {
+	return (response.headers.get('x-middleware-override-headers') ?? '').split(',').filter(Boolean)
+}
+
+function forwardedSessionRefresh(response: Response): string | null {
+	return response.headers.get(`x-middleware-request-${SESSION_REFRESH_HEADER}`)
 }
 
 type Call = { url: string; init: RequestInit }
@@ -192,7 +206,19 @@ describe('proxy: refresh при SSR', () => {
 		const response = await proxy(request('/dashboard', { [REFRESH]: 'old-refresh' }))
 		assert.ok(isPassThrough(response))
 		assert.deepEqual(response.headers.getSetCookie(), [])
-		assert.equal(response.headers.get('x-middleware-request-cookie'), null)
+		const forwardedCookie = response.headers.get('x-middleware-request-cookie')
+		assert.ok(forwardedCookie === null || forwardedCookie === `${REFRESH}=old-refresh`, `cookie: ${forwardedCookie}`)
+		assert.equal(forwardedSessionRefresh(response), 'unavailable')
+		assert.ok(overriddenHeaderNames(response).includes(SESSION_REFRESH_HEADER))
+	})
+
+	test('refresh недоступен: входящий x-session-refresh заменяется значением proxy', async () => {
+		stubFetch(() => refreshResponse([], 502))
+		const response = await proxy(
+			request('/dashboard', { [REFRESH]: 'old-refresh' }, { [SESSION_REFRESH_HEADER]: 'spoofed' })
+		)
+		assert.ok(isPassThrough(response))
+		assert.equal(forwardedSessionRefresh(response), 'unavailable')
 	})
 
 	test('запрос refresh идёт без signal и таймаута', async () => {
@@ -231,5 +257,56 @@ describe('proxy: без cookie', () => {
 		vi.stubEnv('API_ORIGIN', '')
 		const response = await proxy(request('/dashboard', { [ACCESS]: accessToken(600), [REFRESH]: 'r' }))
 		assert.ok(isPassThrough(response))
+	})
+})
+
+describe('proxy: входящий x-session-refresh вырезается', () => {
+	function assertStripped(response: Response): void {
+		assert.ok(isPassThrough(response))
+		assert.equal(overriddenHeaderNames(response).includes(SESSION_REFRESH_HEADER), false)
+		assert.ok(overriddenHeaderNames(response).length > 0, 'request headers are not overridden')
+		assert.equal(forwardedSessionRefresh(response), null)
+	}
+
+	test('refresh успешен', async () => {
+		stubFetch(() => refreshResponse(ROTATED_SET_COOKIES))
+		const response = await proxy(
+			request('/dashboard', { [REFRESH]: 'old-refresh' }, { [SESSION_REFRESH_HEADER]: 'unavailable' })
+		)
+		assertStripped(response)
+		assert.match(requestCookieOverride(response), new RegExp(`${REFRESH}=new-refresh`))
+	})
+
+	test('refresh 401 на публичном пути', async () => {
+		stubFetch(() => refreshResponse([], 401))
+		const response = await proxy(
+			request('/login', { [REFRESH]: 'revoked' }, { [SESSION_REFRESH_HEADER]: 'unavailable' })
+		)
+		assertStripped(response)
+		assert.ok(clearedNames(response).includes(REFRESH))
+	})
+
+	test('access действует, refresh не нужен', async () => {
+		const calls = stubFetch(() => refreshResponse(ROTATED_SET_COOKIES))
+		const response = await proxy(
+			request(
+				'/dashboard',
+				{ [ACCESS]: accessToken(600), [REFRESH]: 'old-refresh' },
+				{ [SESSION_REFRESH_HEADER]: 'unavailable' }
+			)
+		)
+		assert.equal(calls.length, 0)
+		assertStripped(response)
+	})
+
+	test.each(['/login', '/invite/token'])('%s без cookie', async (path) => {
+		const response = await proxy(request(path, {}, { accept: 'text/html', [SESSION_REFRESH_HEADER]: 'unavailable' }))
+		assertStripped(response)
+	})
+
+	test('без входящего заголовка заголовки запроса не переписываются', async () => {
+		const response = await proxy(request('/dashboard', { [ACCESS]: accessToken(600), [REFRESH]: 'r' }))
+		assert.ok(isPassThrough(response))
+		assert.equal(response.headers.get('x-middleware-override-headers'), null)
 	})
 })

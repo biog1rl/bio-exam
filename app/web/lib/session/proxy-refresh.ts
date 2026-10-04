@@ -1,5 +1,8 @@
 import { apiUrl } from './api-origin'
 
+export const SESSION_REFRESH_HEADER = 'x-session-refresh'
+export const SESSION_REFRESH_UNAVAILABLE = 'unavailable'
+
 export type ProxyRefreshOutcome =
 	| { kind: 'refreshed'; setCookies: string[]; values: Record<string, string> }
 	| { kind: 'rejected' }

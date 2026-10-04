@@ -50,6 +50,8 @@ export const ERROR_MESSAGES = {
 	STORAGE_ERROR: 'Storage operation failed',
 } as const
 
+export const BCRYPT_COST = 12
+
 export const DEFAULTS = {
 	SESSION_MAX_AGE_DAYS: 30,
 	JWT_SECRET: 'dev-secret-change-me',

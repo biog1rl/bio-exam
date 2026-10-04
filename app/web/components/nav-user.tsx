@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
 import { getInitials } from '@/helpers/getAvatarColor'
+import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
 
 export function NavUser() {
 	const { isMobile } = useSidebar()
@@ -35,8 +36,11 @@ export function NavUser() {
 	const backgroundColor = avatarColor || '#3B82F6'
 
 	const handleLogout = async () => {
-		toast.success('Вы вышли из аккаунта')
-		await logout()
+		if (await logout()) {
+			toast.success('Вы вышли из аккаунта')
+			return
+		}
+		toast.error(LOGOUT_FAILED_MESSAGE)
 	}
 
 	const handleProfileClick = () => {

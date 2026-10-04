@@ -416,9 +416,13 @@ describe('logout', () => {
 		assert.equal(calls.refresh, 0)
 	})
 
-	test('ответ 500 и сбой сети дают false', async () => {
-		const { client } = scenario({ logout: [status(500), new TypeError('Failed to fetch')] })
-		assert.equal(await client.logout(), false)
+	test('ответ 500: сервер очищает cookie в любом случае, logout даёт true', async () => {
+		const { client } = scenario({ logout: [status(500)] })
+		assert.equal(await client.logout(), true)
+	})
+
+	test('сбой сети даёт false', async () => {
+		const { client } = scenario({ logout: [new TypeError('Failed to fetch')] })
 		assert.equal(await client.logout(), false)
 	})
 })
