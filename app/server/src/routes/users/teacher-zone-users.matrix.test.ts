@@ -13,36 +13,7 @@ import {
 	type ZoneTopicKey,
 } from '../../test-support/teacher-zone-world.js'
 
-const KNOWN_DEFECTS = new Set<string>([
-	'admin GET /users groups',
-	'admin GET /users/:s1/test-assignments',
-	'admin PATCH /users/:fresh/group groupIds',
-	'admin PATCH /users/:teacher isActive false',
-	'admin PATCH /users/:teacher roles admin',
-	'admin PATCH /users/:teacher roles user',
-	'adminNoZone GET /users total',
-	'readUsers GET /users total',
-	'teacherA DELETE /api/tests/:freshX/assignments/:ungrouped by admin',
-	'teacherA DELETE /users/:own/test-assignments/:fresh colleague',
-	'teacherA DELETE /users/:own/test-assignments/:freshX by admin',
-	'teacherA GET /api/tests/:tX/assignments',
-	'teacherA GET /users total',
-	'teacherA GET /users/:own/test-assignments colleague',
-	'teacherA GET /users/:s1/test-assignments',
-	'teacherA GET /users/:s2/test-assignments',
-	'teacherA GET /users/:s2/test-attempts',
-	'teacherA GET /users/:teacherA/test-attempts',
-	'teacherA POST /api/tests/:freshX/assignments ungrouped',
-	'teacherA POST /api/tests/:freshX/assignments/group/:teacherB',
-	'teacherA POST /api/tests/:freshY/assignments own',
-	'teacherA POST /api/tests/:freshY/assignments/group/:own',
-	'teacherA POST /users/:own/test-assignments tY',
-	'teacherA POST /users/:ungrouped/test-assignments freshX',
-	'teacherB GET /api/tests/:tX/assignments',
-	'teacherB GET /users total',
-	'teacherB GET /users/:s1/test-assignments',
-	'teacherB GET /users/:s2/test-attempts',
-])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function check(id: string, title: string, fn: () => Promise<void>): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
@@ -277,6 +248,13 @@ row(['admin'], 'GET /users total', 'total равен числу строк пр�
 	const { rows, total } = await listUsers(p)
 	assert.equal(total, rows.length, `total ${String(total)} при ${rows.length} строках`)
 })
+row(['admin'], 'GET /users page', '?limit=2&offset=0: 2 строки, total равен числу всех пользователей', async (p) => {
+	const reply = await send(p, 'GET', '/users?limit=2&offset=0')
+	expectStatus(reply, 200)
+	const result = await ctx.pgPool.query<{ total: string }>('SELECT count(*)::text AS total FROM users')
+	assert.equal(rowsOf(reply.body.rows, 'пользователей').length, 2)
+	assert.equal(reply.body.total, Number(result.rows[0].total))
+})
 status([['s1', 403]], 'GET /users rows', (p) => send(p, 'GET', '/users?limit=500'))
 row(['admin'], 'GET /users groups', 'у строки s1 groups содержит G и GA', async (p) => {
 	const { rows } = await listUsers(p)
@@ -487,6 +465,11 @@ row(['admin'], 'PATCH /users/:fresh/group groupId', '200 и членства р�
 	const student = (await w.freshUser({ groups: [w.groups.G, w.groups.GA] })).id
 	expectStatus(await send(p, 'PATCH', `/users/${student}/group`, { groupId: w.groups.G }), 200)
 	assert.deepEqual(await groupsOf(student), ['G'])
+})
+row(['admin'], 'PATCH /users/:teacher group G', '400 и учитель не в группе учителя', async (p) => {
+	const teacher = await w.freshUser({ role: 'teacher' })
+	expectStatus(await send(p, 'PATCH', `/users/${teacher.id}/group`, { groupIds: [w.groups.G] }), 400)
+	assert.deepEqual(await groupsOf(teacher.id), [])
 })
 row(['teacherA'], 'PATCH /users/:own/group', '403 и членства не изменились', async (p) => {
 	const student = await ownStudent()

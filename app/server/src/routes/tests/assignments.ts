@@ -1,65 +1,121 @@
-import { and, eq } from 'drizzle-orm'
-import { Router } from 'express'
+import { and, eq, inArray } from 'drizzle-orm'
+import { Router, type Request } from 'express'
 
 import { db } from '../../db/index.js'
 import { testAssignments, userGroups, users } from '../../db/schema.js'
-import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { AssignUserSchema } from '../../schemas/assignments.js'
+import {
+	canAssign,
+	canAssignMany,
+	canManageGroup,
+	canReadTest,
+	canWriteTest,
+	hasGlobalZone,
+	userScope,
+} from '../../services/access-policy/index.js'
 
 export const assignmentsRouter = Router({ mergeParams: true })
 
+export async function removeAssignment(req: Request, testId: string, userId: string): Promise<boolean> {
+	if (!(await canAssign(req, testId, userId))) return false
+	const [row] = await db
+		.select({ assignedBy: testAssignments.assignedBy })
+		.from(testAssignments)
+		.where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
+		.limit(1)
+	if (!row) return true
+	const requesterId = req.authUser!.id
+	const global = await hasGlobalZone(req)
+	if (!global && row.assignedBy !== requesterId) return false
+	await db
+		.delete(testAssignments)
+		.where(
+			and(
+				eq(testAssignments.testId, testId),
+				eq(testAssignments.userId, userId),
+				global ? undefined : eq(testAssignments.assignedBy, requesterId)
+			)
+		)
+	return true
+}
+
+async function memberIdsInScope(req: Request, userIds: string[]): Promise<(userId: string) => boolean> {
+	const scope = await userScope(req)
+	if (scope.all) return () => true
+	if (scope.groupIds.length === 0 || userIds.length === 0) return () => false
+	const rows = await db
+		.selectDistinct({ userId: userGroups.userId })
+		.from(userGroups)
+		.where(and(inArray(userGroups.groupId, scope.groupIds), inArray(userGroups.userId, userIds)))
+	const members = new Set(rows.map((row) => row.userId))
+	return (userId) => members.has(userId)
+}
+
 // GET /api/tests/:testId/assignments — list users assigned to this test
-assignmentsRouter.get(
-	'/',
-	validateUUID('testId'),
-	sessionRequired(),
-	requirePerm('tests', 'manage_assignments'),
-	async (req, res, next) => {
-		try {
-			const { testId } = req.params as { testId: string }
-			const rows = await db
-				.select({
-					userId: testAssignments.userId,
-					assignedAt: testAssignments.assignedAt,
-					name: users.name,
-					isActive: users.isActive,
-					login: users.login,
-				})
-				.from(testAssignments)
-				.innerJoin(users, eq(users.id, testAssignments.userId))
-				.where(eq(testAssignments.testId, testId))
-			res.json({ assignments: rows })
-		} catch (err) {
-			next(err)
+assignmentsRouter.get('/', validateUUID('testId'), sessionRequired(), async (req, res, next) => {
+	try {
+		const { testId } = req.params as { testId: string }
+		if (!(await canReadTest(req, testId))) {
+			res.status(403).json({ error: 'Forbidden' })
+			return
 		}
+		const rows = await db
+			.select({
+				userId: testAssignments.userId,
+				assignedAt: testAssignments.assignedAt,
+				assignedBy: testAssignments.assignedBy,
+				name: users.name,
+				isActive: users.isActive,
+				login: users.login,
+			})
+			.from(testAssignments)
+			.innerJoin(users, eq(users.id, testAssignments.userId))
+			.where(eq(testAssignments.testId, testId))
+		const userIds = [...new Set(rows.map((row) => row.userId))]
+		const requesterId = req.authUser!.id
+		const [inScope, allowed, global] = await Promise.all([
+			memberIdsInScope(req, userIds),
+			canAssignMany(req, [testId], userIds),
+			hasGlobalZone(req),
+		])
+		res.json({
+			assignments: rows.map((row) => ({
+				userId: row.userId,
+				assignedAt: row.assignedAt,
+				name: row.name,
+				isActive: row.isActive,
+				...(inScope(row.userId) ? { login: row.login } : {}),
+				canUnassign: allowed(testId, row.userId) && (global || row.assignedBy === requesterId),
+			})),
+		})
+	} catch (err) {
+		next(err)
 	}
-)
+})
 
 // POST /api/tests/:testId/assignments — assign a user to this test
-assignmentsRouter.post(
-	'/',
-	validateUUID('testId'),
-	sessionRequired(),
-	requirePerm('tests', 'manage_assignments'),
-	async (req, res, next) => {
-		try {
-			const { testId } = req.params as { testId: string }
-			const parsed = AssignUserSchema.safeParse(req.body)
-			if (!parsed.success) {
-				res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() })
-				return
-			}
-			const { userId } = parsed.data
-			const adminId = req.authUser!.id
-			await db.insert(testAssignments).values({ testId, userId, assignedBy: adminId }).onConflictDoNothing()
-			res.json({ ok: true })
-		} catch (err) {
-			next(err)
+assignmentsRouter.post('/', validateUUID('testId'), sessionRequired(), async (req, res, next) => {
+	try {
+		const { testId } = req.params as { testId: string }
+		const parsed = AssignUserSchema.safeParse(req.body)
+		if (!parsed.success) {
+			res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() })
+			return
 		}
+		const { userId } = parsed.data
+		if (!(await canAssign(req, testId, userId))) {
+			res.status(403).json({ error: 'Forbidden' })
+			return
+		}
+		const adminId = req.authUser!.id
+		await db.insert(testAssignments).values({ testId, userId, assignedBy: adminId }).onConflictDoNothing()
+		res.json({ ok: true })
+	} catch (err) {
+		next(err)
 	}
-)
+})
 
 // POST /api/tests/:testId/assignments/group/:groupId — bulk assignment для всей группы
 assignmentsRouter.post(
@@ -67,10 +123,13 @@ assignmentsRouter.post(
 	validateUUID('testId'),
 	validateUUID('groupId'),
 	sessionRequired(),
-	requirePerm('tests', 'manage_assignments'),
 	async (req, res, next) => {
 		try {
 			const { testId, groupId } = req.params as { testId: string; groupId: string }
+			if (!(await canWriteTest(req, testId)) || !(await canManageGroup(req, groupId))) {
+				res.status(403).json({ error: 'Forbidden' })
+				return
+			}
 			const adminId = req.authUser!.id
 
 			const members = await db
@@ -102,13 +161,13 @@ assignmentsRouter.delete(
 	validateUUID('testId'),
 	validateUUID('userId'),
 	sessionRequired(),
-	requirePerm('tests', 'manage_assignments'),
 	async (req, res, next) => {
 		try {
 			const { testId, userId } = req.params as { testId: string; userId: string }
-			await db
-				.delete(testAssignments)
-				.where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
+			if (!(await removeAssignment(req, testId, userId))) {
+				res.status(403).json({ error: 'Forbidden' })
+				return
+			}
 			res.json({ ok: true })
 		} catch (err) {
 			next(err)

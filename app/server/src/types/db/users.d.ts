@@ -18,4 +18,6 @@ export type UserRow = {
 	telegram: string | null
 	phone: string | null
 	email: string | null
+	groups: Array<{ id: string; name: string }>
+	groupName: string | null
 }
