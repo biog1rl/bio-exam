@@ -35,7 +35,7 @@ const CROP = {
 	cropRotation: '0',
 }
 
-const KNOWN_DEFECTS = new Set<string>(['STOR-avatar-crop-delete-supabase'])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function defectTest(id: string, title: string, fn: () => Promise<void>, timeout?: number): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
@@ -105,7 +105,7 @@ afterAll(async () => {
 })
 
 describe('POST /api/users/avatar', () => {
-	test('PNG с кропом: 200 { avatarUrl, avatarCroppedUrl, cropParams }, два объекта под avatars/<userId>/, users.avatar равен avatarUrl', async () => {
+	test('PNG с кропом: 200 { avatarUrl, avatarCroppedUrl, cropParams }, два объекта под avatars/<userId>/, в users ключи, avatarUrl ведёт на proxy ключа', async () => {
 		const user = await account()
 		const reply = await postAvatar(user.jar, CROP, png())
 		assert.equal(reply.status, 200)
@@ -124,8 +124,14 @@ describe('POST /api/users/avatar', () => {
 		assert.ok((reply.body.avatarUrl as string).includes(encodeURIComponent(original)))
 		assert.ok((reply.body.avatarCroppedUrl as string).includes(encodeURIComponent(cropped)))
 		const row = await avatarRow(user.id)
-		assert.equal(row.avatar, reply.body.avatarUrl)
-		assert.equal(row.avatar_cropped, reply.body.avatarCroppedUrl)
+		assert.equal(row.avatar, original)
+		assert.equal(row.avatar_cropped, cropped)
+		assert.ok(
+			(reply.body.avatarUrl as string).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(original)}&`)
+		)
+		assert.ok(
+			(reply.body.avatarCroppedUrl as string).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(cropped)}&`)
+		)
 	})
 
 	test('без файла у пользователя без аватара: 400 и текст про отсутствие аватара', async () => {

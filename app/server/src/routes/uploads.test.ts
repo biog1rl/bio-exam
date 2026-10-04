@@ -191,7 +191,7 @@ describe('POST /api/tests/:id/assets', () => {
 })
 
 describe('POST /api/users/avatar', () => {
-	test('PNG с параметрами кропа проходит через Sharp: оригинал и кроп 256x256 в хранилище, users.avatar обновлён', async () => {
+	test('PNG с параметрами кропа проходит через Sharp: оригинал и кроп 256x256 в хранилище, в users ключи, в ответе URL proxy', async () => {
 		const reply = await postFile('/api/users/avatar', 'avatar', png(), {
 			cropX: '0',
 			cropY: '0',
@@ -230,8 +230,10 @@ describe('POST /api/users/avatar', () => {
 			.from(schema.users)
 			.where(eq(schema.users.id, adminId))
 		assert.ok(row)
-		assert.equal(row.avatar, reply.body.avatarUrl)
-		assert.equal(row.avatarCropped, reply.body.avatarCroppedUrl)
+		assert.match(String(row.avatar), new RegExp(`^avatars/${adminId}/[0-9a-f]{24}\\.png$`))
+		assert.match(String(row.avatarCropped), new RegExp(`^avatars/${adminId}/[0-9a-f]{24}_cropped\\.png$`))
+		assert.equal(row.avatar, originalKey)
+		assert.equal(row.avatarCropped, croppedKey)
 		assert.equal(row.rotation, 90)
 	})
 

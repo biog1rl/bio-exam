@@ -9,6 +9,7 @@ import { BCRYPT_COST } from '../../lib/constants.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
 import { revokeUserSessions } from '../../services/session/index.js'
+import { avatarUrl, storedAvatarValue } from '../../services/storage/links.js'
 
 const router = Router()
 
@@ -77,7 +78,7 @@ router.patch('/', sessionRequired(), async (req, res) => {
 				firstName: body.firstName,
 				lastName: body.lastName,
 				login: body.login,
-				avatar: body.avatar === '' ? null : body.avatar,
+				avatar: body.avatar === undefined ? undefined : storedAvatarValue(body.avatar),
 				avatarColor: body.avatarColor,
 				initials: body.initials,
 				birthdate: body.birthdate,
@@ -104,7 +105,7 @@ router.patch('/', sessionRequired(), async (req, res) => {
 			return res.status(404).json({ error: 'Пользователь не найден' })
 		}
 
-		res.json({ user: updatedUser[0] })
+		res.json({ user: { ...updatedUser[0], avatar: avatarUrl(updatedUser[0].avatar) } })
 	} catch (error: unknown) {
 		if (error instanceof z.ZodError) {
 			console.log('Zod validation error:', error.issues)

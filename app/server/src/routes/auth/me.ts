@@ -4,6 +4,7 @@ import { Router } from 'express'
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
 import { requestAccess } from '../../services/access-policy/index.js'
+import { avatarUrl } from '../../services/storage/links.js'
 
 const router = Router()
 
@@ -28,8 +29,8 @@ router.get('/', async (req, res, next) => {
 				login: row.login ?? null,
 				firstName: row.firstName ?? null,
 				lastName: row.lastName ?? null,
-				avatar: row.avatar ?? null,
-				avatarCropped: row.avatarCropped ?? null,
+				avatar: avatarUrl(row.avatar),
+				avatarCropped: avatarUrl(row.avatarCropped),
 				avatarColor: row.avatarColor ?? null,
 				initials: row.initials ?? null,
 				avatarCropX: row.avatarCropX ?? null,
