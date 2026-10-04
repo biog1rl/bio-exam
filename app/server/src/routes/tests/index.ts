@@ -11,7 +11,7 @@ import {
 } from '@bio-exam/exam-core'
 
 import crypto from 'crypto'
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import fs from 'fs'
 import multer from 'multer'
@@ -61,14 +61,18 @@ import { canReadTest, canWriteTest, canWriteTopic, testScope } from '../../servi
 import {
 	createQuestion,
 	createTestWithQuestions,
+	deleteQuestion,
+	deleteTest,
+	deleteTopic,
+	moveQuestion,
 	readAdminTest,
 	readQuestionMarkdown,
+	reorderQuestions,
 	resolveQuestionPoints,
 	updateQuestion,
 	updateTestSettings,
 	updateTopic,
 } from '../../services/question-content/index.js'
-import { updateQuestionSearchDocumentLocation } from '../../services/search/question-documents.js'
 import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
 import { assignmentsRouter } from './assignments.js'
 
@@ -323,32 +327,20 @@ router.patch('/topics/:id', validateUUID('id'), sessionRequired(), async (req, r
 })
 
 // DELETE /api/tests/topics/:id - удалить тему
-router.delete(
-	'/topics/:id',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const id = req.params.id as string
-
-			const existing = await db.query.topics.findFirst({ where: eq(topics.id, id) })
-			if (!existing) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-
-			// Удаляем файлы из Storage
-			await storageService.deleteDirectory(`topics/${existing.slug}`)
-
-			// Удаляем из БД (каскадно удалятся тесты, вопросы, ответы)
-			await db.delete(topics).where(eq(topics.id, id))
-
-			res.json({ ok: true })
-		} catch (e) {
-			next(e)
+router.delete('/topics/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const id = req.params.id as string
+		if (!(await canWriteTopic(req, id))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
+
+		await deleteTopic({ topicId: id })
+
+		return res.json({ ok: true })
+	} catch (e) {
+		return next(e)
 	}
-)
+})
 
 // =============================================================================
 // Tests
@@ -1277,63 +1269,24 @@ router.patch(
 )
 
 // PUT /api/tests/:id/questions/reorder - изменить порядок вопросов
-router.put(
-	'/:id/questions/reorder',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const testId = req.params.id as string
-			const parsed = ReorderQuestionsSchema.safeParse(req.body)
-			if (!parsed.success) {
-				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
-			}
-			const userId = req.authUser?.id ?? null
-			const { questionIds } = parsed.data
-
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-
-			const existingQuestions = await db
-				.select({ id: questions.id, order: questions.order })
-				.from(questions)
-				.where(eq(questions.testId, testId))
-				.orderBy(asc(questions.order))
-
-			if (existingQuestions.length !== questionIds.length) {
-				return res.status(400).json({ error: 'Неверный набор вопросов для сортировки' })
-			}
-			const existingIdsSet = new Set(existingQuestions.map((question) => question.id))
-			if (!questionIds.every((id) => existingIdsSet.has(id))) {
-				return res.status(400).json({ error: 'Неверный набор вопросов для сортировки' })
-			}
-
-			await db.transaction(async (tx) => {
-				const now = new Date()
-				for (let order = 0; order < questionIds.length; order += 1) {
-					await tx
-						.update(questions)
-						.set({ order, updatedAt: now })
-						.where(and(eq(questions.id, questionIds[order]), eq(questions.testId, testId)))
-				}
-				await tx
-					.update(tests)
-					.set({
-						updatedAt: now,
-						updatedBy: userId,
-					})
-					.where(eq(tests.id, testId))
-			})
-
-			return res.json({ ok: true })
-		} catch (e) {
-			return next(e)
+router.put('/:id/questions/reorder', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		if (!(await canWriteTest(req, testId))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
+		const parsed = ReorderQuestionsSchema.safeParse(req.body)
+		if (!parsed.success) {
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		}
+
+		await reorderQuestions({ testId, questionIds: parsed.data.questionIds, userId: req.authUser?.id ?? null })
+
+		return res.json({ ok: true })
+	} catch (e) {
+		return next(e)
 	}
-)
+})
 
 // POST /api/tests/:id/questions/:questionId/move - перенести вопрос в другой тест/тему
 router.post(
@@ -1341,174 +1294,36 @@ router.post(
 	validateUUID('id'),
 	validateUUID('questionId'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
 			const sourceTestId = req.params.id as string
 			const questionId = req.params.questionId as string
-
+			if (!(await canWriteTest(req, sourceTestId))) {
+				return res.status(403).json({ error: 'Forbidden' })
+			}
 			const parsed = MoveQuestionSchema.safeParse(req.body)
 			if (!parsed.success) {
 				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 			}
-
 			const { targetTestId, targetTopicId } = parsed.data
-			const userId = req.authUser?.id
-
-			const sourceTest = await db.query.tests.findFirst({ where: eq(tests.id, sourceTestId) })
-			if (!sourceTest) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			const targetAllowed = targetTestId
+				? await canWriteTest(req, targetTestId)
+				: await canWriteTopic(req, targetTopicId as string)
+			if (!targetAllowed) {
+				return res.status(403).json({ error: 'Forbidden' })
 			}
 
-			const question = await db.query.questions.findFirst({
-				where: and(eq(questions.id, questionId), eq(questions.testId, sourceTestId)),
-			})
-			if (!question) {
-				return res.status(404).json({ error: 'Вопрос не найден в текущем тесте' })
-			}
-
-			const sourceTopic = await db.query.topics.findFirst({ where: eq(topics.id, sourceTest.topicId) })
-			if (!sourceTopic) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-
-			let resolvedTargetTest = targetTestId
-				? await db.query.tests.findFirst({ where: eq(tests.id, targetTestId) })
-				: null
-			let targetTopic =
-				resolvedTargetTest && resolvedTargetTest.topicId
-					? await db.query.topics.findFirst({ where: eq(topics.id, resolvedTargetTest.topicId) })
-					: null
-
-			if (!resolvedTargetTest && targetTopicId) {
-				targetTopic = await db.query.topics.findFirst({ where: eq(topics.id, targetTopicId) })
-				if (!targetTopic) {
-					return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-				}
-
-				resolvedTargetTest = await db.query.tests.findFirst({
-					where: and(eq(tests.topicId, targetTopic.id), eq(tests.slug, sourceTest.slug)),
-				})
-
-				if (!resolvedTargetTest) {
-					let nextSlug = sourceTest.slug
-					let suffix = 2
-					while (
-						await db.query.tests.findFirst({
-							where: and(eq(tests.topicId, targetTopic.id), eq(tests.slug, nextSlug)),
-						})
-					) {
-						nextSlug = `${sourceTest.slug}-${suffix}`
-						suffix += 1
-					}
-
-					const [orderRow] = await db
-						.select({ maxOrder: sql<number>`COALESCE(MAX(${tests.order}), -1)` })
-						.from(tests)
-						.where(eq(tests.topicId, targetTopic.id))
-
-					const [createdTest] = await db
-						.insert(tests)
-						.values({
-							topicId: targetTopic.id,
-							slug: nextSlug,
-							title: sourceTest.title,
-							description: sourceTest.description,
-							version: 1,
-							isPublished: false,
-							showCorrectAnswer: sourceTest.showCorrectAnswer,
-							scoringRules: sourceTest.scoringRules,
-							timeLimitMinutes: sourceTest.timeLimitMinutes,
-							redThresholdMinutes: sourceTest.redThresholdMinutes,
-							warningThresholdMinutes: sourceTest.warningThresholdMinutes,
-							passingScore: sourceTest.passingScore,
-							order: (orderRow?.maxOrder ?? -1) + 1,
-							createdBy: userId,
-							updatedBy: userId,
-						})
-						.returning()
-
-					resolvedTargetTest = createdTest
-				}
-			}
-
-			if (!resolvedTargetTest) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-			if (!targetTopic) {
-				targetTopic = await db.query.topics.findFirst({ where: eq(topics.id, resolvedTargetTest.topicId) })
-			}
-			if (!targetTopic) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-			if (resolvedTargetTest.id === sourceTestId) {
-				return res.status(400).json({ error: 'Выберите другую тему или тест для переноса вопроса' })
-			}
-
-			const oldQuestionPath = storageService.getQuestionPath(sourceTopic.slug, sourceTest.slug, questionId)
-			const newQuestionPath = storageService.getQuestionPath(targetTopic.slug, resolvedTargetTest.slug, questionId)
-			const newPromptPath = question.promptPath
-				? `${newQuestionPath}/${path.posix.basename(question.promptPath)}`
-				: null
-			const newExplanationPath = question.explanationPath
-				? `${newQuestionPath}/${path.posix.basename(question.explanationPath)}`
-				: null
-
-			await storageService.moveDirectory(oldQuestionPath, newQuestionPath)
-
-			try {
-				await db.transaction(async (tx) => {
-					const [targetOrderRow] = await tx
-						.select({ maxOrder: sql<number>`COALESCE(MAX(${questions.order}), -1)` })
-						.from(questions)
-						.where(eq(questions.testId, resolvedTargetTest.id))
-					const nextOrder = (targetOrderRow?.maxOrder ?? -1) + 1
-
-					await tx
-						.update(questions)
-						.set({
-							order: sql`${questions.order} - 1`,
-							updatedAt: new Date(),
-						})
-						.where(and(eq(questions.testId, sourceTestId), gt(questions.order, question.order)))
-
-					await tx
-						.update(questions)
-						.set({
-							testId: resolvedTargetTest.id,
-							order: nextOrder,
-							promptPath: newPromptPath,
-							explanationPath: newExplanationPath,
-							updatedAt: new Date(),
-						})
-						.where(eq(questions.id, questionId))
-				})
-			} catch (txError) {
-				try {
-					await storageService.moveDirectory(newQuestionPath, oldQuestionPath)
-				} catch (rollbackError) {
-					console.error('[tests] Failed to rollback moved question files:', rollbackError)
-				}
-				throw txError
-			}
-			await updateQuestionSearchDocumentLocation({
+			const { target } = await moveQuestion({
+				sourceTestId,
 				questionId,
-				testId: resolvedTargetTest.id,
-				topicId: targetTopic.id,
+				targetTestId,
+				targetTopicId,
+				userId: req.authUser?.id ?? null,
 			})
 
-			res.json({
-				ok: true,
-				questionId,
-				target: {
-					topicId: targetTopic.id,
-					topicSlug: targetTopic.slug,
-					testId: resolvedTargetTest.id,
-					testSlug: resolvedTargetTest.slug,
-				},
-			})
+			return res.json({ ok: true, questionId, target })
 		} catch (e) {
-			next(e)
+			return next(e)
 		}
 	}
 )
@@ -1519,66 +1334,15 @@ router.delete(
 	validateUUID('id'),
 	validateUUID('questionId'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
 			const testId = req.params.id as string
 			const questionId = req.params.questionId as string
-			const userId = req.authUser?.id ?? null
-
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+			if (!(await canWriteTest(req, testId))) {
+				return res.status(403).json({ error: 'Forbidden' })
 			}
 
-			const question = await db.query.questions.findFirst({
-				where: and(eq(questions.id, questionId), eq(questions.testId, testId)),
-			})
-			if (!question) {
-				return res.status(404).json({ error: 'Вопрос не найден в текущем тесте' })
-			}
-
-			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
-
-			await db.transaction(async (tx) => {
-				const now = new Date()
-
-				await tx
-					.update(questions)
-					.set({
-						order: sql`${questions.order} - 1`,
-						updatedAt: now,
-					})
-					.where(and(eq(questions.testId, testId), gt(questions.order, question.order)))
-
-				const [removedQuestion] = await tx
-					.delete(questions)
-					.where(and(eq(questions.id, questionId), eq(questions.testId, testId)))
-					.returning({ id: questions.id })
-
-				if (!removedQuestion) {
-					throw new Error('Не удалось удалить вопрос')
-				}
-
-				await tx
-					.update(tests)
-					.set({
-						updatedAt: now,
-						updatedBy: userId,
-					})
-					.where(eq(tests.id, testId))
-			})
-
-			let assetsDeleted = true
-			if (topic?.slug && test.slug) {
-				const questionPath = storageService.getQuestionPath(topic.slug, test.slug, questionId)
-				try {
-					await storageService.deleteDirectory(questionPath)
-				} catch (error) {
-					assetsDeleted = false
-					console.error('[tests] Failed to delete question assets directory:', error)
-				}
-			}
+			const { assetsDeleted } = await deleteQuestion({ testId, questionId, userId: req.authUser?.id ?? null })
 
 			return res.json({ ok: true, questionId, assetsDeleted })
 		} catch (e) {
@@ -1588,29 +1352,18 @@ router.delete(
 )
 
 // DELETE /api/tests/:id - удалить тест
-router.delete('/:id', validateUUID('id'), sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.delete('/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
 		const id = req.params.id as string
-
-		const test = await db.query.tests.findFirst({ where: eq(tests.id, id) })
-		if (!test) {
-			return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+		if (!(await canWriteTest(req, id))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
 
-		const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
+		await deleteTest({ testId: id })
 
-		// Удаляем файлы из Storage
-		if (topic) {
-			const testPath = storageService.getTestPath(topic.slug, test.slug)
-			await storageService.deleteDirectory(testPath)
-		}
-
-		// Удаляем из БД
-		await db.delete(tests).where(eq(tests.id, id))
-
-		res.json({ ok: true })
+		return res.json({ ok: true })
 	} catch (e) {
-		next(e)
+		return next(e)
 	}
 })
 

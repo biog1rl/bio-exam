@@ -23,6 +23,7 @@ export {
 	type AdminTestSummary,
 	type QuestionMarkdownKind,
 } from './read.js'
+export { MOVE_FAILED_MESSAGE, MOVE_SAME_TARGET_MESSAGE, moveQuestion, type MoveTarget } from './move.js'
 export {
 	COPY_CONCURRENCY,
 	PUBLISH_WITHOUT_QUESTIONS_MESSAGE,
@@ -41,6 +42,16 @@ export {
 	type TestSettingsInput,
 	type TopicUpdateInput,
 } from './relocate.js'
+export {
+	REORDER_SET_MISMATCH_MESSAGE,
+	collectContentKeys,
+	deleteQuestion,
+	deleteTest,
+	deleteTopic,
+	reorderQuestions,
+	type ContentScope,
+	type PointerRow,
+} from './remove.js'
 export {
 	CONTENT_CHANGED_MESSAGE,
 	QUESTION_NOT_IN_TEST_MESSAGE,
