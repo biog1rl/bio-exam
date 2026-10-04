@@ -8,6 +8,7 @@ const REQUIRED_FILES = ['index.js', 'index.cjs', 'index.d.ts', 'index.d.cts']
 
 const EXPECTED_EXPORTS = [
 	'ALLOWED_MISTAKE_METRICS_BY_TEMPLATE',
+	'ATTEMPT_GRACE_PERIOD_MINUTES',
 	'AUTHORING_MESSAGES',
 	'AnswerValueSchema',
 	'BUILTIN_QUESTION_TYPES',
@@ -23,7 +24,10 @@ const EXPECTED_EXPORTS = [
 	'QuestionTypeScoringRuleSchema',
 	'QuestionTypeValidationSchema',
 	'SCORING_FORMULAS',
+	'SUBMIT_ERROR_CODES',
 	'ScoringTierSchema',
+	'SubmitAttemptErrorSchema',
+	'SubmitAttemptRequestSchema',
 	'SubmitResultItemSchema',
 	'SubmitResultSchema',
 	'TEMPLATE_ADAPTERS',

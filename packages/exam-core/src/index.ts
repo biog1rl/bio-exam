@@ -31,8 +31,22 @@ export {
 	validateQuestionForSave,
 } from './authoring'
 export type { ValidateQuestionForSaveInput } from './authoring'
-export { AnswerValueSchema, SubmitResultItemSchema, SubmitResultSchema } from './attempt-result'
-export type { AnswerValue, SubmitResult, SubmitResultItem } from './attempt-result'
+export {
+	AnswerValueSchema,
+	ATTEMPT_GRACE_PERIOD_MINUTES,
+	SUBMIT_ERROR_CODES,
+	SubmitAttemptErrorSchema,
+	SubmitAttemptRequestSchema,
+	SubmitResultItemSchema,
+	SubmitResultSchema,
+} from './attempt-result'
+export type {
+	AnswerValue,
+	SubmitAttemptError,
+	SubmitAttemptRequest,
+	SubmitResult,
+	SubmitResultItem,
+} from './attempt-result'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
 export type { QuestionKeyPayload, QuestionMatchingPairs, QuestionOption } from './content'
 export {

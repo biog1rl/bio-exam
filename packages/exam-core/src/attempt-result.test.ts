@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { AnswerValueSchema, SubmitResultItemSchema, SubmitResultSchema } from './attempt-result'
+import {
+	AnswerValueSchema,
+	ATTEMPT_GRACE_PERIOD_MINUTES,
+	SUBMIT_ERROR_CODES,
+	SubmitAttemptErrorSchema,
+	SubmitAttemptRequestSchema,
+	SubmitResultItemSchema,
+	SubmitResultSchema,
+} from './attempt-result'
 
 const ATTEMPT = '11111111-1111-4111-8111-111111111111'
 const Q1 = '22222222-2222-4222-8222-222222222222'
@@ -97,3 +105,64 @@ for (const row of rejectedResults) {
 		assert.equal(SubmitResultSchema.safeParse(row.value).success, false)
 	})
 }
+
+const SESSION = '33333333-3333-4333-8333-333333333333'
+const CLIENT_ATTEMPT = '44444444-4444-4444-8444-444444444444'
+
+const validEnvelope = {
+	sessionId: SESSION,
+	clientAttemptId: CLIENT_ATTEMPT,
+	answers: { [Q1]: 'a' },
+	telemetry: { [Q1]: { timeSpentMs: 1000, focusLossCount: 0, visitCount: 1 } },
+}
+
+test('SubmitAttemptRequestSchema: принимает полный конверт', () => {
+	assert.deepEqual(SubmitAttemptRequestSchema.parse(validEnvelope), validEnvelope)
+})
+
+test('SubmitAttemptRequestSchema: telemetry необязательна', () => {
+	const withoutTelemetry = {
+		sessionId: validEnvelope.sessionId,
+		clientAttemptId: validEnvelope.clientAttemptId,
+		answers: validEnvelope.answers,
+	}
+	assert.deepEqual(SubmitAttemptRequestSchema.parse(withoutTelemetry), withoutTelemetry)
+})
+
+test('SubmitAttemptRequestSchema: лишние поля отбрасываются', () => {
+	assert.deepEqual(SubmitAttemptRequestSchema.parse({ ...validEnvelope, extra: 1 }), validEnvelope)
+})
+
+const rejectedEnvelopes: Array<{ name: string; value: unknown }> = [
+	{ name: 'нет sessionId', value: { ...validEnvelope, sessionId: undefined } },
+	{ name: 'нет clientAttemptId', value: { ...validEnvelope, clientAttemptId: undefined } },
+	{ name: 'sessionId не uuid', value: { ...validEnvelope, sessionId: 'session-1' } },
+	{ name: 'clientAttemptId не uuid', value: { ...validEnvelope, clientAttemptId: 'attempt-1' } },
+	{ name: 'ключ answers не uuid', value: { ...validEnvelope, answers: { q1: 'a' } } },
+	{ name: 'нет answers', value: { ...validEnvelope, answers: undefined } },
+]
+
+for (const row of rejectedEnvelopes) {
+	test(`SubmitAttemptRequestSchema: отклоняет — ${row.name}`, () => {
+		assert.equal(SubmitAttemptRequestSchema.safeParse(row.value).success, false)
+	})
+}
+
+test('SubmitAttemptErrorSchema: принимает оба кода и attemptId null', () => {
+	const conflict = { error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId: ATTEMPT }
+	const unknownAttempt = { error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId: null }
+	const expired = { error: SUBMIT_ERROR_CODES.timeExpired }
+	assert.deepEqual(SubmitAttemptErrorSchema.parse(conflict), conflict)
+	assert.deepEqual(SubmitAttemptErrorSchema.parse(unknownAttempt), unknownAttempt)
+	assert.deepEqual(SubmitAttemptErrorSchema.parse(expired), expired)
+})
+
+test('SubmitAttemptErrorSchema: отклоняет прежний код конфликта и чужие коды', () => {
+	assert.equal(SubmitAttemptErrorSchema.safeParse({ error: 'TIME_EXPIRED_ALREADY_SUBMITTED' }).success, false)
+	assert.equal(SubmitAttemptErrorSchema.safeParse({ error: 'Session not found' }).success, false)
+})
+
+test('коды ошибок submit и льгота лимита', () => {
+	assert.deepEqual(SUBMIT_ERROR_CODES, { alreadySubmitted: 'ATTEMPT_ALREADY_SUBMITTED', timeExpired: 'TIME_EXPIRED' })
+	assert.equal(ATTEMPT_GRACE_PERIOD_MINUTES, 2)
+})

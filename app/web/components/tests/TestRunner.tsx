@@ -1,6 +1,6 @@
 'use client'
 
-import { isAnswered } from '@bio-exam/exam-core'
+import { isAnswered, SUBMIT_ERROR_CODES } from '@bio-exam/exam-core'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -38,6 +38,7 @@ import {
 } from '../ui/alert-dialog'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
+import { clientAttemptIdKey, forgetClientAttemptId, resolveClientAttemptId } from './client-attempt-id'
 import {
 	appendQuestionTime,
 	incrementQuestionFocusLoss,
@@ -177,6 +178,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 	const frozenKey = `test-frozen-${test.id}-${userId}`
 	const walKey = `test-answers-wal-${test.id}-${userId}`
 	const sessionKey = `test-session-${test.id}-${userId}`
+	const clientAttemptKey = clientAttemptIdKey(test.id, userId)
 
 	const replaceTelemetry = useCallback(
 		(next: TelemetryMap) => {
@@ -467,7 +469,19 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 		// Flush any pending question time before submitting
 		const finalTelemetry = flushQuestionTime(currentQuestionId)
 		try {
-			const result = await submitPublicTestAnswers(test.id, answers, finalTelemetry)
+			let activeSession = session
+			if (!activeSession) {
+				activeSession = await startTestSession(test.id)
+				setSession(activeSession)
+				localStorage.setItem(sessionKey, JSON.stringify(activeSession))
+			}
+			const clientAttemptId = resolveClientAttemptId(localStorage, clientAttemptKey, activeSession.sessionId)
+			const result = await submitPublicTestAnswers(test.id, {
+				sessionId: activeSession.sessionId,
+				clientAttemptId,
+				answers,
+				telemetry: finalTelemetry,
+			})
 			if (isAutoSubmit) {
 				setShowTimeUp(true)
 				// Brief delay to show "Время вышло" screen before transitioning to results
@@ -492,11 +506,11 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 			localStorage.removeItem(frozenKey)
 			localStorage.removeItem(walKey)
 			localStorage.removeItem(sessionKey)
+			forgetClientAttemptId(localStorage, clientAttemptKey)
 		} catch (error) {
-			// Check for TIME_EXPIRED_ALREADY_SUBMITTED
 			if (error instanceof Error) {
 				const body = tryParseJson(error.message)
-				if (body?.error === 'TIME_EXPIRED_ALREADY_SUBMITTED') {
+				if (body?.error === SUBMIT_ERROR_CODES.alreadySubmitted) {
 					setExpiredAttemptId((body as { attemptId?: string }).attemptId ?? null)
 					setShowTimeExpiredDialog(true)
 					return
@@ -637,6 +651,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 		localStorage.removeItem(frozenKey)
 		localStorage.removeItem(walKey)
 		localStorage.removeItem(sessionKey)
+		forgetClientAttemptId(localStorage, clientAttemptKey)
 
 		if (test.timeLimitMinutes) {
 			setAwaitingStart(true)

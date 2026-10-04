@@ -1,6 +1,7 @@
 import { mergeTelemetryMaps, type TelemetryMap } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import {
@@ -12,6 +13,7 @@ import {
 	seedAttemptWorld,
 	seedStudent,
 	startSession,
+	submitAttempt,
 	type AttemptWorld,
 } from '../../test-support/attempt-world.js'
 import { startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
@@ -20,6 +22,7 @@ type Student = { id: string; cookie: string }
 
 const ROUNDS = 5
 const PARALLEL_STARTS = 8
+const PARALLEL_SUBMITS = 8
 const DRAFT_QUESTIONS = 6
 const TELEMETRY_PATCHES = 3
 const VALUES = ['a', 'b', 'c']
@@ -160,6 +163,59 @@ describe('гонки PATCH черновика', () => {
 			assert.deepEqual(row.draft_answers, answers, `round ${round}`)
 			assert.deepEqual(row.draft_telemetry, mergeTelemetryMaps(...telemetries), `round ${round}`)
 			assert.ok(row.draft_last_question_id && questionIds.includes(row.draft_last_question_id))
+		}
+	})
+})
+
+async function attemptsOf(testId: string, userId: string): Promise<number> {
+	return countRows(world, 'SELECT count(*)::int AS count FROM test_attempts WHERE test_id = $1 AND user_id = $2', [
+		testId,
+		userId,
+	])
+}
+
+describe('гонки submit', () => {
+	test('параллельные submit одной сессии с одним clientAttemptId: все 200, тела равны, попытка одна', async () => {
+		for (let round = 0; round < ROUNDS; round++) {
+			const { testId, questionIds } = await prepareTest(`races-submit-same-${round}`)
+			const [sessionId] = await parallelStarts(testId)
+			assert.equal(typeof sessionId, 'string')
+			const body = { sessionId, clientAttemptId: crypto.randomUUID(), answers: { [questionIds[0]!]: 'b' } }
+
+			const replies = await Promise.all(
+				Array.from({ length: PARALLEL_SUBMITS }, () => submitAttempt(world, student.cookie, testId, body))
+			)
+			for (const reply of replies) assert.equal(reply.status, 200, `round ${round}: ${JSON.stringify(reply.body)}`)
+			for (const reply of replies) assert.deepEqual(reply.body, replies[0]!.body, `round ${round}`)
+			assert.equal(await attemptsOf(testId, student.id), 1, `round ${round}`)
+		}
+	})
+
+	test('параллельные submit одной сессии с разными clientAttemptId: один 200, остальные 409 с его attemptId', async () => {
+		for (let round = 0; round < ROUNDS; round++) {
+			const { testId, questionIds } = await prepareTest(`races-submit-distinct-${round}`)
+			const [sessionId] = await parallelStarts(testId)
+			assert.equal(typeof sessionId, 'string')
+
+			const replies = await Promise.all(
+				Array.from({ length: PARALLEL_SUBMITS }, () =>
+					submitAttempt(world, student.cookie, testId, {
+						sessionId,
+						clientAttemptId: crypto.randomUUID(),
+						answers: { [questionIds[0]!]: 'b' },
+					})
+				)
+			)
+			const accepted = replies.filter((reply) => reply.status === 200)
+			const conflicts = replies.filter((reply) => reply.status === 409)
+			assert.equal(accepted.length, 1, `round ${round}: ${replies.map((reply) => reply.status).join(', ')}`)
+			assert.equal(conflicts.length, PARALLEL_SUBMITS - 1, `round ${round}`)
+			const attemptId = accepted[0]!.body.attemptId
+			assert.equal(typeof attemptId, 'string')
+			for (const reply of conflicts) {
+				assert.deepEqual(reply.body, { error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId }, `round ${round}`)
+			}
+			assert.equal(await attemptsOf(testId, student.id), 1, `round ${round}`)
 		}
 	})
 })

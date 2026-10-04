@@ -8,7 +8,6 @@ export {
 	type AttemptTest,
 } from './access.js'
 export {
-	GRACE_PERIOD_MINUTES,
 	saveSessionDraft,
 	startAttemptSession,
 	type SaveSessionDraftParams,
@@ -16,3 +15,14 @@ export {
 	type SessionInfo,
 	type StartAttemptSessionParams,
 } from './sessions.js'
+export {
+	closeExpiredSession,
+	precheckSubmit,
+	submitAttempt,
+	type PrecheckSubmitParams,
+	type PrecheckSubmitResult,
+	type ScoredAttemptFacts,
+	type SessionCloseReason,
+	type SubmitAttemptOutcome,
+	type SubmitAttemptParams,
+} from './submit.js'

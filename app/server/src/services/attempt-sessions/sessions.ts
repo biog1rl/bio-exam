@@ -1,11 +1,14 @@
-import { mergeTelemetryMaps, type AnswerValue, type TelemetryMap } from '@bio-exam/exam-core'
+import {
+	ATTEMPT_GRACE_PERIOD_MINUTES,
+	mergeTelemetryMaps,
+	type AnswerValue,
+	type TelemetryMap,
+} from '@bio-exam/exam-core'
 
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { testSessions } from '../../db/schema.js'
-
-export const GRACE_PERIOD_MINUTES = 2
 
 export type SessionInfo = {
 	sessionId: string
@@ -48,8 +51,8 @@ const sessionColumns = {
 	draftTelemetry: testSessions.draftTelemetry,
 }
 
-function sessionExpired(timeLimitMinutes: number | null): SQL<boolean> {
-	return sql<boolean>`(${timeLimitMinutes}::int IS NOT NULL AND now() > ${testSessions.startedAt} + make_interval(mins => ${timeLimitMinutes}::int + ${GRACE_PERIOD_MINUTES}::int))`
+export function sessionExpired(timeLimitMinutes: number | null): SQL<boolean> {
+	return sql<boolean>`(${timeLimitMinutes}::int IS NOT NULL AND now() > ${testSessions.startedAt} + make_interval(mins => ${timeLimitMinutes}::int + ${ATTEMPT_GRACE_PERIOD_MINUTES}::int))`
 }
 
 function openSessionOf(testId: string, userId: string): SQL | undefined {

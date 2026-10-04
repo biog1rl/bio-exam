@@ -19,7 +19,7 @@ import {
 } from '../../test-support/attempt-world.js'
 import { call, startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 
-const KNOWN_DEFECTS = new Set<string>(['ATT-02-no-session', 'ATT-04-double-attempt', 'SCORE-03-d1-key-change'])
+const KNOWN_DEFECTS = new Set<string>(['SCORE-03-d1-key-change'])
 
 type Student = { id: string; cookie: string }
 

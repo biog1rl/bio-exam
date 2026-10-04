@@ -1,3 +1,5 @@
+import type { SubmitAttemptRequest } from '@bio-exam/exam-core'
+
 import { apiFetch } from '../api-fetch'
 import type {
 	AttemptReviewData,
@@ -115,15 +117,10 @@ export async function saveSessionTelemetry(testId: string, sessionId: string, te
 	})
 }
 
-export async function submitPublicTestAnswers(
-	testId: string,
-	answers: Record<string, TestAnswerValue>,
-	telemetry?: TelemetryMap
-) {
-	const clientAttemptId = crypto.randomUUID()
+export async function submitPublicTestAnswers(testId: string, request: SubmitAttemptRequest) {
 	return fetchJson<SubmitResult>(`/api/tests/public/tests/${testId}/submit`, {
 		method: 'POST',
-		body: JSON.stringify({ answers, clientAttemptId, telemetry }),
+		body: JSON.stringify(request),
 	})
 }
 
