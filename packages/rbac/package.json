@@ -25,10 +25,6 @@
 		"test": "vitest run",
 		"lint": "oxlint -c ../../.oxlintrc.json src"
 	},
-	"dependencies": {
-		"@tiptap/core": "^3.10.3",
-		"@tiptap/pm": "^3.10.3"
-	},
 	"devDependencies": {
 		"oxlint": "1.86.0",
 		"rimraf": "^5.0.5",
