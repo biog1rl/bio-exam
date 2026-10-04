@@ -1,11 +1,3 @@
-/**
- * Module-level cache для signed URLs изображений.
- * Ключ: storage path (e.g. "images/abc.webp")
- * Значение: { signedUrl, expiresAt (Date.now() + TTL) }
- *
- * TTL кэша: 50 минут (3000000 мс) — меньше чем серверный TTL 60 минут, чтобы URL не истёк в процессе использования.
- */
-
 type CacheEntry = {
 	signedUrl: string
 	expiresAt: number
@@ -13,55 +5,26 @@ type CacheEntry = {
 
 const cache = new Map<string, CacheEntry>()
 
-const CACHE_TTL_MS = 50 * 60 * 1000 // 50 минут
-const SUPABASE_STORAGE_OBJECT_RE = /\/storage\/v1\/object\/(?:public|sign)\/[^/]+\/([^?]+)/
+const CACHE_TTL_MS = 50 * 60 * 1000
 
-/**
- * Определяет, является ли src storage path (а не URL/data URI).
- * Storage path: "images/abc123.webp" — не начинается с http, https, data:, blob:, /
- */
-export function isStoragePath(src: string): boolean {
-	return (
-		Boolean(src) &&
-		!src.startsWith('http') &&
-		!src.startsWith('data:') &&
-		!src.startsWith('blob:') &&
-		!src.startsWith('/')
-	)
+export function resolvesViaApi(src: string): boolean {
+	return Boolean(src) && !src.startsWith('data:') && !src.startsWith('blob:')
 }
 
-export function getStoragePathFromSupabaseUrl(src: string): string | null {
-	const match = src.match(SUPABASE_STORAGE_OBJECT_RE)
-	if (!match?.[1]) return null
-
-	try {
-		return decodeURIComponent(match[1])
-	} catch {
-		return match[1]
-	}
-}
-
-export function getStoragePathForImageSrc(src: string): string | null {
-	return getStoragePathFromSupabaseUrl(src) ?? (isStoragePath(src) ? src : null)
-}
-
-/**
- * Получает signed URL для storage path. Использует кэш если URL ещё валидный.
- */
-export async function getSignedUrl(storagePath: string): Promise<string> {
+export async function getSignedUrl(src: string): Promise<string> {
 	const now = Date.now()
-	const cached = cache.get(storagePath)
+	const cached = cache.get(src)
 	if (cached && cached.expiresAt > now) {
 		return cached.signedUrl
 	}
 
-	const response = await fetch(`/api/docs/assets/signed?path=${encodeURIComponent(storagePath)}`)
+	const response = await fetch(`/api/docs/assets/signed?path=${encodeURIComponent(src)}`)
 	if (!response.ok) {
-		throw new Error(`Failed to get signed URL for ${storagePath}`)
+		throw new Error(`Failed to get signed URL for ${src}`)
 	}
 	const data: { signedUrl: string } = await response.json()
 
-	cache.set(storagePath, {
+	cache.set(src, {
 		signedUrl: data.signedUrl,
 		expiresAt: now + CACHE_TTL_MS,
 	})
@@ -69,18 +32,11 @@ export async function getSignedUrl(storagePath: string): Promise<string> {
 	return data.signedUrl
 }
 
-/**
- * Prefetch signed URLs для массива storage paths (последовательно, не параллельно).
- * Используется в TestRunner для предзагрузки изображений следующих вопросов.
- */
-export async function prefetchSignedUrls(paths: string[]): Promise<void> {
-	for (const p of paths) {
-		if (isStoragePath(p)) {
-			try {
-				await getSignedUrl(p)
-			} catch {
-				// Не блокируем prefetch при ошибке одного URL
-			}
-		}
+export async function prefetchSignedUrls(srcs: string[]): Promise<void> {
+	for (const src of srcs) {
+		if (!resolvesViaApi(src)) continue
+		try {
+			await getSignedUrl(src)
+		} catch {}
 	}
 }

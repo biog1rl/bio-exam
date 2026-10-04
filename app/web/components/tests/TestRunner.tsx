@@ -11,7 +11,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
-import { isStoragePath, prefetchSignedUrls } from '@/lib/image-signed-url-cache'
+import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
 import { saveAnswer, saveSessionTelemetry, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
 import type {
@@ -88,13 +88,13 @@ function tryParseJson(text: string): Record<string, unknown> | null {
 
 /**
  * Рекурсивно извлекает все image src из Lexical JSON документа.
- * ImageNode хранит src как storage path (e.g. "images/abc.webp").
+ * ImageNode хранит src как ключ хранилища или URL; URL для показа выдаёт API.
  */
 function extractImagePaths(lexicalJson: unknown): string[] {
 	const paths: string[] = []
 	function walk(node: Record<string, unknown> | null | undefined) {
 		if (!node) return
-		if (node.type === 'image' && typeof node.src === 'string' && isStoragePath(node.src)) {
+		if (node.type === 'image' && typeof node.src === 'string' && resolvesViaApi(node.src)) {
 			paths.push(node.src)
 		}
 		if (Array.isArray(node.children)) {

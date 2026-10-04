@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
 import { serialize } from 'next-mdx-remote/serialize'
 
-import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
+import { getSignedUrl, resolvesViaApi } from '@/lib/image-signed-url-cache'
 import { normalizeMdxSource } from '@/lib/mdx/normalizeSource'
 import { buildMdxOptions } from '@/lib/mdx/options'
 
@@ -36,12 +36,6 @@ function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: n
 	)
 }
 
-function normalizeImageSrc(src: string): string {
-	// Support markdown with "uploads/..." paths by converting them to site-root absolute URLs.
-	if (src.startsWith('uploads/')) return `/${src}`
-	return src
-}
-
 function getImageDimension(value: MdxImageProps['width'] | MdxImageProps['height']): number | undefined {
 	if (typeof value === 'number') return value
 	if (typeof value !== 'string') return undefined
@@ -52,9 +46,8 @@ function getImageDimension(value: MdxImageProps['width'] | MdxImageProps['height
 
 function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	const rawSrc = typeof src === 'string' ? src : ''
-	const normalizedSrc = normalizeImageSrc(rawSrc)
-	const storagePath = getStoragePathForImageSrc(normalizedSrc)
-	const [resolvedSrc, setResolvedSrc] = useState<string>(() => (normalizedSrc && !storagePath ? normalizedSrc : ''))
+	const viaApi = resolvesViaApi(rawSrc)
+	const [resolvedSrc, setResolvedSrc] = useState<string>(() => (rawSrc && !viaApi ? rawSrc : ''))
 	const [isLoaded, setIsLoaded] = useState(false)
 	const width = getImageDimension(props.width)
 	const height = getImageDimension(props.height)
@@ -62,18 +55,18 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 	useEffect(() => {
 		setIsLoaded(false)
 
-		if (!normalizedSrc) {
+		if (!rawSrc) {
 			setResolvedSrc('')
 			return
 		}
 
-		if (!storagePath) {
-			setResolvedSrc(normalizedSrc)
+		if (!viaApi) {
+			setResolvedSrc(rawSrc)
 			return
 		}
 
 		let cancelled = false
-		getSignedUrl(storagePath)
+		getSignedUrl(rawSrc)
 			.then((signedUrl) => {
 				if (!cancelled) {
 					setResolvedSrc(signedUrl)
@@ -81,15 +74,14 @@ function MdxImage({ src, alt, ...props }: MdxImageProps) {
 			})
 			.catch(() => {
 				if (!cancelled) {
-					// Fallback to original src in case this is a valid relative URL outside storage.
-					setResolvedSrc(normalizedSrc)
+					setResolvedSrc(rawSrc)
 				}
 			})
 
 		return () => {
 			cancelled = true
 		}
-	}, [normalizedSrc, storagePath])
+	}, [rawSrc, viaApi])
 
 	if (!resolvedSrc) {
 		return <ImageLoadingPlaceholder width={width} height={height} />

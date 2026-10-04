@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 import { $isImageNode } from '@/components/editor/nodes/image-node'
 import { INSERT_IMAGE_COMMAND } from '@/components/editor/plugins/images-plugin'
+import { useAuth } from '@/components/providers/AuthProvider'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -23,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { deleteErrorMessage } from '@/lib/assets/delete-error'
 import type { AssetFile, AssetsListResponse, UploadAssetResponse } from '@/types/assets'
 
 const PAGE_SIZE = 20
@@ -33,6 +35,8 @@ type MediaLibraryProps = {
 }
 
 export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
+	const { can } = useAuth()
+	const canWrite = can('tests', 'write')
 	const [assets, setAssets] = useState<AssetFile[]>([])
 	const [total, setTotal] = useState(0)
 	const [isLoading, setIsLoading] = useState(false)
@@ -40,6 +44,8 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 	const [offset, setOffset] = useState(0)
 	const [deleteTarget, setDeleteTarget] = useState<AssetFile | null>(null)
 	const [isUsedInDoc, setIsUsedInDoc] = useState(false)
+	const [deleteError, setDeleteError] = useState<string | null>(null)
+	const [isDeleting, setIsDeleting] = useState(false)
 
 	// Upload tab state
 	const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -69,8 +75,9 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 	}, [])
 
 	useEffect(() => {
+		if (!canWrite) return
 		loadAssets(0, false)
-	}, [loadAssets])
+	}, [canWrite, loadAssets])
 
 	const handleLoadMore = () => {
 		const newOffset = offset + PAGE_SIZE
@@ -110,25 +117,34 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 	const handleDeleteClick = (asset: AssetFile) => {
 		const used = checkUsageInEditor(asset.path)
 		setIsUsedInDoc(used)
+		setDeleteError(null)
 		setDeleteTarget(asset)
 	}
 
-	const handleDeleteConfirm = async () => {
-		if (!deleteTarget) return
+	const handleDeleteConfirm = async (event: React.MouseEvent<HTMLButtonElement>) => {
+		event.preventDefault()
+		if (!deleteTarget || isDeleting) return
+		const target = deleteTarget
+		setIsDeleting(true)
 		try {
 			const response = await fetch('/api/docs/assets', {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path: deleteTarget.path }),
+				body: JSON.stringify({ path: target.path }),
 			})
-			if (!response.ok) throw new Error('Delete failed')
-			setAssets((prev) => prev.filter((a) => a.path !== deleteTarget.path))
+			if (!response.ok) {
+				const body: unknown = await response.json().catch(() => null)
+				setDeleteError(deleteErrorMessage(response.status, body))
+				return
+			}
+			setAssets((prev) => prev.filter((a) => a.path !== target.path))
 			setTotal((prev) => prev - 1)
 			toast.success('Изображение удалено')
-		} catch {
-			toast.error('Не удалось удалить изображение')
-		} finally {
 			setDeleteTarget(null)
+		} catch {
+			setDeleteError(deleteErrorMessage(0, null))
+		} finally {
+			setIsDeleting(false)
 		}
 	}
 
@@ -215,6 +231,8 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 			toast.error('Поддерживаются только JPEG, PNG и WebP')
 		}
 	}
+
+	if (!canWrite) return null
 
 	return (
 		<>
@@ -342,7 +360,10 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 			<AlertDialog
 				open={deleteTarget !== null}
 				onOpenChange={(open) => {
-					if (!open) setDeleteTarget(null)
+					if (!open) {
+						setDeleteTarget(null)
+						setDeleteError(null)
+					}
 				}}
 			>
 				<AlertDialogContent>
@@ -353,15 +374,23 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 								? 'Изображение используется в текущем документе. Оно также могло использоваться в других местах. Всё равно удалить?'
 								: 'Изображение могло использоваться в других местах. Всё равно удалить?'}
 						</AlertDialogDescription>
+						{deleteError && (
+							<p role="alert" className="text-sm text-destructive">
+								{deleteError}
+							</p>
+						)}
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Отмена</AlertDialogCancel>
-						<AlertDialogAction
-							onClick={handleDeleteConfirm}
-							className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
-						>
-							Удалить
-						</AlertDialogAction>
+						{!deleteError && (
+							<AlertDialogAction
+								onClick={handleDeleteConfirm}
+								disabled={isDeleting}
+								className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+							>
+								Удалить
+							</AlertDialogAction>
+						)}
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

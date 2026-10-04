@@ -39,7 +39,7 @@ import { ContentEditable } from '@/components/editor/editor-ui/content-editable'
 import { ImageResizer } from '@/components/editor/editor-ui/image-resizer'
 import { $isImageNode } from '@/components/editor/nodes/image-node'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getSignedUrl, getStoragePathForImageSrc } from '@/lib/image-signed-url-cache'
+import { getSignedUrl, resolvesViaApi } from '@/lib/image-signed-url-cache'
 
 const imageCache = new Set()
 
@@ -82,8 +82,8 @@ function LazyImage({
 }): JSX.Element {
 	useSuspenseImage(src)
 
-	// Если изображение из API, data URI или Supabase storage signed URL — используем обычный img
-	const useNativeImg = src.startsWith('/api/') || src.startsWith('data:') || src.includes('/storage/v1/')
+	// Если изображение из API, data URI или blob URL — используем обычный img
+	const useNativeImg = src.startsWith('/api/') || src.startsWith('data:') || src.startsWith('blob:')
 
 	if (useNativeImg) {
 		return (
@@ -186,22 +186,22 @@ export default function ImageComponent({
 	const activeEditorRef = useRef<LexicalEditor | null>(null)
 	const [isLoadError, setIsLoadError] = useState<boolean>(false)
 	const isEditable = useLexicalEditable()
-	const storagePath = getStoragePathForImageSrc(src)
+	const viaApi = resolvesViaApi(src)
 
 	const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
-		return storagePath ? null : src
+		return viaApi ? null : src
 	})
-	const [isLoadingSrc, setIsLoadingSrc] = useState<boolean>(() => Boolean(storagePath))
+	const [isLoadingSrc, setIsLoadingSrc] = useState<boolean>(() => viaApi)
 
 	useEffect(() => {
-		if (!storagePath) {
+		if (!viaApi) {
 			setResolvedSrc(src)
 			setIsLoadingSrc(false)
 			return
 		}
 		let cancelled = false
 		setIsLoadingSrc(true)
-		getSignedUrl(storagePath)
+		getSignedUrl(src)
 			.then((url) => {
 				if (!cancelled) {
 					setResolvedSrc(url)
@@ -218,7 +218,7 @@ export default function ImageComponent({
 		return () => {
 			cancelled = true
 		}
-	}, [src, storagePath])
+	}, [src, viaApi])
 
 	const $onDelete = useCallback(
 		(payload: KeyboardEvent) => {

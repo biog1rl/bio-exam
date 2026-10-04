@@ -4,10 +4,14 @@ import { Images } from 'lucide-react'
 
 import { useToolbarContext } from '@/components/editor/context/toolbar-context'
 import { MediaLibrary } from '@/components/editor/plugins/images-plugin/MediaLibrary'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 
 export function InsertMediaLibrary() {
 	const { activeEditor, showModal } = useToolbarContext()
+	const { can } = useAuth()
+
+	if (!can('tests', 'write')) return null
 
 	return (
 		<Button
