@@ -9,6 +9,7 @@ const CARDS: Record<QuestionStatus, RunnerResultCard> = {
 	ungraded: { label: 'Без оценки', className: 'rounded border bg-muted/30 p-3 text-sm' },
 }
 
-export function runnerResultCard(status: QuestionStatus): RunnerResultCard {
-	return { ...CARDS[status] }
+export function runnerResultCard(status: QuestionStatus | undefined): RunnerResultCard {
+	const card = status && Object.hasOwn(CARDS, status) ? CARDS[status] : CARDS.ungraded
+	return { ...card }
 }

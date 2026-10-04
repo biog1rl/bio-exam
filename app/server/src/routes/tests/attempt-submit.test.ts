@@ -182,6 +182,29 @@ describe('POST submit: сдача и повтор', () => {
 		])
 	})
 
+	test('PATCH черновика в сданную сессию отвечает 404, черновик остаётся пустым', async () => {
+		const { testId, questionId } = await prepareTest('submit-then-draft')
+		const sessionId = await startOk(testId)
+		const draft = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'a' })
+		assert.equal(draft.status, 200)
+		const submitted = await submitAttempt(world, student.cookie, testId, envelope(sessionId, questionId))
+		assert.equal(submitted.status, 200, JSON.stringify(submitted.body))
+
+		const late = await saveDraft(world, student.cookie, testId, sessionId, {
+			questionId,
+			value: 'c',
+			telemetry: { [questionId]: { timeSpentMs: 300, focusLossCount: 0, visitCount: 1 } },
+		})
+		assert.equal(late.status, 404)
+		assert.deepEqual(late.body, { error: 'Session not found or already submitted' })
+		const session = await sessionRow(sessionId)
+		assert.equal(session.attempt_id, submitted.body.attemptId)
+		assert.equal(session.draft_answers, null)
+		assert.equal(session.draft_last_question_id, null)
+		assert.equal(session.draft_telemetry, null)
+		assert.equal(session.draft_updated_at, null)
+	})
+
 	test('та же сессия с другим clientAttemptId отвечает 409 ATTEMPT_ALREADY_SUBMITTED с attemptId первой', async () => {
 		const { testId, questionId } = await prepareTest('submit-conflict')
 		const sessionId = await startOk(testId)
