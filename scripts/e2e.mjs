@@ -1,14 +1,14 @@
 /**
  * yarn e2e: изолированный сквозной прогон (D-15, D-16, D-17, D-18, D-29).
  *
- * Порядок: сборка packages/rbac -> одноразовый PostgreSQL 17 и временная база test_e2e_*
+ * Порядок: сборка packages/rbac и packages/exam-core -> одноразовый PostgreSQL 17 и временная база test_e2e_*
  * (withTestDatabase) -> миграции настоящим раннером -> детерминированный сид (БД + prompt.md
  * в локальном хранилище) -> проба изоляции Express -> защита окружения Next (--check) ->
  * next build с e2e API_ORIGIN -> playwright test (Express и Next стартуют как webServer) ->
  * всё удаляется: серверы, временный каталог хранилища, база, кластер.
  *
  * Флаги:
- *   --seed-only  остановиться после сида (отладка фикстур); rbac всё равно собирается
+ *   --seed-only  остановиться после сида (отладка фикстур); rbac и exam-core всё равно собираются
  *   --no-build   не пересобирать web; только вместе с явными E2E_API_PORT и E2E_WEB_PORT,
  *                совпадающими с прошлой сборкой (rewrites фиксируются в next build)
  *   остальные аргументы передаются в playwright test (например --grep @flow1)
@@ -139,8 +139,9 @@ async function main() {
 		throw new Error('--no-build needs E2E_API_PORT and E2E_WEB_PORT that match the existing web build')
 	}
 
-	// 1. rbac до кластера: @bio-exam/rbac указывает на dist, dist в .gitignore, а сид импортирует ROLE_KEYS
+	// 1. rbac и exam-core до кластера: оба пакета указывают на dist, dist в .gitignore, сид импортирует ROLE_KEYS, сервер импортирует exam-core
 	await runStep('build packages/rbac', 'yarn', ['workspace', '@bio-exam/rbac', 'build'], isolatedChildEnv({}))
+	await runStep('build packages/exam-core', 'yarn', ['workspace', '@bio-exam/exam-core', 'build'], isolatedChildEnv({}))
 
 	await withTestDatabase('test_e2e', async ({ url, name }) => {
 		console.error(`[e2e] scratch database ${name}`)

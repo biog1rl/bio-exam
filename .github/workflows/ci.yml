@@ -74,6 +74,10 @@ jobs:
         run: yarn workspace @bio-exam/rbac build
       - name: Check rbac dist
         run: node scripts/check-rbac-dist.mjs
+      - name: Build exam-core
+        run: yarn workspace @bio-exam/exam-core build
+      - name: Check exam-core dist
+        run: node scripts/check-exam-core-dist.mjs
       - name: Build server
         run: yarn workspace @bio-exam/server build
       # Боевая (неизолированная) ветка старта сервера: NODE_ENV=production, сборка app/server/dist.

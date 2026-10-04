@@ -39,6 +39,9 @@ try {
 	console.log('\n=== Building @bio-exam/rbac ===')
 	run('yarn workspace @bio-exam/rbac build', rootDir)
 
+	console.log('\n=== Building @bio-exam/exam-core ===')
+	run('yarn workspace @bio-exam/exam-core build', rootDir)
+
 	console.log('\n=== Building @bio-exam/server ===')
 	run('yarn workspace @bio-exam/server build', rootDir)
 

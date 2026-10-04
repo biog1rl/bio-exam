@@ -56,6 +56,11 @@ const JOB_ORDER = {
 	build: [
 		{ label: 'yarn workspace @bio-exam/rbac build', pattern: /run:\s*yarn workspace @bio-exam\/rbac build\b/ },
 		{ label: 'check-rbac-dist', pattern: /run:\s*node scripts\/check-rbac-dist\.mjs\b/ },
+		{
+			label: 'yarn workspace @bio-exam/exam-core build',
+			pattern: /run:\s*yarn workspace @bio-exam\/exam-core build\b/,
+		},
+		{ label: 'check-exam-core-dist', pattern: /run:\s*node scripts\/check-exam-core-dist\.mjs\b/ },
 		{ label: 'yarn workspace @bio-exam/server build', pattern: /run:\s*yarn workspace @bio-exam\/server build\b/ },
 		{ label: '/healthz', pattern: /\/healthz\b/ },
 		{ label: 'yarn workspace @bio-exam/web build', pattern: /run:\s*yarn workspace @bio-exam\/web build\b/ },

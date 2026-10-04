@@ -243,7 +243,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@bio-exam/exam-core@workspace:packages/exam-core":
+"@bio-exam/exam-core@workspace:*, @bio-exam/exam-core@workspace:packages/exam-core":
   version: 0.0.0-use.local
   resolution: "@bio-exam/exam-core@workspace:packages/exam-core"
   dependencies:
@@ -274,6 +274,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bio-exam/server@workspace:app/server"
   dependencies:
+    "@bio-exam/exam-core": "workspace:*"
     "@bio-exam/rbac": "workspace:*"
     "@supabase/supabase-js": "npm:^2.93.1"
     "@types/archiver": "npm:^7.0.0"

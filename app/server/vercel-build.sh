@@ -9,6 +9,7 @@ yarn install
 
 # Собираем пакет rbac
 yarn workspace @bio-exam/rbac build
+yarn workspace @bio-exam/exam-core build
 
 # Переходим обратно в server
 cd app/server
