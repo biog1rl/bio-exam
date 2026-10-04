@@ -29,10 +29,7 @@ const nextConfig: NextConfig = withMdx({
 		const to = (p: string) => `${API_ORIGIN}${p}`
 
 		return {
-			beforeFiles: [
-				{ source: '/api/:path*', destination: to('/api/:path*') },
-				{ source: '/uploads/:path*', destination: to('/uploads/:path*') },
-			],
+			beforeFiles: [{ source: '/api/:path*', destination: to('/api/:path*') }],
 			afterFiles: [],
 			fallback: [],
 		}

@@ -2,13 +2,12 @@ import cors from 'cors'
 import express from 'express'
 import type { ErrorRequestHandler, Request } from 'express'
 import helmet from 'helmet'
+
 /**
  * Express приложение без запуска сервера.
  * Используется как для локальной разработки (src/index.ts),
  * так и для Vercel Serverless Functions (api/index.ts).
  */
-import path from 'node:path'
-
 import './lib/patchExpressAsyncErrors.js'
 import './config/env.js'
 import { ApiError, isApiError } from './lib/errors.js'
@@ -82,11 +81,6 @@ app.use(
 
 // --- Парсинг JSON тел
 app.use(express.json({ limit: JSON_BODY_LIMIT }))
-
-// --- Раздача статических файлов uploads
-if (process.env.NODE_ENV !== 'production') {
-	app.use('/uploads', express.static(path.join(process.cwd(), '../web/public/uploads')))
-}
 
 // --- Сессия из JWT (опционально, чтобы req.authUser был доступен в роутерах)
 app.use(sessionOptional())

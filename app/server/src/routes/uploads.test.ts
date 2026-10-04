@@ -5,30 +5,15 @@ import http from 'node:http'
 import sharp from 'sharp'
 import { afterAll, beforeAll, beforeEach, describe, test, vi } from 'vitest'
 
+import type { MemoryStorageAdapter } from '../services/storage/adapters/memory.js'
 import { sessionCookieFor, startTestServer } from '../test-support/http.js'
+import { memoryStorage } from '../test-support/storage.js'
 import {
 	createScratchDatabase,
 	migrateTestDatabase,
 	requireTestDatabaseUrl,
 	type ScratchDatabase,
 } from '../test-support/test-database.js'
-
-const uploads = vi.hoisted(() => [] as Array<{ path: string; buffer: Buffer; contentType: string }>)
-const createClientSpy = vi.hoisted(() => vi.fn())
-
-vi.mock('@supabase/supabase-js', () => ({ createClient: createClientSpy }))
-
-vi.mock('../services/storage/storage.js', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('../services/storage/storage.js')>()
-	const fake = Object.create(actual.storageService) as typeof actual.storageService
-	fake.isConfigured = () => true
-	fake.uploadBuffer = async (path: string, buffer: Buffer, contentType?: string) => {
-		uploads.push({ path, buffer, contentType: contentType ?? '' })
-	}
-	fake.getPublicUrl = (path: string) => `https://storage.test/${path}`
-	fake.deleteFiles = async () => {}
-	return { ...actual, storageService: fake }
-})
 
 type DbModule = typeof import('../db/index.js')
 type SchemaModule = typeof import('../db/schema.js')
@@ -42,6 +27,7 @@ let previousTestDatabaseUrl: string | undefined
 let server: { baseUrl: string; close: () => Promise<void> } | null = null
 let dbModule: DbModule
 let schema: SchemaModule
+let mem: MemoryStorageAdapter
 let adminId = ''
 let testId = ''
 let cookie = ''
@@ -56,6 +42,7 @@ beforeAll(async () => {
 	process.env.TEST_DATABASE_URL = scratch.url
 	vi.resetModules()
 	const app = (await import('../app.js')).default
+	mem = await memoryStorage()
 	dbModule = await import('../db/index.js')
 	schema = await import('../db/schema.js')
 	const { db } = dbModule
@@ -100,7 +87,7 @@ afterAll(async () => {
 })
 
 beforeEach(() => {
-	uploads.length = 0
+	mem.reset()
 })
 
 function baseUrl(): string {
@@ -165,21 +152,21 @@ for (const route of ROUTES) {
 			const reply = await postFile(route.path(), route.field, textFile('text/plain'))
 			assert.equal(reply.status, 500)
 			assert.equal(reply.body.error, route.filterError)
-			assert.equal(uploads.length, 0)
+			assert.deepEqual(mem.keys(), [])
 		})
 
 		test('файл больше 5 МБ отклоняется, в хранилище ничего не попадает', async () => {
 			const reply = await postFile(route.path(), route.field, { bytes: oversize, type: 'image/png', name: 'big.png' })
 			assert.equal(reply.status, 500)
 			assert.equal(reply.body.error, 'File too large')
-			assert.equal(uploads.length, 0)
+			assert.deepEqual(mem.keys(), [])
 		})
 
 		test('без cookie сессии ответ 401', async () => {
 			const reply = await postFile(route.path(), route.field, png(), {}, null)
 			assert.equal(reply.status, 401)
 			assert.equal(reply.body.error, 'Unauthorized')
-			assert.equal(uploads.length, 0)
+			assert.deepEqual(mem.keys(), [])
 		})
 	})
 }
@@ -190,12 +177,15 @@ describe('POST /api/tests/:id/assets', () => {
 	test('PNG сохраняется в хранилище, ответ 201 с путём файла', async () => {
 		const reply = await postFile(route(), 'file', png())
 		assert.equal(reply.status, 201)
-		assert.equal(uploads.length, 1)
-		const [saved] = uploads
+		const keys = mem.keys()
+		assert.equal(keys.length, 1)
+		const [key] = keys
+		assert.ok(key)
+		assert.equal(reply.body.url, key)
+		assert.ok(key.startsWith('topics/biology/cell/assets/'))
+		const saved = mem.get(key)
 		assert.ok(saved)
-		assert.equal(reply.body.url, saved.path)
-		assert.ok(saved.path.startsWith('topics/biology/cell/assets/'))
-		assert.ok(saved.buffer.equals(tinyPng))
+		assert.ok(saved.data.equals(tinyPng))
 		assert.equal(saved.contentType, 'image/png')
 	})
 })
@@ -211,18 +201,26 @@ describe('POST /api/users/avatar', () => {
 			cropRotation: '90',
 		})
 		assert.equal(reply.status, 200)
-		assert.equal(uploads.length, 2)
-		const [original, cropped] = uploads
+		const keys = mem.keys()
+		assert.equal(keys.length, 2)
+		for (const key of keys) assert.ok(key.startsWith(`avatars/${adminId}/`))
+		const originalKey = keys.find((key) => mem.get(key)?.data.equals(tinyPng))
+		const croppedKey = keys.find((key) => key !== originalKey)
+		assert.ok(originalKey && croppedKey)
+		const original = mem.get(originalKey)
+		const cropped = mem.get(croppedKey)
 		assert.ok(original && cropped)
-		assert.ok(original.path.startsWith(`avatars/${adminId}/`))
-		assert.ok(original.buffer.equals(tinyPng))
 		assert.equal(original.contentType, 'image/png')
 		assert.equal(cropped.contentType, 'image/png')
-		const meta = await sharp(cropped.buffer).metadata()
+		const meta = await sharp(cropped.data).metadata()
 		assert.equal(meta.width, 256)
 		assert.equal(meta.height, 256)
-		assert.equal(reply.body.avatarUrl, `https://storage.test/${original.path}`)
-		assert.equal(reply.body.avatarCroppedUrl, `https://storage.test/${cropped.path}`)
+		assert.ok(
+			String(reply.body.avatarUrl).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(originalKey)}&`)
+		)
+		assert.ok(
+			String(reply.body.avatarCroppedUrl).startsWith(`/api/docs/assets/proxy?path=${encodeURIComponent(croppedKey)}&`)
+		)
 		const [row] = await dbModule.db
 			.select({
 				avatar: schema.users.avatar,
@@ -244,7 +242,7 @@ describe('POST /api/users/avatar', () => {
 			reply.body.error,
 			'Недопустимый тип файла. Файл не является допустимым изображением (JPEG, PNG, GIF, WebP)'
 		)
-		assert.equal(uploads.length, 0)
+		assert.deepEqual(mem.keys(), [])
 	})
 })
 
@@ -253,14 +251,17 @@ describe('POST /api/docs/assets', () => {
 		const reply = await postFile('/api/docs/assets', 'file', png())
 		assert.equal(reply.status, 200)
 		assert.equal(reply.body.success, true)
-		assert.equal(uploads.length, 1)
-		const [saved] = uploads
+		const keys = mem.keys()
+		assert.equal(keys.length, 1)
+		const [key] = keys
+		assert.ok(key)
+		assert.match(key, /^images\/[0-9a-f]{32}\.webp$/)
+		assert.equal(reply.body.path, key)
+		assert.equal(reply.body.filename, key.slice('images/'.length))
+		const saved = mem.get(key)
 		assert.ok(saved)
-		assert.match(saved.path, /^images\/[0-9a-f]{32}\.webp$/)
-		assert.equal(reply.body.path, saved.path)
-		assert.equal(reply.body.filename, saved.path.slice('images/'.length))
 		assert.equal(saved.contentType, 'image/webp')
-		const meta = await sharp(saved.buffer).metadata()
+		const meta = await sharp(saved.data).metadata()
 		assert.equal(meta.format, 'webp')
 		assert.equal(meta.width, 64)
 		assert.equal(meta.height, 64)
@@ -270,14 +271,14 @@ describe('POST /api/docs/assets', () => {
 		const reply = await postFile('/api/docs/assets', 'file', { bytes: tinyPng, type: 'image/gif', name: 'a.gif' })
 		assert.equal(reply.status, 500)
 		assert.equal(reply.body.error, DOCS_FILTER_ERROR)
-		assert.equal(uploads.length, 0)
+		assert.deepEqual(mem.keys(), [])
 	})
 
 	test('текст с типом image/png отклоняется проверкой сигнатуры: 400, в хранилище ничего не попадает', async () => {
 		const reply = await postFile('/api/docs/assets', 'file', textFile('image/png'))
 		assert.equal(reply.status, 400)
 		assert.equal(reply.body.error, DOCS_FILTER_ERROR)
-		assert.equal(uploads.length, 0)
+		assert.deepEqual(mem.keys(), [])
 	})
 })
 
@@ -345,10 +346,10 @@ for (const route of ROUTES) {
 		test('сервер жив, в хранилище ничего не попадает, следующая загрузка проходит', async () => {
 			await abortUpload(route.path(), route.field)
 			assert.equal(await waitForHealthz(), 200)
-			assert.equal(uploads.length, 0)
+			assert.deepEqual(mem.keys(), [])
 			const reply = await postFile(route.path(), route.field, png())
 			assert.equal(reply.status, route.okStatus)
-			assert.equal(uploads.length > 0, true)
+			assert.equal(mem.keys().length > 0, true)
 		})
 	})
 }
@@ -368,7 +369,7 @@ describe('POST /api/docs/assets: сломанный multipart', () => {
 		const reply = await postRaw('/api/docs/assets', contentType, body)
 		assert.equal(reply.status, 500)
 		assert.equal(reply.body.error, 'Unexpected end of form')
-		assert.equal(uploads.length, 0)
+		assert.deepEqual(mem.keys(), [])
 		assert.equal(await waitForHealthz(), 200)
 	})
 
@@ -383,11 +384,7 @@ describe('POST /api/docs/assets: сломанный multipart', () => {
 		const reply = await postRaw('/api/docs/assets', contentType, body)
 		assert.equal(reply.status, 500)
 		assert.equal(reply.body.error, 'Field name missing')
-		assert.equal(uploads.length, 0)
+		assert.deepEqual(mem.keys(), [])
 		assert.equal(await waitForHealthz(), 200)
 	})
-})
-
-test('клиент Supabase не создаётся', () => {
-	assert.equal(createClientSpy.mock.calls.length, 0)
 })
