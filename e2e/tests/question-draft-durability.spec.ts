@@ -119,3 +119,76 @@ test.describe.serial('LIFE-04: черновик вопроса пережива�
 		}
 	})
 })
+
+function unsavedDialog(page: Page): Locator {
+	return page.getByRole('alertdialog')
+}
+
+async function openQuestionEdit(page: Page, url: string, prompt: string): Promise<void> {
+	await page.goto(url)
+	await expect(page.getByRole('heading', { level: 1, name: 'Редактирование' })).toBeVisible()
+	await expect(promptEditor(page)).toHaveAttribute('contenteditable', 'true')
+	await expect(promptEditor(page)).toContainText(prompt)
+}
+
+test('LIFE-04: правка существующего вопроса защищена от ухода @life04', async ({ adminPage: page }, testInfo) => {
+	const slug = seedTest(projectKey(testInfo), 'authoring').slug
+	const prompt = `Правка e2e ${projectKey(testInfo)}`
+	const testId = await testIdOf(page, slug)
+	const testPage = new RegExp(`${testPageUrl(slug)}/?$`)
+	let questionId: string | undefined
+	let draftId: string | undefined
+	try {
+		draftId = (await openNewDraft(page, slug)).draftId
+		await promptEditor(page).click()
+		await page.keyboard.type(prompt)
+		await expect(promptEditor(page)).toContainText(prompt)
+		await page.getByPlaceholder('Введите правильный ответ').fill('митоз')
+		await page.getByRole('button', { name: 'Сохранить вопрос' }).click()
+		await expect(page).toHaveURL(testPage)
+
+		const response = await page.request.get(`/api/tests/by-slug/${TOPIC_SLUG}/${slug}`)
+		expect(response.ok(), 'setup: read questions').toBe(true)
+		const { questions } = (await response.json()) as { questions: { id: string; promptText: string }[] }
+		questionId = questions.find((question) => question.promptText.includes(prompt))?.id
+		if (!questionId) throw new Error(`setup: no question "${prompt}"`)
+		const editUrl = `${testPageUrl(slug)}/questions/${questionId}`
+
+		await openQuestionEdit(page, editUrl, prompt)
+		await page.getByRole('button', { name: 'Отмена', exact: true }).click()
+		await expect(page).toHaveURL(testPage)
+		await expect(unsavedDialog(page)).toHaveCount(0)
+
+		await openQuestionEdit(page, editUrl, prompt)
+		await promptEditor(page).click()
+		await page.getByRole('button', { name: 'Отмена', exact: true }).click()
+		await expect(page).toHaveURL(testPage)
+		await expect(unsavedDialog(page)).toHaveCount(0)
+
+		await openQuestionEdit(page, editUrl, prompt)
+		await promptEditor(page).click()
+		await page.keyboard.press('End')
+		await page.keyboard.type(' дополнено')
+		await expect(promptEditor(page)).toContainText(`${prompt} дополнено`)
+
+		await page.getByRole('button', { name: 'Отмена', exact: true }).click()
+		await expect(unsavedDialog(page)).toBeVisible()
+		await expect(unsavedDialog(page).getByText('Есть несохранённые изменения')).toBeVisible()
+		await expect(unsavedDialog(page).getByText('Уйти без сохранения?')).toBeVisible()
+		await unsavedDialog(page).getByRole('button', { name: 'Остаться' }).click()
+		await expect(unsavedDialog(page)).toHaveCount(0)
+		await expect(page).toHaveURL(new RegExp(`${editUrl}$`))
+
+		await page.getByRole('button', { name: 'Назад', exact: true }).click()
+		await expect(unsavedDialog(page)).toBeVisible()
+		await expect(unsavedDialog(page).getByText('Уйти без сохранения?')).toBeVisible()
+		await unsavedDialog(page).getByRole('button', { name: 'Выйти' }).click()
+		await expect(page).not.toHaveURL(new RegExp(`${editUrl}$`))
+	} finally {
+		if (draftId) await deleteDraft(page, testId, draftId)
+		if (questionId) {
+			const deleted = await page.request.delete(`/api/tests/${testId}/questions/${questionId}`)
+			expect([200, 204, 404], `cleanup: delete question ${questionId}`).toContain(deleted.status())
+		}
+	}
+})

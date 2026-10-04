@@ -60,8 +60,9 @@ function MdxPlugin({
 	useEffect(() => {
 		if (!onMdxChange) return
 
-		return editor.registerUpdateListener(({ editorState }) => {
+		return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
 			if (!initialized.current) return
+			if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return
 			editorState.read(() => {
 				const mdx = editorStateToMdx()
 				onMdxChange(mdx)

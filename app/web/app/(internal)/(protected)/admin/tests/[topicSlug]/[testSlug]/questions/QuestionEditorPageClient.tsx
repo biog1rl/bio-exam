@@ -5,11 +5,12 @@ import { normalizeKeyValue } from '@bio-exam/exam-core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowRightLeft, Loader2 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { UnsavedChangesDialog } from '@/components/Buttons/UnsavedChangesDialog'
 import { Button } from '@/components/ui/button'
 import {
 	Dialog,
@@ -22,6 +23,9 @@ import {
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiFetch } from '@/lib/api-fetch'
+import { createBeforeUnloadGuard } from '@/lib/drafts/before-unload'
+import { UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
+import { useUnsavedChanges } from '@/store/unsavedChanges.store'
 
 import QuestionEditor from '../../../components/QuestionEditor'
 import { validateQuestion } from '../../../question-validation'
@@ -34,6 +38,7 @@ import type {
 	TopicsResponse,
 } from '../../../types'
 import { createDefaultQuestion, normalizeQuestionForSave } from '../../../types'
+import { questionFormKey } from './question-draft-payload'
 
 const QUESTION_DRAFT_SAVE_DEBOUNCE_MS = 700
 
@@ -102,7 +107,12 @@ interface Props {
 
 export default function QuestionEditorPageClient({ topicSlug, testSlug, questionId, questionDraftId }: Props) {
 	const router = useRouter()
+	const pathname = usePathname() || '/'
+	const setUnsavedDirty = useUnsavedChanges((s) => s.setDirty)
+	const clearUnsaved = useUnsavedChanges((s) => s.clear)
 	const [isSaving, setIsSaving] = useState(false)
+	const [isFormDirty, setIsFormDirty] = useState(false)
+	const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
 	const [moving, setMoving] = useState(false)
 	const [moveDialogOpen, setMoveDialogOpen] = useState(false)
 	const [targetTopicId, setTargetTopicId] = useState('')
@@ -116,6 +126,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	const isDraftMode = Boolean(questionDraftId)
 	const isNewQuestion = questionId === undefined
 	const isEditingExistingQuestion = Boolean(questionId)
+	const isEditMode = isEditingExistingQuestion && !isDraftMode
 
 	const {
 		data: testData,
@@ -197,6 +208,36 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		return found ? normalizeQuestionForSave(found) : null
 	}, [testData, isDraftMode, draftQuestion, isNewQuestion, questionId])
 
+	const savedFormKey = useMemo(
+		() => (isEditMode && currentQuestion ? questionFormKey(currentQuestion) : null),
+		[isEditMode, currentQuestion]
+	)
+
+	const handleEditFormChange = useCallback(
+		(nextQuestion: Question) => {
+			if (savedFormKey === null) return
+			setIsFormDirty(questionFormKey(nextQuestion) !== savedFormKey)
+		},
+		[savedFormKey]
+	)
+
+	useEffect(() => {
+		if (!isEditMode) return
+		setUnsavedDirty(pathname, isFormDirty)
+	}, [isEditMode, pathname, isFormDirty, setUnsavedDirty])
+
+	useEffect(() => {
+		if (!isEditMode) return
+		return () => clearUnsaved(pathname)
+	}, [isEditMode, pathname, clearUnsaved])
+
+	useEffect(() => {
+		if (!isEditMode) return
+		const guard = createBeforeUnloadGuard(window)
+		guard.setActive(isFormDirty)
+		return () => guard.dispose()
+	}, [isEditMode, isFormDirty])
+
 	const breadcrumbLabels = useMemo(() => {
 		const labels: Record<string, string> = {}
 		const topicTitle = testData?.test?.topicTitle
@@ -230,6 +271,19 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 	const backToTestEditor = useCallback(() => {
 		router.push(`/admin/tests/${topicSlug}/${testSlug}`)
 	}, [router, topicSlug, testSlug])
+
+	const handleCancel = useCallback(() => {
+		if (isEditMode && isFormDirty) {
+			setLeaveDialogOpen(true)
+			return
+		}
+		backToTestEditor()
+	}, [isEditMode, isFormDirty, backToTestEditor])
+
+	const leaveWithoutSaving = useCallback(() => {
+		clearUnsaved(pathname)
+		backToTestEditor()
+	}, [clearUnsaved, pathname, backToTestEditor])
 
 	const persistDraftQuestion = useCallback(
 		async (nextQuestion: Question) => {
@@ -403,6 +457,10 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 				await mutate()
 				toast.success(appendAsNew ? 'Вопрос добавлен' : 'Вопрос сохранен')
+				if (isEditMode) {
+					setIsFormDirty(false)
+					clearUnsaved(pathname)
+				}
 				backToTestEditor()
 			} catch (err) {
 				toast.error(err instanceof Error ? err.message : 'Ошибка сохранения вопроса')
@@ -410,7 +468,19 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				setIsSaving(false)
 			}
 		},
-		[testData, questionTypesData, isDraftMode, isNewQuestion, questionId, questionDraftId, mutate, backToTestEditor]
+		[
+			testData,
+			questionTypesData,
+			isDraftMode,
+			isNewQuestion,
+			isEditMode,
+			questionId,
+			questionDraftId,
+			mutate,
+			clearUnsaved,
+			pathname,
+			backToTestEditor,
+		]
 	)
 
 	if (isLoading || (isDraftMode && questionDraftLoading && !isDraftHydratedRef.current)) {
@@ -458,8 +528,8 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				question={currentQuestion}
 				questionTypes={questionTypesData?.questionTypes ?? []}
 				onSave={handleSaveQuestion}
-				onDraftChange={isDraftMode ? handleQuestionDraftChange : undefined}
-				onCancel={backToTestEditor}
+				onDraftChange={isDraftMode ? handleQuestionDraftChange : isEditMode ? handleEditFormChange : undefined}
+				onCancel={handleCancel}
 				headerActions={
 					isEditingExistingQuestion && questionId ? (
 						<Button variant="secondary" onClick={openMoveDialog} disabled={moving} className="rounded-full">
@@ -470,6 +540,15 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				}
 				isSaving={isSaving}
 			/>
+
+			{isEditMode ? (
+				<UnsavedChangesDialog
+					open={leaveDialogOpen}
+					onOpenChange={setLeaveDialogOpen}
+					description={UNSAVED_CHANGES_TEXT.description}
+					onLeave={leaveWithoutSaving}
+				/>
+			) : null}
 
 			<Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
 				<DialogContent className="rounded-4xl">
