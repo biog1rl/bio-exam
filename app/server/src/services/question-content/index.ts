@@ -1,8 +1,13 @@
+export { insertAt, lockTest, resequenceQuestions, type LockedTest, type Tx } from './order.js'
 export {
+	contentKey,
+	newRevision,
 	questionMarkdownCandidates,
 	questionPrefix,
 	testPrefix,
 	topicPrefix,
+	type ContentKeyParams,
+	type ContentKind,
 	type QuestionMarkdownCandidatesParams,
 	type QuestionMarkdownFileName,
 } from './paths.js'
@@ -18,3 +23,18 @@ export {
 	type AdminTestSummary,
 	type QuestionMarkdownKind,
 } from './read.js'
+export {
+	CONTENT_CHANGED_MESSAGE,
+	QUESTION_NOT_IN_TEST_MESSAGE,
+	createQuestion,
+	createTestWithQuestions,
+	resolveQuestionPoints,
+	syncQuestionDerived,
+	updateQuestion,
+	writeContentFiles,
+	type ContentFiles,
+	type QuestionDerivedInput,
+	type QuestionInput,
+	type QuestionTypeMap,
+	type TestWithQuestionsInput,
+} from './write.js'

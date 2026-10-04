@@ -1,3 +1,5 @@
+import crypto from 'node:crypto'
+
 export type QuestionMarkdownFileName = 'prompt.md' | 'explanation.md'
 
 export type QuestionMarkdownCandidatesParams = {
@@ -7,6 +9,16 @@ export type QuestionMarkdownCandidatesParams = {
 	testId: string
 	questionId: string
 	fileName: QuestionMarkdownFileName
+}
+
+export type ContentKind = 'prompt' | 'explanation'
+
+export type ContentKeyParams = {
+	topicSlug: string
+	testSlug: string
+	questionId: string
+	kind: ContentKind
+	rev: string
 }
 
 export function topicPrefix(topicSlug: string): string {
@@ -33,4 +45,13 @@ export function questionMarkdownCandidates(params: QuestionMarkdownCandidatesPar
 	].filter((value): value is string => typeof value === 'string' && value.length > 0)
 
 	return [...new Set(candidates)]
+}
+
+export function newRevision(): string {
+	return crypto.randomBytes(6).toString('hex')
+}
+
+export function contentKey(params: ContentKeyParams): string {
+	const { topicSlug, testSlug, questionId, kind, rev } = params
+	return `${questionPrefix(topicSlug, testSlug, questionId)}/${kind}-${rev}.md`
 }

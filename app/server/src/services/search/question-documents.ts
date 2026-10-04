@@ -1,4 +1,6 @@
-import { pgPool } from '../../db/index.js'
+import { sql } from 'drizzle-orm'
+
+import { db } from '../../db/index.js'
 import { stripMarkdownToText } from './markdown.js'
 
 type TextOption = {
@@ -9,6 +11,8 @@ type MatchingPairs = {
 	left?: TextOption[]
 	right?: TextOption[]
 }
+
+export type SqlExecutor = Pick<typeof db, 'execute'>
 
 export type QuestionSearchInput = {
 	questionId: string
@@ -57,47 +61,56 @@ export function buildQuestionSearchDocument(input: QuestionSearchInput) {
 	}
 }
 
-export async function upsertQuestionSearchDocument(input: QuestionSearchInput): Promise<void> {
+export async function upsertQuestionSearchDocument(
+	input: QuestionSearchInput,
+	executor: SqlExecutor = db
+): Promise<void> {
 	const doc = buildQuestionSearchDocument(input)
-	await pgPool.query(
-		`
-			insert into question_search_documents (
-				question_id,
-				test_id,
-				topic_id,
-				prompt_text,
-				options_text,
-				matching_text,
-				search_text,
-				updated_at
-			)
-			values ($1, $2, $3, $4, $5, $6, $7, now())
-			on conflict (question_id) do update set
-				test_id = excluded.test_id,
-				topic_id = excluded.topic_id,
-				prompt_text = excluded.prompt_text,
-				options_text = excluded.options_text,
-				matching_text = excluded.matching_text,
-				search_text = excluded.search_text,
-				updated_at = now()
-		`,
-		[doc.questionId, doc.testId, doc.topicId, doc.promptText, doc.optionsText, doc.matchingText, doc.searchText]
-	)
+	await executor.execute(sql`
+		insert into question_search_documents (
+			question_id,
+			test_id,
+			topic_id,
+			prompt_text,
+			options_text,
+			matching_text,
+			search_text,
+			updated_at
+		)
+		values (
+			${doc.questionId},
+			${doc.testId},
+			${doc.topicId},
+			${doc.promptText},
+			${doc.optionsText},
+			${doc.matchingText},
+			${doc.searchText},
+			now()
+		)
+		on conflict (question_id) do update set
+			test_id = excluded.test_id,
+			topic_id = excluded.topic_id,
+			prompt_text = excluded.prompt_text,
+			options_text = excluded.options_text,
+			matching_text = excluded.matching_text,
+			search_text = excluded.search_text,
+			updated_at = now()
+	`)
 }
 
-export async function updateQuestionSearchDocumentLocation(params: {
-	questionId: string
-	testId: string
-	topicId: string
-}): Promise<void> {
-	await pgPool.query(
-		`
-			update question_search_documents
-			set test_id = $2,
-				topic_id = $3,
-				updated_at = now()
-			where question_id = $1
-		`,
-		[params.questionId, params.testId, params.topicId]
-	)
+export async function updateQuestionSearchDocumentLocation(
+	params: {
+		questionId: string
+		testId: string
+		topicId: string
+	},
+	executor: SqlExecutor = db
+): Promise<void> {
+	await executor.execute(sql`
+		update question_search_documents
+		set test_id = ${params.testId},
+			topic_id = ${params.topicId},
+			updated_at = now()
+		where question_id = ${params.questionId}
+	`)
 }

@@ -57,12 +57,16 @@ import {
 	UpdateQuestionDraftSchema,
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
-import { canReadTest, testScope } from '../../services/access-policy/index.js'
-import { readAdminTest, readQuestionMarkdown } from '../../services/question-content/index.js'
+import { canReadTest, canWriteTest, canWriteTopic, testScope } from '../../services/access-policy/index.js'
 import {
-	updateQuestionSearchDocumentLocation,
-	upsertQuestionSearchDocument,
-} from '../../services/search/question-documents.js'
+	createQuestion,
+	createTestWithQuestions,
+	readAdminTest,
+	readQuestionMarkdown,
+	resolveQuestionPoints,
+	updateQuestion,
+} from '../../services/question-content/index.js'
+import { updateQuestionSearchDocumentLocation } from '../../services/search/question-documents.js'
 import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
 import { assignmentsRouter } from './assignments.js'
 
@@ -149,52 +153,6 @@ async function ensureGlobalScoringRules(updatedBy?: string | null) {
 		.onConflictDoNothing()
 
 	return defaults
-}
-
-function resolveQuestionPoints(params: {
-	type: string
-	fallbackPoints: number
-	typeMap: Awaited<ReturnType<typeof getQuestionTypeMapForTest>>
-}): number {
-	const rulePoints = params.typeMap[params.type]?.scoringRule?.correctPoints
-	if (typeof rulePoints === 'number' && Number.isFinite(rulePoints) && rulePoints >= 0) {
-		return rulePoints
-	}
-	return params.fallbackPoints
-}
-
-async function writeTestSettingsFile(params: {
-	topicSlug: string
-	testSlug: string
-	testId: string
-	title: string
-	description: string | null | undefined
-	isPublished: boolean
-	showCorrectAnswer: boolean
-	timeLimitMinutes: number | null | undefined
-	redThresholdMinutes: number | null | undefined
-	warningThresholdMinutes: number | null | undefined
-	passingScore: number | null | undefined
-	version: number
-	effectiveScoringRules: z.infer<typeof TestScoringRulesSchema>
-	testOverrideRules: z.infer<typeof TestScoringRulesSchema> | null | undefined
-}) {
-	const testPath = storageService.getTestPath(params.topicSlug, params.testSlug)
-	await storageService.writeJson(`${testPath}/settings.json`, {
-		id: params.testId,
-		title: params.title,
-		description: params.description,
-		isPublished: params.isPublished,
-		showCorrectAnswer: params.showCorrectAnswer,
-		scoringRules: params.effectiveScoringRules,
-		useGlobalScoringRules: params.testOverrideRules == null,
-		timeLimitMinutes: params.timeLimitMinutes,
-		redThresholdMinutes: params.redThresholdMinutes,
-		warningThresholdMinutes: params.warningThresholdMinutes,
-		passingScore: params.passingScore,
-		version: params.version,
-		updatedAt: new Date().toISOString(),
-	})
 }
 
 async function syncQuestionPointsForTestByTypeConfig(testId: string) {
@@ -1222,20 +1180,20 @@ router.get('/:id', validateUUID('id'), sessionRequired(), async (req, res, next)
 })
 
 // POST /api/tests/save - создать новый тест
-router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.post('/save', sessionRequired(), async (req, res, next) => {
 	try {
+		if (!(await canWriteTopic(req, String(req.body?.topicId ?? '')))) {
+			return res.status(403).json({ error: 'Forbidden' })
+		}
+
 		const parsed = SaveTestSchema.safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		}
 
-		const userId = req.authUser?.id
+		const userId = req.authUser?.id ?? null
 		const data = parsed.data
-		const globalScoringRules = await ensureGlobalScoringRules(userId)
-		const effectiveScoringRules = resolveEffectiveScoringRules({
-			globalRules: globalScoringRules,
-			testOverrideRules: data.scoringRules,
-		})
+		await ensureGlobalScoringRules(userId)
 		const globalQuestionTypesMap = await getQuestionTypeMapForTest({ includeInactive: true })
 
 		for (let index = 0; index < data.questions.length; index++) {
@@ -1254,133 +1212,9 @@ router.post('/save', sessionRequired(), requirePerm('tests', 'write'), async (re
 			}
 		}
 
-		// Получаем тему для slug
-		const topic = await db.query.topics.findFirst({ where: eq(topics.id, data.topicId) })
-		if (!topic) {
-			return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-		}
+		const { test, topicSlug } = await createTestWithQuestions({ data, userId, typeMap: globalQuestionTypesMap })
 
-		// Проверяем уникальность slug в рамках темы
-		const existingTest = await db.query.tests.findFirst({
-			where: and(eq(tests.topicId, data.topicId), eq(tests.slug, data.slug)),
-		})
-		if (existingTest) {
-			return res.status(409).json({ error: ERROR_MESSAGES.TEST_SLUG_EXISTS })
-		}
-
-		// Начинаем транзакцию
-		const result = await db.transaction(async (tx) => {
-			// Создаём тест
-			const [newTest] = await tx
-				.insert(tests)
-				.values({
-					topicId: data.topicId,
-					slug: data.slug,
-					title: data.title,
-					description: data.description,
-					isPublished: data.isPublished,
-					showCorrectAnswer: data.showCorrectAnswer,
-					scoringRules: data.scoringRules ?? null,
-					timeLimitMinutes: data.timeLimitMinutes,
-					redThresholdMinutes: data.redThresholdMinutes ?? null,
-					warningThresholdMinutes: data.warningThresholdMinutes ?? null,
-					passingScore: data.passingScore,
-					order: data.order,
-					version: data.isPublished ? 1 : 0,
-					createdBy: userId,
-					updatedBy: userId,
-				})
-				.returning()
-
-			// Создаём вопросы
-			const createdQuestions = []
-			for (const q of data.questions) {
-				const [newQuestion] = await tx
-					.insert(questions)
-					.values({
-						testId: newTest.id,
-						type: q.type,
-						order: q.order,
-						points: resolveQuestionPoints({
-							type: q.type,
-							fallbackPoints: Number(q.points ?? 0),
-							typeMap: globalQuestionTypesMap,
-						}),
-						options: q.options ?? null,
-						matchingPairs: q.matchingPairs ?? null,
-						promptPath: `topics/${topic.slug}/${data.slug}/questions/${crypto.randomUUID()}/prompt.md`,
-						explanationPath: q.explanationText
-							? `topics/${topic.slug}/${data.slug}/questions/${crypto.randomUUID()}/explanation.md`
-							: null,
-					})
-					.returning()
-
-				// Обновляем пути с реальным ID
-				const promptPath = storageService.getQuestionPath(topic.slug, data.slug, newQuestion.id) + '/prompt.md'
-				const explanationPath = q.explanationText
-					? storageService.getQuestionPath(topic.slug, data.slug, newQuestion.id) + '/explanation.md'
-					: null
-
-				await tx.update(questions).set({ promptPath, explanationPath }).where(eq(questions.id, newQuestion.id))
-
-				// Создаём ключ ответа
-				await tx.insert(answerKeys).values({
-					questionId: newQuestion.id,
-					version: 1,
-					correctAnswer: q.correct,
-					isActive: true,
-					createdBy: userId,
-				})
-
-				createdQuestions.push({
-					...newQuestion,
-					promptPath,
-					explanationPath,
-					promptText: q.promptText,
-					explanationText: q.explanationText,
-				})
-			}
-
-			return { test: newTest, questions: createdQuestions }
-		})
-
-		// Записываем файлы в Storage (после успешной транзакции)
-		for (const q of result.questions) {
-			if (q.promptPath && q.promptText) {
-				await storageService.writeFile(q.promptPath, q.promptText)
-			}
-			if (q.explanationPath && q.explanationText) {
-				await storageService.writeFile(q.explanationPath, q.explanationText)
-			}
-			await upsertQuestionSearchDocument({
-				questionId: q.id,
-				testId: result.test.id,
-				topicId: topic.id,
-				type: q.type,
-				promptText: q.promptText,
-				options: q.options,
-				matchingPairs: q.matchingPairs,
-			})
-		}
-
-		await writeTestSettingsFile({
-			topicSlug: topic.slug,
-			testSlug: data.slug,
-			testId: result.test.id,
-			title: data.title,
-			description: data.description,
-			isPublished: data.isPublished,
-			showCorrectAnswer: data.showCorrectAnswer,
-			timeLimitMinutes: data.timeLimitMinutes,
-			redThresholdMinutes: data.redThresholdMinutes,
-			warningThresholdMinutes: data.warningThresholdMinutes,
-			passingScore: data.passingScore,
-			version: result.test.version,
-			effectiveScoringRules,
-			testOverrideRules: data.scoringRules ?? null,
-		})
-
-		res.status(201).json({ test: { ...result.test, topicSlug: topic.slug } })
+		res.status(201).json({ test: { ...test, topicSlug } })
 	} catch (e) {
 		next(e)
 	}
@@ -1431,12 +1265,8 @@ router.patch(
 				return res.status(400).json({ error: 'Для публикации добавьте хотя бы один вопрос' })
 			}
 
-			const globalScoringRules = await ensureGlobalScoringRules(userId)
+			await ensureGlobalScoringRules(userId)
 			const nextScoringOverride = data.scoringRules === undefined ? existingTest.scoringRules : data.scoringRules
-			const effectiveScoringRules = resolveEffectiveScoringRules({
-				globalRules: globalScoringRules,
-				testOverrideRules: nextScoringOverride,
-			})
 
 			const oldTopic = await db.query.topics.findFirst({ where: eq(topics.id, existingTest.topicId) })
 			const oldPrefix = oldTopic ? storageService.getTestPath(oldTopic.slug, existingTest.slug) : null
@@ -1512,23 +1342,6 @@ router.patch(
 				}
 			}
 
-			await writeTestSettingsFile({
-				topicSlug: topic.slug,
-				testSlug: data.slug,
-				testId: result.test.id,
-				title: data.title,
-				description: data.description,
-				isPublished: data.isPublished,
-				showCorrectAnswer: data.showCorrectAnswer,
-				timeLimitMinutes: data.timeLimitMinutes,
-				redThresholdMinutes: data.redThresholdMinutes,
-				warningThresholdMinutes: data.warningThresholdMinutes,
-				passingScore: data.passingScore,
-				version: result.test.version,
-				effectiveScoringRules,
-				testOverrideRules: nextScoringOverride ?? null,
-			})
-
 			const response: { test: typeof result.test & { topicSlug: string }; assetsMoved?: boolean } = {
 				test: { ...result.test, topicSlug: topic.slug },
 			}
@@ -1543,136 +1356,28 @@ router.patch(
 )
 
 // POST /api/tests/:id/questions - создать вопрос в тесте
-router.post(
-	'/:id/questions',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const testId = req.params.id as string
-			const parsed = SaveQuestionSchema.safeParse(req.body)
-			if (!parsed.success) {
-				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
-			}
-			const data = parsed.data
-			const userId = req.authUser?.id ?? null
-
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
-			if (!topic) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-
-			const typeMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
-			const questionValidationError = validateQuestionWithType(data, typeMap)
-			if (questionValidationError) {
-				return res.status(400).json({ error: questionValidationError })
-			}
-
-			const [orderRow] = await db
-				.select({ count: sql<number>`count(*)::int` })
-				.from(questions)
-				.where(eq(questions.testId, testId))
-			const questionsCount = Number(orderRow?.count ?? 0)
-			const targetOrderRaw = typeof data.order === 'number' ? data.order : questionsCount
-			const targetOrder = Math.max(0, Math.min(targetOrderRaw, questionsCount))
-
-			const result = await db.transaction(async (tx) => {
-				const now = new Date()
-				if (targetOrder < questionsCount) {
-					await tx
-						.update(questions)
-						.set({
-							order: sql`${questions.order} + 1`,
-							updatedAt: now,
-						})
-						.where(and(eq(questions.testId, testId), sql`${questions.order} >= ${targetOrder}`))
-				}
-
-				const [createdQuestion] = await tx
-					.insert(questions)
-					.values({
-						testId,
-						type: data.type,
-						order: targetOrder,
-						points: resolveQuestionPoints({
-							type: data.type,
-							fallbackPoints: Number(data.points ?? 0),
-							typeMap,
-						}),
-						options: data.options ?? null,
-						matchingPairs: data.matchingPairs ?? null,
-					})
-					.returning()
-
-				const promptPath = storageService.getQuestionPath(topic.slug, test.slug, createdQuestion.id) + '/prompt.md'
-				const explanationPath = data.explanationText
-					? storageService.getQuestionPath(topic.slug, test.slug, createdQuestion.id) + '/explanation.md'
-					: null
-
-				await tx
-					.update(questions)
-					.set({
-						promptPath,
-						explanationPath,
-						updatedAt: now,
-					})
-					.where(eq(questions.id, createdQuestion.id))
-
-				await tx.insert(answerKeys).values({
-					questionId: createdQuestion.id,
-					version: 1,
-					correctAnswer: data.correct,
-					isActive: true,
-					createdBy: userId,
-				})
-
-				await tx
-					.update(tests)
-					.set({
-						updatedAt: now,
-						updatedBy: userId,
-					})
-					.where(eq(tests.id, testId))
-
-				return {
-					id: createdQuestion.id,
-					order: targetOrder,
-					promptPath,
-					explanationPath,
-				}
-			})
-
-			if (result.promptPath && data.promptText) {
-				await storageService.writeFile(result.promptPath, data.promptText)
-			}
-			if (result.explanationPath && data.explanationText) {
-				await storageService.writeFile(result.explanationPath, data.explanationText)
-			}
-			await upsertQuestionSearchDocument({
-				questionId: result.id,
-				testId,
-				topicId: topic.id,
-				type: data.type,
-				promptText: data.promptText,
-				options: data.options,
-				matchingPairs: data.matchingPairs,
-			})
-
-			return res.status(201).json({
-				ok: true,
-				questionId: result.id,
-				order: result.order,
-			})
-		} catch (e) {
-			return next(e)
+router.post('/:id/questions', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		if (!(await canWriteTest(req, testId))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
+		const parsed = SaveQuestionSchema.safeParse(req.body)
+		if (!parsed.success) {
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		}
+
+		const result = await createQuestion({ testId, data: parsed.data, userId: req.authUser?.id ?? null })
+
+		return res.status(201).json({
+			ok: true,
+			questionId: result.questionId,
+			order: result.order,
+		})
+	} catch (e) {
+		return next(e)
 	}
-)
+})
 
 // PATCH /api/tests/:id/questions/:questionId - обновить вопрос
 router.patch(
@@ -1680,115 +1385,19 @@ router.patch(
 	validateUUID('id'),
 	validateUUID('questionId'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
 			const testId = req.params.id as string
 			const questionId = req.params.questionId as string
+			if (!(await canWriteTest(req, testId))) {
+				return res.status(403).json({ error: 'Forbidden' })
+			}
 			const parsed = SaveQuestionSchema.safeParse(req.body)
 			if (!parsed.success) {
 				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 			}
-			const data = parsed.data
-			const userId = req.authUser?.id ?? null
 
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-			const topic = await db.query.topics.findFirst({ where: eq(topics.id, test.topicId) })
-			if (!topic) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-			const existingQuestion = await db.query.questions.findFirst({
-				where: and(eq(questions.id, questionId), eq(questions.testId, testId)),
-			})
-			if (!existingQuestion) {
-				return res.status(404).json({ error: 'Вопрос не найден в текущем тесте' })
-			}
-
-			const typeMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
-			const questionValidationError = validateQuestionWithType(data, typeMap)
-			if (questionValidationError) {
-				return res.status(400).json({ error: questionValidationError })
-			}
-
-			const result = await db.transaction(async (tx) => {
-				const now = new Date()
-				const promptPath = storageService.getQuestionPath(topic.slug, test.slug, questionId) + '/prompt.md'
-				const explanationPath = data.explanationText
-					? storageService.getQuestionPath(topic.slug, test.slug, questionId) + '/explanation.md'
-					: null
-
-				await tx
-					.update(questions)
-					.set({
-						type: data.type,
-						points: resolveQuestionPoints({
-							type: data.type,
-							fallbackPoints: Number(data.points ?? 0),
-							typeMap,
-						}),
-						options: data.options ?? null,
-						matchingPairs: data.matchingPairs ?? null,
-						promptPath,
-						explanationPath,
-						updatedAt: now,
-					})
-					.where(eq(questions.id, questionId))
-
-				await tx.update(answerKeys).set({ isActive: false }).where(eq(answerKeys.questionId, questionId))
-
-				const [maxVersion] = await tx
-					.select({ maxV: sql<number>`COALESCE(MAX(version), 0)` })
-					.from(answerKeys)
-					.where(eq(answerKeys.questionId, questionId))
-
-				await tx.insert(answerKeys).values({
-					questionId,
-					version: (maxVersion?.maxV ?? 0) + 1,
-					correctAnswer: data.correct,
-					isActive: true,
-					createdBy: userId,
-				})
-
-				await tx
-					.update(tests)
-					.set({
-						updatedAt: now,
-						updatedBy: userId,
-					})
-					.where(eq(tests.id, testId))
-
-				return {
-					oldPromptPath: existingQuestion.promptPath,
-					oldExplanationPath: existingQuestion.explanationPath,
-					promptPath,
-					explanationPath,
-				}
-			})
-
-			if (result.oldPromptPath && result.oldPromptPath !== result.promptPath) {
-				await storageService.deleteFiles([result.oldPromptPath])
-			}
-			if (result.oldExplanationPath && result.oldExplanationPath !== result.explanationPath) {
-				await storageService.deleteFiles([result.oldExplanationPath])
-			}
-			if (result.promptPath && data.promptText) {
-				await storageService.writeFile(result.promptPath, data.promptText)
-			}
-			if (result.explanationPath && data.explanationText) {
-				await storageService.writeFile(result.explanationPath, data.explanationText)
-			}
-			await upsertQuestionSearchDocument({
-				questionId,
-				testId,
-				topicId: topic.id,
-				type: data.type,
-				promptText: data.promptText,
-				options: data.options,
-				matchingPairs: data.matchingPairs,
-			})
+			await updateQuestion({ testId, questionId, data: parsed.data, userId: req.authUser?.id ?? null })
 
 			return res.json({ ok: true, questionId })
 		} catch (e) {
@@ -1968,8 +1577,12 @@ router.post(
 
 			const oldQuestionPath = storageService.getQuestionPath(sourceTopic.slug, sourceTest.slug, questionId)
 			const newQuestionPath = storageService.getQuestionPath(targetTopic.slug, resolvedTargetTest.slug, questionId)
-			const newPromptPath = question.promptPath ? `${newQuestionPath}/prompt.md` : null
-			const newExplanationPath = question.explanationPath ? `${newQuestionPath}/explanation.md` : null
+			const newPromptPath = question.promptPath
+				? `${newQuestionPath}/${path.posix.basename(question.promptPath)}`
+				: null
+			const newExplanationPath = question.explanationPath
+				? `${newQuestionPath}/${path.posix.basename(question.explanationPath)}`
+				: null
 
 			await storageService.moveDirectory(oldQuestionPath, newQuestionPath)
 

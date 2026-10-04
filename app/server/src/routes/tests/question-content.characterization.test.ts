@@ -23,7 +23,7 @@ type ReadQuestion = {
 const PASSWORD = 'qcon-password-1'
 const TOPIC_SLUG = 'qcon-topic'
 
-const KNOWN_DEFECTS = new Set<string>(['STOR-D6a', 'STOR-D6b', 'STOR-save-order-holes'])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function defectTest(id: string, title: string, fn: () => Promise<void>, timeout?: number): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
