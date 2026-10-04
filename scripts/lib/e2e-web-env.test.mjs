@@ -17,6 +17,7 @@ import { assertWebEnvClosed, buildWebEnv, webEnvFileKeys } from './e2e-web-env.m
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const GUARD_CLI = path.join(REPO_ROOT, 'scripts', 'lib', 'e2e-web-env.mjs')
+const WEB_DIR = path.join(REPO_ROOT, 'app', 'web')
 
 const SCRATCH_URL = 'postgres://postgres@127.0.0.1:55432/test_e2e_x'
 
@@ -35,11 +36,13 @@ const DEV_ENV_FILE = [
 	`SESSION_COOKIE_NAME=${DECOY_COOKIE}`,
 ].join('\n')
 
+const RUNNER_SECRET = 'e2e-only-jwt-secret-not-for-production'
+
 /** Окружение раннера, из которого строится окружение Next */
 function runnerEnv(overrides = {}) {
 	return {
 		TEST_DATABASE_URL: SCRATCH_URL,
-		AUTH_JWT_SECRET: 'e2e-only-jwt-secret-not-for-production',
+		AUTH_JWT_SECRET: RUNNER_SECRET,
 		SESSION_COOKIE_NAME: 'bio_exam_session',
 		E2E_API_PORT: '4101',
 		E2E_WEB_PORT: '4102',
@@ -48,9 +51,9 @@ function runnerEnv(overrides = {}) {
 }
 
 /** Закрытое окружение Next так, как его получают next build и next start */
-function closedEnv(overrides = {}) {
+function closedEnv(webDir, overrides = {}) {
 	const runner = runnerEnv()
-	return { ...runner, ...buildWebEnv(runner), ...overrides }
+	return { ...runner, ...buildWebEnv(runner, { webDir }), ...overrides }
 }
 
 /** Временный каталог web с заданными .env-файлами; удаляется после fn */
@@ -83,26 +86,65 @@ function expectViolation(env, webDir, key) {
 	return text
 }
 
-test('buildWebEnv derives the closed Next environment from the runner env', () => {
-	const env = buildWebEnv(runnerEnv())
-	assert.deepEqual(env, {
-		NODE_ENV: 'production',
-		API_ORIGIN: 'http://127.0.0.1:4101',
-		APP_ORIGIN: 'http://127.0.0.1:4102',
-		NEXT_PUBLIC_APP_ORIGIN: 'http://127.0.0.1:4102',
-		DATABASE_URL: SCRATCH_URL,
-		AUTH_JWT_SECRET: 'e2e-only-jwt-secret-not-for-production',
-		SESSION_COOKIE_NAME: 'bio_exam_session',
-		NEXT_IGNORE_INCORRECT_LOCKFILE: '1',
+test('buildWebEnv derives the closed Next environment from the runner env without the database and the JWT secret', () => {
+	withWebDir({}, (webDir) => {
+		const env = buildWebEnv(runnerEnv(), { webDir })
+		assert.deepEqual(env, {
+			NODE_ENV: 'production',
+			API_ORIGIN: 'http://127.0.0.1:4101',
+			APP_ORIGIN: 'http://127.0.0.1:4102',
+			NEXT_PUBLIC_APP_ORIGIN: 'http://127.0.0.1:4102',
+			SESSION_COOKIE_NAME: 'bio_exam_session',
+			NEXT_IGNORE_INCORRECT_LOCKFILE: '1',
+			DATABASE_URL: '',
+			AUTH_JWT_SECRET: '',
+		})
+		const values = Object.values(env).join('\n')
+		assert.ok(!values.includes(SCRATCH_URL))
+		assert.ok(!values.includes(RUNNER_SECRET))
+	})
+})
+
+test('buildWebEnv does not require TEST_DATABASE_URL or AUTH_JWT_SECRET in the runner env', () => {
+	withWebDir({}, (webDir) => {
+		const env = buildWebEnv(runnerEnv({ TEST_DATABASE_URL: undefined, AUTH_JWT_SECRET: undefined }), { webDir })
+		assert.equal(env.DATABASE_URL, '')
+		assert.equal(env.AUTH_JWT_SECRET, '')
 	})
 })
 
 test('buildWebEnv throws naming each missing source variable', () => {
-	for (const key of ['TEST_DATABASE_URL', 'AUTH_JWT_SECRET', 'SESSION_COOKIE_NAME', 'E2E_API_PORT', 'E2E_WEB_PORT']) {
-		const env = runnerEnv()
-		delete env[key]
-		assert.throws(() => buildWebEnv(env), new RegExp(key), `buildWebEnv did not name ${key}`)
-	}
+	withWebDir({}, (webDir) => {
+		for (const key of ['SESSION_COOKIE_NAME', 'E2E_API_PORT', 'E2E_WEB_PORT']) {
+			const env = runnerEnv()
+			delete env[key]
+			assert.throws(() => buildWebEnv(env, { webDir }), new RegExp(key), `buildWebEnv did not name ${key}`)
+		}
+	})
+})
+
+test('buildWebEnv sets every key from the web .env files, unknown keys as empty strings', () => {
+	withWebDir({ '.env': `${DEV_ENV_FILE}\nOTHER_KEY=decoy-pass\n` }, (webDir) => {
+		const env = buildWebEnv(runnerEnv(), { webDir })
+		for (const key of [
+			'API_ORIGIN',
+			'AUTH_JWT_SECRET',
+			'DATABASE_URL',
+			'SESSION_COOKIE_NAME',
+			'NEXT_IGNORE_INCORRECT_LOCKFILE',
+			'OTHER_KEY',
+		]) {
+			assert.notEqual(env[key], undefined, `${key} is not set`)
+		}
+		assert.equal(env.OTHER_KEY, '')
+		assert.equal(env.API_ORIGIN, 'http://127.0.0.1:4101')
+		assert.equal(env.SESSION_COOKIE_NAME, 'bio_exam_session')
+		assert.equal(env.NEXT_IGNORE_INCORRECT_LOCKFILE, '1')
+		assert.equal(env.DATABASE_URL, '')
+		assert.equal(env.AUTH_JWT_SECRET, '')
+		const values = Object.values(env).join('\n')
+		for (const decoy of DECOYS) assert.ok(!values.includes(decoy), 'a decoy value reached the environment')
+	})
 })
 
 test('closed environment passes against a .env with the developer keys, decoys never reach it', () => {
@@ -114,7 +156,7 @@ test('closed environment passes against a .env with the developer keys, decoys n
 			'NEXT_IGNORE_INCORRECT_LOCKFILE',
 			'SESSION_COOKIE_NAME',
 		])
-		const env = closedEnv()
+		const env = closedEnv(webDir)
 		assert.equal(violationText(env, webDir), null)
 		const values = Object.values(env).join('\n')
 		for (const decoy of DECOYS) assert.ok(!values.includes(decoy), 'a decoy value reached the environment')
@@ -130,22 +172,33 @@ test('webEnvFileKeys returns names only and reads export lines', () => {
 })
 
 test('a key defined in .env.local but absent from the environment fails and is named', () => {
-	withWebDir({ '.env': DEV_ENV_FILE, '.env.local': 'E2E_DECOY_KEY=decoy-pass\n' }, (webDir) => {
-		expectViolation(closedEnv(), webDir, 'E2E_DECOY_KEY')
+	withWebDir({ '.env': DEV_ENV_FILE }, (builtFrom) => {
+		withWebDir({ '.env': DEV_ENV_FILE, '.env.local': 'E2E_DECOY_KEY=decoy-pass\n' }, (webDir) => {
+			expectViolation(closedEnv(builtFrom), webDir, 'E2E_DECOY_KEY')
+		})
+	})
+})
+
+test('a key from .env removed from the built environment fails and is named', () => {
+	withWebDir({ '.env': `${DEV_ENV_FILE}\nOTHER_KEY=decoy-pass\n` }, (webDir) => {
+		const env = closedEnv(webDir)
+		assert.equal(violationText(env, webDir), null)
+		delete env.OTHER_KEY
+		expectViolation(env, webDir, 'OTHER_KEY')
 	})
 })
 
 test('.env.example keys are ignored', () => {
 	withWebDir({ '.env': DEV_ENV_FILE, '.env.example': 'UNPINNED_EXAMPLE_KEY=placeholder\n' }, (webDir) => {
 		assert.ok(!webEnvFileKeys(webDir).includes('UNPINNED_EXAMPLE_KEY'))
-		assert.equal(violationText(closedEnv(), webDir), null)
+		assert.equal(violationText(closedEnv(webDir), webDir), null)
 	})
 })
 
 test('an empty value counts as present (@next/env fills only undefined keys)', () => {
 	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
 		assert.equal(
-			violationText(closedEnv({ NEXT_IGNORE_INCORRECT_LOCKFILE: '', SESSION_COOKIE_NAME: '' }), webDir),
+			violationText(closedEnv(webDir, { NEXT_IGNORE_INCORRECT_LOCKFILE: '', SESSION_COOKIE_NAME: '' }), webDir),
 			null
 		)
 	})
@@ -153,80 +206,87 @@ test('an empty value counts as present (@next/env fills only undefined keys)', (
 
 test('API_ORIGIN on another port or host fails', () => {
 	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
-		expectViolation(closedEnv({ API_ORIGIN: 'http://127.0.0.1:4999' }), webDir, 'API_ORIGIN')
-		expectViolation(closedEnv({ API_ORIGIN: 'http://localhost:4101' }), webDir, 'API_ORIGIN')
-		expectViolation(closedEnv({ API_ORIGIN: DECOY_API_ORIGIN }), webDir, 'API_ORIGIN')
+		expectViolation(closedEnv(webDir, { API_ORIGIN: 'http://127.0.0.1:4999' }), webDir, 'API_ORIGIN')
+		expectViolation(closedEnv(webDir, { API_ORIGIN: 'http://localhost:4101' }), webDir, 'API_ORIGIN')
+		expectViolation(closedEnv(webDir, { API_ORIGIN: DECOY_API_ORIGIN }), webDir, 'API_ORIGIN')
 	})
 })
 
 test('NODE_ENV other than production fails', () => {
 	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
-		expectViolation(closedEnv({ NODE_ENV: 'development' }), webDir, 'NODE_ENV')
-		expectViolation(closedEnv({ NODE_ENV: 'test' }), webDir, 'NODE_ENV')
-		const env = closedEnv()
+		expectViolation(closedEnv(webDir, { NODE_ENV: 'development' }), webDir, 'NODE_ENV')
+		expectViolation(closedEnv(webDir, { NODE_ENV: 'test' }), webDir, 'NODE_ENV')
+		const env = closedEnv(webDir)
 		delete env.NODE_ENV
 		expectViolation(env, webDir, 'NODE_ENV')
 	})
 })
 
-test('DATABASE_URL that is remote, not a test database or not the scratch URL fails without printing it', () => {
+test('a non-empty DATABASE_URL fails without printing it, app/web does not read it', () => {
 	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
-		const remote = 'postgres://u:s3cret@db.example.invalid:5432/test_e2e_x'
-		const remoteText = expectViolation(
-			closedEnv({ DATABASE_URL: remote, TEST_DATABASE_URL: remote }),
-			webDir,
-			'DATABASE_URL'
-		)
-		assert.ok(!remoteText.includes('s3cret'))
-		assert.ok(!remoteText.includes(remote))
-
-		const prod = 'postgres://u:s3cret@127.0.0.1:5432/postgres'
-		const prodText = expectViolation(closedEnv({ DATABASE_URL: prod, TEST_DATABASE_URL: prod }), webDir, 'DATABASE_URL')
-		assert.ok(!prodText.includes('s3cret'))
-
-		const other = 'postgres://u:s3cret@127.0.0.1:5432/test_other'
-		const otherText = expectViolation(closedEnv({ DATABASE_URL: other }), webDir, 'DATABASE_URL')
-		assert.ok(!otherText.includes('s3cret'))
-
-		expectViolation(closedEnv({ DATABASE_URL: DECOY_DATABASE_URL }), webDir, 'DATABASE_URL')
+		const local = 'postgres://u:s3cret@127.0.0.1:5432/test_e2e_x'
+		const text = expectViolation(closedEnv(webDir, { DATABASE_URL: local }), webDir, 'DATABASE_URL')
+		assert.match(text, /^DATABASE_URL: must be empty, app\/web does not read it \(ADR-0001\)$/m)
+		assert.ok(!text.includes('s3cret'))
+		assert.ok(!text.includes(local))
+		expectViolation(closedEnv(webDir, { DATABASE_URL: SCRATCH_URL }), webDir, 'DATABASE_URL')
+		expectViolation(closedEnv(webDir, { DATABASE_URL: DECOY_DATABASE_URL }), webDir, 'DATABASE_URL')
 	})
 })
 
-test('AUTH_JWT_SECRET without the e2e-only- marker fails', () => {
+test('DATABASE_URL and AUTH_JWT_SECRET that are not set fail as well', () => {
+	withWebDir({}, (webDir) => {
+		for (const key of ['DATABASE_URL', 'AUTH_JWT_SECRET']) {
+			const env = closedEnv(webDir)
+			delete env[key]
+			expectViolation(env, webDir, key)
+		}
+	})
+})
+
+test('a non-empty AUTH_JWT_SECRET fails without printing it, even with the e2e-only- marker', () => {
 	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
-		const text = expectViolation(closedEnv({ AUTH_JWT_SECRET: 'not-the-e2e-secret' }), webDir, 'AUTH_JWT_SECRET')
-		assert.ok(!text.includes('not-the-e2e-secret'))
-		expectViolation(closedEnv({ AUTH_JWT_SECRET: DECOY_SECRET }), webDir, 'AUTH_JWT_SECRET')
+		const text = expectViolation(closedEnv(webDir, { AUTH_JWT_SECRET: RUNNER_SECRET }), webDir, 'AUTH_JWT_SECRET')
+		assert.match(text, /^AUTH_JWT_SECRET: must be empty, app\/web does not read it \(ADR-0001\)$/m)
+		assert.ok(!text.includes(RUNNER_SECRET))
+		expectViolation(closedEnv(webDir, { AUTH_JWT_SECRET: DECOY_SECRET }), webDir, 'AUTH_JWT_SECRET')
+	})
+})
+
+test('the closed environment does not need TEST_DATABASE_URL', () => {
+	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
+		const env = closedEnv(webDir)
+		delete env.TEST_DATABASE_URL
+		assert.equal(violationText(env, webDir), null)
 	})
 })
 
 test('any SUPABASE_* variable fails and is named', () => {
 	withWebDir({ '.env': DEV_ENV_FILE }, (webDir) => {
-		expectViolation(closedEnv({ SUPABASE_URL: 'https://decoy.supabase.invalid' }), webDir, 'SUPABASE_URL')
-		expectViolation(closedEnv({ SUPABASE_SERVICE_KEY: 'decoy-pass' }), webDir, 'SUPABASE_SERVICE_KEY')
+		expectViolation(closedEnv(webDir, { SUPABASE_URL: 'https://decoy.supabase.invalid' }), webDir, 'SUPABASE_URL')
+		expectViolation(closedEnv(webDir, { SUPABASE_SERVICE_KEY: 'decoy-pass' }), webDir, 'SUPABASE_SERVICE_KEY')
 	})
 })
 
 test('a web directory without any .env file passes (CI case)', () => {
 	withWebDir({}, (webDir) => {
 		assert.deepEqual(webEnvFileKeys(webDir), [])
-		assert.equal(violationText(closedEnv(), webDir), null)
+		assert.equal(violationText(closedEnv(webDir), webDir), null)
 	})
 })
 
 test('CLI --check prints next-env-guard: OK for the closed env and FAILED with key lines otherwise', () => {
 	const ok = spawnSync(process.execPath, [GUARD_CLI, '--check'], {
-		env: { PATH: process.env.PATH, ...closedEnv() },
+		env: { PATH: process.env.PATH, ...closedEnv(WEB_DIR) },
 		encoding: 'utf8',
 	})
-	// app/web/.env может задавать и другие ключи: сверяем только формат строк и отсутствие значений
 	if (ok.status === 0) assert.match(ok.stdout, /next-env-guard: OK/)
 	else assert.match(ok.stderr, /^next-env-guard: FAILED/m)
 
 	const bad = spawnSync(process.execPath, [GUARD_CLI, '--check'], {
 		env: {
 			PATH: process.env.PATH,
-			...closedEnv({
+			...closedEnv(WEB_DIR, {
 				API_ORIGIN: 'http://127.0.0.1:4000',
 				DATABASE_URL: 'postgres://u:s3cret@db.example.invalid:5432/test_x',
 				AUTH_JWT_SECRET: 'not-the-e2e-secret',
@@ -240,6 +300,7 @@ test('CLI --check prints next-env-guard: OK for the closed env and FAILED with k
 	for (const key of ['API_ORIGIN', 'DATABASE_URL', 'AUTH_JWT_SECRET'])
 		assert.match(output, new RegExp(`^${key}: `, 'm'))
 	assert.ok(!output.includes('s3cret'))
+	assert.ok(!output.includes('not-the-e2e-secret'))
 	assert.ok(!output.includes('next-env-guard: OK'))
 })
 

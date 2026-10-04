@@ -23,7 +23,6 @@ const EXPECTED_EXPORTS = [
 	'ROLE_KEYS',
 	'ROLE_REGISTRY',
 	'accessRuleToSerializable',
-	'buildPermissionSet',
 	'can',
 	'createAccessRule',
 	'normaliseActionList',

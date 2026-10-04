@@ -4,7 +4,7 @@ export type { PermissionDomain, ActionOf, PermissionKey } from './domains'
 export { ROLE_REGISTRY, ROLE_KEYS, ROLES_LIST, roleDisplayName } from './roles'
 export type { RoleKey, RoleConfig, RoleGrant } from './roles'
 
-export { buildPermissionSet, can } from './rbac'
+export { can } from './rbac'
 export type { AccessRule, SubjectActionMap } from './access'
 export {
 	normaliseRoleKeys,

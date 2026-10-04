@@ -32,7 +32,7 @@ const FORBIDDEN = [
 
 /**
  * Контекст secrets в любой форме: secrets.X, secrets['X'], toJSON(secrets), в том числе в комментариях.
- * Слово ищется целиком: AUTH_JWT_SECRET и ci-build-secret не совпадают
+ * Слово ищется целиком: AUTH_JWT_SECRET и ci-smoke-secret не совпадают
  */
 const SECRETS_CONTEXT = /\bsecrets\b/i
 

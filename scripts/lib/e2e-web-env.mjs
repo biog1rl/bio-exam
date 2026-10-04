@@ -1,14 +1,15 @@
 /**
- * Закрытое окружение Next для e2e и его защита (D-17, D-29, T-1-28).
+ * Закрытое окружение Next для e2e и его защита (D-17, D-29, T-1-28, D-18 фазы 4).
  *
  * next build и next start вызывают @next/env loadEnvConfig: он дописывает в process.env каждый
  * ключ из app/web/.env*, которого там нет (undefined), и никогда не перезаписывает заданный.
- * Поэтому окружение Next задаётся явно и целиком (buildWebEnv), а защита проверяет, что в нём
- * правильные значения и что каждый ключ из app/web/.env* уже задан, то есть @next/env нечего
- * подставить из файлов разработчика (живой DATABASE_URL, его API_ORIGIN, секреты).
+ * Поэтому окружение Next задаётся явно и целиком (buildWebEnv): каждый ключ из app/web/.env*
+ * задан, а DATABASE_URL и AUTH_JWT_SECRET — пустые строки. Web не читает ни адрес базы, ни секрет
+ * JWT (ADR-0001), а пустые строки перекрывают и файлы разработчика, и окружение раннера.
+ * Защита проверяет, что значения правильные и что @next/env нечего подставить из файлов.
  *
  * Защита читает из .env-файлов только ИМЕНА ключей и никогда не печатает значения: каждая строка
- * нарушения имеет вид "KEY: причина", причина называет не больше хоста или имени базы.
+ * нарушения имеет вид "KEY: причина".
  *
  * CLI: node scripts/lib/e2e-web-env.mjs --check
  *   проверяет process.env против app/web, печатает "next-env-guard: OK" (код 0) или
@@ -18,13 +19,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { assertTestDatabaseUrl } from '../../app/server/src/config/test-database-url.ts'
-
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DEFAULT_WEB_DIR = path.join(REPO_ROOT, 'app', 'web')
-
-/** Маркер тестового секрета: e2e никогда не подписывает токены боевым секретом */
-export const E2E_SECRET_MARKER = 'e2e-only-'
 
 const LOOPBACK = '127.0.0.1'
 
@@ -46,26 +42,27 @@ function apiOrigin(port) {
  * Единственное определение окружения Next в e2e (build и start), выводится из окружения раннера.
  * Бросает, называя отсутствующую переменную-источник.
  */
-export function buildWebEnv(env) {
-	const testDatabaseUrl = requireVar(env, 'TEST_DATABASE_URL')
-	const secret = requireVar(env, 'AUTH_JWT_SECRET')
+export function buildWebEnv(env, { webDir = DEFAULT_WEB_DIR } = {}) {
 	const cookieName = requireVar(env, 'SESSION_COOKIE_NAME')
 	const apiPort = requireVar(env, 'E2E_API_PORT')
 	const webPort = requireVar(env, 'E2E_WEB_PORT')
 	const webOrigin = `http://${LOOPBACK}:${webPort}`
-	return {
+	const webEnv = {
 		NODE_ENV: 'production',
 		API_ORIGIN: apiOrigin(apiPort),
 		APP_ORIGIN: webOrigin,
 		NEXT_PUBLIC_APP_ORIGIN: webOrigin,
-		// lib/env/server.ts требует это имя до Phase 4: здесь только временная база test_e2e_*
-		DATABASE_URL: testDatabaseUrl,
-		AUTH_JWT_SECRET: secret,
 		SESSION_COOKIE_NAME: cookieName,
 		// Ключ есть в .env разработчика, поэтому задан явно. Значение '1', а не пустое: при пустом
 		// next build и next start пытаются «чинить» lockfile и вызывают yarn config get registry
 		NEXT_IGNORE_INCORRECT_LOCKFILE: '1',
+		DATABASE_URL: '',
+		AUTH_JWT_SECRET: '',
 	}
+	for (const key of webEnvFileKeys(webDir)) {
+		if (!(key in webEnv)) webEnv[key] = ''
+	}
+	return webEnv
 }
 
 /** .env-файлы каталога, которые может прочитать @next/env (без *.example) */
@@ -101,23 +98,6 @@ export function webEnvFileKeys(webDir) {
 }
 
 /**
- * Причина отказа защиты базы без самих значений: даже хост живого пулера или имя базы
- * разработчика не попадают в вывод, только класс нарушения.
- */
-function guardReason(value) {
-	try {
-		assertTestDatabaseUrl(value)
-		return null
-	} catch (error) {
-		const message = String(error.message)
-		if (message.includes(' host ')) return 'host is not localhost or 127.0.0.1'
-		if (message.includes(' database ')) return 'database name does not match ^test_[a-z0-9_]+$'
-		if (message.includes(' protocol ')) return 'protocol is not postgres: or postgresql:'
-		return message.replace(/^TEST_DATABASE_URL\s*/, '')
-	}
-}
-
-/**
  * Проверяет, что env — закрытое окружение Next для e2e. Бросает одну ошибку со строками
  * "KEY: причина"; error.violations — те же строки массивом.
  */
@@ -132,18 +112,8 @@ export function assertWebEnvClosed(env, { webDir = DEFAULT_WEB_DIR } = {}) {
 		violations.push(`API_ORIGIN: does not equal the e2e Express origin on ${LOOPBACK} port ${apiPort}`)
 	}
 
-	if (env.TEST_DATABASE_URL === undefined || env.TEST_DATABASE_URL === '') {
-		violations.push('TEST_DATABASE_URL: is not set')
-	}
-	if (env.DATABASE_URL === undefined) violations.push('DATABASE_URL: is not set')
-	else {
-		if (env.DATABASE_URL !== env.TEST_DATABASE_URL) violations.push('DATABASE_URL: does not equal TEST_DATABASE_URL')
-		const reason = guardReason(env.DATABASE_URL)
-		if (reason) violations.push(`DATABASE_URL: rejected by the test database guard (${reason})`)
-	}
-
-	if (typeof env.AUTH_JWT_SECRET !== 'string' || !env.AUTH_JWT_SECRET.startsWith(E2E_SECRET_MARKER)) {
-		violations.push(`AUTH_JWT_SECRET: does not carry the ${E2E_SECRET_MARKER} test marker`)
+	for (const key of ['DATABASE_URL', 'AUTH_JWT_SECRET']) {
+		if (env[key] !== '') violations.push(`${key}: must be empty, app/web does not read it (ADR-0001)`)
 	}
 
 	for (const key of Object.keys(env).sort()) {

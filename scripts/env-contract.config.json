@@ -4,8 +4,7 @@
 			"sources": ["src", "api", "drizzle.config.ts"]
 		},
 		"app/web": {
-			"sources": ["."],
-			"zodFile": "lib/env/server.ts"
+			"sources": ["."]
 		}
 	},
 	"allowlist": {

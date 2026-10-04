@@ -115,8 +115,6 @@ jobs:
           echo 'production start smoke: OK'
       - name: Build web
         env:
-          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/test_ci
-          AUTH_JWT_SECRET: ci-build-secret
           API_ORIGIN: http://127.0.0.1:4000
         run: yarn workspace @bio-exam/web build
 

@@ -9,7 +9,6 @@ const RUNTIME_EXPORTS = [
 	'ROLE_KEYS',
 	'ROLES_LIST',
 	'roleDisplayName',
-	'buildPermissionSet',
 	'can',
 	'normaliseRoleKeys',
 	'normaliseUserIdentifiers',
@@ -21,11 +20,15 @@ const RUNTIME_EXPORTS = [
 ]
 
 describe('@bio-exam/rbac', () => {
-	test('экспортирует ровно 14 рантайм-имён', () => {
+	test('экспортирует ровно 13 рантайм-имён', () => {
 		expect(Object.keys(rbac).sort()).toEqual([...RUNTIME_EXPORTS].sort())
 	})
 
-	test('роль admin может читать пользователей', () => {
-		expect(rbac.can(rbac.buildPermissionSet(['admin']), 'users', 'read')).toBe(true)
+	test('can проверяет готовый набор прав', () => {
+		const perms = new Set<rbac.PermissionKey>(['users.read'])
+		expect(rbac.can(perms, 'users', 'read')).toBe(true)
+		expect(rbac.can(perms, 'users.read')).toBe(true)
+		expect(rbac.can(perms, 'users', 'edit')).toBe(false)
+		expect(rbac.can(perms, 'tests.read')).toBe(false)
 	})
 })
