@@ -1,4 +1,4 @@
-import { ATTEMPT_GRACE_PERIOD_MINUTES, SUBMIT_ERROR_CODES } from '@bio-exam/exam-core'
+import { SUBMIT_ERROR_CODES } from '@bio-exam/exam-core'
 
 import { AttemptRequestError } from '@/lib/tests/api'
 
@@ -95,11 +95,4 @@ export function storageKeysToClear(event: AttemptStorageEvent): readonly Attempt
 
 export function blocksInteraction(banner: AttemptBanner): boolean {
 	return banner !== 'retry'
-}
-
-export function isClientExpired(input: { startedAt: string; timeLimitMinutes: number | null; nowMs: number }): boolean {
-	if (!input.timeLimitMinutes) return false
-	const startedMs = Date.parse(input.startedAt)
-	if (Number.isNaN(startedMs)) return false
-	return input.nowMs > startedMs + (input.timeLimitMinutes + ATTEMPT_GRACE_PERIOD_MINUTES) * 60 * 1000
 }

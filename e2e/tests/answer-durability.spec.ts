@@ -48,10 +48,9 @@ test.describe.serial('LIFE-02: ответы переживают перезаг�
 		}
 	})
 
-	test('LIFE-02 known defect (чинит 06-09): ответы на вопросы 1 и 2 в окне дебаунса переживают перезагрузку @known-defect @life02', async ({
+	test('LIFE-02: ответы на вопросы 1 и 2 в окне дебаунса переживают перезагрузку @life02', async ({
 		studentPage: page,
 	}, testInfo) => {
-		test.fail()
 		const seed = seedTest(projectKey(testInfo), 'all-templates')
 		const count = seed.questions.length
 		const [first, second] = seed.questions

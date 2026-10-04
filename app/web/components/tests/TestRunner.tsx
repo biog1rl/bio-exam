@@ -2,10 +2,9 @@
 
 import { isAnswered } from '@bio-exam/exam-core'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { toast } from 'sonner'
-import { useDebouncedCallback } from 'use-debounce'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
@@ -13,17 +12,8 @@ import { QuestionInput } from '@/components/tests/QuestionInput'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
 import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
-import { saveAnswer, saveSessionTelemetry, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
-import type {
-	AttemptQuestionView,
-	AttemptView,
-	PublicTestDetail,
-	PublicTestQuestion,
-	SessionInfo,
-	TestAnswerValue,
-	TestAttemptSummary,
-} from '@/lib/tests/types'
+import type { AttemptQuestionView, PublicTestDetail, PublicTestQuestion, TestAttemptSummary } from '@/lib/tests/types'
 import { cn } from '@/lib/utils'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
@@ -39,25 +29,9 @@ import {
 } from '../ui/alert-dialog'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
-import {
-	type AttemptBanner,
-	type AttemptStorageEvent,
-	bannerFor,
-	blocksInteraction,
-	classifyStartFailure,
-	classifySubmitFailure,
-	isClientExpired,
-	storageKeysToClear,
-	SUBMIT_FLOW_TEXT,
-} from './attempt-submit-flow'
-import { clientAttemptIdKey, forgetClientAttemptId, resolveClientAttemptId } from './client-attempt-id'
-import {
-	appendQuestionTime,
-	incrementQuestionFocusLoss,
-	incrementQuestionVisit,
-	mergeTelemetryMaps,
-	type TelemetryMap,
-} from './telemetry'
+import { type AttemptNotice, saveIndicatorView, setMatchingPair, toggleOption } from './attempt-lifecycle'
+import { useAttemptLifecycle } from './attempt-lifecycle/use-attempt-lifecycle'
+import { type AttemptBanner, bannerFor, SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
 
 type Props = {
 	test: PublicTestDetail
@@ -106,26 +80,6 @@ function extractImagePaths(lexicalJson: unknown): string[] {
 
 const RED_THRESHOLD_SECONDS_DEFAULT = 5 * 60 // 300 seconds = 5 minutes
 
-function useCountdown(startedAt: string | null, limitMinutes: number | null): number | null {
-	const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
-
-	useEffect(() => {
-		if (!startedAt || !limitMinutes) return
-		const endMs = new Date(startedAt).getTime() + limitMinutes * 60 * 1000
-
-		const tick = () => {
-			const remaining = Math.max(0, Math.floor((endMs - Date.now()) / 1000))
-			setSecondsLeft(remaining)
-		}
-		tick()
-
-		const id = setInterval(tick, 1000)
-		return () => clearInterval(id)
-	}, [startedAt, limitMinutes])
-
-	return secondsLeft
-}
-
 function formatTime(seconds: number, showHours: boolean): string {
 	const h = Math.floor(seconds / 3600)
 	const m = Math.floor((seconds % 3600) / 60)
@@ -136,14 +90,20 @@ function formatTime(seconds: number, showHours: boolean): string {
 	return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export default function TestRunner({ test, questions, initialAttempts = [], attemptsLoading = false }: Props) {
+export default function TestRunner(props: Props) {
 	const { me } = useAuth()
-	const userId = me?.id ?? 'anonymous'
+	if (!me) return <div className="p-6">Загрузка теста...</div>
+	return <AttemptRunner key={`${props.test.id}:${me.id}`} {...props} userId={me.id} />
+}
+
+function AttemptRunner({
+	test,
+	questions,
+	initialAttempts = [],
+	attemptsLoading = false,
+	userId,
+}: Props & { userId: string }) {
 	const orderedQuestions = useMemo(() => [...questions].sort((a, b) => a.order - b.order), [questions])
-	const [answers, setAnswers] = useState<Record<string, TestAnswerValue>>({})
-	const [submitting, setSubmitting] = useState(false)
-	const [submitResult, setSubmitResult] = useState<AttemptView | null>(null)
-	const [banner, setBanner] = useState<AttemptBanner | null>(null)
 	const [attempts, setAttempts] = useState<TestAttemptSummary[]>(initialAttempts)
 	useEffect(() => {
 		if (initialAttempts.length === 0) return
@@ -153,219 +113,41 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 			return added.length > 0 ? [...prev, ...added] : prev
 		})
 	}, [initialAttempts])
-	const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(() => orderedQuestions[0]?.id ?? null)
 	const [showUnansweredDialog, setShowUnansweredDialog] = useState(false)
-	const [session, setSession] = useState<SessionInfo | null>(null)
-	const [frozen, setFrozen] = useState(false)
-	const [showTimeUp, setShowTimeUp] = useState(false)
-	const [alreadySubmitted, setAlreadySubmitted] = useState<{ open: boolean; attemptId: string | null }>({
-		open: false,
-		attemptId: null,
-	})
-	const [timeExpiredOpen, setTimeExpiredOpen] = useState(false)
-	const [awaitingStart, setAwaitingStart] = useState(false)
-	const [sessionStarting, setSessionStarting] = useState(false)
-	const telemetryRef = useRef<TelemetryMap>({})
-	const enterTimeRef = useRef<number | null>(null)
-	const warningFiredRef = useRef(false)
-	const sessionInitRef = useRef(false)
-	const autoSubmitFiredRef = useRef(false)
-	const frozenKey = `test-frozen-${test.id}-${userId}`
-	const walKey = `test-answers-wal-${test.id}-${userId}`
-	const sessionKey = `test-session-${test.id}-${userId}`
-	const clientAttemptKey = clientAttemptIdKey(test.id, userId)
+	const [alreadySubmittedClosed, setAlreadySubmittedClosed] = useState(false)
 
-	const clearAttemptStorage = (event: AttemptStorageEvent) => {
-		for (const key of storageKeysToClear(event)) {
-			if (key === 'session') localStorage.removeItem(sessionKey)
-			else if (key === 'wal') localStorage.removeItem(walKey)
-			else if (key === 'frozen') localStorage.removeItem(frozenKey)
-			else forgetClientAttemptId(localStorage, clientAttemptKey)
+	const onNotice = (notice: AttemptNotice) => {
+		if (notice.kind === 'session-restored') toast.info('Сессия восстановлена')
+		else if (notice.kind === 'session-replaced') toast.info(SUBMIT_FLOW_TEXT.sessionReplaced)
+		else if (notice.kind === 'start-failed') toast.error('Не удалось начать тест. Попробуйте ещё раз.')
+		else if (notice.kind === 'retake-start-failed') toast.error('Не удалось начать новую попытку. Попробуйте ещё раз.')
+		else if (notice.kind === 'one-minute-left')
+			toast.warning('Осталась 1 минута — тест будет сдан автоматически', { duration: 8000 })
+		else {
+			const result = notice.result
+			setAttempts((prev) => [
+				{
+					id: result.attemptId,
+					earnedPoints: result.earnedPoints,
+					totalPoints: result.totalPoints,
+					scorePercentage: result.scorePercentage,
+					passed: result.passed,
+					submittedAt: result.submittedAt,
+				},
+				...prev,
+			])
 		}
 	}
 
-	const showStartNotAssigned = () => {
-		clearAttemptStorage('start-not-assigned')
-		setBanner('start-not-assigned')
-	}
-
-	const replaceTelemetry = useCallback(
-		(next: TelemetryMap) => {
-			telemetryRef.current = next
-
-			try {
-				const raw = localStorage.getItem(walKey)
-				const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
-				const hasWrappedAnswers = parsed.answers && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers)
-				const wal = hasWrappedAnswers
-					? { ...parsed, telemetry: next }
-					: {
-							answers: parsed,
-							lastQuestionId: null,
-							telemetry: next,
-						}
-				localStorage.setItem(walKey, JSON.stringify(wal))
-			} catch {
-				/* localStorage is best-effort; the server draft remains the fallback */
-			}
-		},
-		[walKey]
-	)
-
-	const hydrateFromServerSession = useCallback(
-		(serverSession: SessionInfo) => {
-			setSession(serverSession)
-			localStorage.setItem(sessionKey, JSON.stringify(serverSession))
-			replaceTelemetry(mergeTelemetryMaps(telemetryRef.current, serverSession.draftTelemetry))
-
-			// Server draft has priority over stale WAL values.
-			if (serverSession.draftAnswers && Object.keys(serverSession.draftAnswers).length > 0) {
-				setAnswers((prev) => ({ ...prev, ...serverSession.draftAnswers }))
-			}
-			if (serverSession.draftLastQuestionId) {
-				const idx = orderedQuestions.findIndex((q) => q.id === serverSession.draftLastQuestionId)
-				if (idx !== -1) {
-					setCurrentQuestionId(serverSession.draftLastQuestionId)
-				}
-			}
-		},
-		[orderedQuestions, replaceTelemetry, sessionKey]
-	)
-
-	const replaceWithNewSession = (serverSession: SessionInfo) => {
-		clearAttemptStorage('session-replaced')
-		setFrozen(false)
-		telemetryRef.current = {}
-		replaceTelemetry(serverSession.draftTelemetry ?? {})
-		setSession(serverSession)
-		localStorage.setItem(sessionKey, JSON.stringify(serverSession))
-		setAnswers(serverSession.draftAnswers ?? {})
-		const lastQuestionId = serverSession.draftLastQuestionId
-		const hasLastQuestion = !!lastQuestionId && orderedQuestions.some((q) => q.id === lastQuestionId)
-		setCurrentQuestionId(hasLastQuestion ? lastQuestionId : (orderedQuestions[0]?.id ?? null))
-	}
-
-	const secondsLeft = useCountdown(session?.startedAt ?? null, test.timeLimitMinutes ?? null)
+	const { lifecycle, snapshot } = useAttemptLifecycle({ test, questions, userId, onNotice })
+	const answers = snapshot.answers
+	const currentQuestionId = snapshot.currentQuestionId
+	const submitResult = snapshot.result
+	const secondsLeft = snapshot.secondsLeft
+	const submitting = snapshot.phase === 'submitting' || snapshot.phase === 'autoSubmitting'
+	const interactionDisabled = snapshot.interactionDisabled
 	const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT
 	const showHours = (test.timeLimitMinutes ?? 0) > 60
-
-	// Session start effect: restore frozen state and start/restore timer session
-	useEffect(() => {
-		// Restore frozen state from localStorage (user returned after auto-submit)
-		if (localStorage.getItem(frozenKey)) {
-			setFrozen(true)
-		}
-
-		// Guard against React StrictMode double-invoke
-		if (sessionInitRef.current) return
-		sessionInitRef.current = true
-
-		const cached = localStorage.getItem(sessionKey)
-		if (cached) {
-			// Existing session — restore silently without confirmation
-			async function restoreSession(raw: string) {
-				let cachedSession: SessionInfo | null = null
-				try {
-					cachedSession = JSON.parse(raw) as SessionInfo
-				} catch {
-					localStorage.removeItem(sessionKey)
-				}
-				if (
-					cachedSession &&
-					isClientExpired({
-						startedAt: cachedSession.startedAt,
-						timeLimitMinutes: test.timeLimitMinutes ?? null,
-						nowMs: Date.now(),
-					})
-				) {
-					clearAttemptStorage('time-expired')
-					setTimeExpiredOpen(true)
-					return
-				}
-				if (cachedSession) setSession(cachedSession)
-				try {
-					setSessionStarting(true)
-					const serverSession = await startTestSession(test.id)
-					if (cachedSession && serverSession.sessionId !== cachedSession.sessionId) {
-						replaceWithNewSession(serverSession)
-						toast.info(SUBMIT_FLOW_TEXT.sessionReplaced)
-					} else {
-						hydrateFromServerSession(serverSession)
-						if (cachedSession) {
-							toast.info('Сессия восстановлена')
-						}
-					}
-				} catch (error) {
-					if (classifyStartFailure(error) === 'not-assigned') {
-						setSession(null)
-						showStartNotAssigned()
-					}
-				} finally {
-					setSessionStarting(false)
-				}
-			}
-			void restoreSession(cached)
-		} else {
-			if (test.timeLimitMinutes) {
-				// Timed tests: explicit confirmation before timer starts.
-				setAwaitingStart(true)
-			} else {
-				// Untimed tests: start session silently to persist draft progress in DB.
-				async function startUntimedSession() {
-					try {
-						setSessionStarting(true)
-						const serverSession = await startTestSession(test.id)
-						hydrateFromServerSession(serverSession)
-					} catch (error) {
-						if (classifyStartFailure(error) === 'not-assigned') showStartNotAssigned()
-					} finally {
-						setSessionStarting(false)
-					}
-				}
-				void startUntimedSession()
-			}
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [])
-
-	// WAL restore effect: restore answers and last position from localStorage on mount
-	useEffect(() => {
-		const raw = localStorage.getItem(walKey)
-		if (raw) {
-			try {
-				// Support both old format (plain answers map) and new format ({answers, lastQuestionId, telemetry})
-				const parsed = JSON.parse(raw) as Record<string, unknown>
-				let restoredAnswers: Record<string, TestAnswerValue> = {}
-				let lastQuestionId: string | null = null
-
-				if (parsed.answers && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers)) {
-					// New format
-					restoredAnswers = parsed.answers as Record<string, TestAnswerValue>
-					lastQuestionId = typeof parsed.lastQuestionId === 'string' ? parsed.lastQuestionId : null
-				} else {
-					// Old format (plain answers map) — backward compat
-					restoredAnswers = parsed as Record<string, TestAnswerValue>
-				}
-
-				if (Object.keys(restoredAnswers).length > 0) {
-					setAnswers((prev) => ({ ...prev, ...restoredAnswers }))
-				}
-				// Restore position: navigate to last answered question
-				if (lastQuestionId) {
-					const idx = orderedQuestions.findIndex((q) => q.id === lastQuestionId)
-					if (idx !== -1) {
-						setCurrentQuestionId(lastQuestionId)
-					}
-				}
-				if (parsed.telemetry && typeof parsed.telemetry === 'object') {
-					replaceTelemetry(mergeTelemetryMaps(telemetryRef.current, parsed.telemetry as TelemetryMap))
-				}
-			} catch {
-				/* ignore */
-			}
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [replaceTelemetry])
 
 	const resultByQuestion = useMemo<Record<string, AttemptQuestionView>>(() => {
 		const map: Record<string, AttemptQuestionView> = {}
@@ -387,72 +169,20 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 		[answers, orderedQuestions]
 	)
 
-	const debouncedSaveAnswer = useDebouncedCallback(
-		useCallback(
-			async (questionId: string, value: TestAnswerValue) => {
-				if (!session) return
-				// Write to localStorage WAL before server send
-				try {
-					const existing = localStorage.getItem(walKey)
-					let currentAnswers: Record<string, TestAnswerValue> = {}
-					if (existing) {
-						const parsed = JSON.parse(existing) as Record<string, unknown>
-						if (parsed.answers && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers)) {
-							currentAnswers = parsed.answers as Record<string, TestAnswerValue>
-						} else {
-							currentAnswers = parsed as Record<string, TestAnswerValue>
-						}
-					}
-					currentAnswers[questionId] = value
-					const wal = {
-						answers: currentAnswers,
-						lastQuestionId: currentQuestionId,
-						telemetry: telemetryRef.current,
-					}
-					localStorage.setItem(walKey, JSON.stringify(wal))
-				} catch {
-					/* ignore */
-				}
-				try {
-					await saveAnswer(test.id, session.sessionId, questionId, value, telemetryRef.current)
-				} catch {
-					// localStorage already has value; silently ignore server errors
-				}
-			},
-			[session, walKey, test.id, currentQuestionId]
-		),
-		600
-	)
-
 	const onSelectRadio = (questionId: string, optionId: string) => {
-		setAnswers((prev) => ({ ...prev, [questionId]: optionId }))
-		void debouncedSaveAnswer(questionId, optionId)
+		lifecycle.answer(questionId, optionId)
 	}
 
 	const onToggleCheckbox = (questionId: string, optionId: string) => {
-		setAnswers((prev) => {
-			const current = Array.isArray(prev[questionId]) ? [...(prev[questionId] as string[])] : []
-			const next = current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
-			void debouncedSaveAnswer(questionId, next)
-			return { ...prev, [questionId]: next }
-		})
+		lifecycle.answer(questionId, toggleOption(lifecycle.getSnapshot().answers[questionId], optionId))
 	}
 
 	const onSelectMatching = (questionId: string, leftId: string, rightId: string) => {
-		setAnswers((prev) => {
-			const current =
-				prev[questionId] && typeof prev[questionId] === 'object' && !Array.isArray(prev[questionId])
-					? { ...(prev[questionId] as Record<string, string>) }
-					: {}
-			current[leftId] = rightId
-			void debouncedSaveAnswer(questionId, current)
-			return { ...prev, [questionId]: current }
-		})
+		lifecycle.answer(questionId, setMatchingPair(lifecycle.getSnapshot().answers[questionId], leftId, rightId))
 	}
 
 	const onInputTextAnswer = (questionId: string, value: string) => {
-		setAnswers((prev) => ({ ...prev, [questionId]: value }))
-		void debouncedSaveAnswer(questionId, value)
+		lifecycle.answer(questionId, value)
 	}
 
 	const currentIndex = useMemo(
@@ -460,186 +190,14 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 		[orderedQuestions, currentQuestionId]
 	)
 
-	const applyTelemetry = useCallback(
-		(updater: (previous: TelemetryMap) => TelemetryMap) => {
-			const next = updater(telemetryRef.current)
-			replaceTelemetry(next)
-			return next
-		},
-		[replaceTelemetry]
-	)
-
-	const flushQuestionTime = useCallback(
-		(questionId: string | null) => {
-			if (!questionId || enterTimeRef.current === null) return telemetryRef.current
-			const elapsed = Date.now() - enterTimeRef.current
-			const next = applyTelemetry((prev) => appendQuestionTime(prev, questionId, elapsed))
-			enterTimeRef.current = null
-			return next
-		},
-		[applyTelemetry]
-	)
-
-	const goToQuestion = useCallback(
-		(index: number) => {
-			const q = orderedQuestions[index]
-			if (!q) return
-			// Flush time spent on current question
-			const nextTelemetry = flushQuestionTime(currentQuestionId)
-			if (session) {
-				void saveSessionTelemetry(test.id, session.sessionId, nextTelemetry)
-			}
-			setCurrentQuestionId(q.id)
-		},
-		[orderedQuestions, currentQuestionId, flushQuestionTime, session, test.id]
-	)
-
-	const goPrev = useCallback(() => goToQuestion(currentIndex - 1), [goToQuestion, currentIndex])
-	const goNext = useCallback(() => goToQuestion(currentIndex + 1), [goToQuestion, currentIndex])
-
-	const unfreezeAfterAutoSubmit = (isAutoSubmit: boolean) => {
-		if (!isAutoSubmit) return
-		setFrozen(false)
-		localStorage.removeItem(frozenKey)
+	const goToQuestion = (index: number) => {
+		const q = orderedQuestions[index]
+		if (!q) return
+		lifecycle.navigate(q.id)
 	}
 
-	const doSubmit = async ({ isAutoSubmit = false }: { isAutoSubmit?: boolean } = {}) => {
-		setSubmitting(true)
-		setBanner(null)
-		// Flush any pending question time before submitting
-		const finalTelemetry = flushQuestionTime(currentQuestionId)
-		try {
-			let activeSession = session
-			if (!activeSession) {
-				try {
-					activeSession = await startTestSession(test.id)
-				} catch (error) {
-					if (classifyStartFailure(error) === 'not-assigned') {
-						showStartNotAssigned()
-						unfreezeAfterAutoSubmit(isAutoSubmit)
-						return
-					}
-					throw new Error('start failed', { cause: error })
-				}
-				setSession(activeSession)
-				localStorage.setItem(sessionKey, JSON.stringify(activeSession))
-			}
-			const clientAttemptId = resolveClientAttemptId(localStorage, clientAttemptKey, activeSession.sessionId)
-			const result = await submitPublicTestAnswers(test.id, {
-				sessionId: activeSession.sessionId,
-				clientAttemptId,
-				answers,
-				telemetry: finalTelemetry,
-			})
-			debouncedSaveAnswer.cancel()
-			clearAttemptStorage('success')
-			if (isAutoSubmit) {
-				setShowTimeUp(true)
-				// Brief delay to show "Время вышло" screen before transitioning to results
-				await new Promise((resolve) => setTimeout(resolve, 1500))
-				setShowTimeUp(false)
-			}
-			setSubmitResult(result)
-			setAttempts((prev) => [
-				{
-					id: result.attemptId,
-					earnedPoints: result.earnedPoints,
-					totalPoints: result.totalPoints,
-					scorePercentage: result.scorePercentage,
-					passed: result.passed,
-					submittedAt: result.submittedAt,
-				},
-				...prev,
-			])
-			// The completed session must never be reused by a retake.
-			setSession(null)
-		} catch (error) {
-			const failure = classifySubmitFailure(error)
-			if (failure.kind === 'already-submitted') {
-				debouncedSaveAnswer.cancel()
-				setSession(null)
-				clearAttemptStorage('already-submitted')
-				setAlreadySubmitted({ open: true, attemptId: failure.attemptId })
-				return
-			}
-			if (failure.kind === 'time-expired') {
-				debouncedSaveAnswer.cancel()
-				setSession(null)
-				clearAttemptStorage('time-expired')
-				setTimeExpiredOpen(true)
-				return
-			}
-			if (failure.kind === 'not-assigned') {
-				clearAttemptStorage('submit-not-assigned')
-				setBanner('submit-not-assigned')
-			} else if (failure.kind === 'not-found') {
-				clearAttemptStorage('not-found')
-				setBanner('not-found')
-			} else {
-				console.error('Failed to submit test answers:', error)
-				setBanner('retry')
-			}
-			// On auto-submit failure: unfreeze so user can retry manually
-			unfreezeAfterAutoSubmit(isAutoSubmit)
-		} finally {
-			setSubmitting(false)
-		}
-	}
-
-	// Auto-submit effect: fires 1-minute warning toast and auto-submits at zero
-	useEffect(() => {
-		if (secondsLeft === null) return
-
-		// 1-minute warning toast
-		const warningThresholdSeconds = 60
-		if (secondsLeft === warningThresholdSeconds && !warningFiredRef.current) {
-			warningFiredRef.current = true
-			toast.warning('Осталась 1 минута — тест будет сдан автоматически', { duration: 8000 })
-		}
-
-		// Auto-submit at zero (fire once per component lifecycle — ref prevents loop on unfreeze)
-		if (secondsLeft === 0 && !frozen && !submitResult && !autoSubmitFiredRef.current) {
-			autoSubmitFiredRef.current = true
-			setFrozen(true)
-			localStorage.setItem(frozenKey, '1')
-			void doSubmit({ isAutoSubmit: true })
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [secondsLeft, frozen, submitResult])
-
-	// Telemetry: track tab visibility changes (pause/resume timer, count focus loss)
-	useEffect(() => {
-		const handler = () => {
-			if (awaitingStart || sessionStarting) return
-			if (document.hidden) {
-				// Tab hidden: flush time + count focus loss
-				let nextTelemetry = flushQuestionTime(currentQuestionId)
-				if (currentQuestionId) {
-					nextTelemetry = applyTelemetry((prev) => incrementQuestionFocusLoss(prev, currentQuestionId))
-				}
-				if (session) {
-					void saveSessionTelemetry(test.id, session.sessionId, nextTelemetry)
-				}
-			} else {
-				// Tab visible again: restart timer
-				if (!submitResult && !frozen) {
-					enterTimeRef.current = Date.now()
-				}
-			}
-		}
-		document.addEventListener('visibilitychange', handler)
-		return () => document.removeEventListener('visibilitychange', handler)
-	}, [
-		applyTelemetry,
-		awaitingStart,
-		currentQuestionId,
-		flushQuestionTime,
-		frozen,
-		session,
-		sessionStarting,
-		submitResult,
-		test.id,
-	])
+	const goPrev = () => goToQuestion(currentIndex - 1)
+	const goNext = () => goToQuestion(currentIndex + 1)
 
 	// Prefetch signed URLs for all images in all questions on mount
 	useEffect(() => {
@@ -660,97 +218,37 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 		}
 	}, [orderedQuestions])
 
-	// Telemetry: track the active question, including positions restored from a draft.
-	useEffect(() => {
-		if (!currentQuestionId || submitResult || frozen || awaitingStart || sessionStarting || document.hidden) return
-		enterTimeRef.current = Date.now()
-		applyTelemetry((prev) => incrementQuestionVisit(prev, currentQuestionId))
-		return () => {
-			flushQuestionTime(currentQuestionId)
-		}
-	}, [applyTelemetry, awaitingStart, currentQuestionId, flushQuestionTime, frozen, sessionStarting, submitResult])
-
 	const handleSubmit = () => {
 		if (answeredCount < orderedQuestions.length) {
 			setShowUnansweredDialog(true)
 		} else {
-			void doSubmit()
-		}
-	}
-
-	const handleConfirmStart = async () => {
-		setAwaitingStart(false)
-		setSessionStarting(true)
-		try {
-			const serverSession = await startTestSession(test.id)
-			hydrateFromServerSession(serverSession)
-		} catch (error) {
-			if (classifyStartFailure(error) === 'not-assigned') {
-				showStartNotAssigned()
-			} else {
-				toast.error('Не удалось начать тест. Попробуйте ещё раз.')
-				setAwaitingStart(true)
-			}
-		} finally {
-			setSessionStarting(false)
+			void lifecycle.submit()
 		}
 	}
 
 	const handleRetake = () => {
-		debouncedSaveAnswer.cancel()
-		enterTimeRef.current = null
-		telemetryRef.current = {}
-		warningFiredRef.current = false
-		autoSubmitFiredRef.current = false
-		setSession(null)
-		setSubmitResult(null)
-		setAnswers({})
-		setBanner(null)
-		setFrozen(false)
-		setShowTimeUp(false)
-		setAlreadySubmitted({ open: false, attemptId: null })
-		setTimeExpiredOpen(false)
-		setCurrentQuestionId(orderedQuestions[0]?.id ?? null)
-		localStorage.removeItem(frozenKey)
-		localStorage.removeItem(walKey)
-		localStorage.removeItem(sessionKey)
-		forgetClientAttemptId(localStorage, clientAttemptKey)
-
-		if (test.timeLimitMinutes) {
-			setAwaitingStart(true)
-			return
-		}
-
-		setSessionStarting(true)
-		void startTestSession(test.id)
-			.then(hydrateFromServerSession)
-			.catch((error: unknown) => {
-				if (classifyStartFailure(error) === 'not-assigned') {
-					showStartNotAssigned()
-					return
-				}
-				toast.error('Не удалось начать новую попытку. Попробуйте ещё раз.')
-			})
-			.finally(() => {
-				setSessionStarting(false)
-			})
+		setAlreadySubmittedClosed(false)
+		lifecycle.retake()
 	}
 
 	const closeAlreadySubmitted = () => {
-		setAlreadySubmitted((prev) => ({ ...prev, open: false }))
-		setBanner('already-submitted')
+		setAlreadySubmittedClosed(true)
 	}
 
+	const blockReason = snapshot.blockReason
+	const alreadySubmittedOpen = blockReason === 'already-submitted' && !alreadySubmittedClosed
+	const banner: AttemptBanner | null =
+		blockReason === 'start-not-assigned' || blockReason === 'submit-not-assigned' || blockReason === 'not-found'
+			? blockReason
+			: blockReason === 'already-submitted'
+				? alreadySubmittedClosed
+					? 'already-submitted'
+					: null
+				: snapshot.submitFailed
+					? 'retry'
+					: null
 	const bannerView = banner ? bannerFor(banner) : null
-
-	const interactionDisabled =
-		frozen ||
-		!!submitResult ||
-		awaitingStart ||
-		sessionStarting ||
-		timeExpiredOpen ||
-		alreadySubmitted.open ||
-		(banner !== null && blocksInteraction(banner))
+	const saveIndicator = snapshot.saveIndicator ? saveIndicatorView(snapshot.saveIndicator) : null
 
 	return (
 		<div className="flex min-w-0 flex-col gap-4 tab:flex-row">
@@ -785,7 +283,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 							{bannerView.message}
 						</span>
 						{bannerView.action === 'retry' ? (
-							<Button variant="outline" size="sm" onClick={() => void doSubmit()}>
+							<Button variant="outline" size="sm" onClick={() => void lifecycle.submit()}>
 								{SUBMIT_FLOW_TEXT.retryAction}
 							</Button>
 						) : bannerView.action === 'reload' ? (
@@ -796,7 +294,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 					</section>
 				) : null}
 
-				{showTimeUp ? (
+				{snapshot.showTimeUp ? (
 					<section className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
 						<div className="mx-4 rounded-lg bg-white p-6 text-center shadow-xl tab-sm:p-8">
 							<p className="text-2xl font-semibold">Время вышло</p>
@@ -924,6 +422,15 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 							}}
 						/>
 					</div>
+					{saveIndicator ? (
+						<p
+							aria-live="polite"
+							aria-atomic="true"
+							className={cn('text-xs', saveIndicator.tone === 'warning' ? 'text-amber-700' : 'text-muted-foreground')}
+						>
+							{saveIndicator.text}
+						</p>
+					) : null}
 				</div>
 
 				<div className="grid grid-cols-5 gap-1">
@@ -958,7 +465,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 				</Button>
 			</section>
 
-			<AlertDialog open={awaitingStart}>
+			<AlertDialog open={snapshot.phase === 'awaitingStart'}>
 				<AlertDialogContent overlayClassName="bg-black/60 backdrop-blur-xl">
 					<AlertDialogHeader>
 						<AlertDialogTitle>Начать тест?</AlertDialogTitle>
@@ -969,12 +476,12 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel onClick={() => window.history.back()}>Назад</AlertDialogCancel>
-						<AlertDialogAction onClick={() => void handleConfirmStart()}>Начать</AlertDialogAction>
+						<AlertDialogAction onClick={() => void lifecycle.confirmStart()}>Начать</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
 
-			<AlertDialog open={timeExpiredOpen}>
+			<AlertDialog open={blockReason === 'time-expired'}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle className="font-medium">{SUBMIT_FLOW_TEXT.timeExpiredTitle}</AlertDialogTitle>
@@ -1000,7 +507,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 						<AlertDialogAction
 							onClick={() => {
 								setShowUnansweredDialog(false)
-								void doSubmit()
+								void lifecycle.submit()
 							}}
 						>
 							Всё равно завершить
@@ -1010,7 +517,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 			</AlertDialog>
 
 			<Dialog
-				open={alreadySubmitted.open}
+				open={alreadySubmittedOpen}
 				onOpenChange={(open) => {
 					if (!open) closeAlreadySubmitted()
 				}}
@@ -1021,7 +528,7 @@ export default function TestRunner({ test, questions, initialAttempts = [], atte
 						<DialogDescription>{SUBMIT_FLOW_TEXT.alreadySubmittedDescription}</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
-						{alreadySubmitted.attemptId ? (
+						{snapshot.alreadySubmittedAttemptId ? (
 							<Button onClick={() => window.location.reload()}>{SUBMIT_FLOW_TEXT.alreadySubmittedOpenResults}</Button>
 						) : (
 							<Button onClick={closeAlreadySubmitted}>{SUBMIT_FLOW_TEXT.alreadySubmittedClose}</Button>
