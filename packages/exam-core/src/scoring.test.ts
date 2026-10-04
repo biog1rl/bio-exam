@@ -1,54 +1,104 @@
 import assert from 'node:assert/strict'
-import { test } from 'vitest'
+import { describe, test } from 'vitest'
 
-import { BUILTIN_QUESTION_TYPES, type MistakeMetric } from './registry'
-import { MISTAKES_UNSCORABLE, countMistakes, scoreQuestionByType, type RuntimeQuestionTypeConfig } from './scoring'
+import {
+	MATCHING_SCORING_CASES,
+	MULTI_CHOICE_SCORING_CASES,
+	SCORING_TYPES_MAP,
+	SEQUENCE_SCORING_CASES,
+	SHORT_TEXT_SCORING_CASES,
+	SINGLE_CHOICE_SCORING_CASES,
+	type ScoringCase,
+} from './cases/scoring.cases'
+import type { MistakeMetric, QuestionUiTemplate } from './registry'
+import { MISTAKES_UNSCORABLE, countMistakes, scoreQuestionByType } from './scoring'
 
-const builtinTypesMap: Record<string, RuntimeQuestionTypeConfig> = Object.fromEntries(
-	BUILTIN_QUESTION_TYPES.map((item) => [
-		item.key,
-		{ key: item.key, uiTemplate: item.uiTemplate, scoringRule: item.scoringRule },
-	])
-)
-
-const sequenceRows = [
-	{
-		name: 'D2: ключ 1243, ответ 1234 — соседняя перестановка, одна ошибка',
-		correctAnswer: '1243',
-		userAnswer: '1234',
-		expected: { maxPoints: 2, earnedPoints: 1, isCorrect: false, mistakesCount: 1 },
-	},
-	{
-		name: 'D2: точный ответ 1243',
-		correctAnswer: '1243',
-		userAnswer: '1243',
-		expected: { maxPoints: 2, earnedPoints: 2, isCorrect: true, mistakesCount: 0 },
-	},
+const TABLES: Array<{ template: QuestionUiTemplate; cases: ScoringCase[] }> = [
+	{ template: 'single_choice', cases: SINGLE_CHOICE_SCORING_CASES },
+	{ template: 'multi_choice', cases: MULTI_CHOICE_SCORING_CASES },
+	{ template: 'matching', cases: MATCHING_SCORING_CASES },
+	{ template: 'short_text', cases: SHORT_TEXT_SCORING_CASES },
+	{ template: 'sequence_digits', cases: SEQUENCE_SCORING_CASES },
 ]
 
-for (const row of sequenceRows) {
-	test(`sequence: ${row.name}`, () => {
-		const result = scoreQuestionByType({
-			questionType: 'sequence',
-			userAnswer: row.userAnswer,
-			correctAnswer: row.correctAnswer,
-			fallbackMaxPoints: 0,
-			questionTypesMap: builtinTypesMap,
-		})
-		assert.deepEqual(result, row.expected)
+function scoreCase(row: ScoringCase) {
+	return scoreQuestionByType({
+		questionType: row.typeKey,
+		userAnswer: row.answer,
+		correctAnswer: row.key,
+		fallbackMaxPoints: 0,
+		questionTypesMap: SCORING_TYPES_MAP,
 	})
 }
 
-test('scoreQuestionByType: неизвестный тип вопроса оценивается как неразбираемый', () => {
-	const result = scoreQuestionByType({
-		questionType: 'missing',
-		userAnswer: '1',
-		correctAnswer: '1',
-		fallbackMaxPoints: 3,
-		questionTypesMap: builtinTypesMap,
+for (const table of TABLES) {
+	describe(`оценка ${table.template}`, () => {
+		test.each(table.cases)('$name', (row) => {
+			assert.deepEqual(scoreCase(row), row.expected)
+		})
+
+		test('все строки таблицы относятся к типам своего шаблона', () => {
+			for (const row of table.cases) {
+				assert.equal(SCORING_TYPES_MAP[row.typeKey]?.uiTemplate, table.template, row.name)
+			}
+		})
 	})
-	assert.deepEqual(result, { maxPoints: 3, earnedPoints: 0, isCorrect: false, mistakesCount: MISTAKES_UNSCORABLE })
+}
+
+test('по всем строкам: число ошибок целое неотрицательное или MISTAKES_UNSCORABLE, баллы в [0, maxPoints]', () => {
+	let checked = 0
+	for (const table of TABLES) {
+		for (const row of table.cases) {
+			const result = scoreCase(row)
+			assert.ok(
+				result.mistakesCount === MISTAKES_UNSCORABLE ||
+					(Number.isInteger(result.mistakesCount) && result.mistakesCount >= 0),
+				`${row.name}: mistakesCount ${result.mistakesCount}`
+			)
+			assert.ok(result.earnedPoints >= 0 && result.earnedPoints <= result.maxPoints, `${row.name}: баллы`)
+			assert.equal(result.isCorrect, result.mistakesCount === 0, `${row.name}: isCorrect`)
+			checked += 1
+		}
+	}
+	assert.ok(checked >= 80, `строк ${checked}`)
 })
+
+test.each([
+	{ fallbackMaxPoints: 3, maxPoints: 3 },
+	{ fallbackMaxPoints: 0, maxPoints: 0 },
+	{ fallbackMaxPoints: -2, maxPoints: 0 },
+	{ fallbackMaxPoints: Number.NaN, maxPoints: 0 },
+])(
+	'тип отсутствует в карте: MISTAKES_UNSCORABLE, maxPoints из fallbackMaxPoints $fallbackMaxPoints',
+	({ fallbackMaxPoints, maxPoints }) => {
+		const result = scoreQuestionByType({
+			questionType: 'missing',
+			userAnswer: '1',
+			correctAnswer: '1',
+			fallbackMaxPoints,
+			questionTypesMap: SCORING_TYPES_MAP,
+		})
+		assert.deepEqual(result, { maxPoints, earnedPoints: 0, isCorrect: false, mistakesCount: MISTAKES_UNSCORABLE })
+	}
+)
+
+test.each([
+	{ fallbackMaxPoints: 0, maxPoints: 2 },
+	{ fallbackMaxPoints: 3, maxPoints: 3 },
+	{ fallbackMaxPoints: Number.NaN, maxPoints: 2 },
+])(
+	'неразбираемое правило {}: correctPoints из fallbackMaxPoints $fallbackMaxPoints',
+	({ fallbackMaxPoints, maxPoints }) => {
+		const result = scoreQuestionByType({
+			questionType: 'broken_rule',
+			userAnswer: '1234',
+			correctAnswer: '1234',
+			fallbackMaxPoints,
+			questionTypesMap: SCORING_TYPES_MAP,
+		})
+		assert.deepEqual(result, { maxPoints, earnedPoints: maxPoints, isCorrect: true, mistakesCount: 0 })
+	}
+)
 
 const metricRows: Array<{ metric: MistakeMetric; userAnswer: unknown; correctAnswer: unknown; expected: number }> = [
 	{ metric: 'boolean_correct', userAnswer: 3, correctAnswer: '3', expected: 0 },
@@ -59,8 +109,6 @@ const metricRows: Array<{ metric: MistakeMetric; userAnswer: unknown; correctAns
 	{ metric: 'hamming_digits', userAnswer: '2134', correctAnswer: '1234', expected: 1 },
 ]
 
-for (const row of metricRows) {
-	test(`countMistakes: ${row.metric} диспетчеризуется в адаптер своего шаблона`, () => {
-		assert.equal(countMistakes(row.metric, row.userAnswer, row.correctAnswer), row.expected)
-	})
-}
+test.each(metricRows)('countMistakes: $metric диспетчеризуется в адаптер своего шаблона', (row) => {
+	assert.equal(countMistakes(row.metric, row.userAnswer, row.correctAnswer), row.expected)
+})
