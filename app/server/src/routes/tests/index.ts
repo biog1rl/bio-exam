@@ -30,6 +30,7 @@ import {
 	users,
 } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
+import { isApiError } from '../../lib/errors.js'
 import {
 	getEffectiveQuestionTypesForTest,
 	getGlobalQuestionTypes,
@@ -55,11 +56,17 @@ import {
 	UpdateTestSettingsSchema,
 } from '../../schemas/tests.js'
 import {
+	canManageCatalog,
 	canReadTest,
 	canReviewAttempt,
 	canWriteTest,
 	canWriteTopic,
+	hasGlobalZone,
+	isZoneOwnerCandidate,
+	setTopicTeachers,
 	testScope,
+	topicTeachers,
+	zoneOwnerCandidates,
 } from '../../services/access-policy/index.js'
 import { uploadImage } from '../../services/assets/index.js'
 import {
@@ -127,6 +134,15 @@ const UpdateQuestionTypePayloadSchema = z.object({
 	validationSchema: QuestionTypeValidationSchema.optional(),
 	scoringRule: QuestionTypeScoringRuleSchema.optional(),
 	isActive: z.boolean().optional(),
+})
+
+const TOPIC_TEACHER_INVALID_ERROR = 'Учитель не найден или не активен'
+
+const TopicTeachersSchema = z.object({
+	teacherIds: z
+		.array(z.string().uuid())
+		.max(50)
+		.refine((ids) => new Set(ids).size === ids.length),
 })
 
 const PutTestQuestionTypeOverrideSchema = z.object({
@@ -252,8 +268,11 @@ function toQuestionDraftListItem(
 // =============================================================================
 
 // GET /api/tests/topics - список всех тем
-router.get('/topics', sessionRequired(), requirePerm('tests', 'read'), async (_req, res, next) => {
+router.get('/topics', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
 	try {
+		const scope = await testScope(req)
+		if (!scope.all && scope.topicIds.length === 0) return res.json({ topics: [] })
+
 		// Используем LEFT JOIN с GROUP BY вместо коррелированного подзапроса для лучшей производительности
 		const rows = await db
 			.select({
@@ -268,18 +287,63 @@ router.get('/topics', sessionRequired(), requirePerm('tests', 'read'), async (_r
 			})
 			.from(topics)
 			.leftJoin(tests, eq(tests.topicId, topics.id))
+			.where(scope.all ? undefined : inArray(topics.id, scope.topicIds))
 			.groupBy(topics.id)
 			.orderBy(asc(topics.order), asc(topics.title))
 
-		res.json({ topics: rows })
+		if (!(await canManageCatalog(req))) return res.json({ topics: rows })
+
+		const teachersByTopic = await topicTeachers(rows.map((row) => row.id))
+		return res.json({ topics: rows.map((row) => ({ ...row, teachers: teachersByTopic.get(row.id) ?? [] })) })
 	} catch (e) {
-		next(e)
+		return next(e)
+	}
+})
+
+router.get('/topics/teacher-options', sessionRequired(), async (req, res, next) => {
+	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
+		return res.json({ teachers: await zoneOwnerCandidates() })
+	} catch (e) {
+		return next(e)
+	}
+})
+
+router.put('/topics/:id/teachers', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
+		const parsed = TopicTeachersSchema.safeParse(req.body)
+		if (!parsed.success) {
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		}
+
+		const id = req.params.id as string
+		const topic = await db.query.topics.findFirst({ where: eq(topics.id, id), columns: { id: true } })
+		if (!topic) return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
+
+		const { teacherIds } = parsed.data
+		const assignedBy = req.authUser?.id ?? null
+		const result = await db.transaction(async (tx) => {
+			const current = new Set(((await topicTeachers([id], tx)).get(id) ?? []).map((person) => person.id))
+			for (const teacherId of teacherIds) {
+				if (current.has(teacherId)) continue
+				if (!(await isZoneOwnerCandidate(teacherId, tx))) return null
+			}
+			await setTopicTeachers(tx, { topicId: id, teacherIds, assignedBy })
+			return (await topicTeachers([id], tx)).get(id) ?? []
+		})
+		if (result === null) return res.status(400).json({ error: TOPIC_TEACHER_INVALID_ERROR })
+
+		return res.json({ teachers: result })
+	} catch (e) {
+		return next(e)
 	}
 })
 
 // POST /api/tests/topics - создать тему
-router.post('/topics', sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.post('/topics', sessionRequired(), async (req, res, next) => {
 	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
 		const parsed = TopicSchema.safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
@@ -315,10 +379,10 @@ router.post('/topics', sessionRequired(), requirePerm('tests', 'write'), async (
 // PATCH /api/tests/topics/:id - редактировать тему
 router.patch('/topics/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
-		const id = req.params.id as string
-		if (!(await canWriteTopic(req, id))) {
+		if (!(await canManageCatalog(req))) {
 			return res.status(403).json({ error: 'Forbidden' })
 		}
+		const id = req.params.id as string
 		const parsed = TopicSchema.partial().safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
@@ -335,10 +399,10 @@ router.patch('/topics/:id', validateUUID('id'), sessionRequired(), async (req, r
 // DELETE /api/tests/topics/:id - удалить тему
 router.delete('/topics/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
-		const id = req.params.id as string
-		if (!(await canWriteTopic(req, id))) {
+		if (!(await canManageCatalog(req))) {
 			return res.status(403).json({ error: 'Forbidden' })
 		}
+		const id = req.params.id as string
 
 		await deleteTopic({ topicId: id })
 
@@ -356,9 +420,15 @@ router.delete('/topics/:id', validateUUID('id'), sessionRequired(), async (req, 
 router.get('/', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
 	try {
 		const topicId = req.query.topicId as string | undefined
+		const scope = await testScope(req)
+		if (!scope.all && scope.topicIds.length === 0) return res.json({ tests: [] })
+		const conditions = [
+			...(topicId ? [eq(tests.topicId, topicId)] : []),
+			...(scope.all ? [] : [inArray(tests.topicId, scope.topicIds)]),
+		]
 
 		// Используем LEFT JOIN с GROUP BY вместо коррелированного подзапроса
-		let query = db
+		const rows = await db
 			.select({
 				id: tests.id,
 				topicId: tests.topicId,
@@ -380,18 +450,13 @@ router.get('/', sessionRequired(), requirePerm('tests', 'read'), async (req, res
 			.from(tests)
 			.leftJoin(topics, eq(tests.topicId, topics.id))
 			.leftJoin(questions, eq(questions.testId, tests.id))
+			.where(conditions.length > 0 ? and(...conditions) : undefined)
 			.groupBy(tests.id, topics.title, topics.slug)
 			.orderBy(asc(tests.order), asc(tests.title))
 
-		if (topicId) {
-			query = query.where(eq(tests.topicId, topicId)) as typeof query
-		}
-
-		const rows = await query
-
-		res.json({ tests: rows })
+		return res.json({ tests: rows })
 	} catch (e) {
-		next(e)
+		return next(e)
 	}
 })
 
@@ -1365,10 +1430,11 @@ router.delete('/:id', validateUUID('id'), sessionRequired(), async (req, res, ne
 			return res.status(403).json({ error: 'Forbidden' })
 		}
 
-		await deleteTest({ testId: id })
+		await deleteTest({ testId: id, refuseWithAttempts: !(await hasGlobalZone(req)) })
 
 		return res.json({ ok: true })
 	} catch (e) {
+		if (isApiError(e) && e.statusCode < 500) return res.status(e.statusCode).json({ error: e.message })
 		return next(e)
 	}
 })
@@ -1433,7 +1499,7 @@ router.get('/:id/export', validateUUID('id'), sessionRequired(), async (req, res
 		const id = req.params.id as string
 		if (!(await canReadTest(req, id))) return res.status(403).json({ error: 'Forbidden' })
 
-		const withAnswers = req.query.withAnswers === 'true'
+		const withAnswers = req.query.withAnswers === 'true' && (await canWriteTest(req, id))
 		const archive = await buildTestArchive({ testId: id, withAnswers })
 
 		res.setHeader('Content-Type', 'application/zip')
@@ -1451,7 +1517,12 @@ router.get('/topics/:slug/export', sessionRequired(), async (req, res, next) => 
 		if (!scope.all && scope.topicIds.length === 0) return res.status(403).json({ error: 'Forbidden' })
 
 		const withAnswers = req.query.withAnswers === 'true'
-		const archive = await buildTopicArchive({ topicSlug: req.params.slug as string, withAnswers, scope })
+		const archive = await buildTopicArchive({
+			topicSlug: req.params.slug as string,
+			withAnswers,
+			scope,
+			answersAllowed: (topicId) => canWriteTopic(req, topicId),
+		})
 
 		res.setHeader('Content-Type', 'application/zip')
 		res.setHeader('Content-Disposition', `attachment; filename="${archive.filename}"`)

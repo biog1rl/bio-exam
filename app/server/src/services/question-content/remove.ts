@@ -1,7 +1,9 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { STAFF_ROLE_KEYS } from '@bio-exam/rbac'
+
+import { and, eq, inArray, sql } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
-import { questions, tests, topics } from '../../db/schema.js'
+import { questions, testAttempts, tests, topics, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { ApiError } from '../../lib/errors.js'
 import { StorageKeyError, normalizeKey, storage } from '../storage/index.js'
@@ -10,6 +12,9 @@ import { questionPrefix, testPrefix, topicPrefix } from './paths.js'
 import { CONTENT_CHANGED_MESSAGE, QUESTION_NOT_IN_TEST_MESSAGE } from './write.js'
 
 export const REORDER_SET_MISMATCH_MESSAGE = 'Неверный набор вопросов для сортировки'
+
+const TEST_HAS_STUDENT_ATTEMPTS_MESSAGE =
+	'У теста есть попытки учеников. Снимите публикацию или обратитесь к администратору'
 
 export type ContentScope = { kind: 'question' | 'test' | 'topic'; prefix: string }
 
@@ -169,13 +174,33 @@ export async function deleteQuestion(params: {
 	return { assetsDeleted }
 }
 
-export async function deleteTest(params: { testId: string }): Promise<{ assetsDeleted: boolean }> {
-	const { testId } = params
+async function hasStudentAttempts(tx: Tx, testId: string): Promise<boolean> {
+	const [row] = await tx
+		.select({ id: testAttempts.id })
+		.from(testAttempts)
+		.where(
+			and(
+				eq(testAttempts.testId, testId),
+				sql`not exists (select 1 from ${userRoles} where ${userRoles.userId} = ${testAttempts.userId} and ${inArray(userRoles.roleKey, [...STAFF_ROLE_KEYS])})`
+			)
+		)
+		.limit(1)
+	return Boolean(row)
+}
+
+export async function deleteTest(params: {
+	testId: string
+	refuseWithAttempts?: boolean
+}): Promise<{ assetsDeleted: boolean }> {
+	const { testId, refuseWithAttempts = false } = params
 	const { test, topic } = await loadTestLocation(testId)
 	const listed = await collectContentKeys([], { kind: 'test', prefix: testPrefix(topic.slug, test.slug) })
 
 	const keys = await db.transaction(async (tx) => {
 		await lockTestAt(tx, testId, { slug: test.slug, topicId: test.topicId, topicSlug: topic.slug })
+		if (refuseWithAttempts && (await hasStudentAttempts(tx, testId))) {
+			throw new ApiError(409, TEST_HAS_STUDENT_ATTEMPTS_MESSAGE)
+		}
 		const pointers = await tx.execute<PointerDbRow>(sql`
 			SELECT prompt_path, explanation_path FROM questions WHERE test_id = ${testId}
 		`)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Client } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, test, vi } from 'vitest'
 
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
@@ -11,6 +12,8 @@ type Json = Record<string, unknown>
 
 type QuestionRow = { id: string; order: number; prompt_path: string | null; explanation_path: string | null }
 
+type Queryable = { query: (text: string, params?: unknown[]) => Promise<unknown> }
+
 const PASSWORD = 'qcon-move-remove-password-1'
 const ORPHAN_LOG = '[question-content] orphan objects'
 const CONTENT_CHANGED = 'Содержимое изменилось, повторите'
@@ -19,6 +22,7 @@ const REORDER_MISMATCH = 'Неверный набор вопросов для с
 const SAME_TARGET = 'Выберите другую тему или тест для переноса вопроса'
 const KEEP_IMAGE = 'images/qcon-move-remove-keep.webp'
 const MISSING_ID = '00000000-0000-4000-8000-000000000000'
+const DELETE_WITH_ATTEMPTS = 'У теста есть попытки учеников. Снимите публикацию или обратитесь к администратору'
 
 const OPTIONS = [
 	{ id: 'a', text: 'Хлоропласт' },
@@ -32,6 +36,9 @@ let qc: QuestionContentModule
 let adminJar: CookieJar
 let studentJar: CookieJar
 let deniedJar: CookieJar
+let adminId: string
+let studentId: string
+let teacherId: string
 let counter = 0
 
 function radio(promptText: string, overrides: Json = {}): Json {
@@ -143,10 +150,29 @@ function afterCopies(times: number, action: () => Promise<unknown>) {
 	return { fired: () => fired }
 }
 
+async function insertAttempt(testId: string, userId: string, executor: Queryable = ctx.pgPool): Promise<void> {
+	await executor.query(
+		"INSERT INTO test_attempts (test_id, user_id, answers, results, earned_points, total_points, score_percentage) VALUES ($1, $2, '{}', '{}', 0, 1, 0)",
+		[testId, userId]
+	)
+}
+
+async function waitForBackend(condition: string): Promise<void> {
+	for (let i = 0; i < 400; i += 1) {
+		const { rows } = await ctx.pgPool.query<{ count: number }>(
+			`SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname = current_database() AND ${condition}`
+		)
+		if ((rows[0]?.count ?? 0) > 0) return
+		await new Promise((resolve) => setTimeout(resolve, 25))
+	}
+	assert.fail(`нет сеанса с условием ${condition}`)
+}
+
 beforeAll(async () => {
 	ctx = await startAuthApp('test_qcon_move_remove')
-	await seedUser(ctx, { login: 'qcon_mr_admin', roles: ['admin'], password: PASSWORD })
-	await seedUser(ctx, { login: 'qcon_mr_student', roles: ['user'], password: PASSWORD })
+	adminId = await seedUser(ctx, { login: 'qcon_mr_admin', roles: ['admin'], password: PASSWORD })
+	studentId = await seedUser(ctx, { login: 'qcon_mr_student', roles: ['user'], password: PASSWORD })
+	teacherId = await seedUser(ctx, { login: 'qcon_mr_teacher', roles: ['teacher'], password: PASSWORD })
 	const deniedId = await seedUser(ctx, { login: 'qcon_mr_denied', roles: ['admin'], password: PASSWORD })
 	await ctx.pgPool.query(
 		"INSERT INTO rbac_user_grants (user_id, domain, action, allow) VALUES ($1, 'tests', 'write', false)",
@@ -401,6 +427,108 @@ describe('удаление теста и темы', () => {
 			(read.body.questions as Array<{ promptText: string }>).map((q) => q.promptText),
 			[prompt]
 		)
+	})
+})
+
+describe('удаление теста с попытками учеников (D-25)', () => {
+	async function testWithContent(name: string): Promise<{ testId: string; prefix: string; keys: string[] }> {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const slug = nextSlug(name)
+		const testId = await saveTest(topicId, slug, [radio('Первый', { order: 0 }), radio('Второй', { order: 1 })])
+		const prefix = testPrefix(topicSlug, slug)
+		const keys = mem.keys(prefix)
+		assert.ok(keys.length > 0)
+		return { testId, prefix, keys }
+	}
+
+	test('refuseWithAttempts и попытка ученика: 409 с текстом D-25, тест, вопросы и файлы на месте', async () => {
+		const { testId, prefix, keys } = await testWithContent('d25-student')
+		await insertAttempt(testId, studentId)
+		await insertAttempt(testId, adminId)
+		const error = await qc.deleteTest({ testId, refuseWithAttempts: true }).then(
+			() => assert.fail('удаление прошло'),
+			(reason: { statusCode?: number; message?: string }) => reason
+		)
+		assert.equal(error.statusCode, 409)
+		assert.equal(error.message, DELETE_WITH_ATTEMPTS)
+		assert.equal(await count('SELECT count(*) AS count FROM tests WHERE id = $1', [testId]), 1)
+		assert.equal((await questionRows(testId)).length, 2)
+		assert.deepEqual(mem.keys(prefix), keys)
+	})
+
+	test('refuseWithAttempts и только попытки персонала: тест удалён', async () => {
+		const { testId, prefix } = await testWithContent('d25-staff')
+		await insertAttempt(testId, adminId)
+		await insertAttempt(testId, teacherId)
+		assert.deepEqual(await qc.deleteTest({ testId, refuseWithAttempts: true }), { assetsDeleted: true })
+		assert.equal(await count('SELECT count(*) AS count FROM tests WHERE id = $1', [testId]), 0)
+		assert.equal(await count('SELECT count(*) AS count FROM test_attempts WHERE test_id = $1', [testId]), 0)
+		assert.deepEqual(mem.keys(prefix), [])
+	})
+
+	test('refuseWithAttempts без попыток: тест удалён', async () => {
+		const { testId } = await testWithContent('d25-empty')
+		await qc.deleteTest({ testId, refuseWithAttempts: true })
+		assert.equal(await count('SELECT count(*) AS count FROM tests WHERE id = $1', [testId]), 0)
+	})
+
+	test('без refuseWithAttempts попытка ученика удалению не мешает', async () => {
+		const { testId } = await testWithContent('d25-global')
+		await insertAttempt(testId, studentId)
+		await qc.deleteTest({ testId })
+		assert.equal(await count('SELECT count(*) AS count FROM tests WHERE id = $1', [testId]), 0)
+		assert.equal(await count('SELECT count(*) AS count FROM test_attempts WHERE test_id = $1', [testId]), 0)
+	})
+
+	test('гонка: попытка ученика, зафиксированная пока удаление ждёт блокировку теста, даёт 409', async () => {
+		const { testId } = await testWithContent('d25-race-before')
+		const client = new Client({ connectionString: ctx.pgPool.options.connectionString })
+		await client.connect()
+		try {
+			await client.query('BEGIN')
+			await client.query('SELECT id FROM tests WHERE id = $1 FOR UPDATE', [testId])
+			const pending = qc.deleteTest({ testId, refuseWithAttempts: true }).then(
+				() => null,
+				(reason: { statusCode?: number; message?: string }) => reason
+			)
+			await waitForBackend("wait_event_type = 'Lock'")
+			await insertAttempt(testId, studentId, client)
+			await client.query('COMMIT')
+			const error = await pending
+			assert.ok(error, 'удаление прошло')
+			assert.equal(error.statusCode, 409)
+			assert.equal(error.message, DELETE_WITH_ATTEMPTS)
+		} finally {
+			await client.end()
+		}
+		assert.equal(await count('SELECT count(*) AS count FROM tests WHERE id = $1', [testId]), 1)
+	})
+
+	test('гонка: попытка, вставленная после блокировки, ждёт конца удаления и не сохраняется', async () => {
+		const { testId } = await testWithContent('d25-race-after')
+		const name = 'qcon_mr_slow_test_delete'
+		await ctx.pgPool.query(
+			`CREATE OR REPLACE FUNCTION ${name}_fn() RETURNS trigger AS $$ BEGIN PERFORM pg_sleep(0.5); RETURN OLD; END $$ LANGUAGE plpgsql`
+		)
+		await ctx.pgPool.query(
+			`CREATE TRIGGER ${name} BEFORE DELETE ON tests FOR EACH ROW WHEN (OLD.id = '${testId}') EXECUTE FUNCTION ${name}_fn()`
+		)
+		try {
+			const removal = qc.deleteTest({ testId, refuseWithAttempts: true })
+			await waitForBackend("wait_event = 'PgSleep'")
+			const late = insertAttempt(testId, studentId).then(
+				() => null,
+				(reason: { code?: string }) => reason
+			)
+			await removal
+			const error = await late
+			assert.equal(error?.code, '23503')
+		} finally {
+			await ctx.pgPool.query(`DROP TRIGGER IF EXISTS ${name} ON tests`)
+		}
+		assert.equal(await count('SELECT count(*) AS count FROM tests WHERE id = $1', [testId]), 0)
+		assert.equal(await count('SELECT count(*) AS count FROM test_attempts WHERE test_id = $1', [testId]), 0)
 	})
 })
 

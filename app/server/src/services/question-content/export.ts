@@ -171,12 +171,14 @@ export async function buildTopicArchive(params: {
 	topicSlug: string
 	withAnswers: boolean
 	scope: TestScope
+	answersAllowed?: (topicId: string) => Promise<boolean>
 	limitBytes?: number
 }): Promise<ArchiveResult> {
-	const { topicSlug, withAnswers, scope, limitBytes = ZIP_RESPONSE_LIMIT_BYTES } = params
+	const { topicSlug, scope, answersAllowed, limitBytes = ZIP_RESPONSE_LIMIT_BYTES } = params
 	const topic = await db.query.topics.findFirst({ where: eq(topics.slug, topicSlug) })
 	if (!topic) throw new ApiError(404, ERROR_MESSAGES.TOPIC_NOT_FOUND)
 	if (!scope.all && !scope.topicIds.includes(topic.id)) throw new ApiError(403, 'Forbidden')
+	const withAnswers = params.withAnswers && (answersAllowed ? await answersAllowed(topic.id) : true)
 
 	const topicTests = await db
 		.select()

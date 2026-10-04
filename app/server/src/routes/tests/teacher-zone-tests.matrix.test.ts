@@ -18,48 +18,24 @@ import { readZipEntries } from '../../test-support/zip.js'
 const KNOWN_DEFECTS = new Set<string>([
 	'admin GET /admin/attempts',
 	'admin GET /admin/dashboard',
-	'admin GET /topics',
-	'admin GET /topics/teacher-options',
-	'admin PUT /topics/:fresh/teachers',
-	'admin PUT /topics/:fresh/teachers s1',
-	'admin PUT /topics/:fresh/teachers teacherOff',
 	'adminNoZone GET /admin/attempts',
 	'adminNoZone GET /admin/dashboard',
-	'adminNoZone GET /api/tests',
-	'adminNoZone GET /topics',
-	'adminNoZone GET /topics/teacher-options',
 	'adminNoZone POST /question-types',
-	'adminNoZone POST /topics',
 	'adminNoZone PUT /scoring-rules/global',
-	'readTests GET /api/tests',
-	'readTests GET /topics',
-	'readTestsAll GET /api/tests/:tX/export?withAnswers=true',
-	'readTestsAll GET /topics/X/export?withAnswers=true',
-	'teacherA DELETE /api/tests/:freshX attempt s1',
 	'teacherA DELETE /question-types/:fresh',
-	'teacherA DELETE /topics/:fresh',
 	'teacherA GET /admin/attempts',
 	'teacherA GET /admin/dashboard',
-	'teacherA GET /api/tests',
-	'teacherA GET /api/tests?topicId=Y',
 	'teacherA GET /question-types?testId=tY',
-	'teacherA GET /topics',
-	'teacherA GET /topics/teacher-options',
 	'teacherA PATCH /question-types/:fresh',
-	'teacherA PATCH /topics/:fresh',
 	'teacherA POST /question-types',
-	'teacherA POST /topics',
 	'teacherA PUT /scoring-rules/global',
-	'teacherA PUT /topics/:fresh/teachers',
 	'teacherB DELETE /api/tests/:freshX/question-drafts/:draft',
 	'teacherB DELETE /question-types/tests/:freshX/overrides/radio',
 	'teacherB GET /admin/attempts',
-	'teacherB GET /api/tests',
 	'teacherB GET /api/tests/:freshX/question-drafts',
 	'teacherB GET /api/tests/:freshX/question-drafts/:draft',
 	'teacherB GET /question-types/tests/:tX/overrides',
 	'teacherB GET /scoring-rules/tests/:tX',
-	'teacherB GET /topics',
 	'teacherB PATCH /api/tests/:freshX/question-drafts/:draft',
 	'teacherB POST /api/tests/:freshX/question-drafts',
 	'teacherB PUT /question-types/tests/:freshX/overrides/radio',
@@ -305,6 +281,79 @@ for (const [profile, target, expected, suffix] of [
 	status([[profile, expected]], `PUT /topics/:fresh/teachers${suffix}`, async (p) => {
 		const topic = await w.freshTopic()
 		return send(p, 'PUT', `/topics/${topic.id}/teachers`, { teacherIds: [w.users[target].id] })
+	})
+}
+row(
+	['admin'],
+	'PUT /topics/:fresh/teachers teacherA teacherB',
+	'200 два учителя, teacherB видит раздел, после возврата к teacherA не видит',
+	async (p) => {
+		const topic = await w.freshTopic({ teacher: 'teacherA' })
+		const both = await send(p, 'PUT', `/topics/${topic.id}/teachers`, {
+			teacherIds: [w.users.teacherA.id, w.users.teacherB.id],
+		})
+		expectStatus(both, 200)
+		assert.deepEqual(
+			rowsOf(both.body.teachers, 'учителей')
+				.map((item) => String(item.id))
+				.sort(),
+			[w.users.teacherA.id, w.users.teacherB.id].sort()
+		)
+		const shared = await send('teacherB', 'GET', '/topics')
+		expectStatus(shared, 200)
+		const sharedSlugs = rowsOf(shared.body.topics, 'разделов').map((item) => item.slug)
+		assert.ok(sharedSlugs.includes(topic.slug), 'teacherB не видит закреплённый раздел')
+		assert.ok(sharedSlugs.includes(w.topics.Y.slug), 'teacherB не видит раздел Y')
+		const single = await send(p, 'PUT', `/topics/${topic.id}/teachers`, { teacherIds: [w.users.teacherA.id] })
+		expectStatus(single, 200)
+		assert.deepEqual(
+			rowsOf(single.body.teachers, 'учителей').map((item) => item.id),
+			[w.users.teacherA.id]
+		)
+		const own = await send('teacherB', 'GET', '/topics')
+		expectStatus(own, 200)
+		const ownSlugs = rowsOf(own.body.topics, 'разделов').map((item) => item.slug)
+		assert.ok(!ownSlugs.includes(topic.slug), 'teacherB видит снятый раздел')
+		assert.deepEqual(topicKeys(own.body.topics), ['Y'])
+	}
+)
+row(
+	['admin'],
+	'PUT /topics/:fresh/teachers stale',
+	'200 с прежним набором при неактивном закреплённом учителе, 400 при добавлении неактивного',
+	async (p) => {
+		const stale = await w.freshUser({ role: 'teacher' })
+		const topic = await w.freshTopic()
+		expectStatus(await send(p, 'PUT', `/topics/${topic.id}/teachers`, { teacherIds: [stale.id] }), 200)
+		await ctx.pgPool.query('UPDATE users SET is_active = false WHERE id = $1', [stale.id])
+		const same = await send(p, 'PUT', `/topics/${topic.id}/teachers`, { teacherIds: [stale.id] })
+		expectStatus(same, 200)
+		assert.deepEqual(
+			rowsOf(same.body.teachers, 'учителей').map((item) => item.id),
+			[stale.id]
+		)
+		const inactive = await w.freshUser({ role: 'teacher', isActive: false, activated: true })
+		const added = await send(p, 'PUT', `/topics/${topic.id}/teachers`, { teacherIds: [stale.id, inactive.id] })
+		expectStatus(added, 400)
+		assert.deepEqual(added.body, { error: 'Учитель не найден или не активен' })
+		const kept = await ctx.pgPool.query('SELECT teacher_id FROM teacher_topics WHERE topic_id = $1', [topic.id])
+		assert.deepEqual(
+			kept.rows.map((item: { teacher_id: string }) => item.teacher_id),
+			[stale.id]
+		)
+	}
+)
+status([['admin', 404]], 'PUT /topics/:missing/teachers', (p) =>
+	send(p, 'PUT', `/topics/${crypto.randomUUID()}/teachers`, { teacherIds: [w.users.teacherA.id] })
+)
+for (const [suffix, teacherIds] of [
+	[' duplicates', () => [w.users.teacherA.id, w.users.teacherA.id]],
+	[' not uuid', () => ['teacherA']],
+	[' over 50', () => Array.from({ length: 51 }, () => crypto.randomUUID())],
+] as Array<[string, () => string[]]>) {
+	status([['admin', 400]], `PUT /topics/:fresh/teachers${suffix}`, async (p) => {
+		const topic = await w.freshTopic()
+		return send(p, 'PUT', `/topics/${topic.id}/teachers`, { teacherIds: teacherIds() })
 	})
 }
 

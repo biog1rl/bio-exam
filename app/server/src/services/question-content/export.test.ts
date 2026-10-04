@@ -345,6 +345,38 @@ describe('ZIP темы', () => {
 		assert.equal(absent.status, 404)
 	})
 
+	test('answersAllowed: false — нет answer_keys.json, true — есть, вызывается с id темы', async () => {
+		const topicSlug = nextSlug('topic')
+		const topicId = await createTopic(topicSlug)
+		const slug = nextSlug('allowed')
+		await saveTest(topicId, slug, [radio('Ответ b', { order: 0 })])
+		const asked: string[] = []
+		const answersOf = async (allowed: boolean) => {
+			const archive = await qc.buildTopicArchive({
+				topicSlug,
+				withAnswers: true,
+				scope: { all: true },
+				answersAllowed: async (id) => {
+					asked.push(id)
+					return allowed
+				},
+			})
+			return [...readZipEntries(archive.buffer).keys()].filter((name) => name.endsWith('answer_keys.json'))
+		}
+		assert.deepEqual(await answersOf(false), [])
+		assert.deepEqual(await answersOf(true), [`${slug}/answer_keys.json`])
+		assert.deepEqual(asked, [topicId, topicId])
+		const plain = await qc.buildTopicArchive({ topicSlug, withAnswers: true, scope: { all: true } })
+		assert.ok(readZipEntries(plain.buffer).has(`${slug}/answer_keys.json`))
+		const without = await qc.buildTopicArchive({
+			topicSlug,
+			withAnswers: false,
+			scope: { all: true },
+			answersAllowed: async () => true,
+		})
+		assert.ok(!readZipEntries(without.buffer).has(`${slug}/answer_keys.json`))
+	})
+
 	test('тема вне зоны testScope → 403', async () => {
 		const topicSlug = nextSlug('topic')
 		await createTopic(topicSlug)
