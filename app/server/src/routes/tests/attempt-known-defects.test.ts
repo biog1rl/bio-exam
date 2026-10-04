@@ -20,9 +20,6 @@ import {
 import { call, startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 
 const KNOWN_DEFECTS = new Set<string>([
-	'ATT-01-unassigned-start',
-	'ATT-01-unassigned-patch',
-	'ATT-01-unassigned-submit',
 	'ATT-02-expired-restart',
 	'ATT-02-no-session',
 	'ATT-04-double-attempt',

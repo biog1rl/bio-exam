@@ -150,6 +150,7 @@ async function createTest(options: { showCorrectAnswer?: boolean } = {}): Promis
 		})
 		.returning({ id: schema.tests.id })
 	assert.ok(created)
+	await dbModule.db.insert(schema.testAssignments).values({ testId: created.id, userId: studentId })
 	return created.id
 }
 

@@ -10,25 +10,21 @@ import {
 } from '@bio-exam/exam-core'
 
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
-import { Router } from 'express'
+import { Router, type Response } from 'express'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import {
-	answerKeys,
-	appSettings,
-	questions,
-	testAssignments,
-	testAttempts,
-	testSessions,
-	tests,
-	topics,
-} from '../../db/schema.js'
+import { answerKeys, appSettings, questions, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
-import { hasPermission } from '../../services/access-policy/index.js'
+import { canReadTest, testScope } from '../../services/access-policy/index.js'
+import {
+	checkAttemptAccess,
+	isAssignedOrPrivileged,
+	visibleTestsFilter,
+} from '../../services/attempt-sessions/index.js'
 import { storageService } from '../../services/storage/storage.js'
 
 const router = Router()
@@ -110,6 +106,11 @@ function isTransientDbError(err: unknown): boolean {
 	)
 }
 
+function denyAttemptAccess(res: Response, status: 403 | 404) {
+	if (status === 404) return res.status(404).json({ error: 'Test not found' })
+	return res.status(403).json({ error: 'Тест не назначен' })
+}
+
 async function withTransientDbRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
 	try {
 		return await task()
@@ -150,9 +151,9 @@ router.get('/topics', async (_req, res, next) => {
 router.get('/tests', sessionRequired(), async (req, res, next) => {
 	try {
 		const userId = req.authUser!.id
-		const canReadAll = await hasPermission(req, 'tests.read')
+		const scope = await testScope(req)
 
-		const baseQuery = db
+		const rows = await db
 			.select({
 				id: tests.id,
 				slug: tests.slug,
@@ -169,17 +170,7 @@ router.get('/tests', sessionRequired(), async (req, res, next) => {
 			.from(tests)
 			.innerJoin(topics, and(eq(tests.topicId, topics.id), eq(topics.isActive, true)))
 			.leftJoin(questions, eq(questions.testId, tests.id))
-			.where(eq(tests.isPublished, true))
-			.$dynamic()
-
-		const query = canReadAll
-			? baseQuery
-			: baseQuery.innerJoin(
-					testAssignments,
-					and(eq(testAssignments.testId, tests.id), eq(testAssignments.userId, userId))
-				)
-
-		const rows = await query
+			.where(and(eq(tests.isPublished, true), visibleTestsFilter({ userId, scope })))
 			.groupBy(tests.id, topics.id, topics.slug, topics.title)
 			.orderBy(asc(topics.order), asc(topics.title), asc(tests.order), asc(tests.title))
 
@@ -194,7 +185,7 @@ router.get('/topics/:slug/tests', sessionRequired(), async (req, res, next) => {
 	try {
 		const { slug } = req.params as { slug: string }
 		const userId = req.authUser!.id
-		const canReadAll = await hasPermission(req, 'tests.read')
+		const scope = await testScope(req)
 
 		const topic = await db.query.topics.findFirst({
 			where: and(eq(topics.slug, slug), eq(topics.isActive, true)),
@@ -204,7 +195,7 @@ router.get('/topics/:slug/tests', sessionRequired(), async (req, res, next) => {
 			return res.status(404).json({ error: 'Topic not found' })
 		}
 
-		const baseQuery = db
+		const rows = await db
 			.select({
 				id: tests.id,
 				slug: tests.slug,
@@ -216,17 +207,9 @@ router.get('/topics/:slug/tests', sessionRequired(), async (req, res, next) => {
 			})
 			.from(tests)
 			.leftJoin(questions, eq(questions.testId, tests.id))
-			.where(and(eq(tests.topicId, topic.id), eq(tests.isPublished, true)))
-			.$dynamic()
-
-		const query = canReadAll
-			? baseQuery
-			: baseQuery.innerJoin(
-					testAssignments,
-					and(eq(testAssignments.testId, tests.id), eq(testAssignments.userId, userId))
-				)
-
-		const rows = await query.groupBy(tests.id).orderBy(asc(tests.order), asc(tests.title))
+			.where(and(eq(tests.topicId, topic.id), eq(tests.isPublished, true), visibleTestsFilter({ userId, scope })))
+			.groupBy(tests.id)
+			.orderBy(asc(tests.order), asc(tests.title))
 
 		res.json({ tests: rows, topicTitle: topic.title })
 	} catch (e) {
@@ -299,21 +282,11 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 			return res.status(404).json({ error: 'Test not found' })
 		}
 
-		// Проверить что тест назначен текущему пользователю (или у пользователя есть право tests.read)
 		const userId = req.authUser!.id
-		const canReadAll = await hasPermission(req, 'tests.read')
-		if (!canReadAll) {
-			const assignment = await withTransientDbRetry('public test assignment check', () =>
-				db
-					.select()
-					.from(testAssignments)
-					.where(and(eq(testAssignments.testId, test.id), eq(testAssignments.userId, userId)))
-					.limit(1)
-			)
-			if (assignment.length === 0) {
-				return res.status(403).json({ error: 'Тест не назначен' })
-			}
-		}
+		const allowed = await withTransientDbRetry('public test assignment check', () =>
+			isAssignedOrPrivileged({ testId: test.id, userId, canReadTest: () => canReadTest(req, test.id) })
+		)
+		if (!allowed) return denyAttemptAccess(res, 403)
 
 		if (req.query.view === 'summary') {
 			return res.json({ test })
@@ -381,43 +354,11 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 router.get('/tests/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
 		const testId = req.params.id as string
+		const userId = req.authUser!.id
 
-		const testRows = await db
-			.select({
-				id: tests.id,
-				slug: tests.slug,
-				title: tests.title,
-				description: tests.description,
-				showCorrectAnswer: tests.showCorrectAnswer,
-				timeLimitMinutes: tests.timeLimitMinutes,
-				passingScore: tests.passingScore,
-				topicId: topics.id,
-				topicSlug: topics.slug,
-				topicTitle: topics.title,
-			})
-			.from(tests)
-			.innerJoin(topics, eq(tests.topicId, topics.id))
-			.where(and(eq(tests.id, testId), eq(tests.isPublished, true), eq(topics.isActive, true)))
-			.limit(1)
-
-		const test = testRows[0]
-		if (!test) {
-			return res.status(404).json({ error: 'Test not found' })
-		}
-
-		// Проверить что тест назначен текущему пользователю (или у пользователя есть право tests.read)
-		const userId2 = req.authUser!.id
-		const canReadAll2 = await hasPermission(req, 'tests.read')
-		if (!canReadAll2) {
-			const assignment = await db
-				.select()
-				.from(testAssignments)
-				.where(and(eq(testAssignments.testId, test.id), eq(testAssignments.userId, userId2)))
-				.limit(1)
-			if (assignment.length === 0) {
-				return res.status(403).json({ error: 'Тест не назначен' })
-			}
-		}
+		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+		if (!access.ok) return denyAttemptAccess(res, access.status)
+		const test = access.test
 
 		const questionRows = await db
 			.select({
@@ -480,6 +421,9 @@ router.get('/tests/:id/attempts/me', validateUUID('id'), sessionRequired(), asyn
 		const userId = req.authUser?.id
 		if (!userId) return res.status(401).json({ error: 'Unauthorized' })
 
+		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+		if (!access.ok) return denyAttemptAccess(res, access.status)
+
 		const offsetRaw = parseInt((req.query.offset as string) ?? '0', 10)
 		const limitRaw = parseInt((req.query.limit as string) ?? '5', 10)
 		const offset = isNaN(offsetRaw) || offsetRaw < 0 ? 0 : offsetRaw
@@ -518,6 +462,9 @@ router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async
 		const testId = req.params.id as string
 		const userId = req.authUser?.id
 		if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+		if (!access.ok) return denyAttemptAccess(res, access.status)
 
 		const fromParam = req.query.from as string | undefined
 		const toParam = req.query.to as string | undefined
@@ -573,12 +520,8 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 		const testId = req.params.id as string
 		const userId = req.authUser!.id
 
-		const [test] = await db
-			.select({ id: tests.id, timeLimitMinutes: tests.timeLimitMinutes })
-			.from(tests)
-			.where(and(eq(tests.id, testId), eq(tests.isPublished, true)))
-			.limit(1)
-		if (!test) return res.status(404).json({ error: 'Test not found' })
+		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+		if (!access.ok) return denyAttemptAccess(res, access.status)
 
 		// Return existing open session or create new one
 		const existing = await db.query.testSessions.findFirst({
@@ -648,6 +591,9 @@ router.patch(
 			}
 			const { questionId, value, telemetry } = parsed.data
 
+			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+			if (!access.ok) return denyAttemptAccess(res, access.status)
+
 			// Подтвердить что сессия принадлежит пользователю и ещё не submit-нута
 			const session = await db.query.testSessions.findFirst({
 				where: and(
@@ -700,24 +646,9 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 
 		const { answers: userAnswers, clientAttemptId, telemetry } = parsed.data
 
-		const testRows = await db
-			.select({
-				id: tests.id,
-				slug: tests.slug,
-				topicSlug: topics.slug,
-				passingScore: tests.passingScore,
-				showCorrectAnswer: tests.showCorrectAnswer,
-				timeLimitMinutes: tests.timeLimitMinutes,
-			})
-			.from(tests)
-			.innerJoin(topics, eq(tests.topicId, topics.id))
-			.where(and(eq(tests.id, testId), eq(tests.isPublished, true), eq(topics.isActive, true)))
-			.limit(1)
-
-		const test = testRows[0]
-		if (!test) {
-			return res.status(404).json({ error: 'Test not found' })
-		}
+		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+		if (!access.ok) return denyAttemptAccess(res, access.status)
+		const test = access.test
 
 		const session = await db.query.testSessions.findFirst({
 			where: and(eq(testSessions.testId, testId), eq(testSessions.userId, userId)),
