@@ -13,6 +13,7 @@ import type { AttemptDraftSaveResult } from '@/lib/tests/api'
 
 import { classifyStartFailure, classifySubmitFailure, type SubmitFailure } from '../attempt-submit-flow'
 import { resolveClientAttemptId, storedClientAttemptId, type ClientAttemptStorage } from '../client-attempt-id'
+import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit } from '../telemetry'
 import { resolveRestoredDraft, type RestoredDraft } from './restore'
 import { saveIndicatorDueAt, saveIndicatorKind, type SaveIndicatorInput } from './save-indicator'
 import {
@@ -23,7 +24,16 @@ import {
 	writeCachedSession,
 	type CachedSession,
 } from './storage-keys'
-import { confirmAnswer, confirmTelemetry, detachWal, readWal, recordAnswer, recordPosition, writeWal } from './wal'
+import {
+	confirmAnswer,
+	confirmTelemetry,
+	detachWal,
+	readWal,
+	recordAnswer,
+	recordPosition,
+	updateWal,
+	writeWal,
+} from './wal'
 
 export type AttemptPhase =
 	| 'awaitingStart'
@@ -109,6 +119,7 @@ export const ATTEMPT_SAVE_DEBOUNCE_MS = 600
 export const ATTEMPT_SAVE_MAX_WAIT_MS = 5000
 export const TELEMETRY_QUEUE_KEY = '#telemetry'
 export const TIME_UP_PAUSE_MS = 1500
+export const ONE_MINUTE_LEFT_SECONDS = 60
 
 type QueueValue = AnswerValue | TelemetryMap
 
@@ -170,6 +181,10 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let timeUpPause: { handle: unknown; resolve: () => void } | null = null
 	let restoreCandidate: CachedSession | null = null
 	let closedSession: CachedSession | null = null
+	let segmentStartedAt: number | null = null
+	let tickTimer: unknown = null
+	let warned = false
+	let autoFired = false
 
 	function indicatorInput(): SaveIndicatorInput {
 		return {
@@ -257,6 +272,96 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		if (telemetryPending) queue.set(TELEMETRY_QUEUE_KEY, telemetry)
 	}
 
+	function applyTelemetry(next: TelemetryMap): void {
+		if (next === telemetry) return
+		telemetry = next
+		telemetryPending = true
+		updateWal(storage, keys.wal, session?.sessionId ?? null, (record) => ({
+			...record,
+			telemetry: next,
+			telemetryPending: true,
+		}))
+		snapshot = null
+	}
+
+	function queueTelemetry(): void {
+		if (session && telemetryPending) queue?.set(TELEMETRY_QUEUE_KEY, telemetry)
+	}
+
+	function openSegment(): void {
+		if (phase !== 'active' || segmentStartedAt !== null || position === null || visibility.isHidden()) return
+		segmentStartedAt = clock.now()
+	}
+
+	function closeSegment(): void {
+		if (segmentStartedAt === null) return
+		const elapsed = clock.now() - segmentStartedAt
+		segmentStartedAt = null
+		if (position !== null) applyTelemetry(appendQuestionTime(telemetry, position, elapsed))
+	}
+
+	function deadlineMs(): number | null {
+		if (!timeLimitMinutes || !session) return null
+		const startedMs = Date.parse(session.startedAt)
+		if (Number.isNaN(startedMs)) return null
+		return startedMs + timeLimitMinutes * 60_000
+	}
+
+	function secondsLeft(): number | null {
+		const deadline = deadlineMs()
+		if (deadline === null) return null
+		return Math.max(0, Math.floor((deadline - clock.now()) / 1000))
+	}
+
+	function stopTick(): void {
+		if (tickTimer === null) return
+		clock.clearTimer(tickTimer)
+		tickTimer = null
+	}
+
+	function scheduleTick(): void {
+		stopTick()
+		const deadline = deadlineMs()
+		if (!initialized || phase !== 'active' || deadline === null) return
+		const remaining = deadline - clock.now()
+		const delay = remaining > 0 ? remaining % 1000 || 1000 : 0
+		tickTimer = clock.setTimer(onTick, delay)
+	}
+
+	function onTick(): void {
+		tickTimer = null
+		if (!initialized || phase !== 'active') return
+		const left = secondsLeft()
+		if (left === null) return
+		if (left <= 0) {
+			warned = true
+			if (autoFired) {
+				emit()
+				return
+			}
+			void runSubmit(true)
+			return
+		}
+		if (left <= ONE_MINUTE_LEFT_SECONDS && !warned) {
+			warned = true
+			notice({ kind: 'one-minute-left' })
+		}
+		scheduleTick()
+		emit()
+	}
+
+	function enterActive(visit: boolean): void {
+		phase = 'active'
+		if (visit && position !== null) applyTelemetry(incrementQuestionVisit(telemetry, position))
+		openSegment()
+		scheduleTick()
+	}
+
+	function leaveActive(): void {
+		closeSegment()
+		stopTick()
+	}
+
 	function applyRestored(restored: RestoredDraft): void {
 		answers = restored.answers
 		pending = new Set(restored.pending)
@@ -336,13 +441,13 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 				blockStart(cached)
 			} else if (cached && !mode.candidate) {
 				session = cached
-				phase = 'active'
 				enqueuePending()
+				enterActive(true)
 			} else if (timeLimitMinutes) {
 				phase = 'awaitingStart'
 				notice({ kind: 'start-failed' })
 			} else {
-				phase = 'active'
+				enterActive(true)
 				if (mode.retake) notice({ kind: 'retake-start-failed' })
 			}
 			emit()
@@ -359,8 +464,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			}
 			removeFrozen()
 		}
-		phase = 'active'
 		enqueuePending()
+		enterActive(true)
 		emit()
 	}
 
@@ -428,6 +533,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	}
 
 	function beginSubmit(auto: boolean): void {
+		leaveActive()
+		if (auto) autoFired = true
 		submitFailed = false
 		if (auto) writeFrozen()
 		phase = auto ? 'autoSubmitting' : 'submitting'
@@ -436,7 +543,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 
 	function failSubmit(auto: boolean): void {
 		if (auto) removeFrozen()
-		phase = 'active'
+		enterActive(false)
 		submitFailed = true
 	}
 
@@ -535,6 +642,10 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		queue?.discard()
 		cancelTimeUpPause()
 		clearIndicatorTimer()
+		stopTick()
+		segmentStartedAt = null
+		warned = false
+		autoFired = false
 		clearAttemptKeys(storage, keys, 'success')
 		session = null
 		blockReason = null
@@ -566,9 +677,19 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 
 	function onVisibility(event: AttemptVisibilityEvent): void {
 		if (!initialized || phase !== 'active' || !queue) return
-		if (event === 'hidden') void queue.flush()
-		else if (event === 'pagehide') queue.drain({ keepalive: true })
-		else queue.retryNow()
+		if (event === 'hidden') {
+			closeSegment()
+			if (position !== null) applyTelemetry(incrementQuestionFocusLoss(telemetry, position))
+			queueTelemetry()
+			void queue.flush()
+		} else if (event === 'pagehide') {
+			closeSegment()
+			queueTelemetry()
+			queue.drain({ keepalive: true })
+		} else {
+			if (event === 'visible') openSegment()
+			queue.retryNow()
+		}
 	}
 
 	function buildSnapshot(): AttemptSnapshot {
@@ -580,7 +701,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			answers,
 			currentQuestionId: position,
 			startedAt: session?.startedAt ?? null,
-			secondsLeft: null,
+			secondsLeft: secondsLeft(),
 			result,
 			showTimeUp,
 			saveIndicator: saveIndicatorKind(indicatorInput()),
@@ -598,6 +719,9 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			submitFailed = false
 			result = null
 			showTimeUp = false
+			segmentStartedAt = null
+			warned = false
+			autoFired = false
 			queue = createQueue()
 			unsubscribeVisibility = visibility.subscribe(onVisibility)
 			const cached = readCachedSession(storage, keys.session)
@@ -646,11 +770,20 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		},
 		navigate(questionId) {
 			if (!knownQuestions.has(questionId)) return
-			position = questionId
-			if (initialized && phase === 'active') {
-				recordPosition(storage, keys.wal, { sessionId: session?.sessionId ?? null, position })
-				void queue?.flush()
+			if (!initialized || phase !== 'active') {
+				position = questionId
+				emit()
+				return
 			}
+			if (questionId !== position) {
+				closeSegment()
+				position = questionId
+				applyTelemetry(incrementQuestionVisit(telemetry, questionId))
+				openSegment()
+			}
+			recordPosition(storage, keys.wal, { sessionId: session?.sessionId ?? null, position })
+			queueTelemetry()
+			void queue?.flush()
 			emit()
 		},
 		async submit(submitOptions) {
@@ -663,6 +796,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		},
 		dispose() {
 			if (!initialized) return
+			closeSegment()
+			queueTelemetry()
 			initialized = false
 			queue?.drain({ keepalive: false })
 			queue?.dispose()
@@ -670,6 +805,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			unsubscribeVisibility?.()
 			unsubscribeVisibility = null
 			clearIndicatorTimer()
+			stopTick()
 			generation += 1
 			cancelTimeUpPause()
 		},

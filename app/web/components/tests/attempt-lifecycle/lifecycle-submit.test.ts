@@ -61,7 +61,7 @@ describe('отправка через модуль', () => {
 			sessionId: 's1',
 			clientAttemptId: 'client-1',
 			answers: { [Q1]: 'a' },
-			telemetry: {},
+			telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } },
 		})
 		pendingSubmit.resolve(view)
 		await submitting
@@ -161,7 +161,7 @@ describe('отправка через модуль', () => {
 			sessionId: 's2',
 			clientAttemptId: 'client-1',
 			answers: { [Q1]: 'a' },
-			telemetry: {},
+			telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } },
 		})
 		assert.equal(lifecycle.getSnapshot().phase, 'submitting')
 		pendingSubmit.resolve(view)
@@ -198,8 +198,8 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 			answers: { [Q1]: 'a' },
 			pending: [Q1],
 			position: Q1,
-			telemetry: {},
-			telemetryPending: false,
+			telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } },
+			telemetryPending: true,
 		})
 	})
 
@@ -311,9 +311,15 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		const sent = fakeApi.saveDraft.mock.calls.slice(saveCalls)
 		assert.deepEqual(
 			sent.map((call) => call[1]),
-			['s3', 's3']
+			['s3', 's3', 's3']
 		)
-		const bodies = sent.map((call) => call[2] as { questionId: string; value: unknown })
+		assert.deepEqual(
+			sent.map((call) => call[2]).filter((body) => 'telemetry' in body),
+			[{ telemetry: { [Q1]: { timeSpentMs: 600, focusLossCount: 0, visitCount: 1 } } }]
+		)
+		const bodies = sent
+			.map((call) => call[2])
+			.filter((body): body is { questionId: string; value: string } => 'questionId' in body)
 		bodies.sort((left, right) => left.questionId.localeCompare(right.questionId))
 		assert.deepEqual(bodies, [
 			{ questionId: Q1, value: 'a' },

@@ -108,6 +108,7 @@ describe('answer: синхронный WAL и очередь', () => {
 		assert.deepEqual(fakeApi.savedBodies(), [
 			{ questionId: Q1, value: 'a' },
 			{ questionId: Q2, value: ['x'] },
+			{ telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } } },
 		])
 		for (const call of fakeApi.saveDraft.mock.calls) assert.equal(call[1], 's1')
 		const wal = readJson(storage, KEYS.wal) as { pending: string[] }
@@ -121,11 +122,17 @@ describe('answer: синхронный WAL и очередь', () => {
 		lifecycle.answer(Q1, 'a')
 		await vi.advanceTimersByTimeAsync(100)
 		lifecycle.dispose()
-		assert.equal(fakeApi.saveDraft.mock.calls.length, 1)
+		assert.equal(fakeApi.saveDraft.mock.calls.length, 2)
 		assert.deepEqual(fakeApi.saveDraft.mock.calls[0], [
 			TEST_ID,
 			's1',
 			{ questionId: Q1, value: 'a' },
+			{ keepalive: false },
+		])
+		assert.deepEqual(fakeApi.saveDraft.mock.calls[1], [
+			TEST_ID,
+			's1',
+			{ telemetry: { [Q1]: { timeSpentMs: 100, focusLossCount: 0, visitCount: 1 } } },
 			{ keepalive: false },
 		])
 		await settle()
@@ -133,7 +140,7 @@ describe('answer: синхронный WAL и очередь', () => {
 		assert.deepEqual(wal.answers, { [Q1]: 'a' })
 		assert.deepEqual(wal.pending, [Q1])
 		await vi.advanceTimersByTimeAsync(10_000)
-		assert.equal(fakeApi.saveDraft.mock.calls.length, 1)
+		assert.equal(fakeApi.saveDraft.mock.calls.length, 2)
 	})
 
 	test('getSnapshot возвращает тот же объект до следующего изменения', async () => {
@@ -349,7 +356,18 @@ describe('восстановление и смена сессии', () => {
 		await vi.advanceTimersByTimeAsync(600)
 		assert.deepEqual(
 			fakeApi.saveDraft.mock.calls.map((call) => [call[1], call[2]]),
-			[['s2', { questionId: Q2, value: 'b' }]]
+			[
+				['s2', { questionId: Q2, value: 'b' }],
+				[
+					's2',
+					{
+						telemetry: {
+							[Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 },
+							[Q3]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 },
+						},
+					},
+				],
+			]
 		)
 		assert.equal(storage.data.get(KEYS.wal), alien)
 	})
@@ -459,7 +477,11 @@ describe('StrictMode: init → dispose → init', () => {
 		await settle()
 		lifecycle.answer(Q1, 'a')
 		await vi.advanceTimersByTimeAsync(600)
-		assert.deepEqual(fakeApi.savedBodies(), [{ questionId: Q1, value: 'a' }])
+		assert.deepEqual(fakeApi.savedBodies(), [
+			{ telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } } },
+			{ telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } } },
+			{ questionId: Q1, value: 'a' },
+		])
 	})
 })
 
@@ -548,7 +570,7 @@ describe('немедленная отправка', () => {
 		fakeApi.setSaveDefault(OK)
 		page.emit('visible')
 		await settle()
-		assert.equal(fakeApi.saveDraft.mock.calls.length, 4)
+		assert.equal(fakeApi.saveDraft.mock.calls.length, 5)
 		assert.equal(lifecycle.getSnapshot().saveIndicator, 'saved')
 	})
 
@@ -562,6 +584,7 @@ describe('немедленная отправка', () => {
 			[
 				[{ questionId: Q1, value: 'a' }, { keepalive: true }],
 				[{ questionId: Q2, value: 'b' }, { keepalive: true }],
+				[{ telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } } }, { keepalive: true }],
 			]
 		)
 	})
@@ -586,7 +609,10 @@ describe('немедленная отправка', () => {
 		lifecycle.answer(Q1, 'a')
 		page.emit('hidden')
 		await settle()
-		assert.deepEqual(fakeApi.savedBodies(), [{ questionId: Q1, value: 'a' }])
+		assert.deepEqual(fakeApi.savedBodies(), [
+			{ questionId: Q1, value: 'a' },
+			{ telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 1, visitCount: 1 } } },
+		])
 	})
 })
 

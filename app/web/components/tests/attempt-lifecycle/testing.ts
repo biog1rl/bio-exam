@@ -247,6 +247,16 @@ export async function settle(): Promise<void> {
 
 export type AttemptKeyName = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
 
+export function walTelemetry(storage: MemoryStorage): TelemetryMap | undefined {
+	const wal = readJson(storage, KEYS.wal) as { telemetry?: TelemetryMap } | undefined
+	return wal?.telemetry
+}
+
+export function walTelemetryPending(storage: MemoryStorage): boolean | undefined {
+	const wal = readJson(storage, KEYS.wal) as { telemetryPending?: boolean } | undefined
+	return wal?.telemetryPending
+}
+
 export function presentKeys(storage: MemoryStorage): AttemptKeyName[] {
 	const names: AttemptKeyName[] = ['session', 'wal', 'frozen', 'clientAttemptId']
 	return names.filter((name) => storage.data.has(KEYS[name]))
@@ -256,7 +266,13 @@ export function seededStorage(
 	input: {
 		session?: { sessionId: string; startedAt?: string }
 		clientAttempt?: { sessionId: string; clientAttemptId: string }
-		wal?: { sessionId: string | null; answers: Record<string, unknown>; pending?: string[] }
+		wal?: {
+			sessionId: string | null
+			answers: Record<string, unknown>
+			pending?: string[]
+			telemetry?: TelemetryMap
+			telemetryPending?: boolean
+		}
 		frozen?: boolean
 	} = {}
 ): MemoryStorage {
@@ -275,8 +291,8 @@ export function seededStorage(
 			answers: input.wal.answers,
 			pending: input.wal.pending ?? Object.keys(input.wal.answers),
 			position: null,
-			telemetry: {},
-			telemetryPending: false,
+			telemetry: input.wal.telemetry ?? {},
+			telemetryPending: input.wal.telemetryPending ?? false,
 		})
 	}
 	if (input.frozen) initial[KEYS.frozen] = '1'

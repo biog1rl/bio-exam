@@ -182,7 +182,7 @@ describe('восстановление: сначала submit с сохранё�
 			sessionId: 's1',
 			clientAttemptId: 'c1',
 			answers: { [Q1]: 'a', [Q2]: 'b' },
-			telemetry: {},
+			telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } },
 		})
 		assert.equal(second.lifecycle.getSnapshot().phase, 'submitted')
 		assert.deepEqual(presentKeys(storage), [])
@@ -234,26 +234,35 @@ describe('восстановление без clientAttemptId: часы клие
 		assert.deepEqual(noticeKinds(onNotice), [])
 	})
 
-	test('часы в пределах лимита и льготы: /start при init, s1 → active и session-restored', async () => {
+	test('часы в пределах лимита и льготы: /start при init, s1 → session-restored и автосдача по истёкшему лимиту', async () => {
 		vi.setSystemTime(WITHIN_GRACE)
 		const storage = abandonedStorage()
 		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const pendingSubmit = deferred<ReturnType<typeof attemptViewOf> | Error>()
+		fakeApi.queueSubmit(pendingSubmit)
 		const { lifecycle, onNotice } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
 		lifecycle.init()
 		await settle()
+		await vi.advanceTimersByTimeAsync(1000)
 		assert.equal(fakeApi.start.mock.calls.length, 1)
-		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(lifecycle.getSnapshot().phase, 'autoSubmitting')
+		assert.equal(fakeApi.submit.mock.calls.length, 1)
+		assert.equal(fakeApi.submitRequests()[0]?.sessionId, 's1')
 		assert.deepEqual(noticeKinds(onNotice), ['session-restored'])
 	})
 
 	test('часы в пределах лимита и льготы: /start вернул s2 → session-replaced, ответы из черновика s2', async () => {
 		vi.setSystemTime(WITHIN_GRACE)
 		const storage = abandonedStorage()
-		const fakeApi = fakeAttemptApi([sessionOf('s2', undefined, { answers: { [Q2]: 'other' } })])
+		const fakeApi = fakeAttemptApi([
+			sessionOf('s2', new Date(WITHIN_GRACE).toISOString(), { answers: { [Q2]: 'other' } }),
+		])
 		const { lifecycle, onNotice } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
 		lifecycle.init()
 		await settle()
+		await vi.advanceTimersByTimeAsync(1000)
 		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(fakeApi.submit.mock.calls.length, 0)
 		assert.deepEqual(lifecycle.getSnapshot().answers, { [Q2]: 'other' })
 		assert.deepEqual(noticeKinds(onNotice), ['session-replaced'])
 	})
@@ -284,7 +293,9 @@ describe('восстановление без clientAttemptId: часы клие
 	test('ревью P-04: frozenKey, часы в пределах, /start вернул s2 → frozenKey удалён, active с черновиком s2, submit не вызван', async () => {
 		vi.setSystemTime(WITHIN_GRACE)
 		const storage = abandonedStorage({ frozen: true })
-		const fakeApi = fakeAttemptApi([sessionOf('s2', undefined, { answers: { [Q2]: 'other' } })])
+		const fakeApi = fakeAttemptApi([
+			sessionOf('s2', new Date(WITHIN_GRACE).toISOString(), { answers: { [Q2]: 'other' } }),
+		])
 		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
 		lifecycle.init()
 		await settle()

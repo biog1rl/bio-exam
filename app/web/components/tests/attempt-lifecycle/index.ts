@@ -1,7 +1,9 @@
+export { setMatchingPair, toggleOption } from './answer-edits'
 export {
 	ATTEMPT_SAVE_DEBOUNCE_MS,
 	ATTEMPT_SAVE_MAX_WAIT_MS,
 	createAttemptLifecycle,
+	ONE_MINUTE_LEFT_SECONDS,
 	type AttemptBlockReason,
 	type AttemptClock,
 	type AttemptLifecycle,
