@@ -415,8 +415,6 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 					} catch (e) {
 						console.warn('Failed to revalidate test data after assets moved', e)
 					}
-				} else if (data.assetsMoved === false) {
-					toast.warning('Изображения не были перемещены — проверьте ссылки на вложения')
 				}
 			}
 		} catch (err) {

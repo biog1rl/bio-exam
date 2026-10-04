@@ -65,6 +65,8 @@ import {
 	readQuestionMarkdown,
 	resolveQuestionPoints,
 	updateQuestion,
+	updateTestSettings,
+	updateTopic,
 } from '../../services/question-content/index.js'
 import { updateQuestionSearchDocumentLocation } from '../../services/search/question-documents.js'
 import { assertLegacyUploadsAllowed, storageService } from '../../services/storage/storage.js'
@@ -301,47 +303,24 @@ router.post('/topics', sessionRequired(), requirePerm('tests', 'write'), async (
 })
 
 // PATCH /api/tests/topics/:id - редактировать тему
-router.patch(
-	'/topics/:id',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const id = req.params.id as string
-			const parsed = TopicSchema.partial().safeParse(req.body)
-			if (!parsed.success) {
-				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
-			}
-
-			const existing = await db.query.topics.findFirst({ where: eq(topics.id, id) })
-			if (!existing) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-
-			// Если меняется slug, проверяем уникальность
-			if (parsed.data.slug && parsed.data.slug !== existing.slug) {
-				const slugExists = await db.query.topics.findFirst({ where: eq(topics.slug, parsed.data.slug) })
-				if (slugExists) {
-					return res.status(409).json({ error: ERROR_MESSAGES.TOPIC_SLUG_EXISTS })
-				}
-			}
-
-			const [updated] = await db
-				.update(topics)
-				.set({
-					...parsed.data,
-					updatedAt: new Date(),
-				})
-				.where(eq(topics.id, id))
-				.returning()
-
-			res.json({ topic: updated })
-		} catch (e) {
-			next(e)
+router.patch('/topics/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const id = req.params.id as string
+		if (!(await canWriteTopic(req, id))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
+		const parsed = TopicSchema.partial().safeParse(req.body)
+		if (!parsed.success) {
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		}
+
+		const topic = await updateTopic({ topicId: id, data: parsed.data })
+
+		return res.json({ topic })
+	} catch (e) {
+		return next(e)
 	}
-)
+})
 
 // DELETE /api/tests/topics/:id - удалить тему
 router.delete(
@@ -1221,139 +1200,30 @@ router.post('/save', sessionRequired(), async (req, res, next) => {
 })
 
 // PATCH /api/tests/:id/settings - обновить настройки теста без изменения вопросов
-router.patch(
-	'/:id/settings',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const testId = req.params.id as string
-			const parsed = UpdateTestSettingsSchema.safeParse(req.body)
-			if (!parsed.success) {
-				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
-			}
-
-			const userId = req.authUser?.id ?? null
-			const data = parsed.data
-
-			const existingTest = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!existingTest) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-
-			const topic = await db.query.topics.findFirst({ where: eq(topics.id, data.topicId) })
-			if (!topic) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TOPIC_NOT_FOUND })
-			}
-
-			if (data.slug !== existingTest.slug || data.topicId !== existingTest.topicId) {
-				const slugExists = await db.query.tests.findFirst({
-					where: and(eq(tests.topicId, data.topicId), eq(tests.slug, data.slug)),
-				})
-				if (slugExists && slugExists.id !== testId) {
-					return res.status(409).json({ error: ERROR_MESSAGES.TEST_SLUG_EXISTS })
-				}
-			}
-
-			const [{ count: questionsCountRaw }] = await db
-				.select({ count: sql<number>`count(*)::int` })
-				.from(questions)
-				.where(eq(questions.testId, testId))
-			const questionsCount = Number(questionsCountRaw ?? 0)
-			if (data.isPublished && questionsCount === 0) {
-				return res.status(400).json({ error: 'Для публикации добавьте хотя бы один вопрос' })
-			}
-
-			await ensureGlobalScoringRules(userId)
-			const nextScoringOverride = data.scoringRules === undefined ? existingTest.scoringRules : data.scoringRules
-
-			const oldTopic = await db.query.topics.findFirst({ where: eq(topics.id, existingTest.topicId) })
-			const oldPrefix = oldTopic ? storageService.getTestPath(oldTopic.slug, existingTest.slug) : null
-			const newPrefix = storageService.getTestPath(topic.slug, data.slug)
-			const shouldRebaseQuestionPaths = Boolean(oldPrefix && oldPrefix !== newPrefix)
-			const shouldIncrementVersion = data.isPublished && !existingTest.isPublished
-
-			const result = await db.transaction(async (tx) => {
-				const [updatedTest] = await tx
-					.update(tests)
-					.set({
-						topicId: data.topicId,
-						slug: data.slug,
-						title: data.title,
-						description: data.description,
-						isPublished: data.isPublished,
-						showCorrectAnswer: data.showCorrectAnswer,
-						scoringRules: nextScoringOverride ?? null,
-						timeLimitMinutes: data.timeLimitMinutes,
-						redThresholdMinutes: data.redThresholdMinutes ?? null,
-						warningThresholdMinutes: data.warningThresholdMinutes ?? null,
-						passingScore: data.passingScore,
-						order: data.order,
-						version: shouldIncrementVersion ? existingTest.version + 1 : existingTest.version,
-						updatedAt: new Date(),
-						updatedBy: userId,
-					})
-					.where(eq(tests.id, testId))
-					.returning()
-
-				if (shouldRebaseQuestionPaths && oldPrefix) {
-					const questionRows = await tx
-						.select({
-							id: questions.id,
-							promptPath: questions.promptPath,
-							explanationPath: questions.explanationPath,
-						})
-						.from(questions)
-						.where(eq(questions.testId, testId))
-
-					for (const row of questionRows) {
-						const promptPath = row.promptPath?.startsWith(oldPrefix)
-							? `${newPrefix}${row.promptPath.slice(oldPrefix.length)}`
-							: row.promptPath
-						const explanationPath = row.explanationPath?.startsWith(oldPrefix)
-							? `${newPrefix}${row.explanationPath.slice(oldPrefix.length)}`
-							: row.explanationPath
-
-						if (promptPath === row.promptPath && explanationPath === row.explanationPath) continue
-
-						await tx
-							.update(questions)
-							.set({
-								promptPath,
-								explanationPath,
-								updatedAt: new Date(),
-							})
-							.where(eq(questions.id, row.id))
-					}
-				}
-
-				return { test: updatedTest }
-			})
-
-			let assetsMoved: boolean | undefined = undefined
-			if (shouldRebaseQuestionPaths && oldPrefix) {
-				try {
-					await storageService.moveDirectory(oldPrefix, newPrefix)
-					assetsMoved = true
-				} catch (err) {
-					console.error('[tests] Failed to move assets directory:', err)
-					assetsMoved = false
-				}
-			}
-
-			const response: { test: typeof result.test & { topicSlug: string }; assetsMoved?: boolean } = {
-				test: { ...result.test, topicSlug: topic.slug },
-			}
-			if (typeof assetsMoved !== 'undefined') {
-				response.assetsMoved = assetsMoved
-			}
-			return res.json(response)
-		} catch (e) {
-			return next(e)
+router.patch('/:id/settings', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		if (!(await canWriteTest(req, testId))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
+		const parsed = UpdateTestSettingsSchema.safeParse(req.body)
+		if (!parsed.success) {
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		}
+		const data = parsed.data
+		if (!(await canWriteTopic(req, data.topicId))) {
+			return res.status(403).json({ error: 'Forbidden' })
+		}
+
+		const userId = req.authUser?.id ?? null
+		await ensureGlobalScoringRules(userId)
+		const { test, topicSlug, assetsMoved } = await updateTestSettings({ testId, data, userId })
+
+		return res.json({ test: { ...test, topicSlug }, ...(assetsMoved ? { assetsMoved } : {}) })
+	} catch (e) {
+		return next(e)
 	}
-)
+})
 
 // POST /api/tests/:id/questions - создать вопрос в тесте
 router.post('/:id/questions', validateUUID('id'), sessionRequired(), async (req, res, next) => {

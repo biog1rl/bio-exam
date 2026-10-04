@@ -24,6 +24,24 @@ export {
 	type QuestionMarkdownKind,
 } from './read.js'
 export {
+	COPY_CONCURRENCY,
+	PUBLISH_WITHOUT_QUESTIONS_MESSAGE,
+	RELOCATION_FAILED_MESSAGE,
+	planRelocation,
+	relocateQuestionObjects,
+	switchPointers,
+	updateTestSettings,
+	updateTopic,
+	type PointerSwitch,
+	type RelocateOptions,
+	type RelocationPair,
+	type RelocationPlan,
+	type RelocationRow,
+	type RelocationTarget,
+	type TestSettingsInput,
+	type TopicUpdateInput,
+} from './relocate.js'
+export {
 	CONTENT_CHANGED_MESSAGE,
 	QUESTION_NOT_IN_TEST_MESSAGE,
 	createQuestion,

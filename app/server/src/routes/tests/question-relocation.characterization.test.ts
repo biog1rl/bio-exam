@@ -28,12 +28,7 @@ const PASSWORD = 'reloc-password-1'
 const KEEP_IMAGE = 'images/keep.webp'
 const ROLLBACK_ERROR = 'Не удалось перенести файлы, переименование отменено'
 
-const KNOWN_DEFECTS = new Set<string>([
-	'STOR-rename-topic-files',
-	'STOR-rename-test-rollback',
-	'STOR-zip-no-images',
-	'STOR-export-writes-answer-keys',
-])
+const KNOWN_DEFECTS = new Set<string>(['STOR-zip-no-images', 'STOR-export-writes-answer-keys'])
 
 function defectTest(id: string, title: string, fn: () => Promise<void>, timeout?: number): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
