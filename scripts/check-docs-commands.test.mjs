@@ -3,9 +3,12 @@
  * файловая система и git не нужны.
  */
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { test } from 'node:test'
 
-import { checkDocsCommands, extractYarnCommands } from './check-docs-commands.mjs'
+import { checkDocsCommands, extractYarnCommands, loadDocs } from './check-docs-commands.mjs'
 
 const PACKAGES = {
 	root: {
@@ -116,4 +119,56 @@ test('extractYarnCommands: fences, inline code, prompts, comments, chained and w
 test('trailing punctuation after a script name and unusual arguments do not produce false errors', () => {
 	const text = `${GOOD_README}\`yarn verify: OK\` \`yarn ...\` \`yarn --version\` \`yarn verify.\`\n`
 	assert.deepEqual(run({ 'README.md': text, 'app/server/README.md': '', 'AGENTS.md': '' }), [])
+})
+
+test('project skills are checked after DOC_FILES in alphabetical order of skill directories', () => {
+	const files = {
+		'.agents/skills/b/SKILL.md': '`yarn bb`\n',
+		'AGENTS.md': '`yarn zz`\n',
+		'.agents/skills/a/SKILL.md': '---\nname: a\n---\n`yarn nope`\n',
+		'app/server/README.md': '',
+		'README.md': GOOD_README,
+	}
+	assert.deepEqual(run(files), [
+		'AGENTS.md:1: unknown script zz',
+		'.agents/skills/a/SKILL.md:4: unknown script nope',
+		'.agents/skills/b/SKILL.md:1: unknown script bb',
+	])
+})
+
+test('known commands in a skill pass; no skills directory gives no findings; missing DOC_FILES stay errors', () => {
+	const skill = '`yarn verify`\n```bash\nyarn workspace @bio-exam/server test\n```\n'
+	const base = { 'README.md': GOOD_README, 'app/server/README.md': '', 'AGENTS.md': '' }
+	assert.deepEqual(run({ ...base, '.agents/skills/a/SKILL.md': skill }), [])
+	assert.deepEqual(run(base), [])
+	assert.deepEqual(run({ 'README.md': GOOD_README, 'AGENTS.md': '', '.agents/skills/a/SKILL.md': skill }), [
+		'app/server/README.md: missing file',
+	])
+})
+
+test('loadDocs reads SKILL.md of every skill directory in alphabetical order', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-skills-'))
+	try {
+		fs.writeFileSync(path.join(root, 'AGENTS.md'), 'agents\n')
+		for (const name of ['y', 'x']) {
+			fs.mkdirSync(path.join(root, '.agents/skills', name), { recursive: true })
+			fs.writeFileSync(path.join(root, '.agents/skills', name, 'SKILL.md'), `skill ${name}\n`)
+		}
+		fs.mkdirSync(path.join(root, '.agents/skills/empty'), { recursive: true })
+		const files = loadDocs(root)
+		assert.deepEqual(Object.keys(files), ['AGENTS.md', '.agents/skills/x/SKILL.md', '.agents/skills/y/SKILL.md'])
+		assert.equal(files['.agents/skills/x/SKILL.md'], 'skill x\n')
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true })
+	}
+})
+
+test('loadDocs without a skills directory returns only DOC_FILES', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-skills-'))
+	try {
+		fs.writeFileSync(path.join(root, 'README.md'), 'readme\n')
+		assert.deepEqual(Object.keys(loadDocs(root)), ['README.md'])
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true })
+	}
 })

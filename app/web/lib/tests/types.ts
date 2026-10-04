@@ -1,9 +1,4 @@
-import type {
-	AdminAttemptView,
-	AnswerValue as TestAnswerValue,
-	QuestionTelemetry,
-	QuestionUiTemplate,
-} from '@bio-exam/exam-core'
+import type { AdminAttemptView, QuestionUiTemplate } from '@bio-exam/exam-core'
 
 export type TestQuestionType = string
 
@@ -71,14 +66,6 @@ export type TestAttemptSummary = {
 	scorePercentage: number
 	passed: boolean
 	submittedAt: string
-}
-
-export type SessionInfo = {
-	sessionId: string
-	startedAt: string // ISO 8601 timestamp
-	draftAnswers?: Record<string, TestAnswerValue> | null
-	draftLastQuestionId?: string | null
-	draftTelemetry?: Record<string, QuestionTelemetry> | null
 }
 
 export type AttemptReviewData = AdminAttemptView

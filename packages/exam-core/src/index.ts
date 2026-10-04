@@ -60,6 +60,8 @@ export type {
 	SubmitAttemptError,
 	SubmitAttemptRequest,
 } from './attempt-result'
+export { AttemptSessionSchema, SaveAttemptDraftRequestSchema } from './attempt-session'
+export type { AttemptSession, SaveAttemptDraftRequest } from './attempt-session'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
 export type { QuestionKeyPayload, QuestionMatchingPairs, QuestionOption } from './content'
 export {

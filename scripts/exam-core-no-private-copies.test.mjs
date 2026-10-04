@@ -139,6 +139,10 @@ const PRIVATE_COPY_NAMES = [
 			'scoreQuestionFacts',
 		],
 	},
+	{
+		positions: 'Phase 6 D-14',
+		names: ['SaveAttemptDraftRequestSchema', 'AttemptSessionSchema', 'SaveDraftAnswerSchema'],
+	},
 ]
 
 const PRIVATE_COPY_PATTERNS = [

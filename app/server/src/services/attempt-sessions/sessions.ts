@@ -2,6 +2,7 @@ import {
 	ATTEMPT_GRACE_PERIOD_MINUTES,
 	mergeTelemetryMaps,
 	type AnswerValue,
+	type AttemptSession,
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
@@ -10,13 +11,7 @@ import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { db } from '../../db/index.js'
 import { testSessions } from '../../db/schema.js'
 
-export type SessionInfo = {
-	sessionId: string
-	startedAt: string
-	draftAnswers: Record<string, unknown> | null
-	draftLastQuestionId: string | null
-	draftTelemetry: TelemetryMap | null
-}
+export type SessionInfo = AttemptSession
 
 export type StartAttemptSessionParams = {
 	testId: string

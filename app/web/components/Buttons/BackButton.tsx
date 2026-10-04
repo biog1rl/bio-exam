@@ -1,22 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { UnsavedChangesDialog } from '@/components/Buttons/UnsavedChangesDialog'
 import { Button } from '@/components/ui/button'
-import { useUnsavedChanges } from '@/store/unsavedChanges.store'
+import { UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
+import { type LeaveDecision, useUnsavedChanges } from '@/store/unsavedChanges.store'
 
 type Props = {
 	className?: string
@@ -25,20 +17,28 @@ type Props = {
 export default function BackButton({ className }: Props) {
 	const router = useRouter()
 	const pathname = usePathname() || '/'
-	const isDirty = useUnsavedChanges((s) => s.isDirty(pathname))
-	const clearDirty = useUnsavedChanges((s) => s.clear)
+	const leave = useUnsavedChanges((s) => s.leave)
+	const clearUnsaved = useUnsavedChanges((s) => s.clear)
+	const isLeaving = useUnsavedChanges((s) => !!s.leavingByPath[pathname])
 	const [open, setOpen] = useState(false)
+	const [description, setDescription] = useState(UNSAVED_CHANGES_TEXT.description)
+	const handledLeaveRef = useRef<Promise<LeaveDecision> | null>(null)
 
-	const doNavigate = () => {
-		router.back()
-	}
-
-	const onClick = () => {
-		if (isDirty) {
+	const onClick = async () => {
+		const pending = leave(pathname)
+		if (handledLeaveRef.current === pending) return
+		handledLeaveRef.current = pending
+		try {
+			const decision = await pending
+			if (decision.kind === 'navigate') {
+				router.back()
+				return
+			}
+			setDescription(decision.description)
 			setOpen(true)
-			return
+		} finally {
+			if (handledLeaveRef.current === pending) handledLeaveRef.current = null
 		}
-		doNavigate()
 	}
 
 	return (
@@ -47,33 +47,22 @@ export default function BackButton({ className }: Props) {
 				size="icon"
 				variant="outline"
 				className={className ?? 'size-9 cursor-pointer'}
-				onClick={onClick}
+				onClick={() => void onClick()}
 				aria-label="Назад"
+				aria-busy={isLeaving}
 			>
-				<ArrowLeft className="size-4" />
+				{isLeaving ? <Loader2 className="size-4 animate-spin" /> : <ArrowLeft className="size-4" />}
 			</Button>
 
-			<AlertDialog open={open} onOpenChange={setOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Есть несохранённые изменения</AlertDialogTitle>
-						<AlertDialogDescription>Уйти без сохранения?</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel className="cursor-pointer">Остаться</AlertDialogCancel>
-						<AlertDialogAction
-							className="cursor-pointer bg-red-500 text-white hover:bg-red-500/80"
-							onClick={() => {
-								setOpen(false)
-								clearDirty(pathname) // очищаем флаг для текущего пути
-								doNavigate()
-							}}
-						>
-							Выйти
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+			<UnsavedChangesDialog
+				open={open}
+				onOpenChange={setOpen}
+				description={description}
+				onLeave={() => {
+					clearUnsaved(pathname)
+					router.back()
+				}}
+			/>
 		</>
 	)
 }

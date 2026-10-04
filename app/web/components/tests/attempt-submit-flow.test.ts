@@ -7,7 +7,6 @@ import {
 	bannerFor,
 	classifyStartFailure,
 	classifySubmitFailure,
-	isClientExpired,
 	storageKeysToClear,
 	SUBMIT_FLOW_TEXT,
 	type AttemptBanner,
@@ -129,29 +128,5 @@ describe('blocksInteraction', () => {
 		['retry', false],
 	])('%s даёт %s', (banner, blocked) => {
 		expect(blocksInteraction(banner)).toBe(blocked)
-	})
-})
-
-describe('isClientExpired', () => {
-	const startedAt = '2026-10-04T10:00:00.000Z'
-	const startMs = Date.parse(startedAt)
-	const twelveMinutes = 12 * 60 * 1000
-
-	test('лимит 10 минут и льгота 2 минуты: за 1 мс до конца ещё не просрочено', () => {
-		expect(isClientExpired({ startedAt, timeLimitMinutes: 10, nowMs: startMs + twelveMinutes - 1 })).toBe(false)
-	})
-
-	test('лимит 10 минут и льгота 2 минуты: через 1 мс после конца просрочено', () => {
-		expect(isClientExpired({ startedAt, timeLimitMinutes: 10, nowMs: startMs + twelveMinutes + 1 })).toBe(true)
-	})
-
-	test('без лимита не просрочено', () => {
-		expect(isClientExpired({ startedAt, timeLimitMinutes: null, nowMs: startMs + 10 * twelveMinutes })).toBe(false)
-	})
-
-	test('нечитаемый startedAt не считается просроченным', () => {
-		expect(
-			isClientExpired({ startedAt: 'not-a-date', timeLimitMinutes: 10, nowMs: startMs + 10 * twelveMinutes })
-		).toBe(false)
 	})
 })

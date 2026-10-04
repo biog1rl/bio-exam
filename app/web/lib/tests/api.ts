@@ -1,15 +1,7 @@
-import type { AttemptView, SubmitAttemptRequest } from '@bio-exam/exam-core'
+import type { AttemptSession, AttemptView, SaveAttemptDraftRequest, SubmitAttemptRequest } from '@bio-exam/exam-core'
 
 import { apiFetch } from '../api-fetch'
-import type {
-	PublicTestDetail,
-	PublicTestListItem,
-	PublicTestQuestion,
-	QuestionTelemetry,
-	SessionInfo,
-	TestAnswerValue,
-	TestAttemptSummary,
-} from './types'
+import type { PublicTestDetail, PublicTestListItem, PublicTestQuestion, TestAttemptSummary } from './types'
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await apiFetch(url, {
@@ -133,33 +125,35 @@ export async function fetchTopicTests(topicSlug: string) {
 	return fetchJson<{ tests: PublicTestListItem[] }>(`/api/tests/public/topics/${topicSlug}/tests`)
 }
 
-export async function startTestSession(testId: string): Promise<SessionInfo> {
-	return fetchAttemptJson<SessionInfo>(`/api/tests/public/tests/${testId}/start`, { method: 'POST' })
+export async function startTestSession(testId: string): Promise<AttemptSession> {
+	return fetchAttemptJson<AttemptSession>(`/api/tests/public/tests/${testId}/start`, { method: 'POST' })
 }
 
-export async function saveAnswer(
+export const KEEPALIVE_BODY_LIMIT_BYTES = 60_000
+
+export type AttemptDraftSaveResult = { kind: 'response'; status: number } | { kind: 'network' } | { kind: 'too-large' }
+
+export async function saveAttemptDraft(
 	testId: string,
 	sessionId: string,
-	questionId: string,
-	value: TestAnswerValue,
-	telemetry?: TelemetryMap
-): Promise<void> {
-	// Errors silently ignored (localStorage WAL fallback)
-	await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
-		method: 'PATCH',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ questionId, value, telemetry }),
-	})
-}
-
-type TelemetryMap = Record<string, QuestionTelemetry>
-
-export async function saveSessionTelemetry(testId: string, sessionId: string, telemetry: TelemetryMap): Promise<void> {
-	await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
-		method: 'PATCH',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ telemetry }),
-	})
+	body: SaveAttemptDraftRequest,
+	options: { keepalive: boolean }
+): Promise<AttemptDraftSaveResult> {
+	const json = JSON.stringify(body)
+	if (options.keepalive && new TextEncoder().encode(json).length > KEEPALIVE_BODY_LIMIT_BYTES) {
+		return { kind: 'too-large' }
+	}
+	try {
+		const response = await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: json,
+			keepalive: options.keepalive,
+		})
+		return { kind: 'response', status: response.status }
+	} catch {
+		return { kind: 'network' }
+	}
 }
 
 export async function submitPublicTestAnswers(testId: string, request: SubmitAttemptRequest): Promise<AttemptView> {

@@ -39,6 +39,11 @@ export function resolveClientAttemptId(
 	return clientAttemptId
 }
 
+export function storedClientAttemptId(storage: ClientAttemptStorage, key: string, sessionId: string): string | null {
+	const stored = readStoredClientAttempt(storage, key)
+	return stored && stored.sessionId === sessionId ? stored.clientAttemptId : null
+}
+
 export function forgetClientAttemptId(storage: ClientAttemptStorage, key: string): void {
 	try {
 		storage.removeItem(key)

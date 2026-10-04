@@ -1,4 +1,5 @@
 import { apiFetch } from '@/lib/api-fetch'
+import { forgetQuestionDraftCopies } from '@/lib/drafts/question-draft-copy'
 
 import type { TestFormData } from '../../types'
 
@@ -51,6 +52,11 @@ export async function createQuestionDraft(testId: string) {
 export async function deleteQuestionDraft(testId: string, draftId: string) {
 	const response = await apiFetch(`/api/tests/${testId}/question-drafts/${draftId}`, { method: 'DELETE' })
 	if (!response.ok) throw new Error(await readApiError(response, 'Не удалось удалить черновик вопроса'))
+	try {
+		forgetQuestionDraftCopies(window.localStorage, draftId)
+	} catch {
+		return
+	}
 }
 
 export async function deleteTestQuestion(testId: string, questionId: string) {
