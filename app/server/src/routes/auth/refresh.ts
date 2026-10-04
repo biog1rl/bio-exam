@@ -1,100 +1,22 @@
-import { eq } from 'drizzle-orm'
 import { Router } from 'express'
-import jwt from 'jsonwebtoken'
-import crypto from 'node:crypto'
 
-import { AUTH_CONFIG } from '../../config/auth.js'
-import { db } from '../../db/index.js'
-import { refreshTokens, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { setSessionCookie } from '../../middleware/auth/session.js'
-import { rateLimiter } from '../../middleware/rateLimiter.js'
+import { readCookie, REFRESH_COOKIE, rotateRefreshToken, setSessionCookies } from '../../services/session/index.js'
 
 const router = Router()
 
-function readCookie(req: any, name: string): string | null {
-	const raw = req.headers.cookie
-	if (!raw) return null
-	const found = raw
-		.split(';')
-		.map((p: string) => p.trim())
-		.find((p: string) => p.startsWith(name + '='))
-	if (!found) return null
+router.post('/', async (req, res, next) => {
 	try {
-		return decodeURIComponent(found.split('=').slice(1).join('='))
-	} catch {
-		return null
-	}
-}
-
-router.post('/', rateLimiter({ maxAttempts: 10, windowMs: 60 * 1000, keyPrefix: 'refresh' }), async (req, res) => {
-	try {
-		const raw = readCookie(req, 'refresh_token')
+		const raw = readCookie(req, REFRESH_COOKIE)
 		if (!raw) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 
-		const tokenHash = crypto.createHash('sha256').update(raw).digest('hex')
+		const result = await rotateRefreshToken({ raw, ip: req.ip || req.socket.remoteAddress || null })
+		if (result.outcome !== 'rotated') return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 
-		// find token
-		const rows = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash)).limit(1)
-		const row = rows[0]
-		if (!row) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
-
-		if (row.revokedAt) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
-		if (new Date(row.expiresAt) < new Date()) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
-
-		// Issue new access token
-		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, row.userId))
-		const roles = rs.map((r) => r.role)
-
-		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? AUTH_CONFIG.sessionMaxAgeSec)
-		const token = jwt.sign({ sub: row.userId, roles }, AUTH_CONFIG.jwtSecret, { expiresIn: `${ACCESS_EXPIRES_SEC}s` })
-
-		setSessionCookie(res, token, ACCESS_EXPIRES_SEC)
-
-		// Optionally rotate refresh token: create new and revoke old
-		const REFRESH_EXPIRES_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? AUTH_CONFIG.sessionMaxAgeDays)
-		const newRefresh = crypto.randomBytes(64).toString('hex')
-		const newHash = crypto.createHash('sha256').update(newRefresh).digest('hex')
-		const newExpires = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000)
-
-		await db.transaction(async (tx) => {
-			await tx
-				.update(refreshTokens)
-				.set({ revokedAt: new Date() } as any)
-				.where(eq(refreshTokens.id, row.id))
-			await tx.insert(refreshTokens).values({
-				userId: row.userId,
-				tokenHash: newHash,
-				expiresAt: newExpires,
-				createdByIp: req.ip || req.socket.remoteAddress || null,
-			} as any)
-		})
-
-		const secure = process.env.NODE_ENV === 'production'
-		const refreshParts = [
-			`refresh_token=${encodeURIComponent(newRefresh)}`,
-			`Path=/`,
-			`HttpOnly`,
-			`SameSite=Lax`,
-			`Max-Age=${REFRESH_EXPIRES_DAYS * 24 * 60 * 60}`,
-			secure ? 'Secure' : undefined,
-		].filter(Boolean)
-
-		const refreshCookie = refreshParts.join('; ')
-		const prev = res.getHeader('Set-Cookie')
-		if (!prev) {
-			res.setHeader('Set-Cookie', refreshCookie)
-		} else if (Array.isArray(prev)) {
-			res.setHeader('Set-Cookie', [...prev, refreshCookie])
-		} else {
-			res.setHeader('Set-Cookie', [String(prev), refreshCookie])
-		}
-
+		setSessionCookies(res, { accessToken: result.accessToken, refreshToken: result.refreshToken })
 		res.json({ ok: true })
 	} catch (e) {
-		// eslint-disable-next-line no-console
-		console.error('Refresh token error', e)
-		res.status(500).json({ error: 'Internal Server Error' })
+		next(e)
 	}
 })
 

@@ -1,16 +1,13 @@
 import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { Router } from 'express'
-import jwt from 'jsonwebtoken'
-import crypto from 'node:crypto'
 
-import { AUTH_CONFIG } from '../../config/auth.js'
 import { db } from '../../db/index.js'
-import { users, userRoles, refreshTokens } from '../../db/schema.js'
+import { users } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { setSessionCookie } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
 import { loginRateLimiter } from '../../middleware/rateLimiter.js'
+import { openSession, setSessionCookies } from '../../services/session/index.js'
 
 const router = Router()
 
@@ -106,51 +103,12 @@ router.post('/', async (req, res, next) => {
 			await updateLoginGuardFields(u.id, { failedLoginAttempts: 0, lockedUntil: null })
 		}
 
-		// Получаем роли из БД
-		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, u.id))
-		const roles = rs.map((r) => r.role)
-
-		// По умолчанию держим access cookie столько же, сколько живёт сессия в its-doc.
-		const ACCESS_EXPIRES_SEC = Number(process.env.ACCESS_TOKEN_EXPIRES_SEC ?? AUTH_CONFIG.sessionMaxAgeSec)
-		const token = jwt.sign({ sub: u.id, login: u.login ?? null, roles }, AUTH_CONFIG.jwtSecret, {
-			expiresIn: `${ACCESS_EXPIRES_SEC}s`,
-		})
-
-		// Create refresh token and store hash in DB
-		const REFRESH_EXPIRES_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? AUTH_CONFIG.sessionMaxAgeDays)
-		const refreshToken = crypto.randomBytes(64).toString('hex')
-		const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
-		const expiresAt = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000)
-
-		await db.insert(refreshTokens).values({
+		const session = await openSession({
 			userId: u.id,
-			tokenHash: tokenHash,
-			expiresAt,
-			createdByIp: req.ip || req.socket.remoteAddress || null,
+			login: u.login ?? null,
+			ip: req.ip || req.socket.remoteAddress || null,
 		})
-
-		// Set cookies: access token (short-lived) + refresh token (long-lived)
-		setSessionCookie(res, token, ACCESS_EXPIRES_SEC)
-
-		const secure = process.env.NODE_ENV === 'production'
-		const refreshParts = [
-			`refresh_token=${encodeURIComponent(refreshToken)}`,
-			`Path=/`,
-			`HttpOnly`,
-			`SameSite=Lax`,
-			`Max-Age=${REFRESH_EXPIRES_DAYS * 24 * 60 * 60}`,
-			secure ? 'Secure' : undefined,
-		].filter(Boolean)
-
-		const refreshCookie = refreshParts.join('; ')
-		const prev = res.getHeader('Set-Cookie')
-		if (!prev) {
-			res.setHeader('Set-Cookie', refreshCookie)
-		} else if (Array.isArray(prev)) {
-			res.setHeader('Set-Cookie', [...prev, refreshCookie])
-		} else {
-			res.setHeader('Set-Cookie', [String(prev), refreshCookie])
-		}
+		setSessionCookies(res, { accessToken: session.accessToken, refreshToken: session.refreshToken })
 
 		res.json({ ok: true })
 	} catch (e) {

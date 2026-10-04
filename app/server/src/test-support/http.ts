@@ -1,16 +1,10 @@
-import type { RoleKey } from '@bio-exam/rbac'
-
 import type { Express } from 'express'
-import jwt from 'jsonwebtoken'
 import type { AddressInfo } from 'node:net'
 
-import { AUTH_CONFIG } from '../config/auth.js'
-
-export function sessionCookieFor(user: { id: string; roles: RoleKey[]; login?: string | null }): string {
-	const token = jwt.sign({ sub: user.id, roles: user.roles, login: user.login ?? null }, AUTH_CONFIG.jwtSecret, {
-		expiresIn: '10m',
-	})
-	return `${AUTH_CONFIG.sessionCookieName}=${encodeURIComponent(token)}`
+export async function sessionCookieFor(user: { id: string; login?: string | null }): Promise<string> {
+	const { ACCESS_COOKIE, openSession } = await import('../services/session/index.js')
+	const session = await openSession({ userId: user.id, login: user.login ?? null, ip: null })
+	return `${ACCESS_COOKIE}=${encodeURIComponent(session.accessToken)}`
 }
 
 export function startTestServer(app: Express): Promise<{ baseUrl: string; close: () => Promise<void> }> {

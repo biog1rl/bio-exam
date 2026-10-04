@@ -88,7 +88,7 @@ beforeAll(async () => {
 	oversize = Buffer.concat([tinyPng, Buffer.alloc(FIVE_MB + 1 - tinyPng.length)])
 
 	server = await startTestServer(app)
-	cookie = sessionCookieFor({ id: adminId, roles: ['admin'] })
+	cookie = await sessionCookieFor({ id: adminId })
 }, 60_000)
 
 afterAll(async () => {

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 
-const KNOWN_DEFECTS = new Set(['AUTH-04-logout', 'AUTH-05-parallel-refresh', 'AUTH-06-foreign-ip'])
+const KNOWN_DEFECTS = new Set(['AUTH-05-parallel-refresh', 'AUTH-06-foreign-ip'])
 
 const PASSWORD = 'defects-password-1'
 const ATTACKER_IP = '203.0.113.10'
@@ -191,15 +191,11 @@ describe('AUTH-04-logout: access-токен после выхода', () => {
 		assert.ok(oldSession)
 	})
 
-	defectTest(
-		'AUTH-04-logout',
-		'после выхода старый bio_exam_session получает 401 на /api/auth/me — исправляется в 04-06',
-		async () => {
-			const session = required(oldSession, 'old session')
-			const reply = await call(ctx, 'GET', '/api/auth/me', { cookies: `bio_exam_session=${session}` })
-			assert.equal(reply.status, 401)
-		}
-	)
+	defectTest('AUTH-04-logout', 'после выхода старый bio_exam_session получает 401 на /api/auth/me', async () => {
+		const session = required(oldSession, 'old session')
+		const reply = await call(ctx, 'GET', '/api/auth/me', { cookies: `bio_exam_session=${session}` })
+		assert.equal(reply.status, 401)
+	})
 })
 
 describe('AUTH-05-parallel-refresh: два одновременных refresh', () => {

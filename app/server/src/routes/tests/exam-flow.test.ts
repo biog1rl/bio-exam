@@ -97,8 +97,8 @@ beforeAll(async () => {
 	topicId = topic.id
 
 	server = await startTestServer(app)
-	adminCookie = sessionCookieFor({ id: admin.id, roles: ['admin'] })
-	studentCookie = sessionCookieFor({ id: student.id, roles: ['user'] })
+	adminCookie = await sessionCookieFor({ id: admin.id })
+	studentCookie = await sessionCookieFor({ id: student.id })
 }, 60_000)
 
 afterAll(async () => {

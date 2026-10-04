@@ -6,6 +6,23 @@ import { DEFAULTS } from '../lib/constants.js'
 
 const jwtSecret = process.env.AUTH_JWT_SECRET || DEFAULTS.JWT_SECRET
 
+const ACCESS_TOKEN_TTL_DEFAULT_SEC = 900
+const ACCESS_TOKEN_TTL_MIN_SEC = 60
+const ACCESS_TOKEN_TTL_MAX_SEC = 3600
+
+export function parseAccessTokenTtl(raw: string | undefined): number {
+	if (raw === undefined) return ACCESS_TOKEN_TTL_DEFAULT_SEC
+	const value = /^\d+$/.test(raw) ? Number(raw) : Number.NaN
+	if (!Number.isInteger(value) || value < ACCESS_TOKEN_TTL_MIN_SEC || value > ACCESS_TOKEN_TTL_MAX_SEC) {
+		throw new Error(
+			`ACCESS_TOKEN_EXPIRES_SEC must be an integer from ${ACCESS_TOKEN_TTL_MIN_SEC} to ${ACCESS_TOKEN_TTL_MAX_SEC} seconds`
+		)
+	}
+	return value
+}
+
+const sessionMaxAgeDays = Number(process.env.SESSION_MAX_AGE_DAYS ?? DEFAULTS.SESSION_MAX_AGE_DAYS)
+
 // Fail-fast in production if secret is missing or left as default
 if (process.env.NODE_ENV === 'production') {
 	if (!process.env.AUTH_JWT_SECRET || jwtSecret === DEFAULTS.JWT_SECRET) {
@@ -27,7 +44,11 @@ export const AUTH_CONFIG = {
 	/**
 	 * Время жизни сессии в днях
 	 */
-	sessionMaxAgeDays: Number(process.env.SESSION_MAX_AGE_DAYS ?? DEFAULTS.SESSION_MAX_AGE_DAYS),
+	sessionMaxAgeDays,
+
+	accessTokenTtlSec: parseAccessTokenTtl(process.env.ACCESS_TOKEN_EXPIRES_SEC),
+
+	refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS ?? sessionMaxAgeDays),
 
 	/**
 	 * Время жизни сессии в секундах (вычисляемое)

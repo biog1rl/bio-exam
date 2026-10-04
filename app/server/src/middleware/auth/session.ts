@@ -1,14 +1,11 @@
-import { eq } from 'drizzle-orm'
 import { NextFunction, Request, Response } from 'express'
-import jwt from 'jsonwebtoken'
 
-import { AUTH_CONFIG } from '../../config/auth.js'
-import { db } from '../../db/index.js'
-import { users } from '../../db/schema.js'
+import { ACCESS_COOKIE, loadSessionUser, readCookie, verifyAccessToken } from '../../services/session/index.js'
 
 export type SessionUser = {
 	id: string
 	login?: string | null
+	sessionId: string
 }
 
 declare module 'express-serve-static-core' {
@@ -17,72 +14,18 @@ declare module 'express-serve-static-core' {
 	}
 }
 
-const { sessionCookieName: COOKIE, jwtSecret: JWT_SECRET } = AUTH_CONFIG
-
-function readCookie(req: Request, name: string): string | null {
-	const raw = req.headers.cookie
-	if (!raw) return null
-	const found = raw
-		.split(';')
-		.map((p) => p.trim())
-		.find((p) => p.startsWith(name + '='))
-	if (!found) return null
-	try {
-		return decodeURIComponent(found.split('=').slice(1).join('='))
-	} catch {
-		return null
-	}
-}
-
-export function setSessionCookie(res: Response, token: string, maxAgeSec: number) {
-	const secure = process.env.NODE_ENV === 'production'
-	const parts = [
-		`${COOKIE}=${encodeURIComponent(token)}`,
-		`Path=/`,
-		`HttpOnly`,
-		`SameSite=Lax`,
-		`Max-Age=${maxAgeSec}`,
-		secure ? 'Secure' : undefined,
-	].filter(Boolean)
-	res.setHeader('Set-Cookie', parts.join('; '))
-}
-
-export function clearSessionCookie(res: Response) {
-	const secure = process.env.NODE_ENV === 'production'
-	const parts = [`${COOKIE}=`, `Path=/`, `HttpOnly`, `SameSite=Lax`, `Max-Age=0`, secure ? 'Secure' : undefined].filter(
-		Boolean
-	)
-	res.setHeader('Set-Cookie', parts.join('; '))
-}
-
-type JwtPayload = { sub?: string }
-
-function verifiedUserId(token: string): string | null {
-	try {
-		const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
-		return typeof payload.sub === 'string' && payload.sub ? payload.sub : null
-	} catch {
-		return null
-	}
-}
-
 export function sessionOptional() {
 	return async (req: Request, _res: Response, next: NextFunction) => {
-		const token = readCookie(req, COOKIE)
-		const userId = token ? verifiedUserId(token) : null
-		if (!userId) {
+		const token = readCookie(req, ACCESS_COOKIE)
+		const claims = token ? verifyAccessToken(token) : null
+		if (!claims) {
 			req.authUser = null
 			return next()
 		}
 
 		try {
-			const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
-			if (!u || !u.isActive) {
-				req.authUser = null
-				return next()
-			}
-
-			req.authUser = { id: userId, login: u.login }
+			const user = await loadSessionUser(claims.sessionId, claims.userId)
+			req.authUser = user ? { id: user.id, login: user.login, sessionId: claims.sessionId } : null
 		} catch (error) {
 			return next(error)
 		}

@@ -107,7 +107,7 @@ test.describe.serial('AUTH-04: logout revokes the access token @session', () => 
 	let context: BrowserContext | undefined
 	let oldSession = ''
 
-	test('AUTH-04 setup: student logs in and logs out @session @known-defect', async ({ browser }, testInfo) => {
+	test('AUTH-04 setup: student logs in and logs out @session', async ({ browser }, testInfo) => {
 		context = await loginContext(browser, testInfo, 'user')
 		const session = (await context.cookies()).find((cookie) => cookie.name === SESSION_COOKIE)
 		expect(session?.value, SESSION_COOKIE).toBeTruthy()
@@ -120,14 +120,11 @@ test.describe.serial('AUTH-04: logout revokes the access token @session', () => 
 		await context?.close()
 	})
 
-	test.fail(
-		'AUTH-04 — fixed in Phase 4 (AUTH-04): after logout the old access cookie is rejected @session @known-defect',
-		async () => {
-			await context!.addCookies([{ name: SESSION_COOKIE, value: oldSession, url: baseUrlOf(test.info()) }])
-			const me = await context!.request.get('/api/auth/me')
-			expect(me.status(), 'GET /api/auth/me with the access cookie from before logout').toBe(401)
-		}
-	)
+	test('AUTH-04: after logout the old access cookie is rejected @session', async () => {
+		await context!.addCookies([{ name: SESSION_COOKIE, value: oldSession, url: baseUrlOf(test.info()) }])
+		const me = await context!.request.get('/api/auth/me')
+		expect(me.status(), 'GET /api/auth/me with the access cookie from before logout').toBe(401)
+	})
 })
 
 test('role user does not see the /admin/users section @session', async ({ studentPage: page }) => {

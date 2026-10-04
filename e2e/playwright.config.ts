@@ -71,6 +71,7 @@ export default defineConfig({
 				PORT: String(apiPort),
 				ALLOWED_ORIGIN: webOrigin,
 				BIO_EXAM_ISOLATED_ENV: '1',
+				ACCESS_TOKEN_EXPIRES_SEC: '3600',
 			},
 			reuseExistingServer: false,
 			timeout: 120_000,

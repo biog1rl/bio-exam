@@ -1,73 +1,26 @@
-import { eq } from 'drizzle-orm'
 import { Router } from 'express'
-import crypto from 'node:crypto'
 
-import { db } from '../../db/index.js'
-import { refreshTokens } from '../../db/schema.js'
-import { clearSessionCookie } from '../../middleware/auth/session.js'
+import {
+	ACCESS_COOKIE,
+	clearSessionCookies,
+	endSession,
+	readCookie,
+	REFRESH_COOKIE,
+} from '../../services/session/index.js'
 
 const router = Router()
 
-function readCookie(req: any, name: string): string | null {
-	const raw = req.headers.cookie
-	if (!raw) return null
-	const found = raw
-		.split(';')
-		.map((p: string) => p.trim())
-		.find((p: string) => p.startsWith(name + '='))
-	if (!found) return null
+router.post('/', async (req, res, next) => {
+	let failure: unknown = null
 	try {
-		return decodeURIComponent(found.split('=').slice(1).join('='))
-	} catch {
-		return null
-	}
-}
-
-router.post('/', async (req, res) => {
-	try {
-		// Revoke refresh token if present
-		const raw = readCookie(req, 'refresh_token')
-		if (raw) {
-			const tokenHash = crypto.createHash('sha256').update(raw).digest('hex')
-			await db
-				.update(refreshTokens)
-				.set({ revokedAt: new Date() } as any)
-				.where(eq(refreshTokens.tokenHash, tokenHash))
-		}
-
-		clearSessionCookie(res)
-		// Clear refresh cookie (current path + legacy path)
-		const secure = process.env.NODE_ENV === 'production'
-		const clearRootPathParts = [
-			`refresh_token=`,
-			`Path=/`,
-			`HttpOnly`,
-			`SameSite=Lax`,
-			`Max-Age=0`,
-			secure ? 'Secure' : undefined,
-		].filter(Boolean)
-		const clearLegacyPathParts = [
-			`refresh_token=`,
-			`Path=/api/auth/refresh`,
-			`HttpOnly`,
-			`SameSite=Lax`,
-			`Max-Age=0`,
-			secure ? 'Secure' : undefined,
-		].filter(Boolean)
-		const prev = res.getHeader('Set-Cookie')
-		const nextCookies = [
-			...(Array.isArray(prev) ? prev.map(String) : prev ? [String(prev)] : []),
-			clearRootPathParts.join('; '),
-			clearLegacyPathParts.join('; '),
-		]
-		res.setHeader('Set-Cookie', nextCookies)
-
-		res.json({ ok: true })
+		await endSession({ accessToken: readCookie(req, ACCESS_COOKIE), refreshToken: readCookie(req, REFRESH_COOKIE) })
 	} catch (e) {
-		// eslint-disable-next-line no-console
-		console.error('Logout error', e)
-		res.status(500).json({ error: 'Internal Server Error' })
+		failure = e
+	} finally {
+		clearSessionCookies(res)
 	}
+	if (failure) return next(failure)
+	res.json({ ok: true })
 })
 
 export default router
