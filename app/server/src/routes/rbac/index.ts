@@ -17,7 +17,7 @@ import {
 	PageRuleSchema,
 	PatchPageRuleSchema,
 } from '../../schemas/rbac.js'
-import { accessPolicy, isValidAction } from '../../services/access-policy/index.js'
+import { accessPolicy, isValidAction, loadRoleTraits } from '../../services/access-policy/index.js'
 
 const router = Router()
 
@@ -25,11 +25,14 @@ const router = Router()
 
 router.get('/roles', sessionRequired(), requirePerm('rbac', 'read'), async (_req, res, next) => {
 	try {
+		const traits = await loadRoleTraits()
 		const roles = Object.values(ROLE_REGISTRY).map((r) => ({
 			key: r.key,
 			name: r.name,
 			order: r.order ?? 999,
 			grants: r.grants,
+			ownsZone: traits.get(r.key)?.ownsZone ?? false,
+			groupMember: traits.get(r.key)?.groupMember ?? false,
 		}))
 		const overrides = await db.select().from(rbacRoleGrants)
 		res.json({ roles, overrides })

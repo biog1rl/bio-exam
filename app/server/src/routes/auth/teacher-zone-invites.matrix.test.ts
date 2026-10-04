@@ -10,24 +10,7 @@ import {
 	type ZoneUser,
 } from '../../test-support/teacher-zone-world.js'
 
-const KNOWN_DEFECTS = new Set<string>([
-	'admin GET /api/rbac/roles',
-	'admin POST /invites roleKey nope',
-	'admin POST /invites roleKey user group of teacherB',
-	'admin POST /invites without roleKey',
-	'adminNoZone DELETE /api/users/:own/login-throttle',
-	'adminNoZone POST /api/users/:own/sessions/revoke',
-	'teacherA DELETE /api/users/:own/login-throttle',
-	'teacherA POST /api/users/:own/sessions/revoke',
-	'teacherA POST /invites group of teacherB',
-	'teacherA POST /invites own group',
-	'teacherA POST /invites roleKey admin',
-	'teacherA POST /invites roleKey teacher',
-	'teacherA POST /invites userId allow tests.write',
-	'teacherA POST /invites userId deactivated',
-	'teacherA POST /invites userId teacherOff',
-	'teacherA POST /invites without groupId',
-])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function check(id: string, title: string, fn: () => Promise<void>): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test
@@ -211,7 +194,9 @@ row(
 	async (p) => {
 		const student = await w.freshUser({ isActive: false, activated: true })
 		await teacherAGroup([student.id])
-		expectStatus(await send(p, 'POST', '/api/auth/invites', { userId: student.id }), 409)
+		const reply = await send(p, 'POST', '/api/auth/invites', { userId: student.id })
+		expectStatus(reply, 409)
+		assert.equal(reply.body.error, 'Ученик уже активировал приглашение. Новую ссылку выдаёт администратор')
 		assert.equal(await inviteCount(student.id), 0)
 	}
 )
@@ -250,6 +235,14 @@ row(['admin'], 'POST /invites without roleKey', '400 и пользователь
 row(['admin'], 'POST /invites roleKey nope', '400 и пользователь не создан', async (p) => {
 	const login = uniqueLogin()
 	expectStatus(await send(p, 'POST', '/api/auth/invites', inviteBody(login, { roleKey: 'nope' })), 400)
+	await expectNoUser(login)
+})
+row(['admin'], 'POST /invites missing group', '404 и пользователь не создан', async (p) => {
+	const login = uniqueLogin()
+	expectStatus(
+		await send(p, 'POST', '/api/auth/invites', inviteBody(login, { roleKey: 'user', groupId: crypto.randomUUID() })),
+		404
+	)
 	await expectNoUser(login)
 })
 row(['admin'], 'POST /invites userId s1', '409 активному', async (p) => {

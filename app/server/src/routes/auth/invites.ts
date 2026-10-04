@@ -1,14 +1,17 @@
+import { ROLE_KEYS, STUDENT_ROLE_KEY } from '@bio-exam/rbac'
+
 import { eq } from 'drizzle-orm'
 import { Router, type Request } from 'express'
 import { randomBytes, createHash } from 'node:crypto'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import { invites, users, userRoles } from '../../db/schema.js'
-import { BCRYPT_COST } from '../../lib/constants.js'
+import { invites, studentGroups, userGroups, users, userRoles } from '../../db/schema.js'
+import { BCRYPT_COST, ERROR_MESSAGES } from '../../lib/constants.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { rateLimiter } from '../../middleware/rateLimiter.js'
+import { canManageGroup, canManageStudent, hasGlobalZone } from '../../services/access-policy/index.js'
 import { revokeUserSessions } from '../../services/session/index.js'
 
 const router = Router()
@@ -47,7 +50,10 @@ const CreateInviteSchema = z.object({
 	firstName: z.string().trim().optional(),
 	lastName: z.string().trim().optional(),
 	roleKey: z.string().trim().min(1, 'Role is required').optional(), // опционально, если перегенерируем для существующего пользователя
+	groupId: z.string().uuid().optional(),
 })
+
+const KNOWN_ROLE_KEYS: ReadonlySet<string> = new Set(ROLE_KEYS)
 
 const AcceptSchema = z.object({
 	token: z.string().min(8, 'Invalid token'),
@@ -67,6 +73,7 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 		}
 		const body = parsed.data
+		const global = await hasGlobalZone(req)
 
 		let userId: string | undefined
 
@@ -74,6 +81,33 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			const login = body.login || null
 			if (login && !LOGIN_RE.test(login)) {
 				return res.status(400).json({ error: 'Login is invalid' })
+			}
+
+			let roleKey: string
+			if (global) {
+				if (!body.roleKey) return res.status(400).json({ error: 'Role is required' })
+				if (!KNOWN_ROLE_KEYS.has(body.roleKey)) return res.status(400).json({ error: ERROR_MESSAGES.UNKNOWN_ROLE })
+				roleKey = body.roleKey
+			} else {
+				if (body.roleKey !== undefined && body.roleKey !== STUDENT_ROLE_KEY) {
+					return res.status(403).json({ error: 'Forbidden' })
+				}
+				roleKey = STUDENT_ROLE_KEY
+			}
+
+			const groupId = body.groupId ?? null
+			if (global) {
+				if (groupId) {
+					const [group] = await db
+						.select({ id: studentGroups.id })
+						.from(studentGroups)
+						.where(eq(studentGroups.id, groupId))
+						.limit(1)
+					if (!group) return res.status(404).json({ error: 'Group not found' })
+				}
+			} else {
+				if (!groupId) return res.status(400).json({ error: 'Group is required' })
+				if (!(await canManageGroup(req, groupId))) return res.status(403).json({ error: 'Forbidden' })
 			}
 
 			await db.transaction(async (tx) => {
@@ -90,14 +124,16 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 				userId = u.id
 
 				// Назначаем роль пользователю
-				if (body.roleKey) {
-					await tx
-						.insert(userRoles)
-						.values({
-							userId: u.id,
-							roleKey: body.roleKey,
-						})
-						.onConflictDoNothing()
+				await tx
+					.insert(userRoles)
+					.values({
+						userId: u.id,
+						roleKey,
+					})
+					.onConflictDoNothing()
+
+				if (groupId) {
+					await tx.insert(userGroups).values({ groupId, userId: u.id }).onConflictDoNothing()
 				}
 			})
 		} else {
@@ -105,33 +141,44 @@ router.post('/', sessionRequired(), requirePerm('users', 'invite'), async (req, 
 			if (!userId) {
 				return res.status(400).json({ error: 'User ID is required' })
 			}
+			if (!global && body.roleKey !== undefined && body.roleKey !== STUDENT_ROLE_KEY) {
+				return res.status(403).json({ error: 'Forbidden' })
+			}
 			const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
 			if (!u) return res.status(404).json({ error: 'User not found' })
+			if (!global && !(await canManageStudent(req, u.id))) {
+				return res.status(403).json({ error: 'Forbidden' })
+			}
 			if (u.isActive) {
 				return res
 					.status(409)
 					.json({ error: 'Пользователь уже активен: приглашение выдаётся только неактивному пользователю' })
 			}
+			if (!global && u.activatedAt !== null) {
+				return res.status(409).json({ error: 'Ученик уже активировал приглашение. Новую ссылку выдаёт администратор' })
+			}
 
-			// Если перегенерируем ссылку для существующего пользователя и roleKey не указан,
-			// получаем первую роль пользователя из БД
-			if (!body.roleKey) {
-				const userRole = await db.query.userRoles.findFirst({
-					where: eq(userRoles.userId, userId),
-				})
-				if (userRole) {
-					body.roleKey = userRole.roleKey
+			if (global) {
+				// Если перегенерируем ссылку для существующего пользователя и roleKey не указан,
+				// получаем первую роль пользователя из БД
+				if (!body.roleKey) {
+					const userRole = await db.query.userRoles.findFirst({
+						where: eq(userRoles.userId, userId),
+					})
+					if (userRole) {
+						body.roleKey = userRole.roleKey
+					}
+				}
+
+				// Проверяем, что roleKey есть (обязателен для назначения роли новому пользователю)
+				if (!body.roleKey) {
+					return res.status(400).json({ error: 'Role is required' })
 				}
 			}
 		}
 
 		if (!userId) {
 			return res.status(500).json({ error: 'Failed to create or find user' })
-		}
-
-		// Проверяем, что roleKey есть (обязателен для назначения роли новому пользователю)
-		if (!body.roleKey) {
-			return res.status(400).json({ error: 'Role is required' })
 		}
 
 		await db.delete(invites).where(eq(invites.userId, userId))
