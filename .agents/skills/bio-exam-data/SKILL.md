@@ -1,6 +1,6 @@
 ---
 name: bio-exam-data
-description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/server/drizzle). Применять перед правкой схемы или миграций, перед любой командой, тестом или скриптом, которые касаются базы, и перед служебными командами хранилища storage:reconcile и assets:refs.
+description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/server/drizzle). Применять перед правкой схемы или миграций, таблиц зоны учителя и строк ролей, перед любой командой, тестом или скриптом, которые касаются базы, и перед служебными командами хранилища storage:reconcile и assets:refs.
 ---
 
 # bio-exam data
@@ -8,11 +8,19 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 ## Схема и миграции
 
 - Схема: `app/server/src/db/schema.ts` (Drizzle, `drizzle-orm/pg-core`); клиент базы: `app/server/src/db/index.ts`.
-- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0024_question_asset_refs.sql`.
+- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0025_teacher_zones.sql`.
 - Применённая миграция не редактируется: изменение схемы идёт новым файлом из `yarn workspace @bio-exam/server drizzle:generate` после правки `schema.ts`.
 - `app/server/drizzle/migrations-manifest.json` фиксирует каждую миграцию: `idx`, `tag`, `file`, `sha256`, `when`, `breakpoints` (`checksumAlgorithm: sha256`). Новая миграция получает в нём новую запись, совпадающую с журналом и файлом.
 - `scripts/check-migrations.mjs` (шаг `migrations` в `yarn verify`) на временных базах сверяет манифест с журналом и файлами, цепочку с пустой базы против `schema.ts`, повторный прогон без изменений, отсутствие разницы у `drizzle-kit generate` и `drizzle-kit check`.
 - Тест миграции с данными: образец `app/server/src/db/asset-refs-migration.test.ts` (временная база, миграции до нужной, данные, следующая миграция).
+- Строка новой роли в таблице `roles` вставляется миграцией (`INSERT ... ON CONFLICT DO NOTHING` отдельным оператором после `--> statement-breakpoint`, образец `app/server/drizzle/0025_teacher_zones.sql`), а не только сидом `app/server/src/db/seed.ts`: на неё ссылается FK `user_roles.role_key`.
+
+## Таблицы зоны учителя
+
+- `teacher_topics` (`teacher_id`, `topic_id`, `assigned_at`, `assigned_by`): закрепление раздела за учителем, первичный ключ (`teacher_id`, `topic_id`), FK на `users` и `topics` с `ON DELETE cascade`, `assigned_by` с `ON DELETE set null`, RLS с политикой `deny_direct_access`.
+- `student_groups.owner_id`: владелец группы, FK на `users` с `ON DELETE set null`, индекс `idx_student_groups_owner_id`. `NULL` - группа без владельца.
+- Обе создаёт миграция `0025_teacher_zones`; тест миграции: `app/server/src/db/teacher-zone-migration.test.ts`.
+- Читают и пишут таблицы зоны только `app/server/src/services/access-policy/zone-loader.ts` и `app/server/src/services/access-policy/zone-store.ts`; кроме них имена таблиц допустимы в `app/server/src/db/schema.ts` и `app/server/src/test-support`. Это держит `scripts/teacher-zone-guards.test.mjs`.
 
 ## База для тестов и скриптов
 

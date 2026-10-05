@@ -1,6 +1,6 @@
 ---
 name: bio-exam-api
-description: Факты Express API bio-exam (app/server/src, packages/exam-core). Применять перед правкой маршрутов и сервисов сервера - доступ к тесту, теме, пользователю или попытке, вход и сессии, старт и сдача попытки, содержимое вопросов и файлы хранилища, контракт exam-core, тесты известных дефектов.
+description: Факты Express API bio-exam (app/server/src, packages/exam-core). Применять перед правкой маршрутов и сервисов сервера - доступ к тесту, теме, группе, пользователю или попытке, роли и зона учителя (zone.all, закреплённые разделы, свои группы, назначения), вход и сессии, старт и сдача попытки, содержимое вопросов и файлы хранилища, контракт exam-core, тесты известных дефектов.
 ---
 
 # bio-exam api
@@ -10,9 +10,21 @@ Express владеет данными и политикой доступа (`doc
 ## Доступ
 
 - Права пользователя: `requestAccess(req)` и `hasPermission(req, key)` в `app/server/src/services/access-policy/index.ts`, один расчёт на запрос.
-- Доступ к объекту решают только функции `app/server/src/services/access-policy/scope.ts`: `canReadTest`, `canWriteTest`, `canWriteTopic`, `canReadUser`, `canReviewAttempt`, фильтр списка `testScope`. Новая проверка объекта добавляется туда, а не в маршрут.
-- `requirePerm` и `requirePermKey` (`app/server/src/middleware/auth/requirePerm.ts`) закрывают раздел по ключу права; объектные маршруты `app/server/src/routes/tests` проверяют доступ функциями `scope.ts`, а не `requirePerm`.
+- Доступ к объекту решают только функции `app/server/src/services/access-policy/scope.ts`: `canReadTest`, `canWriteTest`, `canWriteTopic`, `canReviewAttempt`, `canReadUser`, `canManageCatalog`, `canManageGroup`, `canManageStudent`, `canAssign`, `canAssignMany`, `canAssistSignIn`, `hasGlobalZone`; фильтры списков `testScope`, `groupScope`, `userScope`. Новая проверка объекта добавляется туда, а не в маршрут.
+- `requirePerm` и `requirePermKey` (`app/server/src/middleware/auth/requirePerm.ts`) закрывают раздел по ключу права; объектные маршруты проверяют доступ функциями `scope.ts`, а не `requirePerm`.
 - Решения по строке роли (`'admin'`, `roles.includes(...)`) запрещены, разрешено только право из `@bio-exam/rbac`: это держит `scripts/auth-no-role-string-checks.test.mjs`.
+
+## Роли и зона учителя
+
+- Роли `admin`, `teacher`, `user` («Ученик») в `packages/rbac/src/roles.ts`; персонал `STAFF_ROLE_KEYS`, роль ученика `STUDENT_ROLE_KEY`. Право `zone.all` (домен `zone` в `packages/rbac/src/domains.ts`) есть у `admin` и снимает ограничение зоной.
+- Зона пользователя без `zone.all`: закреплённые разделы (`teacher_topics`) и группы, где он владелец (`student_groups.owner_id`). Тесты и попытки зоны - тесты и попытки этих разделов, ученики - участники этих групп.
+- Зону читает загрузчик `ZoneLoader` (`app/server/src/services/access-policy/zone-loader.ts`) внутри `createAccessScope` (`app/server/src/services/access-policy/scope-rules.ts`): заново на каждом запросе, с мемоизацией на `Request` (`WeakMap`), без кэша между запросами. Ошибка загрузчика или проверки права пробрасывается, запрос без `req.authUser` получает `false` или пустую зону.
+- Формула функции шва: нет права действия → `false`; `zone.all` → `true`; иначе объект в зоне. `canManageCatalog` = `tests.write` и `zone.all`. `canAssign` и пакетный `canAssignMany` требуют `tests.manage_assignments`, тест в разделе зоны и ученика своей группы. `canAssistSignIn` с `zone.all` требует `users.edit`, без него - `canManageStudent`.
+- Списки: грубый гейт `requirePerm` в регистрации и фильтр зоны `testScope`, `groupScope` или `userScope` (`{ all: true }` или идентификаторы). Пустая зона - пустой список. Объектный маршрут без `requirePerm` первой строкой вызывает функцию шва: отказ - 403 до поиска объекта, затем 404.
+- Ветвление «администратор или учитель» в маршруте - только `hasGlobalZone(req)`; литерала `zone.all` вне `app/server/src/services/access-policy` нет.
+- Ученик - роль ученика, других ролей нет, allow-строк `rbac_user_grants` нет. Правило записано один раз SQL-фрагментом `studentOnlyFilter`.
+- Таблицы зоны пишут только функции `app/server/src/services/access-policy/zone-store.ts`: `setTopicTeachers`, `setGroupOwner`, `releaseZone`; для показа - `topicTeachers`, `groupOwners`, `zoneOwnerCandidates`. Признаки ролей `ownsZone` и `groupMember`: `roleTraits` и `loadRoleTraits` в `app/server/src/services/access-policy/role-traits.ts`.
+- Охранный тест `scripts/teacher-zone-guards.test.mjs`: таблицы зоны и `zone.all` только в шве, инвентарь маршрутов с их функциями шва. Новый маршрут доступа к объекту зоны добавляется в инвентарь теста.
 
 ## Вход и сессии
 
