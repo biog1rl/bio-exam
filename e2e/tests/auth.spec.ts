@@ -35,9 +35,39 @@ async function logIn(page: Page, login: string): Promise<void> {
 	await page.goto('/login')
 	await page.getByPlaceholder('Login').fill(login)
 	await page.getByPlaceholder('Пароль').fill(E2E_PASSWORD)
+	let reenabledBeforeLeaving = false
+	await page.exposeFunction('reportLoginSubmitReenabled', () => {
+		reenabledBeforeLeaving = true
+	})
+	await page.evaluate(() => {
+		const button = document.querySelector<HTMLButtonElement>('form button[type="submit"]')
+		if (!button) throw new Error('login submit button not found')
+		const report = (window as unknown as { reportLoginSubmitReenabled(): void }).reportLoginSubmitReenabled
+		let wasDisabled = false
+		new MutationObserver(() => {
+			if (button.disabled) wasDisabled = true
+			else if (wasDisabled) report()
+		}).observe(button, { attributes: true, attributeFilter: ['disabled'] })
+	})
+	let releaseDashboard: () => void = () => {}
+	const dashboardHeld = new Promise<void>((resolve) => {
+		releaseDashboard = resolve
+	})
+	await page.route(/\/dashboard$/, async (route) => {
+		if (route.request().isNavigationRequest()) await dashboardHeld
+		await route.continue()
+	})
+	const loginResponse = page.waitForResponse(
+		(response) => response.url().endsWith('/api/auth/login') && response.request().method() === 'POST'
+	)
 	await page.getByRole('button', { name: 'Войти' }).click()
+	expect((await loginResponse).status()).toBe(200)
+	await new Promise((resolve) => setTimeout(resolve, 500))
+	releaseDashboard()
 	// После входа без callbackUrl приложение ведёт на /dashboard
 	await expect(page).toHaveURL(/\/dashboard$/)
+	await page.unroute(/\/dashboard$/)
+	expect(reenabledBeforeLeaving).toBe(false)
 }
 
 /**

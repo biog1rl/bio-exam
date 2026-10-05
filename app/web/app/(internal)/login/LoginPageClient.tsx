@@ -61,6 +61,14 @@ export default function LoginPage() {
 		if (me) router.replace(callbackUrl)
 	}, [me, router, callbackUrl])
 
+	useEffect(() => {
+		const onPageShow = (event: PageTransitionEvent) => {
+			if (event.persisted) setSubmitting(false)
+		}
+		window.addEventListener('pageshow', onPageShow)
+		return () => window.removeEventListener('pageshow', onPageShow)
+	}, [])
+
 	const waitUntil = error.kind === 'wait' ? error.until : null
 
 	useEffect(() => {
@@ -91,7 +99,7 @@ export default function LoginPage() {
 
 	const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
-		if (error.kind === 'wait') return
+		if (submitting || error.kind === 'wait') return
 		const formData = new FormData(e.currentTarget)
 		const usernameRaw = (formData.get('username') ?? '').toString()
 		const passwordValue = (formData.get('password') ?? '').toString()
@@ -105,6 +113,7 @@ export default function LoginPage() {
 
 		setSubmitting(true)
 		setError(NO_ERROR)
+		let navigating = false
 
 		try {
 			const r = await fetch('/api/auth/login', {
@@ -131,10 +140,11 @@ export default function LoginPage() {
 			}
 
 			window.location.assign(callbackUrl)
+			navigating = true
 		} catch {
 			setError({ kind: 'text', text: NETWORK_ERROR_TEXT })
 		} finally {
-			setSubmitting(false)
+			if (!navigating) setSubmitting(false)
 		}
 	}
 
