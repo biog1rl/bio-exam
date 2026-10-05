@@ -25,6 +25,7 @@ import {
 	testScope,
 	userScope,
 } from '../../services/access-policy/index.js'
+import { attemptResultColumns } from '../../services/scored-attempt/index.js'
 import { revokeUserSessions } from '../../services/session/index.js'
 import { avatarUrl } from '../../services/storage/links.js'
 import type { UserRow } from '../../types/db/users.js'
@@ -344,10 +345,7 @@ router.get(
 					topicSlug: topics.slug,
 					topicTitle: topics.title,
 					submittedAt: testAttempts.submittedAt,
-					earnedPoints: testAttempts.earnedPoints,
-					totalPoints: testAttempts.totalPoints,
-					scorePercentage: testAttempts.scorePercentage,
-					passed: testAttempts.passed,
+					...attemptResultColumns,
 				})
 				.from(testAttempts)
 				.innerJoin(tests, eq(tests.id, testAttempts.testId))

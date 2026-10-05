@@ -8,7 +8,7 @@ import {
 	type AnswerViolation,
 } from '@bio-exam/exam-core'
 
-import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lte, ne, sql } from 'drizzle-orm'
 import { Router, type Response } from 'express'
 
 import { db } from '../../db/index.js'
@@ -33,7 +33,7 @@ import {
 	readFirstMarkdown,
 	readQuestionTexts,
 } from '../../services/question-content/index.js'
-import { readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
+import { attemptResultColumns, readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
 import { studentQuestionView } from './student-question-view.js'
 
 const router = Router()
@@ -417,10 +417,7 @@ router.get('/tests/:id/attempts/me', validateUUID('id'), sessionRequired(), asyn
 			db
 				.select({
 					id: testAttempts.id,
-					earnedPoints: testAttempts.earnedPoints,
-					totalPoints: testAttempts.totalPoints,
-					scorePercentage: testAttempts.scorePercentage,
-					passed: testAttempts.passed,
+					...attemptResultColumns,
 					submittedAt: testAttempts.submittedAt,
 				})
 				.from(testAttempts)
@@ -450,7 +447,11 @@ router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async
 		const fromParam = req.query.from as string | undefined
 		const toParam = req.query.to as string | undefined
 
-		const conditions = [eq(testAttempts.testId, testId), eq(testAttempts.userId, userId)]
+		const conditions = [
+			eq(testAttempts.testId, testId),
+			eq(testAttempts.userId, userId),
+			ne(testAttempts.reviewStatus, 'pending'),
+		]
 		if (fromParam) {
 			const fromDate = new Date(fromParam)
 			if (!isNaN(fromDate.getTime())) {
@@ -467,7 +468,7 @@ router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async
 		// Fetch all attempts in range ordered ASC
 		const allAttempts = await db
 			.select({
-				scorePercentage: testAttempts.scorePercentage,
+				scorePercentage: testAttempts.finalScorePercentage,
 				submittedAt: testAttempts.submittedAt,
 			})
 			.from(testAttempts)
@@ -477,9 +478,10 @@ router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async
 		// Group by date (YYYY-MM-DD), keep max/min/count per day
 		const byDate = new Map<string, { scores: number[] }>()
 		for (const a of allAttempts) {
+			if (a.scorePercentage === null) continue
 			const dateKey = a.submittedAt.toISOString().slice(0, 10)
 			if (!byDate.has(dateKey)) byDate.set(dateKey, { scores: [] })
-			byDate.get(dateKey)!.scores.push(Math.round(a.scorePercentage ?? 0))
+			byDate.get(dateKey)!.scores.push(Math.round(a.scorePercentage))
 		}
 
 		const data = [...byDate.entries()].map(([date, { scores }]) => ({
