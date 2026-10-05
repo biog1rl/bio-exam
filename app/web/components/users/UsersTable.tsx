@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { usersKeys } from '@/lib/users/api'
 import { groupsCell, groupsTitle, showReinvite, usersEmptyText } from '@/lib/users/invite-form'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import type { UserRow } from '@/types/users'
@@ -58,7 +59,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 	}
 
 	const afterChange = () => {
-		void mutate('/api/users')
+		void mutate(usersKeys.list())
 	}
 
 	const filteredRows = useMemo(() => {

@@ -1,34 +1,27 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { UserPlusIcon } from 'lucide-react'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { UsersTable } from '@/components/users/UsersTable'
 import { InviteUserDialog } from '@/components/users/dialogs/InviteUserDialog'
+import { groupsKeys, groupsListFetcher } from '@/lib/groups/api'
+import { usersKeys, usersListFetcher } from '@/lib/users/api'
 import { matchesGroup } from '@/lib/users/invite-form'
-import { UserRow } from '@/types/users'
-
-type Group = { id: string; name: string }
-
-const fetcher = (url: string) =>
-	fetch(url).then((r) => {
-		if (r.status === 401) {
-			/* Браузер покажет basic-попап, если backend ответил WWW-Authenticate */
-		}
-		return r.json()
-	})
 
 export default function UsersClient() {
 	const { can } = useAuth()
 	const zoneAll = can('zone', 'all')
 	const canInvite = can('users', 'invite')
-	const { data, mutate, isLoading } = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
-	const { data: groupsData } = useSWR<{ groups: Group[] }>('/api/groups', fetcher)
+	const { data, error, mutate, isLoading } = useSWR(usersKeys.list(), usersListFetcher)
+	const { data: groupsData } = useSWR(groupsKeys.list(), groupsListFetcher)
+	const titleRef = useRef<HTMLHeadingElement>(null)
 	const [open, setOpen] = useState(false)
 	const [groupFilter, setGroupFilter] = useState<string>('all')
 	const allGroups = useMemo(() => groupsData?.groups ?? [], [groupsData])
@@ -39,11 +32,14 @@ export default function UsersClient() {
 		if (!selectedGroup) return all
 		return all.filter((u) => matchesGroup(u, selectedGroup.id))
 	}, [data, groupFilter, allGroups])
+	const loadFailed = error !== undefined && data === undefined
 	return (
 		<div className="space-y-4">
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div className="min-w-0">
-					<h1 className="text-xl font-semibold">Пользователи</h1>
+					<h1 ref={titleRef} tabIndex={-1} className="text-xl font-semibold">
+						Пользователи
+					</h1>
 					{!zoneAll && (
 						<p className="text-sm text-muted-foreground">Ученики ваших групп. Профиль меняет администратор.</p>
 					)}
@@ -72,7 +68,16 @@ export default function UsersClient() {
 					</Select>
 				</div>
 			)}
-			<UsersTable rows={users} isLoading={isLoading} />
+			{loadFailed ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить пользователей"
+					error={error}
+					onRetry={() => mutate()}
+					focusTarget={titleRef}
+				/>
+			) : (
+				<UsersTable rows={users} isLoading={isLoading} />
+			)}
 			{canInvite && <InviteUserDialog open={open} onOpenChange={setOpen} onCreated={() => mutate()} />}
 		</div>
 	)

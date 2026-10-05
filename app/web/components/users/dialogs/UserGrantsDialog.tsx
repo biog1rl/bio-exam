@@ -2,15 +2,18 @@
 
 import { PERMISSION_DOMAINS } from '@bio-exam/rbac'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
+import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { RbacSwitchesRow, type GrantsState } from '@/components/rbac/RbacSwitchesRow'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { apiFetch } from '@/lib/api-fetch'
+import { failureMessage } from '@/lib/http/errors'
+import { removeUserGrant, setUserGrant, userGrantsFetcher, userGrantsKey } from '@/lib/users/api'
 
 type Props = {
 	open: boolean
@@ -18,22 +21,12 @@ type Props = {
 	userId: string | null
 }
 
-type GrantsResponse = {
-	roles: string[]
-	roleKeys: string[] // эффективные права от ролей (после role-overrides)
-	userOverrides: Array<{ domain: string; action: string; allow: boolean }>
-	effective: string[] // итог
-}
-
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
-
 export function UserGrantsDialog({ open, onOpenChange, userId }: Props) {
 	const enabled = open && Boolean(userId)
-	const { data, mutate, isLoading } = useSWR<GrantsResponse>(
-		enabled ? `/api/rbac/user/${userId}/grants` : null,
-		fetcher
-	)
+	const { data, error, mutate, isLoading } = useSWR(enabled && userId ? userGrantsKey(userId) : null, userGrantsFetcher)
 	const [saving, setSaving] = useState(false)
+	const titleRef = useRef<HTMLHeadingElement>(null)
+	const loadFailed = error !== undefined && data === undefined
 
 	const roleSet = useMemo(() => new Set(data?.roleKeys ?? []), [data])
 	const effectiveSet = useMemo(() => new Set(data?.effective ?? []), [data])
@@ -65,24 +58,13 @@ export function UserGrantsDialog({ open, onOpenChange, userId }: Props) {
 
 		setSaving(true)
 		try {
-			if (next === roleHas) {
-				// хотим вернуться к поведению роли -> удалить override (если есть)
-				if (hasOverride) {
-					const res = await apiFetch('/api/rbac/user/grant', {
-						method: 'DELETE',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ userId, domain, action }),
-					})
-					if (!res.ok) throw new Error(await res.text())
-				}
-			} else {
-				// хотим переопределить поведение роли -> upsert allow = next (true=allow, false=deny)
-				const res = await apiFetch('/api/rbac/user/grant', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ userId, domain, action, allow: next }),
-				})
-				if (!res.ok) throw new Error(await res.text())
+			let outcome: Awaited<ReturnType<typeof setUserGrant>> | null = null
+			if (next !== roleHas) outcome = await setUserGrant({ userId, domain, action, allow: next })
+			else if (hasOverride) outcome = await removeUserGrant({ userId, domain, action })
+			if (outcome && !outcome.ok) {
+				const message = failureMessage(outcome)
+				if (message) toast.error(message)
+				return
 			}
 			await mutate()
 		} finally {
@@ -94,30 +76,41 @@ export function UserGrantsDialog({ open, onOpenChange, userId }: Props) {
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="tab-sm:max-w-180">
 				<DialogHeader>
-					<DialogTitle>Права пользователя</DialogTitle>
+					<DialogTitle ref={titleRef} tabIndex={-1}>
+						Права пользователя
+					</DialogTitle>
 				</DialogHeader>
 
-				<div className="space-y-3">
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead className="w-40">Субъект</TableHead>
-								{Object.keys(PERMISSION_DOMAINS).map((d) => (
-									<TableHead key={d} className="capitalize">
-										{d}
-									</TableHead>
-								))}
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							<RbacSwitchesRow label="Пользователь" state={state} onToggle={toggle} loading={isLoading || saving} />
-						</TableBody>
-					</Table>
-					<p className="text-xs text-muted-foreground">
-						Персональные права **имеют приоритет** над ролью: включение добавляет доступ, выключение может отключить
-						даже права, пришедшие от роли.
-					</p>
-				</div>
+				{loadFailed ? (
+					<LoadErrorAlert
+						title="Не удалось загрузить права пользователя"
+						error={error}
+						onRetry={() => mutate()}
+						focusTarget={titleRef}
+					/>
+				) : (
+					<div className="space-y-3">
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead className="w-40">Субъект</TableHead>
+									{Object.keys(PERMISSION_DOMAINS).map((d) => (
+										<TableHead key={d} className="capitalize">
+											{d}
+										</TableHead>
+									))}
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								<RbacSwitchesRow label="Пользователь" state={state} onToggle={toggle} loading={isLoading || saving} />
+							</TableBody>
+						</Table>
+						<p className="text-xs text-muted-foreground">
+							Персональные права **имеют приоритет** над ролью: включение добавляет доступ, выключение может отключить
+							даже права, пришедшие от роли.
+						</p>
+					</div>
+				)}
 
 				<DialogFooter>
 					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>

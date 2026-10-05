@@ -40,8 +40,19 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { UserGrantsDialog } from '@/components/users/dialogs/UserGrantsDialog'
-import { AuthExpiredError, apiFetch } from '@/lib/api-fetch'
 import { LOGIN_PATTERN, LOGIN_HINT } from '@/lib/auth/validators'
+import { groupsKeys, groupsListFetcher } from '@/lib/groups/api'
+import { failureMessage } from '@/lib/http/errors'
+import {
+	clearLoginThrottle,
+	deleteUser,
+	revokeUserSessions,
+	setUserGroups,
+	updateUser,
+	userGrantsFetcher,
+	userGrantsKey,
+	usersKeys,
+} from '@/lib/users/api'
 import {
 	buildUserPatch,
 	editRoleWarning,
@@ -70,15 +81,6 @@ type Props = {
 	user: UserRow | null
 	onSaved?: () => void
 }
-
-type GrantsResponse = {
-	roles: string[]
-	roleKeys: string[]
-	userOverrides: Array<{ domain: string; action: string; allow: boolean }>
-	effective: string[]
-}
-
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
 function withLoginBreak(text: string, login: string) {
 	const quoted = `«${login}»`
@@ -173,11 +175,12 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 
 	// грузим информацию о персональных override'ах пользователя, чтобы показать предупреждение
 	const enabled = open && !!user?.id
-	const { data: grantsMeta } = useSWR<GrantsResponse>(enabled ? `/api/rbac/user/${user!.id}/grants` : null, fetcher)
-	const hasCustomOverrides = (grantsMeta?.userOverrides?.length ?? 0) > 0
+	const { data: grantsMeta } = useSWR(enabled && user ? userGrantsKey(user.id) : null, userGrantsFetcher)
+	const hasCustomOverrides = (grantsMeta?.userOverrides.length ?? 0) > 0
 
-	const { data: groupsData } = useSWR<unknown>(open ? '/api/groups' : null, fetcher)
+	const { data: groupsData, error: groupsError } = useSWR(open ? groupsKeys.list() : null, groupsListFetcher)
 	const allGroups = useMemo(() => parseInviteGroups(groupsData), [groupsData])
+	const groupsFailed = groupsError !== undefined && groupsData === undefined
 	const selectedGroups = useMemo(() => {
 		const known = new Map<string, { name: string }>()
 		for (const group of user?.groups ?? []) known.set(group.id, group)
@@ -228,11 +231,13 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 
 	async function onSubmit() {
 		if (!user) return
+		if (!selectedRole) {
+			setError('Выберите роль')
+			return
+		}
 		setSubmitting(true)
 		setError(null)
 		try {
-			if (!selectedRole) throw new Error('Выберите роль')
-
 			const payload = buildUserPatch({
 				firstName,
 				lastName,
@@ -246,21 +251,11 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 				initialRole,
 			})
 
-			const res = await apiFetch(`/api/users/${user.id}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-			})
-
-			if (!res.ok) {
-				let msg = ''
-				try {
-					const j = await res.json()
-					msg = (j?.error as string) || ''
-				} catch {
-					/* noop */
-				}
-				throw new Error(msg || `HTTP ${res.status}`)
+			const saved = await updateUser(user.id, payload)
+			if (!saved.ok) {
+				const message = failureMessage(saved)
+				if (message) setError(message)
+				return
 			}
 
 			if (payload.roles) {
@@ -270,28 +265,24 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 			setInitialActive(isActive)
 
 			if (groupIdsChanged(initialGroupIds, selectedGroupIds)) {
-				const groupRes = await apiFetch(`/api/users/${user.id}/group`, {
-					method: 'PATCH',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ groupIds: selectedGroupIds }),
-				})
-				if (!groupRes.ok) {
-					const body: unknown = await groupRes.json().catch(() => null)
-					const msg =
-						body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
-							? (body as { error: string }).error
-							: ''
-					throw new Error(msg || 'Не удалось обновить группу')
+				const grouped = await setUserGroups(user.id, selectedGroupIds)
+				if (!grouped.ok) {
+					const message = failureMessage(grouped, 'Не удалось обновить группу')
+					if (message) setError(message)
+					return
 				}
 				setInitialGroupIds(selectedGroupIds)
 			}
 
-			await Promise.all([mutate('/api/users'), user ? mutate(`/api/rbac/user/${user.id}/grants`) : Promise.resolve()])
+			const loginKeys = new Set([savedLogin, payload.login].filter(Boolean).map((value) => usersKeys.byLogin(value)))
+			await Promise.all([
+				mutate(usersKeys.list()),
+				mutate(userGrantsKey(user.id)),
+				...Array.from(loginKeys, (key) => mutate(key)),
+			])
 
 			onSaved?.()
 			onOpenChange(false)
-		} catch (e) {
-			setError(e instanceof Error ? e.message : 'Неизвестная ошибка')
 		} finally {
 			setSubmitting(false)
 		}
@@ -302,27 +293,16 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		setDeleting(true)
 		setError(null)
 		try {
-			const res = await apiFetch(`/api/users/${user.id}`, {
-				method: 'DELETE',
-				headers: { 'Content-Type': 'application/json' },
-			})
-
-			if (!res.ok) {
-				let msg = ''
-				try {
-					const j = await res.json()
-					msg = (j?.error as string) || ''
-				} catch {
-					/* noop */
-				}
-				throw new Error(msg || `HTTP ${res.status}`)
+			const outcome = await deleteUser(user.id)
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Не удалось удалить пользователя')
+				if (message) setError(message)
+				return
 			}
 
-			await mutate('/api/users')
+			await mutate(usersKeys.list())
 			onSaved?.()
 			onOpenChange(false)
-		} catch (e) {
-			setError(e instanceof Error ? e.message : 'Не удалось удалить пользователя')
 		} finally {
 			setDeleting(false)
 			setDeleteConfirmOpen(false)
@@ -334,17 +314,12 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		const actionLogin = user.login ?? ''
 		setPendingAction(kind)
 		try {
-			const res = await apiFetch(
-				kind === 'revoke' ? `/api/users/${user.id}/sessions/revoke` : `/api/users/${user.id}/login-throttle`,
-				{ method: kind === 'revoke' ? 'POST' : 'DELETE' }
-			)
-			if (res.ok) {
+			const outcome = kind === 'revoke' ? await revokeUserSessions(user.id) : await clearLoginThrottle(user.id)
+			if (outcome.ok) {
 				toast.success(kind === 'revoke' ? revokeSuccessText(actionLogin) : clearSuccessText(actionLogin))
-			} else {
-				toast.error(actionErrorText(kind, res.status))
+			} else if (outcome.kind !== 'auth' && outcome.kind !== 'aborted') {
+				toast.error(actionErrorText(kind, outcome.status ?? 0))
 			}
-		} catch (e) {
-			if (!(e instanceof AuthExpiredError)) toast.error(actionErrorText(kind, 0))
 		} finally {
 			setPendingAction(null)
 			setConfirmAction(null)
@@ -502,12 +477,17 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 							</DropdownMenu>
 						</div>
 
-						{allGroups.length > 0 && (
+						{(allGroups.length > 0 || groupsFailed) && (
 							<div className="space-y-2">
 								<Label className="font-medium">Группа</Label>
-								<Popover open={groupsOpen} onOpenChange={setGroupsOpen} modal>
+								<Popover open={groupsOpen && !groupsFailed} onOpenChange={setGroupsOpen} modal>
 									<PopoverTrigger asChild>
-										<Button variant="outline" role="combobox" className="w-full justify-between">
+										<Button
+											variant="outline"
+											role="combobox"
+											className="w-full justify-between"
+											disabled={groupsFailed}
+										>
 											<span className="min-w-0 truncate">{groupsTriggerLabel(selectedGroups)}</span>
 											<ChevronsUpDown className="size-4 shrink-0 opacity-50" aria-hidden="true" />
 										</Button>
@@ -536,6 +516,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 										</Command>
 									</PopoverContent>
 								</Popover>
+								{groupsFailed && <p className="text-xs text-destructive">Не удалось загрузить группы</p>}
 							</div>
 						)}
 

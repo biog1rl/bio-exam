@@ -6,7 +6,7 @@ import { useMemo } from 'react'
 
 import useSWR from 'swr'
 
-import { apiFetch } from '@/lib/api-fetch'
+import { requestJson } from '@/lib/http/request'
 
 export type RoleTraits = {
 	key: string
@@ -45,10 +45,8 @@ export function parseRoleTraits(body: unknown): RoleTraits[] {
 	return parsed.length > 0 ? parsed : fallbackRoleTraits()
 }
 
-async function fetchRoleTraits(url: string): Promise<unknown> {
-	const res = await apiFetch(url)
-	if (!res.ok) throw new Error(`GET ${url} failed with status ${res.status}`)
-	return res.json()
+function fetchRoleTraits(url: string): Promise<unknown> {
+	return requestJson<unknown>(url)
 }
 
 export function useRoleTraits(): { roles: RoleTraits[]; loaded: boolean } {
