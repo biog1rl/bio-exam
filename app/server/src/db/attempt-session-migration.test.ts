@@ -145,16 +145,42 @@ async function insertSession(
 	)
 }
 
-async function insertAttempt(id: string, testId: string, userId: string, sessionId?: string): Promise<void> {
-	const columns = sessionId === undefined ? '' : ', session_id'
-	const values = sessionId === undefined ? '' : ', $5'
+type InsertAttemptOptions = { sessionId?: string; projected?: boolean; resultsVersion?: number }
+
+async function insertAttempt(
+	id: string,
+	testId: string,
+	userId: string,
+	options: InsertAttemptOptions = {}
+): Promise<void> {
+	const columns = [
+		'id',
+		'test_id',
+		'user_id',
+		'answers',
+		'results',
+		'earned_points',
+		'total_points',
+		'score_percentage',
+		'passed',
+	]
+	const values = ['$1', '$2', '$3', `'{"q1":"b"}'::jsonb`, '$4::jsonb', '1', '1', '100', 'true']
 	const params: unknown[] = [id, testId, userId, JSON.stringify([{ questionId: 'q1', isCorrect: true, points: 1 }])]
-	if (sessionId !== undefined) params.push(sessionId)
-	await db().query(
-		`INSERT INTO test_attempts (id, test_id, user_id, answers, results, earned_points, total_points, score_percentage, passed${columns})
-		VALUES ($1, $2, $3, '{"q1":"b"}'::jsonb, $4::jsonb, 1, 1, 100, true${values})`,
-		params
-	)
+	if (options.sessionId !== undefined) {
+		params.push(options.sessionId)
+		columns.push('session_id')
+		values.push(`$${params.length}`)
+	}
+	if (options.resultsVersion !== undefined) {
+		params.push(options.resultsVersion)
+		columns.push('results_version')
+		values.push(`$${params.length}`)
+	}
+	if (options.projected) {
+		columns.push('review_status', 'final_earned_points', 'final_score_percentage', 'final_passed', 'auto_total_points')
+		values.push(`'none'`, '1', '100', 'true', '1')
+	}
+	await db().query(`INSERT INTO test_attempts (${columns.join(', ')}) VALUES (${values.join(', ')})`, params)
 }
 
 beforeAll(async () => {
@@ -284,8 +310,9 @@ describe('0022_attempt_sessions applied over duplicate open sessions', () => {
 	})
 
 	test('two attempts with one session_id are rejected with 23505', async () => {
-		await insertAttempt(crypto.randomUUID(), TEST_ONE, USER_ONE, SESSIONS.S2)
-		await assert.rejects(insertAttempt(crypto.randomUUID(), TEST_ONE, USER_ONE, SESSIONS.S2), hasCode('23505'))
+		const options = { sessionId: SESSIONS.S2, projected: true }
+		await insertAttempt(crypto.randomUUID(), TEST_ONE, USER_ONE, options)
+		await assert.rejects(insertAttempt(crypto.randomUUID(), TEST_ONE, USER_ONE, options), hasCode('23505'))
 	})
 
 	test('an unknown close_reason is rejected with 23514', async () => {
@@ -321,7 +348,7 @@ describe('0023_attempt_results_version applied over existing attempts', () => {
 
 	test('a new attempt without an explicit value gets results_version 1', async () => {
 		const id = crypto.randomUUID()
-		await insertAttempt(id, TEST_TWO, USER_TWO)
+		await insertAttempt(id, TEST_TWO, USER_TWO, { projected: true })
 		const { rows } = await db().query<{ results_version: number }>(
 			'SELECT results_version FROM test_attempts WHERE id = $1',
 			[id]
@@ -331,7 +358,7 @@ describe('0023_attempt_results_version applied over existing attempts', () => {
 
 	test('results_version outside 1 and 2 is rejected with 23514', async () => {
 		await assert.rejects(
-			db().query('UPDATE test_attempts SET results_version = 3 WHERE id = $1', [ATTEMPT_ONE]),
+			insertAttempt(crypto.randomUUID(), TEST_TWO, USER_TWO, { projected: true, resultsVersion: 3 }),
 			hasCode('23514')
 		)
 	})

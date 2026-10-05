@@ -164,6 +164,10 @@ beforeAll(async () => {
 			earnedPoints: 0,
 			totalPoints: 1,
 			scorePercentage: 0,
+			finalEarnedPoints: 0,
+			finalScorePercentage: 0,
+			finalPassed: false,
+			autoTotalPoints: 1,
 		})
 		.returning({ id: ctx.schema.testAttempts.id })
 	if (!attempt) throw new Error('attempt was not created')

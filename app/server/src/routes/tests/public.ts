@@ -615,7 +615,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			if (scored.reason === 'no_questions') return res.status(404).json({ error: 'Questions not found' })
 			return res.status(500).json({ error: `Question type is not configured: ${scored.type}` })
 		}
-		const { facts, earnedPoints, totalPoints, scorePercentage, passed } = scored
+		const { facts, outcome: scoredOutcome, passingScore, earnedPoints, totalPoints, scorePercentage, passed } = scored
 
 		const outcome = await submitAttempt({
 			testId,
@@ -624,7 +624,16 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			clientAttemptId,
 			answers: userAnswers,
 			telemetry,
-			scored: { results: facts, resultsVersion: 2, earnedPoints, totalPoints, scorePercentage, passed },
+			scored: {
+				results: facts,
+				resultsVersion: 2,
+				earnedPoints,
+				totalPoints,
+				scorePercentage,
+				passed,
+				outcome: scoredOutcome,
+				passingScore,
+			},
 		})
 		if (outcome.kind === 'not_found') return sessionNotFound(res)
 		if (outcome.kind === 'conflict') return attemptAlreadySubmitted(res, outcome.attemptId)

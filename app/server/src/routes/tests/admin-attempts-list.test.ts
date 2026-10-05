@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
+import { insertAttemptFixture } from '../../test-support/attempt-fixture.js'
 import { call, startAuthApp, type AuthApp, type Reply } from '../../test-support/auth-app.js'
 import {
 	seedTeacherZoneWorld,
@@ -65,14 +66,16 @@ async function insertAttempt(input: {
 	score: number
 	passed: boolean
 }): Promise<string> {
-	const result = await ctx.pgPool.query<{ id: string }>(
-		`INSERT INTO test_attempts (test_id, user_id, answers, results, earned_points, total_points, score_percentage, passed, submitted_at)
-		VALUES ($1, $2, '{}', '{}', $3, 100, $3, $4, $5) RETURNING id`,
-		[input.testId, input.userId, input.score, input.passed, input.submittedAt]
-	)
-	const id = result.rows[0]?.id
-	assert.ok(id, 'попытка не вставлена')
-	return id
+	return insertAttemptFixture(ctx.pgPool, {
+		testId: input.testId,
+		userId: input.userId,
+		submittedAt: input.submittedAt,
+		results: {},
+		earnedPoints: input.score,
+		totalPoints: 100,
+		scorePercentage: input.score,
+		passed: input.passed,
+	})
 }
 
 async function expectedSummary(where: string, params: unknown[]): Promise<{ passed: number; averageScore: number }> {

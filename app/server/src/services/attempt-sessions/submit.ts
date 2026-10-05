@@ -1,4 +1,10 @@
-import { mergeTelemetryMaps, type AnswerValue, type TelemetryMap } from '@bio-exam/exam-core'
+import {
+	mergeTelemetryMaps,
+	projectionOf,
+	type AnswerValue,
+	type AttemptOutcome,
+	type TelemetryMap,
+} from '@bio-exam/exam-core'
 
 import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
 
@@ -15,6 +21,8 @@ export type ScoredAttemptFacts = {
 	totalPoints: number
 	scorePercentage: number
 	passed: boolean
+	outcome: AttemptOutcome
+	passingScore: number | null
 }
 
 export type PrecheckSubmitParams = {
@@ -150,10 +158,14 @@ export async function submitAttempt({
 					answers,
 					results: scored.results,
 					resultsVersion: scored.resultsVersion,
-					earnedPoints: scored.earnedPoints,
-					totalPoints: scored.totalPoints,
-					scorePercentage: scored.scorePercentage,
-					passed: scored.passed,
+					earnedPoints: scored.outcome.submitted.earnedPoints,
+					totalPoints: scored.outcome.submitted.totalPoints,
+					scorePercentage: scored.outcome.submitted.scorePercentage,
+					passed: scored.outcome.submitted.passed,
+					...projectionOf(scored.outcome),
+					passingScore: scored.passingScore,
+					submitSource: 'client',
+					gradedAt: null,
 					telemetry: Object.keys(mergedTelemetry).length > 0 ? mergedTelemetry : null,
 				})
 				.onConflictDoNothing()

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { Client } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, test, vi } from 'vitest'
 
+import { insertAttemptFixture, type Queryable } from '../../test-support/attempt-fixture.js'
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
 import { memoryStorage } from '../../test-support/storage.js'
 import type { MemoryStorageAdapter } from '../storage/adapters/memory.js'
@@ -11,8 +12,6 @@ type QuestionContentModule = typeof import('./index.js')
 type Json = Record<string, unknown>
 
 type QuestionRow = { id: string; order: number; prompt_path: string | null; explanation_path: string | null }
-
-type Queryable = { query: (text: string, params?: unknown[]) => Promise<unknown> }
 
 const PASSWORD = 'qcon-move-remove-password-1'
 const ORPHAN_LOG = '[question-content] orphan objects'
@@ -151,10 +150,15 @@ function afterCopies(times: number, action: () => Promise<unknown>) {
 }
 
 async function insertAttempt(testId: string, userId: string, executor: Queryable = ctx.pgPool): Promise<void> {
-	await executor.query(
-		"INSERT INTO test_attempts (test_id, user_id, answers, results, earned_points, total_points, score_percentage) VALUES ($1, $2, '{}', '{}', 0, 1, 0)",
-		[testId, userId]
-	)
+	await insertAttemptFixture(executor, {
+		testId,
+		userId,
+		results: {},
+		earnedPoints: 0,
+		totalPoints: 1,
+		scorePercentage: 0,
+		passed: false,
+	})
 }
 
 async function waitForBackend(condition: string): Promise<void> {

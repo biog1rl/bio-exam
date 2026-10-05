@@ -1,8 +1,10 @@
 import {
+	computeAttemptOutcome,
 	MatchingPairsSchema,
 	OptionSchema,
 	scoreQuestionFacts,
 	type AnswerValue,
+	type AttemptOutcome,
 	type QuestionContent,
 	type ScoredQuestionFact,
 } from '@bio-exam/exam-core'
@@ -29,6 +31,8 @@ export type ScoreSubmissionResult =
 	| {
 			ok: true
 			facts: ScoredQuestionFact[]
+			outcome: AttemptOutcome
+			passingScore: number | null
 			earnedPoints: number
 			totalPoints: number
 			scorePercentage: number
@@ -93,8 +97,6 @@ export async function scoreSubmission(params: ScoreSubmissionParams): Promise<Sc
 		q.explanationPath ? readExplanation({ id: q.id, explanationPath: q.explanationPath }) : Promise.resolve(null)
 	)
 
-	let totalPoints = 0
-	let earnedPoints = 0
 	const facts: ScoredQuestionFact[] = []
 
 	for (const [index, q] of questionRows.entries()) {
@@ -109,9 +111,6 @@ export async function scoreSubmission(params: ScoreSubmissionParams): Promise<Sc
 			fallbackMaxPoints: Number(q.points ?? 0),
 			content: readContent(q),
 		})
-
-		totalPoints += scored.points
-		earnedPoints += scored.earnedPoints
 
 		const explanationText = explanations[index] ?? null
 
@@ -136,8 +135,8 @@ export async function scoreSubmission(params: ScoreSubmissionParams): Promise<Sc
 		)
 	}
 
-	const scorePercentage = totalPoints > 0 ? (earnedPoints / totalPoints) * 100 : 0
-	const passed = passingScore == null ? true : scorePercentage >= Number(passingScore)
+	const outcome = computeAttemptOutcome({ facts, finalScores: new Map(), passingScore })
+	const { earnedPoints, totalPoints, scorePercentage, passed } = outcome.submitted
 
-	return { ok: true, facts, earnedPoints, totalPoints, scorePercentage, passed }
+	return { ok: true, facts, outcome, passingScore, earnedPoints, totalPoints, scorePercentage, passed }
 }

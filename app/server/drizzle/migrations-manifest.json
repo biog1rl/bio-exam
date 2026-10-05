@@ -208,6 +208,14 @@
       "sha256": "2dbe45923c68da464f82c01c3c9cb9a486db4d9cab8246142a35f8011f50099b",
       "when": 1791139459249,
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "tag": "0026_attempt_result_projection",
+      "file": "0026_attempt_result_projection.sql",
+      "sha256": "79a09926d095a95c2a17b26aaffe09c02ba1d23816e1786028a82d666ac65b7e",
+      "when": 1791239364196,
+      "breakpoints": true
     }
   ]
 }

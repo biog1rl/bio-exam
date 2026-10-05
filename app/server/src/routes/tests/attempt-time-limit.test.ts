@@ -1,3 +1,5 @@
+import { computeAttemptOutcome } from '@bio-exam/exam-core'
+
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import { afterAll, beforeAll, describe, test } from 'vitest'
@@ -207,6 +209,8 @@ const STUB_FACTS = {
 	totalPoints: 0,
 	scorePercentage: 0,
 	passed: false,
+	outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: 60 }),
+	passingScore: 60,
 }
 
 describe('лимит времени на submit', () => {

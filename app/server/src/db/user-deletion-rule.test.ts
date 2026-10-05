@@ -32,14 +32,7 @@ type ForeignKey = {
 
 type LegacyException = { table: string; column: string; reason: string }
 
-const LEGACY_EXCEPTIONS: LegacyException[] = [
-	{
-		table: 'users',
-		column: 'created_by',
-		reason:
-			'ключ users_created_by_fk объявлен без ON DELETE и переводится на ON DELETE SET NULL миграцией 0026 (план 09-05, D-21)',
-	},
-]
+const LEGACY_EXCEPTIONS: LegacyException[] = []
 
 const ALLOWED_RULES = new Set(['c', 'n'])
 
@@ -201,5 +194,21 @@ describe('правило удаления пользователя: поведе
 		)
 		assert.equal(assignment.rowCount, 1)
 		assert.equal(assignment.rows[0]?.assigned_by, null)
+	})
+
+	test('удаление пользователя, пригласившего другого, обнуляет created_by приглашённого', async () => {
+		assert.ok(ctx && world)
+		const inviter = await seedUser(ctx, { login: 'deletion_inviter', roles: ['teacher'], password: world.password })
+		const invited = await seedStudent(world, 'deletion_invited')
+		await ctx.pgPool.query('UPDATE users SET created_by = $1 WHERE id = $2', [inviter, invited.id])
+
+		await ctx.pgPool.query('DELETE FROM users WHERE id = $1', [inviter])
+
+		const invitedRow = await ctx.pgPool.query<{ created_by: string | null }>(
+			'SELECT created_by FROM users WHERE id = $1',
+			[invited.id]
+		)
+		assert.equal(invitedRow.rowCount, 1)
+		assert.equal(invitedRow.rows[0]?.created_by, null)
 	})
 })

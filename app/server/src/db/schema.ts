@@ -96,7 +96,7 @@ export const users = pgTable(
 			name: 'users_created_by_fk',
 			columns: [t.createdBy],
 			foreignColumns: [t.id],
-		}),
+		}).onDelete('set null'),
 		lockedUntilIdx: index('idx_users_locked_until').on(t.lockedUntil),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
@@ -492,6 +492,14 @@ export const testAttempts = pgTable(
 		telemetry: jsonb('telemetry').$type<TelemetryMap>(), // per-question telemetry: questionId -> { timeSpentMs, focusLossCount, visitCount }
 		sessionId: uuid('session_id').references((): AnyPgColumn => testSessions.id, { onDelete: 'set null' }),
 		resultsVersion: smallint('results_version').notNull().default(1),
+		reviewStatus: text('review_status').notNull().default('none'),
+		finalEarnedPoints: real('final_earned_points'),
+		finalScorePercentage: real('final_score_percentage'),
+		finalPassed: boolean('final_passed'),
+		gradedAt: timestamp('graded_at', { withTimezone: true }),
+		passingScore: real('passing_score'),
+		autoTotalPoints: real('auto_total_points').notNull(),
+		submitSource: text('submit_source').notNull().default('client'),
 	},
 	(t) => ({
 		testIdIdx: index('idx_test_attempts_test_id').on(t.testId),
@@ -504,6 +512,19 @@ export const testAttempts = pgTable(
 			.on(t.sessionId)
 			.where(sql`${t.sessionId} IS NOT NULL`),
 		resultsVersionCheck: check('test_attempts_results_version_check', sql`${t.resultsVersion} IN (1, 2)`),
+		reviewStatusCheck: check(
+			'test_attempts_review_status_check',
+			sql`${t.reviewStatus} IN ('none', 'pending', 'graded')`
+		),
+		submitSourceCheck: check('test_attempts_submit_source_check', sql`${t.submitSource} IN ('client', 'deadline')`),
+		reviewProjectionCheck: check(
+			'test_attempts_review_projection_check',
+			sql`(${t.finalEarnedPoints} IS NULL) = (${t.reviewStatus} = 'pending') AND (${t.finalScorePercentage} IS NULL) = (${t.reviewStatus} = 'pending') AND (${t.finalPassed} IS NULL) = (${t.reviewStatus} = 'pending')`
+		),
+		gradedAtCheck: check(
+			'test_attempts_graded_at_check',
+			sql`(${t.reviewStatus} = 'graded') = (${t.gradedAt} IS NOT NULL)`
+		),
 		// Имена внешних ключей из миграции 0004 (REFERENCES без имени даёт *_fkey)
 		testIdFk: foreignKey({
 			name: 'test_attempts_test_id_fkey',

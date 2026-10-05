@@ -85,6 +85,10 @@ async function insertLegacyAttempt(testId: string, results: unknown): Promise<st
 			totalPoints: 3,
 			scorePercentage: 33.3,
 			passed: false,
+			finalEarnedPoints: 1,
+			finalScorePercentage: 33.3,
+			finalPassed: false,
+			autoTotalPoints: 3,
 			submittedAt: new Date('2026-09-10T12:00:00Z'),
 			resultsVersion: 1,
 		})
