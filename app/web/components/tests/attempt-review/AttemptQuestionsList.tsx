@@ -10,6 +10,7 @@ import {
 	emptyQuestionView,
 	formatDuration,
 	getAdminReviewNote,
+	getQuestionPointsLabel,
 	getQuestionView,
 	getStatusClass,
 	getStatusLabel,
@@ -61,7 +62,7 @@ export function AttemptQuestionsList({
 							</div>
 							{view ? (
 								<span className="rounded-full bg-secondary/70 px-3 py-1 text-sm text-muted-foreground">
-									{view.earnedPoints} / {view.points} балл.
+									{getQuestionPointsLabel(view)}
 								</span>
 							) : null}
 						</div>

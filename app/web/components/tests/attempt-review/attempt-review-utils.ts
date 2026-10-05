@@ -11,7 +11,7 @@ import {
 
 import type { PublicTestQuestion, QuestionTelemetry } from '@/lib/tests/types'
 
-export type NavFilter = 'all' | 'correct' | 'partial' | 'wrong'
+export type NavFilter = 'all' | 'correct' | 'partial' | 'wrong' | 'pending'
 
 export const NAV_FILTERS: { value: NavFilter; label: string; dotClass: string }[] = [
 	{ value: 'all', label: 'Все', dotClass: 'bg-muted-foreground/35' },
@@ -19,6 +19,16 @@ export const NAV_FILTERS: { value: NavFilter; label: string; dotClass: string }[
 	{ value: 'partial', label: 'Частично', dotClass: 'bg-amber-400' },
 	{ value: 'wrong', label: 'Неверно', dotClass: 'bg-red-500' },
 ]
+
+const PENDING_NAV_FILTER: (typeof NAV_FILTERS)[number] = {
+	value: 'pending',
+	label: 'На проверке',
+	dotClass: 'bg-muted-foreground/35',
+}
+
+export function navFiltersFor(results: ReadonlyArray<AttemptQuestionView>): typeof NAV_FILTERS {
+	return results.some((item) => item.status === 'pending') ? [...NAV_FILTERS, PENDING_NAV_FILTER] : NAV_FILTERS
+}
 
 export type ChoiceOptionReviewStatus = 'correct' | 'incorrect-selected' | 'neutral'
 
@@ -347,10 +357,16 @@ export function formatAttemptDate(value?: string): string {
 	}).format(new Date(value))
 }
 
+export function getQuestionPointsLabel(view: Pick<AttemptQuestionView, 'status' | 'points' | 'earnedPoints'>) {
+	if (view.status === 'pending') return `до ${view.points} балл.`
+	return `${view.earnedPoints} / ${view.points} балл.`
+}
+
 export function getStatusLabel(status: QuestionStatus | null) {
 	if (status === 'correct') return 'Верно'
 	if (status === 'partial') return 'Частично'
 	if (status === 'wrong') return 'Неверно'
+	if (status === 'pending') return 'На проверке'
 	return 'Без оценки'
 }
 
@@ -358,6 +374,7 @@ export function getStatusClass(status: QuestionStatus | null) {
 	if (status === 'correct') return 'border-green-500/45 bg-green-50/80 text-green-700'
 	if (status === 'partial') return 'border-amber-500/45 bg-amber-50/80 text-amber-700'
 	if (status === 'wrong') return 'border-red-500/45 bg-red-50/80 text-red-700'
+	if (status === 'pending') return 'border-border/70 bg-secondary text-secondary-foreground'
 	return 'border-border/70 bg-secondary/60 text-muted-foreground'
 }
 
@@ -365,6 +382,7 @@ export function getStatusDotClass(status: QuestionStatus | null) {
 	if (status === 'correct') return 'bg-green-500'
 	if (status === 'partial') return 'bg-amber-400'
 	if (status === 'wrong') return 'bg-red-500'
+	if (status === 'pending') return 'bg-muted-foreground/35'
 	return 'bg-muted-foreground/35'
 }
 

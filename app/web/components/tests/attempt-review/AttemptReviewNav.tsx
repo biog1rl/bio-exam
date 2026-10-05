@@ -5,7 +5,7 @@ import {
 	formatDuration,
 	getQuestionView,
 	getStatusDotClass,
-	NAV_FILTERS,
+	navFiltersFor,
 	scrollToAttemptSection,
 	type NavFilter,
 } from './attempt-review-utils'
@@ -28,7 +28,7 @@ export function AttemptReviewNav({
 			<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">навигация</p>
 
 			<div className="mt-5 flex flex-wrap gap-2">
-				{NAV_FILTERS.map((filter) => (
+				{navFiltersFor(results).map((filter) => (
 					<button
 						key={filter.value}
 						type="button"

@@ -17,10 +17,13 @@ import {
 	getCorrectLines,
 	getMatchingReview,
 	getQuestionView,
+	getQuestionPointsLabel,
 	getSequenceReview,
 	getStatusClass,
+	getStatusDotClass,
 	getStatusLabel,
 	getTextReview,
+	navFiltersFor,
 	sequencePositionLabel,
 } from './attempt-review-utils'
 
@@ -276,6 +279,34 @@ test('getStatusLabel: ungraded и null — «Без оценки»; фильтр
 	const questions = [{ id: ID }, { id: second }] as PublicTestQuestion[]
 	assert.deepEqual(
 		filterQuestionsByStatus(questions, results, 'correct').map((question) => question.id),
+		[second]
+	)
+})
+
+test('статус pending: подпись, нейтральные класс и точка, баллы «до N», остальные статусы прежние', () => {
+	assert.equal(getStatusLabel('pending'), 'На проверке')
+	assert.equal(getStatusClass('pending'), 'border-border/70 bg-secondary text-secondary-foreground')
+	assert.equal(getStatusDotClass('pending'), 'bg-muted-foreground/35')
+	assert.equal(getQuestionPointsLabel(view({ status: 'pending', points: 3 })), 'до 3 балл.')
+	assert.equal(getQuestionPointsLabel(view({ status: 'partial', points: 3, earnedPoints: 2 })), '2 / 3 балл.')
+	assert.equal(getStatusLabel('wrong'), 'Неверно')
+})
+
+test('navFiltersFor: пункт «На проверке» последним и только при вопросе pending; фильтр оставляет только pending', () => {
+	const second = '33333333-3333-4333-8333-333333333333'
+	const withoutPending = [view({ status: 'correct' }), view({ questionId: second, status: 'wrong' })]
+	const withPending = [view({ status: 'correct' }), view({ questionId: second, status: 'pending' })]
+	assert.deepEqual(
+		navFiltersFor(withoutPending).map((item) => item.value),
+		['all', 'correct', 'partial', 'wrong']
+	)
+	assert.deepEqual(
+		navFiltersFor(withPending).map((item) => item.value),
+		['all', 'correct', 'partial', 'wrong', 'pending']
+	)
+	const questions = [{ id: ID }, { id: second }] as PublicTestQuestion[]
+	assert.deepEqual(
+		filterQuestionsByStatus(questions, withPending, 'pending').map((question) => question.id),
 		[second]
 	)
 })

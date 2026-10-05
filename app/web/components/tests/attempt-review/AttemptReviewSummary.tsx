@@ -1,6 +1,7 @@
 import { Clock3, Eye, RotateCcw } from 'lucide-react'
 
 import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion, QuestionStatus } from '@/lib/tests/types'
+import { cn } from '@/lib/utils/cn'
 
 import {
 	formatDuration,
@@ -38,9 +39,7 @@ function SummaryColumn({
 							className="flex w-full items-center justify-between rounded-2xl border border-transparent px-3 py-2 text-left text-sm text-muted-foreground transition-colors outline-none hover:border-primary/40 hover:bg-card/80 focus-visible:border-primary"
 						>
 							<span>Вопрос {index + 1}</span>
-							<span>
-								{result.earnedPoints}/{result.points}
-							</span>
+							<span>{status === 'pending' ? `до ${result.points}` : `${result.earnedPoints}/${result.points}`}</span>
 						</button>
 					)
 				})}
@@ -64,9 +63,10 @@ export function AttemptReviewSummary({
 			if (status === 'correct') acc.correct += 1
 			if (status === 'partial') acc.partial += 1
 			if (status === 'wrong') acc.wrong += 1
+			if (status === 'pending') acc.pending += 1
 			return acc
 		},
-		{ correct: 0, partial: 0, wrong: 0 }
+		{ correct: 0, partial: 0, wrong: 0, pending: 0 }
 	)
 	const telemetryStats = getAttemptTelemetryStats(attempt.telemetry, questions)
 
@@ -77,7 +77,7 @@ export function AttemptReviewSummary({
 				<h2 className="mt-2 font-serif text-3xl">Структура результата</h2>
 			</div>
 
-			<div className="grid gap-3 tab-sm:grid-cols-3">
+			<div className={cn('grid gap-3', counts.pending > 0 ? 'tab-sm:grid-cols-4' : 'tab-sm:grid-cols-3')}>
 				<SummaryColumn label="верно" status="correct" count={counts.correct} questions={questions} results={results} />
 				<SummaryColumn
 					label="частично"
@@ -87,6 +87,15 @@ export function AttemptReviewSummary({
 					results={results}
 				/>
 				<SummaryColumn label="неверно" status="wrong" count={counts.wrong} questions={questions} results={results} />
+				{counts.pending > 0 ? (
+					<SummaryColumn
+						label="на проверке"
+						status="pending"
+						count={counts.pending}
+						questions={questions}
+						results={results}
+					/>
+				) : null}
 			</div>
 
 			{telemetryStats ? (

@@ -1,6 +1,8 @@
 import { CheckCircle2, Clock3, FileText, Trophy, XCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
+import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 
 import { formatAttemptDate, formatDuration, getAttemptTelemetryStats, getQuestionView } from './attempt-review-utils'
@@ -28,7 +30,7 @@ export function AttemptReviewHero({
 	const correctCount = questions.filter(
 		(question) => getQuestionView(question.id, results)?.status === 'correct'
 	).length
-	const ResultIcon = attempt.passed ? CheckCircle2 : XCircle
+	const view = attemptResultView(attempt)
 
 	return (
 		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
@@ -42,14 +44,46 @@ export function AttemptReviewHero({
 				</div>
 
 				<div className="rounded-3xl border border-border/70 bg-secondary/55 p-unit">
-					<ResultIcon className={attempt.passed ? 'size-7 text-green-600' : 'size-7 text-red-600'} />
-					<p className="mt-6 font-serif text-4xl leading-none">{Math.round(attempt.scorePercentage)}%</p>
-					<p className="mt-2 text-sm text-muted-foreground">{attempt.passed ? 'порог пройден' : 'порог не пройден'}</p>
+					{view.kind === 'pending' ? (
+						<>
+							<Clock3 className="size-7 text-secondary-foreground" aria-hidden="true" />
+							<p className="mt-6 font-serif text-4xl leading-none break-words">На проверке</p>
+							{view.auto ? (
+								<p className="mt-2 text-sm text-muted-foreground">
+									авто {view.auto.earned} из {view.auto.total}
+								</p>
+							) : null}
+							<p className="mt-1 text-xs text-muted-foreground">Процент и итог появятся после проверки.</p>
+						</>
+					) : (
+						<>
+							{view.passed ? (
+								<CheckCircle2 className="size-7 text-green-600" />
+							) : (
+								<XCircle className="size-7 text-red-600" />
+							)}
+							<p className="mt-6 font-serif text-4xl leading-none">{Math.round(view.percent)}%</p>
+							<p className="mt-2 text-sm text-muted-foreground">{view.passed ? 'порог пройден' : 'порог не пройден'}</p>
+							{view.teacherChecked ? (
+								<div className="mt-4">
+									<TeacherCheckedMark />
+								</div>
+							) : null}
+						</>
+					)}
 				</div>
 			</div>
 
 			<div className="mt-8 grid gap-3 tab-sm:grid-cols-4">
-				<MetricTile label="баллов" value={`${attempt.earnedPoints}/${attempt.totalPoints}`} icon={Trophy} />
+				{view.kind === 'pending' ? (
+					<MetricTile
+						label="баллов автопроверки"
+						value={view.auto ? `${view.auto.earned}/${view.auto.total}` : '—'}
+						icon={Trophy}
+					/>
+				) : (
+					<MetricTile label="баллов" value={`${view.points.earned}/${view.points.total}`} icon={Trophy} />
+				)}
 				<MetricTile label="вопросов" value={questions.length} icon={FileText} />
 				<MetricTile label="верно" value={correctCount} icon={CheckCircle2} />
 				<MetricTile
