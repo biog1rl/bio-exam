@@ -1,28 +1,8 @@
-import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
 import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
-import { absoluteUrl } from '@/lib/http/absoluteUrl'
-import { objectAccess, type ObjectAccess } from '@/lib/session/object-access'
-
-async function fetchTestAccess(topicSlug: string, testSlug: string): Promise<ObjectAccess> {
-	try {
-		const cookieStorage = await cookies()
-		const cookieHeader = cookieStorage.toString()
-		const url = await absoluteUrl(
-			`/api/tests/by-slug/${encodeURIComponent(topicSlug)}/${encodeURIComponent(testSlug)}?view=summary`
-		)
-
-		const res = await fetch(url, {
-			method: 'GET',
-			headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-			cache: 'no-store',
-		})
-
-		return objectAccess(res.status)
-	} catch {
-		return 'error'
-	}
-}
+import { buildLoginRedirect } from '@/lib/session/redirect'
+import { serverRequest } from '@/lib/session/server'
 
 interface Props {
 	children: React.ReactNode
@@ -31,9 +11,17 @@ interface Props {
 
 export default async function AdminTestLayout({ children, params }: Props) {
 	const { topicSlug, testSlug } = await params
-	const access = await fetchTestAccess(topicSlug, testSlug)
+	const topicSegment = encodeURIComponent(topicSlug)
+	const testSegment = encodeURIComponent(testSlug)
+	const outcome = await serverRequest(`/api/tests/by-slug/${topicSegment}/${testSegment}?view=summary`, {
+		parse: () => null,
+	})
 
-	if (access === 'denied') {
+	if (outcome.kind === 'unauthorized') {
+		redirect(buildLoginRedirect(`/admin/tests/${topicSegment}/${testSegment}`))
+	}
+
+	if (outcome.kind === 'denied') {
 		return (
 			<AccessDeniedState
 				title="Нет доступа к тесту"

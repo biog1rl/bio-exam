@@ -1,10 +1,6 @@
-import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
-
 import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
 import AttemptReview from '@/components/tests/AttemptReview'
-import { absoluteUrl } from '@/lib/http/absoluteUrl'
-import { objectAccess, type ObjectAccess } from '@/lib/session/object-access'
+import { requireServerData, serverRequest } from '@/lib/session/server'
 import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 
 interface AttemptReviewResponse {
@@ -12,27 +8,13 @@ interface AttemptReviewResponse {
 	questions: PublicTestQuestion[]
 }
 
-type AttemptReviewResult = { access: 'ok'; data: AttemptReviewResponse } | { access: Exclude<ObjectAccess, 'ok'> }
-
-async function fetchAttemptReviewData(attemptId: string): Promise<AttemptReviewResult> {
-	try {
-		const cookieStorage = await cookies()
-		const cookieHeader = cookieStorage.toString()
-		const url = await absoluteUrl(`/api/tests/admin/attempts/${attemptId}`)
-
-		const res = await fetch(url, {
-			method: 'GET',
-			headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-			cache: 'no-store',
-		})
-
-		const access = objectAccess(res.status)
-		if (access !== 'ok') return { access }
-
-		return { access, data: (await res.json()) as AttemptReviewResponse }
-	} catch {
-		return { access: 'error' }
+function parseAttemptReview(body: unknown): AttemptReviewResponse {
+	if (!body || typeof body !== 'object') throw new Error('Malformed attempt review response')
+	const record = body as Record<string, unknown>
+	if (!record.attempt || typeof record.attempt !== 'object' || !Array.isArray(record.questions)) {
+		throw new Error('Malformed attempt review response')
 	}
+	return body as AttemptReviewResponse
 }
 
 interface Props {
@@ -41,9 +23,11 @@ interface Props {
 
 export default async function AttemptReviewPage({ params }: Props) {
 	const { id } = await params
-	const result = await fetchAttemptReviewData(id)
+	const outcome = await serverRequest(`/api/tests/admin/attempts/${encodeURIComponent(id)}`, {
+		parse: parseAttemptReview,
+	})
 
-	if (result.access === 'denied') {
+	if (outcome.kind === 'denied') {
 		return (
 			<AccessDeniedState
 				title="Нет доступа к попытке"
@@ -54,9 +38,7 @@ export default async function AttemptReviewPage({ params }: Props) {
 		)
 	}
 
-	if (result.access !== 'ok') {
-		notFound()
-	}
+	const data = requireServerData(outcome, `/admin/attempts/${encodeURIComponent(id)}`)
 
-	return <AttemptReview attempt={result.data.attempt} questions={result.data.questions} />
+	return <AttemptReview attempt={data.attempt} questions={data.questions} />
 }
