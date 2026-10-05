@@ -19,20 +19,26 @@ const REQUIRED_FILES = ['index.js', 'index.cjs', 'index.d.ts', 'index.d.cts']
 // Эталон: Object.keys() сборки tsup 8.5 (ESM и CJS одинаковы), снят до перехода на tsdown
 const EXPECTED_EXPORTS = [
 	'PERMISSION_DOMAINS',
+	'RESERVED_TOPIC_SLUGS',
 	'ROLES_LIST',
 	'ROLE_KEYS',
 	'ROLE_REGISTRY',
+	'SECTION_PERMISSIONS',
 	'STAFF_ROLE_KEYS',
 	'STUDENT_ROLE_KEY',
 	'accessRuleToSerializable',
 	'can',
+	'canAccessSection',
+	'canOpenPath',
 	'createAccessRule',
+	'isReservedTopicSlug',
 	'normaliseActionList',
 	'normaliseRoleAccessMap',
 	'normaliseRoleKeys',
 	'normaliseUserAccessMap',
 	'normaliseUserIdentifiers',
 	'roleDisplayName',
+	'sectionForPath',
 ]
 
 function diffNames(label, actual) {
