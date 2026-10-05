@@ -18,11 +18,13 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import useSWR from 'swr'
 
 import { StudentProgressSection } from '@/components/progress/StudentProgressSection'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { AttemptReviewLine, type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
 import { Button } from '@/components/ui/button'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -30,6 +32,7 @@ import { request } from '@/lib/http/request'
 import { quickLinkSections } from '@/lib/navigation/sections'
 import { optionalAdminData } from '@/lib/tests/admin-optional'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
+import { attemptResultView, type AttemptResultFields, type AttemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
 
@@ -63,7 +66,7 @@ type DashboardAttempt = TestAttemptSummary & {
 	testHref: string
 }
 
-type AdminDashboardAttempt = {
+type AdminDashboardAttempt = AttemptResultFields & {
 	attemptId: string
 	testId: string
 	testTitle: string
@@ -73,10 +76,6 @@ type AdminDashboardAttempt = {
 	studentId: string
 	studentName: string
 	submittedAt: string
-	earnedPoints: number
-	totalPoints: number
-	scorePercentage: number
-	passed: boolean
 }
 
 type AdminDashboardData = {
@@ -93,20 +92,6 @@ type AdminDashboardData = {
 		averageScore: number | null
 	}>
 }
-
-const studentChartConfig = {
-	score: {
-		label: 'Результат',
-		color: 'var(--chart-1)',
-	},
-} satisfies ChartConfig
-
-const adminStudentChartConfig = {
-	score: {
-		label: 'Балл',
-		color: 'var(--chart-1)',
-	},
-} satisfies ChartConfig
 
 const teacherChartConfig = {
 	published: {
@@ -135,6 +120,16 @@ function formatDate(value?: string) {
 function average(values: number[]) {
 	if (values.length === 0) return 0
 	return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function reviewDateLine(
+	submittedAt: string,
+	view: Extract<AttemptResultView, { kind: 'pending' }>,
+	audience: AttemptReviewAudience
+) {
+	const date = formatDate(submittedAt)
+	if (!view.auto) return date
+	return `${date} · ${audience === 'student' ? 'предварительно' : 'авто'} ${view.auto.earned} из ${view.auto.total}`
 }
 
 function dashboardName(firstName?: string | null, login?: string | null) {
@@ -220,37 +215,21 @@ export default function DashboardClient() {
 		.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
 		.slice(0, 6)
 	const latestAttempt = latestAttempts[0] ?? null
-	const averageScore = Math.round(average(allAttempts.map((attempt) => attempt.scorePercentage)))
+	const finalPercents = allAttempts.flatMap((attempt) => {
+		const view = attemptResultView(attempt)
+		return view.kind === 'final' ? [view.percent] : []
+	})
+	const averageScore = finalPercents.length === 0 ? null : Math.round(average(finalPercents))
+	const bestPercent = finalPercents.length === 0 ? null : Math.max(...finalPercents)
 	const completedTotal = attemptBundles.reduce((sum, bundle) => sum + bundle.total, 0)
-	const bestAttempt = allAttempts.reduce<DashboardAttempt | null>(
-		(best, attempt) => (!best || attempt.scorePercentage > best.scorePercentage ? attempt : best),
-		null
-	)
-
-	const studentProgress = [...allAttempts]
-		.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime())
-		.slice(-12)
-		.map((attempt, index) => ({
-			label: `${index + 1}`,
-			score: Math.round(attempt.scorePercentage),
-			testTitle: attempt.testTitle,
-			date: formatDate(attempt.submittedAt),
-		}))
-
-	const groupedTests = useMemo(() => {
-		const groups = new Map<string, PublicTestListItem[]>()
-		for (const test of tests) {
-			const key = test.topicTitle
-			groups.set(key, [...(groups.get(key) ?? []), test])
-		}
-		return Array.from(groups.entries()).slice(0, 4)
-	}, [tests])
 
 	const topics = adminTopicsQuery.data?.topics ?? []
 	const adminTests = adminTestsQuery.data?.tests ?? []
 	const adminDashboard = adminDashboardQuery.data
 	const adminLatestAttempts = adminDashboard?.latestAttempts ?? []
 	const adminLatestAttempt = adminLatestAttempts[0] ?? null
+	const adminLatestView = adminLatestAttempt ? attemptResultView(adminLatestAttempt) : null
+	const latestView = latestAttempt ? attemptResultView(latestAttempt) : null
 	const teacherAllowed = canReadTests && adminTopicsQuery.data !== null && adminTestsQuery.data !== null
 	const publishedCount = adminTests.filter((test) => test.isPublished).length
 	const draftCount = adminTests.length - publishedCount
@@ -265,15 +244,6 @@ export default function DashboardClient() {
 			questions: topicTests.reduce((sum, test) => sum + (test.questionsCount ?? 0), 0),
 		}
 	})
-	const adminStudentScores = [...adminLatestAttempts]
-		.reverse()
-		.slice(-8)
-		.map((attempt) => ({
-			student: attempt.studentName,
-			score: Math.round(attempt.scorePercentage),
-			testTitle: attempt.testTitle,
-			date: formatDate(attempt.submittedAt),
-		}))
 	const heroTitle = canReadTests
 		? 'Контроль тестов и активности студентов'
 		: latestAttempt
@@ -343,8 +313,8 @@ export default function DashboardClient() {
 						) : (
 							[
 								['завершено', completedTotal, BookOpenCheck],
-								['средний балл', averageScore ? `${averageScore}%` : '—', LineChart],
-								['лучший результат', bestAttempt ? formatPercent(bestAttempt.scorePercentage) : '—', Sparkles],
+								['средний балл', averageScore === null ? '—' : `${averageScore}%`, LineChart],
+								['лучший результат', bestPercent === null ? '—' : formatPercent(bestPercent), Sparkles],
 							].map(([label, value, Icon]) => {
 								const TypedIcon = Icon as typeof BookOpenCheck
 								return (
@@ -387,16 +357,27 @@ export default function DashboardClient() {
 										</div>
 										<ArrowRight className="mt-1 size-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
 									</div>
-									<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-										<div
-											className="h-full rounded-full bg-primary"
-											style={{ width: `${adminLatestAttempt.scorePercentage}%` }}
-										/>
-									</div>
-									<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-										<span>{formatDate(adminLatestAttempt.submittedAt)}</span>
-										<span>{formatPercent(adminLatestAttempt.scorePercentage)}</span>
-									</div>
+									{adminLatestView?.kind === 'final' ? (
+										<>
+											<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+												<div
+													className="h-full rounded-full bg-primary"
+													style={{ width: `${adminLatestView.percent}%` }}
+												/>
+											</div>
+											<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+												<span>{formatDate(adminLatestAttempt.submittedAt)}</span>
+												<span>{formatPercent(adminLatestView.percent)}</span>
+											</div>
+										</>
+									) : adminLatestView ? (
+										<>
+											<div className="mt-4">
+												<AttemptReviewLine view={adminLatestView} audience="staff" />
+											</div>
+											<p className="mt-3 text-sm text-muted-foreground">{formatDate(adminLatestAttempt.submittedAt)}</p>
+										</>
+									) : null}
 								</Link>
 							) : (
 								<p className="mt-3 text-sm text-muted-foreground">Попыток студентов пока нет</p>
@@ -407,16 +388,24 @@ export default function DashboardClient() {
 									<p className="truncate font-serif text-xl mob:text-2xl">{latestAttempt.testTitle}</p>
 									<ArrowRight className="mt-1 size-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
 								</div>
-								<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-									<div
-										className="h-full rounded-full bg-primary"
-										style={{ width: `${latestAttempt.scorePercentage}%` }}
-									/>
-								</div>
-								<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-									<span>{formatDate(latestAttempt.submittedAt)}</span>
-									<span>{formatPercent(latestAttempt.scorePercentage)}</span>
-								</div>
+								{latestView?.kind === 'final' ? (
+									<>
+										<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+											<div className="h-full rounded-full bg-primary" style={{ width: `${latestView.percent}%` }} />
+										</div>
+										<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+											<span>{formatDate(latestAttempt.submittedAt)}</span>
+											<span>{formatPercent(latestView.percent)}</span>
+										</div>
+									</>
+								) : latestView ? (
+									<>
+										<div className="mt-4">
+											<AttemptReviewLine view={latestView} audience="student" />
+										</div>
+										<p className="mt-3 text-sm text-muted-foreground">{formatDate(latestAttempt.submittedAt)}</p>
+									</>
+								) : null}
 							</Link>
 						) : (
 							<p className="mt-3 text-sm text-muted-foreground">Попыток пока нет</p>
@@ -474,28 +463,43 @@ export default function DashboardClient() {
 							) : latestAttempts.length === 0 ? (
 								<EmptyPanel>История появится после первой попытки.</EmptyPanel>
 							) : (
-								latestAttempts.map((attempt) => (
-									<Link
-										key={attempt.id}
-										href={attempt.testHref}
-										className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-									>
-										<div className="flex items-center justify-between gap-3">
-											<p className="truncate font-medium">{attempt.testTitle}</p>
-											<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
-												{formatPercent(attempt.scorePercentage)}
-												<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-											</span>
-										</div>
-										<div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-											<div
-												className="h-full rounded-full bg-primary"
-												style={{ width: `${attempt.scorePercentage}%` }}
-											/>
-										</div>
-										<p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt)}</p>
-									</Link>
-								))
+								latestAttempts.map((attempt) => {
+									const view = attemptResultView(attempt)
+									return (
+										<Link
+											key={attempt.id}
+											href={attempt.testHref}
+											className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
+										>
+											<div className="flex items-center justify-between gap-3">
+												<p className="truncate font-medium">{attempt.testTitle}</p>
+												{view.kind === 'final' ? (
+													<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
+														{formatPercent(view.percent)}
+														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+													</span>
+												) : (
+													<span className="flex shrink-0 items-center gap-2">
+														<ReviewStatusChip />
+														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+													</span>
+												)}
+											</div>
+											{view.kind === 'final' ? (
+												<>
+													<div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+														<div className="h-full rounded-full bg-primary" style={{ width: `${view.percent}%` }} />
+													</div>
+													<p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt)}</p>
+												</>
+											) : (
+												<p className="mt-3 text-xs text-muted-foreground">
+													{reviewDateLine(attempt.submittedAt, view, 'student')}
+												</p>
+											)}
+										</Link>
+									)
+								})
 							)}
 						</div>
 					</SoftPanel>
@@ -512,25 +516,39 @@ export default function DashboardClient() {
 							) : adminLatestAttempts.length === 0 ? (
 								<EmptyPanel>Студенты пока не завершали тесты.</EmptyPanel>
 							) : (
-								adminLatestAttempts.slice(0, 5).map((attempt) => (
-									<Link
-										key={attempt.attemptId}
-										href={`/admin/attempts/${attempt.attemptId}`}
-										className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-									>
-										<div className="flex items-center justify-between gap-3">
-											<div className="min-w-0">
-												<p className="truncate font-medium">{attempt.studentName}</p>
-												<p className="truncate text-xs text-muted-foreground">{attempt.testTitle}</p>
+								adminLatestAttempts.slice(0, 5).map((attempt) => {
+									const view = attemptResultView(attempt)
+									return (
+										<Link
+											key={attempt.attemptId}
+											href={`/admin/attempts/${attempt.attemptId}`}
+											className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
+										>
+											<div className="flex items-center justify-between gap-3">
+												<div className="min-w-0">
+													<p className="truncate font-medium">{attempt.studentName}</p>
+													<p className="truncate text-xs text-muted-foreground">{attempt.testTitle}</p>
+												</div>
+												{view.kind === 'final' ? (
+													<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
+														{formatPercent(view.percent)}
+														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+													</span>
+												) : (
+													<span className="flex shrink-0 items-center gap-2">
+														<ReviewStatusChip />
+														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+													</span>
+												)}
 											</div>
-											<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
-												{formatPercent(attempt.scorePercentage)}
-												<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-											</span>
-										</div>
-										<p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt)}</p>
-									</Link>
-								))
+											<p className="mt-2 text-xs text-muted-foreground">
+												{view.kind === 'final'
+													? formatDate(attempt.submittedAt)
+													: reviewDateLine(attempt.submittedAt, view, 'staff')}
+											</p>
+										</Link>
+									)
+								})
 							)}
 						</div>
 					</SoftPanel>
@@ -554,101 +572,6 @@ export default function DashboardClient() {
 			) : null}
 
 			{canReadTests ? null : <StudentProgressSection />}
-			{/* <section>
-        <SoftPanel className="p-unit-mob tab-sm:p-unit">
-          <SectionTitle kicker="график" title="Динамика результатов" />
-          <div className="mt-6">
-            {canReadTests ? (
-              adminDashboardQuery.isLoading ? (
-                <Skeleton className="h-70 rounded-3xl" />
-              ) : adminStudentScores.length === 0 ? (
-                <EmptyPanel>График появится после первых попыток студентов.</EmptyPanel>
-              ) : (
-                <ChartContainer config={adminStudentChartConfig} className="h-70 w-full">
-                  <BarChart data={adminStudentScores}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis dataKey="student" tickLine={false} axisLine={false} />
-                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="score" fill="var(--color-score)" radius={8} />
-                  </BarChart>
-                </ChartContainer>
-              )
-            ) : attemptsQuery.isLoading ? (
-              <Skeleton className="h-70 rounded-3xl" />
-            ) : studentProgress.length === 0 ? (
-              <EmptyPanel>График появится после первой попытки.</EmptyPanel>
-            ) : (
-              <ChartContainer config={studentChartConfig} className="h-70 w-full">
-                <AreaChart data={studentProgress}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} tickLine={false} axisLine={false} unit="%" />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Area
-                    dataKey="score"
-                    type="monotone"
-                    fill="var(--color-score)"
-                    fillOpacity={0.22}
-                    stroke="var(--color-score)"
-                    strokeWidth={3}
-                  />
-                </AreaChart>
-              </ChartContainer>
-            )}
-          </div>
-
-          {canReadTests ? null : (
-            <>
-              <div className="mt-8 flex items-center justify-between gap-4">
-                <SectionTitle kicker="темы" title="Доступные направления" />
-                <Button
-                  asChild
-                  variant="outline"
-                  className="-sm hidden rounded-full bg-card transition-all tab-sm:inline-flex"
-                >
-                  <Link href="/tests">Все тесты</Link>
-                </Button>
-              </div>
-              <div className="mt-6 grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-4">
-                {groupedTests.length === 0 ? (
-                  <EmptyPanel>Темы появятся после назначения тестов.</EmptyPanel>
-                ) : (
-                  groupedTests.map(([topicTitle, topicTests]) => (
-                    <div key={topicTitle} className="rounded-3xl border border-border bg-card p-unit">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="font-serif text-2xl">{topicTitle}</h3>
-                        <span className="rounded-full bg-secondary px-3 py-1 text-sm">{topicTests.length}</span>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        {topicTests.slice(0, 5).map((test) => (
-                          <Link
-                            key={test.id}
-                            href={`/tests/${test.topicSlug}/${test.slug}`}
-                            className={`group flex items-center justify-between gap-3 rounded-2xl bg-secondary/55 px-3 py-2 text-sm hover:bg-secondary ${interactiveCardClass}`}
-                          >
-                            <span className="truncate">{test.title}</span>
-                            <ArrowRight className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
-                          </Link>
-                        ))}
-                        {topicTests.length > 5 ? (
-                          <Link
-                            href="/tests"
-                            className={`group flex items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm text-muted-foreground hover:bg-secondary/45 hover:text-foreground ${interactiveCardClass}`}
-                          >
-                            <span>Ещё {topicTests.length - 5}</span>
-                            <ArrowRight className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
-                          </Link>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </SoftPanel>
-      </section> */}
 
 			{canReadTests ? (
 				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 tab:grid-cols-[23.75rem_minmax(0,1fr)]">
