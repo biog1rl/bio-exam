@@ -85,6 +85,8 @@ const INVENTORY = [
 	route(USER_ROUTES, 'delete', '/:userId/test-assignments/:testId', OBJECT, [REMOVE_ASSIGNMENT]),
 	route(USER_ROUTES, 'get', '/', LIST, ['userScope(']),
 	route(USER_ROUTES, 'get', '/:userId/test-attempts', LIST, ['testScope(']),
+	route(USER_ROUTES, 'get', '/:id', COARSE, ['canReadUser(']),
+	route(USER_ROUTES, 'get', '/by-login/:login', COARSE, ['canReadUser(', 'hasGlobalZone(']),
 	route(LOGIN_THROTTLE_ROUTES, 'delete', '/:id/login-throttle', OBJECT, ['canAssistSignIn(']),
 	route(SESSION_ROUTES, 'post', '/:id/sessions/revoke', OBJECT, ['canAssistSignIn(']),
 	route(INVITE_ROUTES, 'post', '/', COARSE, ['hasGlobalZone(', 'canManageGroup(', 'canManageStudent(']),
@@ -407,7 +409,7 @@ test('маршруты инвентаря D-14 решают доступ фун�
 		const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8')
 		assert.ok(registrations(source, config.router).length > 0, `${file}: нет регистраций ${config.router}`)
 	}
-	assert.equal(INVENTORY.length, 43)
+	assert.equal(INVENTORY.length, 45)
 	assert.deepEqual(inventoryViolations(REPO_ROOT), [])
 })
 

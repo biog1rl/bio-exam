@@ -2,7 +2,6 @@ import type { RoleKey } from '@bio-exam/rbac'
 import { ROLE_KEYS, STAFF_ROLE_KEYS } from '@bio-exam/rbac'
 
 import { and, asc, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
-import { alias } from 'drizzle-orm/pg-core'
 import { Router } from 'express'
 import { z } from 'zod'
 
@@ -23,7 +22,6 @@ import {
 	ineligibleTeacherGroupMembers,
 	loadRoleTraits,
 	releaseZone,
-	studentOnlyFilter,
 	testScope,
 	userScope,
 } from '../../services/access-policy/index.js'
@@ -35,6 +33,7 @@ import avatarRouter from './avatar.js'
 import loginThrottleRouter from './login-throttle.js'
 import profileRouter from './profile.js'
 import sessionsRouter from './sessions.js'
+import { selectUserRows, serializeUserRow, userZoneFilter } from './user-rows.js'
 
 const router = Router()
 
@@ -122,113 +121,54 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 		if (!scope.all && scope.groupIds.length === 0) {
 			return res.json({ rows: [], users: [], total: 0 })
 		}
-		const zoneFilter = scope.all
-			? undefined
-			: and(
-					sql`exists (select 1 from ${userGroups} where ${userGroups.userId} = ${users.id} and ${inArray(userGroups.groupId, scope.groupIds)})`,
-					studentOnlyFilter(users.id)
-				)
+		const zoneFilter = userZoneFilter(scope)
 
 		const [{ total }] = await db.select({ total: count() }).from(users).where(zoneFilter)
 
-		const createdByUser = alias(users, 'createdByUser')
-		const createdByName = scope.all
-			? sql<string | null>`coalesce(${createdByUser.name}, ${createdByUser.login})`
-			: sql<
-					string | null
-				>`coalesce(${createdByUser.name}, nullif(concat_ws(' ', ${createdByUser.firstName}, ${createdByUser.lastName}), ''))`
-		const groupsInZone = scope.all ? sql`` : sql` and ${inArray(sql`ug.group_id`, scope.groupIds)}`
-
-		const rows = await db
-			.select({
-				id: users.id,
-				login: users.login,
-				firstName: users.firstName,
-				lastName: users.lastName,
-				name: users.name,
-				avatar: users.avatar,
-				avatarCropped: users.avatarCropped,
-				avatarColor: users.avatarColor,
-				initials: users.initials,
-				isActive: users.isActive,
-				invitedAt: users.invitedAt,
-				activatedAt: users.activatedAt,
-				createdAt: users.createdAt,
-				createdByName: createdByName.as('createdByName'),
-				roles: sql<string[]>`
-          coalesce(array_agg(${userRoles.roleKey}) filter (where ${userRoles.roleKey} is not null), '{}')
-        `.as('roles'),
-				birthdate: users.birthdate,
-				telegram: users.telegram,
-				phone: users.phone,
-				email: users.email,
-				groups: sql<Array<{ id: string; name: string }>>`
-          coalesce((select json_agg(json_build_object('id', sg.id, 'name', sg.name) order by sg.name, sg.id)
-           from user_groups ug
-           inner join student_groups sg on sg.id = ug.group_id
-           where ug.user_id = ${users.id}${groupsInZone}), '[]'::json)
-        `.as('groups'),
-			})
-			.from(users)
-			.leftJoin(userRoles, eq(userRoles.userId, users.id))
-			.leftJoin(createdByUser, eq(users.createdBy, createdByUser.id))
-			.where(zoneFilter)
-			.groupBy(
-				users.id,
-				users.login,
-				users.firstName,
-				users.lastName,
-				users.name,
-				users.avatar,
-				users.avatarCropped,
-				users.avatarColor,
-				users.initials,
-				users.isActive,
-				users.invitedAt,
-				users.activatedAt,
-				users.createdAt,
-				users.createdBy,
-				users.birthdate,
-				users.telegram,
-				users.phone,
-				users.email,
-				createdByUser.name,
-				createdByUser.login,
-				createdByUser.firstName,
-				createdByUser.lastName
-			)
-			.orderBy(desc(users.createdAt))
-			.limit(limit)
-			.offset(offset)
-
-		const result: UserRow[] = rows.map((r) => {
-			const groups = r.groups ?? []
-			return {
-				id: r.id,
-				login: r.login,
-				firstName: r.firstName,
-				lastName: r.lastName,
-				name: r.name,
-				avatar: avatarUrl(r.avatar),
-				avatarCropped: avatarUrl(r.avatarCropped),
-				avatarColor: r.avatarColor,
-				initials: r.initials,
-				isActive: Boolean(r.isActive),
-				invitedAt: r.invitedAt ? new Date(r.invitedAt).toISOString() : null,
-				activatedAt: r.activatedAt ? new Date(r.activatedAt).toISOString() : null,
-				createdAt: new Date(r.createdAt).toISOString(),
-				createdByName: r.createdByName,
-				roles: r.roles ?? [],
-				birthdate: r.birthdate,
-				telegram: r.telegram,
-				phone: r.phone,
-				email: r.email,
-				groups,
-				groupName: groups[0]?.name ?? null,
-			}
-		})
+		const rows = await selectUserRows({ scope, limit, offset })
+		const result: UserRow[] = rows.map(serializeUserRow)
 
 		res.json({ rows: result, users: result, total })
+	} catch (e) {
+		next(e)
+	}
+})
+
+const USER_NOT_FOUND = 'Пользователь не найден'
+
+router.get('/:id', validateUUID('id'), sessionRequired(), requirePerm('users', 'read'), async (req, res, next) => {
+	try {
+		const id = req.params.id as string
+		if (!(await canReadUser(req, id))) {
+			return res.status(403).json({ error: 'Forbidden' })
+		}
+		const scope = await userScope(req)
+		const [row] = await selectUserRows({ where: eq(users.id, id), scope, limit: 1 })
+		if (!row) return res.status(404).json({ error: USER_NOT_FOUND })
+		return res.json({ user: serializeUserRow(row) })
+	} catch (e) {
+		next(e)
+	}
+})
+
+router.get('/by-login/:login', sessionRequired(), requirePerm('users', 'read'), async (req, res, next) => {
+	try {
+		const login = String(req.params.login).trim()
+		const scope = await userScope(req)
+		let [row] = await selectUserRows({ where: eq(users.login, login), scope, limit: 1 })
+		if (!row) {
+			const folded = await selectUserRows({ where: sql`lower(${users.login}) = lower(${login})`, scope, limit: 2 })
+			if (folded.length === 1) row = folded[0]
+		}
+		if (!row) {
+			return (await hasGlobalZone(req))
+				? res.status(404).json({ error: USER_NOT_FOUND })
+				: res.status(403).json({ error: 'Forbidden' })
+		}
+		if (!(await canReadUser(req, row.id))) {
+			return res.status(403).json({ error: 'Forbidden' })
+		}
+		return res.json({ user: serializeUserRow(row) })
 	} catch (e) {
 		next(e)
 	}

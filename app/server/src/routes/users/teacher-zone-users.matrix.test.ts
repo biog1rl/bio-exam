@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import { call, startAuthApp, type AuthApp, type Reply } from '../../test-support/auth-app.js'
@@ -321,6 +322,123 @@ row(
 		expectStatus(await send(p, 'GET', `/users/${staffId}/test-assignments`), 403)
 		expectStatus(await send(p, 'GET', `/users/${promoted}/test-assignments`), 403)
 	}
+)
+
+const MISSING_USER_ID = crypto.randomUUID()
+const MISSING_LOGIN = 'tzusr_missing_person'
+
+function lookupById(profile: ZoneProfile, id: string): Promise<Reply> {
+	return send(profile, 'GET', `/users/${id}`)
+}
+
+function lookupByLogin(profile: ZoneProfile, login: string): Promise<Reply> {
+	return send(profile, 'GET', `/users/by-login/${encodeURIComponent(login)}`)
+}
+
+async function expectListRow(profile: ZoneProfile, reply: Reply, id: string): Promise<Item> {
+	expectStatus(reply, 200)
+	const { rows } = await listUsers(profile)
+	const expected = rows.find((item) => item.id === id)
+	assert.ok(expected, `нет строки ${id} в списке ${profile}`)
+	assert.deepEqual(reply.body, { user: expected })
+	return expected
+}
+
+row(
+	['teacherA'],
+	'GET /users/:id s1 body',
+	'200, тело равно строке s1 в списке учителя, группы только G',
+	async (p) => {
+		const user = await expectListRow(p, await lookupById(p, w.users.s1.id), w.users.s1.id)
+		assert.deepEqual(
+			rowsOf(user.groups, 'групп s1').map((item) => item.id),
+			[w.groups.G]
+		)
+	}
+)
+row(
+	['teacherA'],
+	'GET /users/by-login s1 body',
+	'200, тело равно строке s1 в списке учителя, группы только G',
+	async (p) => {
+		const user = await expectListRow(p, await lookupByLogin(p, w.users.s1.login), w.users.s1.id)
+		assert.deepEqual(
+			rowsOf(user.groups, 'групп s1').map((item) => item.id),
+			[w.groups.G]
+		)
+	}
+)
+row(['teacherA'], 'GET /users/:id createdByName', 'кем создан — имя без логина, как в списке учителя', async (p) => {
+	const groupId = await w.freshGroup({ owner: w.users.teacherA.id })
+	const invite = await send(p, 'POST', '/auth/invites', { firstName: 'Новый', groupId })
+	expectStatus(invite, 200)
+	const id = String(invite.body.userId)
+	const user = await expectListRow(p, await lookupById(p, id), id)
+	assert.equal(user.createdByName, `Имя ${w.prefix} teacherA Фамилия ${w.prefix} teacherA`)
+})
+row(['admin'], 'GET /users/:id s1 body', '200, тело равно строке s1 в списке администратора', async (p) => {
+	await expectListRow(p, await lookupById(p, w.users.s1.id), w.users.s1.id)
+})
+status(
+	[
+		['adminNoZone', 403],
+		['s1', 403],
+		['readUsers', 403],
+		['readUsersAll', 200],
+	],
+	'GET /users/:id s1',
+	(p) => lookupById(p, w.users.s1.id)
+)
+status(
+	[
+		['adminNoZone', 403],
+		['s1', 403],
+		['admin', 200],
+	],
+	'GET /users/by-login s1',
+	(p) => lookupByLogin(p, w.users.s1.login)
+)
+status(
+	[
+		['teacherA', 403],
+		['teacherB', 200],
+		['admin', 200],
+		['readUsers', 403],
+	],
+	'GET /users/:id s3',
+	(p) => lookupById(p, w.users.s3.id)
+)
+status(
+	[
+		['teacherA', 403],
+		['teacherB', 200],
+		['admin', 200],
+		['readUsers', 403],
+	],
+	'GET /users/by-login s3',
+	(p) => lookupByLogin(p, w.users.s3.login)
+)
+status(
+	[
+		['teacherA', 403],
+		['readUsers', 403],
+		['adminNoZone', 403],
+		['admin', 404],
+		['readUsersAll', 404],
+	],
+	'GET /users/:id missing',
+	(p) => lookupById(p, MISSING_USER_ID)
+)
+status(
+	[
+		['teacherA', 403],
+		['readUsers', 403],
+		['adminNoZone', 403],
+		['admin', 404],
+		['readUsersAll', 404],
+	],
+	'GET /users/by-login missing',
+	(p) => lookupByLogin(p, MISSING_LOGIN)
 )
 
 let sharedStudent: Promise<string> | null = null

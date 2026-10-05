@@ -16,6 +16,8 @@ POST /api/users/:id/sessions/revoke  validateUUID(id) > sessionRequired > <anony
 DELETE /api/users/:id/login-throttle  validateUUID(id) > sessionRequired > <anonymous>
 GET /api/users/directory  sessionRequired > <anonymous>
 GET /api/users  sessionRequired > requirePerm(users.read) > <anonymous>
+GET /api/users/:id  validateUUID(id) > sessionRequired > requirePerm(users.read) > <anonymous>
+GET /api/users/by-login/:login  sessionRequired > requirePerm(users.read) > <anonymous>
 PATCH /api/users/:id  validateUUID(id) > sessionRequired > requirePerm(users.edit) > <anonymous>
 PATCH /api/users/:id/group  validateUUID(id) > sessionRequired > requirePerm(users.edit) > <anonymous>
 DELETE /api/users/:id  validateUUID(id) > sessionRequired > requirePerm(users.edit) > <anonymous>
