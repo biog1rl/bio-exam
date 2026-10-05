@@ -10,6 +10,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { topicHeroTeachersLine } from '@/lib/tests/bank-view'
 
 import type { Topic } from '../../types'
 import type { TopicStats } from './topic-page-utils'
@@ -17,12 +18,20 @@ import type { TopicStats } from './topic-page-utils'
 interface TopicHeroProps {
 	topic: Topic
 	stats: TopicStats | null
+	canManageCatalog: boolean
 	onEditTopic: () => void
 	onExportTopic: (withAnswers: boolean) => void
 	onDeleteTopic: () => void
 }
 
-export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTopic }: TopicHeroProps) {
+export function TopicHero({
+	topic,
+	stats,
+	canManageCatalog,
+	onEditTopic,
+	onExportTopic,
+	onDeleteTopic,
+}: TopicHeroProps) {
 	return (
 		<section className="overflow-hidden rounded-4xl border border-border/80 bg-card/90 shadow-sm">
 			<div className="grid gap-0 tab:grid-cols-[1fr_18.75rem]">
@@ -42,6 +51,11 @@ export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTo
 							{topic.description ||
 								'Тема без описания. Добавьте короткую аннотацию, чтобы команда быстрее понимала контекст набора тестов.'}
 						</p>
+						{topic.teachers ? (
+							<p className="mt-4 max-w-2xl text-sm break-words text-muted-foreground">
+								{topicHeroTeachersLine(topic.teachers)}
+							</p>
+						) : null}
 					</div>
 
 					<div className="mt-8 flex flex-wrap gap-2">
@@ -51,10 +65,12 @@ export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTo
 								Новый тест
 							</Link>
 						</Button>
-						<Button variant="outline" onClick={onEditTopic} className="rounded-full bg-card transition-all">
-							<Edit className="size-4" />
-							Тема
-						</Button>
+						{canManageCatalog ? (
+							<Button variant="outline" onClick={onEditTopic} className="rounded-full bg-card transition-all">
+								<Edit className="size-4" />
+								Тема
+							</Button>
+						) : null}
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button variant="outline" className="rounded-full bg-card transition-all">
@@ -70,11 +86,15 @@ export function TopicHero({ topic, stats, onEditTopic, onExportTopic, onDeleteTo
 								<DropdownMenuItem onClick={() => onExportTopic(true)}>
 									<Download className="mr-2 size-4" />С ответами
 								</DropdownMenuItem>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem onClick={onDeleteTopic} className="text-destructive">
-									<Trash2 className="mr-2 size-4" />
-									Удалить тему
-								</DropdownMenuItem>
+								{canManageCatalog ? (
+									<>
+										<DropdownMenuSeparator />
+										<DropdownMenuItem onClick={onDeleteTopic} className="text-destructive">
+											<Trash2 className="mr-2 size-4" />
+											Удалить тему
+										</DropdownMenuItem>
+									</>
+								) : null}
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>

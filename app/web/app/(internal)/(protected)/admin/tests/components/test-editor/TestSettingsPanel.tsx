@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { NO_TOPICS_FOR_TEST, testTopicPickerState } from '@/lib/tests/bank-view'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import type { TestFormData, Topic } from '../../types'
@@ -28,6 +29,8 @@ interface TestSettingsPanelProps {
 	testSlugError: string | null
 	setTestSlugError: (error: string | null) => void
 	saving: boolean
+	canManageCatalog: boolean
+	saveDisabled: boolean
 	onCreateTopic: () => void
 	onSave: () => void
 }
@@ -45,9 +48,12 @@ export function TestSettingsPanel({
 	testSlugError,
 	setTestSlugError,
 	saving,
+	canManageCatalog,
+	saveDisabled,
 	onCreateTopic,
 	onSave,
 }: TestSettingsPanelProps) {
+	const topicPicker = testTopicPickerState({ topics: topics.length, canManage: canManageCatalog })
 	return (
 		<AdminTestsSectionCard title="Настройки теста" className="sticky top-unit h-fit" headerClassName="pb-3">
 			<div className="space-y-4 pr-3">
@@ -58,7 +64,9 @@ export function TestSettingsPanel({
 							<Skeleton className="h-10 w-full" aria-label="Загрузка тем" />
 						) : topicsError ? (
 							<p role="alert">Не удалось загрузить темы</p>
-						) : topics.length === 0 ? (
+						) : topicPicker === 'ask-admin' ? (
+							<p className="text-sm text-muted-foreground">{NO_TOPICS_FOR_TEST}</p>
+						) : topicPicker === 'create-first' ? (
 							<div className="space-y-2">
 								<p className="text-sm text-muted-foreground">Нет доступных тем. Создайте первую тему.</p>
 								<Button type="button" variant="outline" className="w-full rounded-full" onClick={onCreateTopic}>
@@ -80,9 +88,11 @@ export function TestSettingsPanel({
 										))}
 									</SelectContent>
 								</Select>
-								<Button type="button" variant="outline" size="icon" onClick={onCreateTopic} title="Создать тему">
-									<FolderPlus className="size-4" />
-								</Button>
+								{canManageCatalog ? (
+									<Button type="button" variant="outline" size="icon" onClick={onCreateTopic} title="Создать тему">
+										<FolderPlus className="size-4" />
+									</Button>
+								) : null}
 							</div>
 						)}
 					</div>
@@ -238,23 +248,27 @@ export function TestSettingsPanel({
 						/>
 					</div>
 
-					<div className="space-y-3">
-						<Label>Начисление баллов</Label>
-						{isEditingExisting && topicSlug && testSlug ? (
-							<div className="space-y-2">
-								<Button variant="outline" asChild className="w-full rounded-full">
-									<Link href={`/admin/tests/scoring?scope=test&topicSlug=${topicSlug}&testSlug=${testSlug}`}>
-										Настроить баллы для этого теста
-									</Link>
-								</Button>
-								<Button variant="outline" asChild className="w-full rounded-full">
-									<Link href="/admin/tests/question-types">Настроить типы вопросов</Link>
-								</Button>
-							</div>
-						) : (
-							<p className="text-sm text-muted-foreground">Сохраните тест, чтобы настроить баллы для него отдельно.</p>
-						)}
-					</div>
+					{canManageCatalog ? (
+						<div className="space-y-3">
+							<Label>Начисление баллов</Label>
+							{isEditingExisting && topicSlug && testSlug ? (
+								<div className="space-y-2">
+									<Button variant="outline" asChild className="w-full rounded-full">
+										<Link href={`/admin/tests/scoring?scope=test&topicSlug=${topicSlug}&testSlug=${testSlug}`}>
+											Настроить баллы для этого теста
+										</Link>
+									</Button>
+									<Button variant="outline" asChild className="w-full rounded-full">
+										<Link href="/admin/tests/question-types">Настроить типы вопросов</Link>
+									</Button>
+								</div>
+							) : (
+								<p className="text-sm text-muted-foreground">
+									Сохраните тест, чтобы настроить баллы для него отдельно.
+								</p>
+							)}
+						</div>
+					) : null}
 
 					<div className="flex items-center justify-between pt-2">
 						<Label>Опубликовать</Label>
@@ -277,7 +291,7 @@ export function TestSettingsPanel({
 						/>
 					</div>
 				</ScrollArea>
-				<Button onClick={onSave} disabled={saving} className="w-full rounded-full">
+				<Button onClick={onSave} disabled={saving || saveDisabled} className="w-full rounded-full">
 					{saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
 					Сохранить
 				</Button>

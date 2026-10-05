@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
+import { Check, ChevronsUpDown, X } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { useAuth } from '@/components/providers/AuthProvider'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import {
 	Dialog,
 	DialogContent,
@@ -15,9 +19,23 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+	TEACHERS_EMPTY,
+	TEACHERS_FIELD_LABEL,
+	TEACHERS_HINT,
+	TEACHERS_SEARCH_PLACEHOLDER,
+	canManageCatalog,
+	teacherDisplayName,
+	teacherTriggerLabel,
+	teachersSetChanged,
+	topicSaveOutcome,
+	type TopicTeacher,
+} from '@/lib/tests/bank-view'
+import { cn } from '@/lib/utils/cn'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import type { Topic, TopicFormData } from '../types'
@@ -30,6 +48,12 @@ function validateSlug(slug: string): string | null {
 	if (slug.length > 100) return 'Максимум 100 символов'
 	if (!SLUG_REGEX.test(slug)) return 'Только латинские буквы, цифры и дефисы'
 	return null
+}
+
+function filterByName(_value: string, search: string, keywords?: string[]): number {
+	const query = search.trim().toLowerCase()
+	if (!query) return 1
+	return (keywords ?? []).join(' ').toLowerCase().includes(query) ? 1 : 0
 }
 
 interface TopicFormDialogProps {
@@ -50,6 +74,8 @@ export function TopicFormDialog({
 	onSaved,
 }: TopicFormDialogProps) {
 	const isEditing = Boolean(editingTopic)
+	const { perms } = useAuth()
+	const catalog = canManageCatalog(perms)
 
 	const [form, setForm] = useState<TopicFormData>({
 		slug: '',
@@ -59,6 +85,11 @@ export function TopicFormDialog({
 		isActive: true,
 	})
 	const [slugError, setSlugError] = useState<string | null>(null)
+	const [saving, setSaving] = useState(false)
+	const [teacherOptions, setTeacherOptions] = useState<TopicTeacher[]>([])
+	const [teacherIds, setTeacherIds] = useState<string[]>([])
+	const [initialTeacherIds, setInitialTeacherIds] = useState<string[]>([])
+	const [teachersOpen, setTeachersOpen] = useState(false)
 
 	useEffect(() => {
 		if (open) {
@@ -70,8 +101,47 @@ export function TopicFormDialog({
 				isActive: editingTopic?.isActive ?? true,
 			})
 			setSlugError(null)
+			const ids = (editingTopic?.teachers ?? []).map((teacher) => teacher.id)
+			setTeacherIds(ids)
+			setInitialTeacherIds(ids)
+			setTeachersOpen(false)
 		}
 	}, [open, editingTopic, initialOrder])
+
+	useEffect(() => {
+		if (!open || !catalog) return
+		let cancelled = false
+		apiFetch('/api/tests/topics/teacher-options')
+			.then(async (res) => {
+				if (!res.ok) return null
+				return (await res.json()) as { teachers?: TopicTeacher[] }
+			})
+			.then((data) => {
+				if (!cancelled) setTeacherOptions(data?.teachers ?? [])
+			})
+			.catch(() => {
+				if (!cancelled) setTeacherOptions([])
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [open, catalog])
+
+	const knownTeachers = useMemo(() => {
+		const byId = new Map<string, TopicTeacher>()
+		for (const teacher of editingTopic?.teachers ?? []) byId.set(teacher.id, teacher)
+		for (const teacher of teacherOptions) byId.set(teacher.id, teacher)
+		return byId
+	}, [editingTopic, teacherOptions])
+
+	const selectedTeachers = useMemo(
+		() => teacherIds.map((id) => knownTeachers.get(id)).filter((teacher): teacher is TopicTeacher => Boolean(teacher)),
+		[teacherIds, knownTeachers]
+	)
+
+	const toggleTeacher = (id: string) => {
+		setTeacherIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
+	}
 
 	const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const title = e.target.value
@@ -90,7 +160,21 @@ export function TopicFormDialog({
 		setForm((prev) => ({ ...prev, slug }))
 	}
 
+	const saveTeachers = async (topicId: string): Promise<number> => {
+		try {
+			const res = await apiFetch(`/api/tests/topics/${topicId}/teachers`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ teacherIds }),
+			})
+			return res.status
+		} catch {
+			return 0
+		}
+	}
+
 	const handleSave = async () => {
+		if (saving) return
 		if (!form.title) {
 			toast.error('Введите название')
 			return
@@ -101,6 +185,7 @@ export function TopicFormDialog({
 			return
 		}
 
+		setSaving(true)
 		try {
 			const url = isEditing ? `/api/tests/topics/${editingTopic!.id}` : '/api/tests/topics'
 			const method = isEditing ? 'PATCH' : 'POST'
@@ -117,17 +202,24 @@ export function TopicFormDialog({
 			}
 
 			const data = await res.json()
-			toast.success(isEditing ? 'Тема обновлена' : 'Тема создана')
+			const topicId: string | undefined = isEditing ? editingTopic!.id : data.topic?.id
+			const teachersStatus =
+				catalog && topicId && teachersSetChanged(initialTeacherIds, teacherIds) ? await saveTeachers(topicId) : null
+			const outcome = topicSaveOutcome({ isEditing, teachersStatus })
+			if (outcome.kind === 'success') toast.success(outcome.message)
+			else toast.error(outcome.message)
 			onOpenChange(false)
 			onSaved(data.topic)
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Ошибка сохранения')
+		} finally {
+			setSaving(false)
 		}
 	}
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent>
+			<DialogContent className="max-h-dvh overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>{isEditing ? 'Редактировать тему' : 'Новая тема'}</DialogTitle>
 					<DialogDescription>Темы помогают организовать тесты по категориям</DialogDescription>
@@ -164,6 +256,69 @@ export function TopicFormDialog({
 						/>
 					</div>
 
+					{catalog ? (
+						<div className="space-y-2">
+							<Label>{TEACHERS_FIELD_LABEL}</Label>
+							<Popover open={teachersOpen} onOpenChange={setTeachersOpen} modal>
+								<PopoverTrigger asChild>
+									<Button variant="outline" role="combobox" className="w-full justify-between">
+										<span className="min-w-0 truncate">{teacherTriggerLabel(selectedTeachers)}</span>
+										<ChevronsUpDown className="size-4 shrink-0 opacity-50" aria-hidden="true" />
+									</Button>
+								</PopoverTrigger>
+								<PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+									<Command filter={filterByName}>
+										<CommandInput placeholder={TEACHERS_SEARCH_PLACEHOLDER} />
+										<CommandList className="max-h-60">
+											<CommandEmpty>{TEACHERS_EMPTY}</CommandEmpty>
+											<CommandGroup>
+												{teacherOptions.map((teacher) => {
+													const label = teacherDisplayName(teacher)
+													const selected = teacherIds.includes(teacher.id)
+													return (
+														<CommandItem
+															key={teacher.id}
+															value={teacher.id}
+															keywords={[label]}
+															onSelect={() => toggleTeacher(teacher.id)}
+														>
+															<Check
+																className={cn('size-4', selected ? 'opacity-100' : 'opacity-0')}
+																aria-hidden="true"
+															/>
+															<span className="min-w-0 truncate">{label}</span>
+														</CommandItem>
+													)
+												})}
+											</CommandGroup>
+										</CommandList>
+									</Command>
+								</PopoverContent>
+							</Popover>
+							{selectedTeachers.length > 0 ? (
+								<div className="flex flex-wrap gap-2">
+									{selectedTeachers.map((teacher) => {
+										const label = teacherDisplayName(teacher)
+										return (
+											<Badge key={teacher.id} variant="secondary" className="max-w-full gap-1">
+												<span className="min-w-0 truncate">{label}</span>
+												<button
+													type="button"
+													aria-label={`Убрать ${label}`}
+													onClick={() => toggleTeacher(teacher.id)}
+													className="shrink-0 rounded-sm"
+												>
+													<X className="size-3" aria-hidden="true" />
+												</button>
+											</Badge>
+										)
+									})}
+								</div>
+							) : null}
+							<p className="text-xs text-muted-foreground">{TEACHERS_HINT}</p>
+						</div>
+					) : null}
+
 					{showIsActive && (
 						<div className="flex items-center justify-between">
 							<Label>Активна</Label>
@@ -179,7 +334,9 @@ export function TopicFormDialog({
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
 						Отмена
 					</Button>
-					<Button onClick={handleSave}>{isEditing ? 'Сохранить' : 'Создать'}</Button>
+					<Button onClick={handleSave} disabled={saving}>
+						{saving ? 'Сохранение…' : isEditing ? 'Сохранить тему' : 'Создать тему'}
+					</Button>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>

@@ -9,10 +9,20 @@ import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+	TOPICS_BACK_LABEL,
+	TOPIC_DENIED_DESCRIPTION,
+	TOPIC_DENIED_TITLE,
+	canManageCatalog,
+	deleteTestToast,
+	topicPageState,
+} from '@/lib/tests/bank-view'
 
 import { TopicFormDialog } from '../components/TopicFormDialog'
 import { readApiError } from '../components/test-editor/test-editor-api'
@@ -49,6 +59,8 @@ function LoadingTopicPage() {
 export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 	const router = useRouter()
 	const { confirm, alertDialog } = useUiAlertDialog()
+	const { can, perms, loading: authLoading } = useAuth()
+	const catalog = canManageCatalog(perms)
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
 
 	const {
@@ -120,15 +132,22 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		})
 		if (!confirmed) return
 
+		let status = 0
+		let body: unknown = null
 		try {
 			const res = await apiFetch(`/api/tests/${test.id}`, { method: 'DELETE' })
+			status = res.status
+			if (!res.ok) body = await res.json().catch(() => null)
+		} catch {
+			status = 0
+		}
 
-			if (!res.ok) throw new Error('Ошибка удаления')
-
-			toast.success('Тест удален')
+		const result = deleteTestToast(status, body)
+		if (result.kind === 'success') {
+			toast.success(result.message)
 			mutateTests()
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления теста')
+		} else {
+			toast.error(result.message)
 		}
 	}
 
@@ -156,11 +175,24 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		}
 	}
 
-	if (topicsLoading) {
+	if (topicsLoading || authLoading) {
 		return <LoadingTopicPage />
 	}
 
 	if (topicsError) return <p role="alert">Не удалось загрузить тему</p>
+
+	const pageState = topicPageState({ topicFound: Boolean(topic), zoneAll: can('zone', 'all') })
+
+	if (pageState === 'denied') {
+		return (
+			<AccessDeniedState
+				title={TOPIC_DENIED_TITLE}
+				description={TOPIC_DENIED_DESCRIPTION}
+				backHref="/admin/tests"
+				backLabel={TOPICS_BACK_LABEL}
+			/>
+		)
+	}
 
 	if (!topic) {
 		return (
@@ -190,6 +222,7 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 			<TopicHero
 				topic={topic}
 				stats={testsLoading || testsError ? null : stats}
+				canManageCatalog={catalog}
 				onEditTopic={() => setTopicDialogOpen(true)}
 				onExportTopic={handleExportTopic}
 				onDeleteTopic={() => handleDeleteTopic(topic)}
@@ -240,17 +273,19 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 				)}
 			</section>
 
-			<TopicFormDialog
-				open={topicDialogOpen}
-				onOpenChange={setTopicDialogOpen}
-				editingTopic={topic}
-				initialOrder={topics.length}
-				showIsActive
-				onSaved={() => {
-					mutateTopics()
-					mutateTests()
-				}}
-			/>
+			{catalog ? (
+				<TopicFormDialog
+					open={topicDialogOpen}
+					onOpenChange={setTopicDialogOpen}
+					editingTopic={topic}
+					initialOrder={topics.length}
+					showIsActive
+					onSaved={() => {
+						mutateTopics()
+						mutateTests()
+					}}
+				/>
+			) : null}
 			{alertDialog}
 		</div>
 	)

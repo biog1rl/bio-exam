@@ -7,8 +7,10 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
+import { canManageCatalog, testTopicPickerState } from '@/lib/tests/bank-view'
 
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type {
@@ -63,6 +65,8 @@ type TestSummaryResponse = Pick<TestDetailResponse, 'test'> & { questionsCount: 
 export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelParams) {
 	const router = useRouter()
 	const { confirm, alertDialog } = useUiAlertDialog()
+	const { perms } = useAuth()
+	const catalog = canManageCatalog(perms)
 	const isEditingExisting = Boolean(topicSlug && testSlug)
 	const isCreateMode = !isEditingExisting
 
@@ -229,7 +233,10 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		}
 	}, [form, topics, questionTypesData])
 
-	const handleCreateTopic = () => setTopicDialogOpen(true)
+	const handleCreateTopic = () => {
+		if (!catalog) return
+		setTopicDialogOpen(true)
+	}
 
 	const handleDragEnd = async (event: DragEndEvent) => {
 		const { active, over } = event
@@ -473,6 +480,11 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		testSlugError,
 		setTestSlugError,
 		saving,
+		canManageCatalog: catalog,
+		saveDisabled:
+			!topicsLoading &&
+			!topicsError &&
+			testTopicPickerState({ topics: topics.length, canManage: catalog }) === 'ask-admin',
 		onCreateTopic: handleCreateTopic,
 		onSave: handleSave,
 	}
@@ -502,7 +514,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	}
 
 	const topicDialogProps = {
-		open: topicDialogOpen,
+		open: topicDialogOpen && catalog,
 		onOpenChange: setTopicDialogOpen,
 		initialOrder: topics.length,
 		onSaved: handleTopicSaved,

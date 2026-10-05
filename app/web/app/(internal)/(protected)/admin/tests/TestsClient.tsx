@@ -11,6 +11,7 @@ import {
 	Edit,
 	EyeOff,
 	FileText,
+	FolderOpen,
 	FolderPlus,
 	Layers3,
 	MoreHorizontal,
@@ -23,6 +24,8 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,6 +39,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+	NO_TOPICS_DESCRIPTION,
+	NO_TOPICS_KICKER,
+	NO_TOPICS_TITLE,
+	canManageCatalog,
+	deleteTestToast,
+	emptyBankState,
+	teachersLine,
+} from '@/lib/tests/bank-view'
 import { cn } from '@/lib/utils/cn'
 
 import { TopicFormDialog } from './components/TopicFormDialog'
@@ -78,6 +90,8 @@ function LoadingState() {
 
 export default function TestsClient() {
 	const { confirm, alertDialog } = useUiAlertDialog()
+	const { can, perms, loading: authLoading } = useAuth()
+	const catalog = canManageCatalog(perms)
 	const {
 		data: topicsData,
 		mutate: mutateTopics,
@@ -102,6 +116,11 @@ export default function TestsClient() {
 	const publishedCount = allTests.filter((test) => test.isPublished).length
 	const draftCount = allTests.length - publishedCount
 	const totalQuestions = allTests.reduce((sum, test) => sum + (test.questionsCount ?? 0), 0)
+	const bankState =
+		topicsLoading || topicsError || authLoading
+			? null
+			: emptyBankState({ topics: topics.length, zoneAll: can('zone', 'all') })
+	const teacherWithoutTopics = bankState === 'teacher-no-topics'
 	const topicRows = useMemo(
 		() => [{ id: null, title: 'Все тесты', testsCount: allTests.length }, ...topics],
 		[allTests.length, topics]
@@ -153,17 +172,24 @@ export default function TestsClient() {
 		})
 		if (!confirmed) return
 
+		let status = 0
+		let body: unknown = null
 		try {
 			const res = await apiFetch(`/api/tests/${test.id}`, {
 				method: 'DELETE',
 			})
+			status = res.status
+			if (!res.ok) body = await res.json().catch(() => null)
+		} catch {
+			status = 0
+		}
 
-			if (!res.ok) throw new Error('Ошибка удаления')
-
-			toast.success('Тест удален')
+		const result = deleteTestToast(status, body)
+		if (result.kind === 'success') {
+			toast.success(result.message)
 			mutateTests()
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления теста')
+		} else {
+			toast.error(result.message)
 		}
 	}
 
@@ -217,238 +243,282 @@ export default function TestsClient() {
 							Тесты и темы
 						</h1>
 					</div>
-					<div className="flex flex-wrap gap-2">
-						<Button variant="outline" asChild className="-sm w-full rounded-full bg-card transition-all mob:w-auto">
-							<Link href="/admin/tests/scoring">
-								<SlidersHorizontal className="size-4" />
-								Баллы
-							</Link>
-						</Button>
-						<Button variant="outline" asChild className="-sm w-full rounded-full bg-card transition-all mob:w-auto">
-							<Link href="/admin/tests/question-types">
-								<Shapes className="size-4" />
-								Типы вопросов
-							</Link>
-						</Button>
-						<Button
-							variant="outline"
-							onClick={handleCreateTopic}
-							className="-sm w-full rounded-full bg-card transition-all mob:w-auto"
-						>
-							<FolderPlus className="size-4" />
-							Новая тема
-						</Button>
-						<Button asChild className="-md w-full rounded-full transition-all mob:w-auto">
-							<Link href="/admin/tests/new">
-								<Plus className="size-4" />
-								Новый тест
-							</Link>
-						</Button>
-					</div>
+					{catalog || !teacherWithoutTopics ? (
+						<div className="flex flex-wrap gap-2">
+							{catalog ? (
+								<>
+									<Button
+										variant="outline"
+										asChild
+										className="-sm w-full rounded-full bg-card transition-all mob:w-auto"
+									>
+										<Link href="/admin/tests/scoring">
+											<SlidersHorizontal className="size-4" />
+											Баллы
+										</Link>
+									</Button>
+									<Button
+										variant="outline"
+										asChild
+										className="-sm w-full rounded-full bg-card transition-all mob:w-auto"
+									>
+										<Link href="/admin/tests/question-types">
+											<Shapes className="size-4" />
+											Типы вопросов
+										</Link>
+									</Button>
+									<Button
+										variant="outline"
+										onClick={handleCreateTopic}
+										className="-sm w-full rounded-full bg-card transition-all mob:w-auto"
+									>
+										<FolderPlus className="size-4" />
+										Новая тема
+									</Button>
+								</>
+							) : null}
+							{teacherWithoutTopics ? null : (
+								<Button asChild className="-md w-full rounded-full transition-all mob:w-auto">
+									<Link href="/admin/tests/new">
+										<Plus className="size-4" />
+										Новый тест
+									</Link>
+								</Button>
+							)}
+						</div>
+					) : null}
 				</div>
 
-				<div className="mt-8 grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-4">
-					<StatTile label="всего тестов" value={testsLoading || testsError ? '…' : allTests.length} icon={BookOpen} />
-					<StatTile
-						label="опубликовано"
-						value={testsLoading || testsError ? '…' : publishedCount}
-						icon={CheckCircle2}
-					/>
-					<StatTile label="черновики" value={testsLoading || testsError ? '…' : draftCount} icon={FileText} />
-					<StatTile label="вопросов" value={testsLoading || testsError ? '…' : totalQuestions} icon={Layers3} />
-				</div>
+				{teacherWithoutTopics ? null : (
+					<div className="mt-8 grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-4">
+						<StatTile label="всего тестов" value={testsLoading || testsError ? '…' : allTests.length} icon={BookOpen} />
+						<StatTile
+							label="опубликовано"
+							value={testsLoading || testsError ? '…' : publishedCount}
+							icon={CheckCircle2}
+						/>
+						<StatTile label="черновики" value={testsLoading || testsError ? '…' : draftCount} icon={FileText} />
+						<StatTile label="вопросов" value={testsLoading || testsError ? '…' : totalQuestions} icon={Layers3} />
+					</div>
+				)}
 			</section>
 
-			<section className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
-				<aside className="top-unit h-fit rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit xl:sticky">
-					<div className="flex items-start justify-between gap-3">
-						<div>
-							<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">темы</p>
-							<h2 className="mt-2 font-serif text-2xl">Навигация</h2>
+			{teacherWithoutTopics ? (
+				<AccessDeniedState
+					icon={FolderOpen}
+					kicker={NO_TOPICS_KICKER}
+					title={NO_TOPICS_TITLE}
+					description={NO_TOPICS_DESCRIPTION}
+				/>
+			) : (
+				<section className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
+					<aside className="top-unit h-fit rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit xl:sticky">
+						<div className="flex items-start justify-between gap-3">
+							<div>
+								<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">темы</p>
+								<h2 className="mt-2 font-serif text-2xl">Навигация</h2>
+							</div>
+							{catalog ? (
+								<Button variant="outline" size="icon" onClick={handleCreateTopic} className="rounded-full bg-card">
+									<FolderPlus className="size-4" />
+								</Button>
+							) : null}
 						</div>
-						<Button variant="outline" size="icon" onClick={handleCreateTopic} className="rounded-full bg-card">
-							<FolderPlus className="size-4" />
-						</Button>
-					</div>
 
-					<div className="mt-6 space-y-2">
-						{topicsLoading ? (
-							<Skeleton className="h-40 w-full" />
-						) : topicsError ? (
-							<p role="alert">Не удалось загрузить темы</p>
-						) : (
-							topicRows.map((topic) => {
-								const isAll = topic.id === null
-								const isSelected = selectedTopic === topic.id
-								return (
-									<div key={topic.id ?? 'all'} className="group flex items-center gap-2">
-										<button
-											type="button"
-											onClick={() => setSelectedTopic(topic.id)}
-											className={cn(
-												'flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-3xl border border-transparent p-unit text-left hover:bg-secondary/70',
-												interactiveClass,
-												isSelected && 'border border-border bg-secondary text-secondary-foreground'
-											)}
-										>
-											<BookOpen className="size-4 shrink-0 text-primary" />
-											<span className="min-w-0 flex-1 truncate text-sm font-medium">{topic.title}</span>
-											{!isAll && 'isActive' in topic && !topic.isActive ? (
-												<EyeOff className="size-3.5 text-muted-foreground" />
-											) : null}
-											<span className="rounded-full bg-card px-3 py-1 text-xs text-muted-foreground">
-												{isAll && (testsLoading || testsError) ? '…' : (topic.testsCount ?? 0)}
-											</span>
-										</button>
-										{isAll ? null : (
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button
-														variant="ghost"
-														size="icon"
-														className="rounded-full opacity-0 group-hover:opacity-100"
-													>
-														<MoreHorizontal className="size-4" />
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="end">
-													<DropdownMenuItem onClick={() => handleEditTopic(topic as Topic)}>
-														<Edit className="mr-2 size-4" />
-														Редактировать
-													</DropdownMenuItem>
-													<DropdownMenuItem asChild>
-														<Link href={`/admin/tests/${(topic as Topic).slug}`}>
-															<ArrowRight className="mr-2 size-4" />
-															Открыть тему
-														</Link>
-													</DropdownMenuItem>
-													<DropdownMenuItem onClick={() => handleExportTopic((topic as Topic).slug, false)}>
-														<Download className="mr-2 size-4" />
-														Экспорт
-													</DropdownMenuItem>
-													<DropdownMenuItem onClick={() => handleExportTopic((topic as Topic).slug, true)}>
-														<Download className="mr-2 size-4" />
-														Экспорт с ответами
-													</DropdownMenuItem>
-													<DropdownMenuSeparator />
-													<DropdownMenuItem
-														onClick={() => handleDeleteTopic(topic as Topic)}
-														className="text-destructive"
-													>
-														<Trash2 className="mr-2 size-4" />
-														Удалить
-													</DropdownMenuItem>
-												</DropdownMenuContent>
-											</DropdownMenu>
-										)}
-									</div>
-								)
-							})
-						)}
-					</div>
-				</aside>
-
-				<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
-					<div className="flex flex-col gap-4 pb-3 tab-sm:flex-row tab-sm:items-end tab-sm:justify-between">
-						<div>
-							<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
-								{selectedTopicData ? selectedTopicData.slug : 'все темы'}
-							</p>
-							<h2 className="mt-2 font-serif text-3xl">{selectedTopicData?.title ?? 'Все тесты'}</h2>
-						</div>
-						<div className="rounded-full bg-secondary px-4 py-2 text-sm text-muted-foreground">
-							{filteredTests.length} из {allTests.length}
-						</div>
-					</div>
-
-					<ScrollArea>
-						<div className="mt-3 h-full max-h-[calc(100dvh-34rem)] space-y-3">
-							{testsLoading ? (
-								<LoadingState />
-							) : testsError ? (
-								<p role="alert">Не удалось загрузить тесты</p>
-							) : filteredTests.length === 0 ? (
-								<div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">
-									{selectedTopic ? 'В этой теме пока нет тестов.' : 'Создайте первый тест.'}
-								</div>
+						<div className="mt-6 space-y-2">
+							{topicsLoading ? (
+								<Skeleton className="h-40 w-full" />
+							) : topicsError ? (
+								<p role="alert">Не удалось загрузить темы</p>
 							) : (
-								filteredTests.map((test) => (
-									<article
-										key={test.id}
-										className="rounded-3xl border border-border/70 bg-secondary/45 p-unit transition-colors hover:bg-secondary/70"
-									>
-										<div className="grid gap-4 tab-sm:grid-cols-[1fr_auto] tab-sm:items-start">
-											<Link href={`/admin/tests/${test.topicSlug}/${test.slug}`} className="group min-w-0">
-												<div className="flex flex-wrap items-center gap-2">
-													<h3 className="font-serif text-2xl leading-tight group-hover:text-primary">{test.title}</h3>
-													<Badge variant={test.isPublished ? 'default' : 'secondary'} className="rounded-full">
-														{test.isPublished ? 'Опубликован' : 'Черновик'}
-													</Badge>
-												</div>
-												<p className="mt-2 text-sm text-muted-foreground">{test.topicTitle}</p>
-											</Link>
-
-											<div className="flex items-center justify-between gap-2 tab-sm:justify-end">
-												<Button asChild variant="outline" className="rounded-full bg-card">
-													<Link href={`/admin/tests/${test.topicSlug}/${test.slug}`}>Редактировать</Link>
-												</Button>
+								topicRows.map((topic) => {
+									const isAll = topic.id === null
+									const isSelected = selectedTopic === topic.id
+									return (
+										<div key={topic.id ?? 'all'} className="group flex items-center gap-2">
+											<button
+												type="button"
+												onClick={() => setSelectedTopic(topic.id)}
+												className={cn(
+													'flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-3xl border border-transparent p-unit text-left hover:bg-secondary/70',
+													interactiveClass,
+													isSelected && 'border border-border bg-secondary text-secondary-foreground'
+												)}
+											>
+												<BookOpen className="size-4 shrink-0 text-primary" />
+												<span className="min-w-0 flex-1">
+													<span className="block truncate text-sm font-medium">{topic.title}</span>
+													{'teachers' in topic && topic.teachers ? (
+														<span className="block truncate text-xs text-muted-foreground">
+															{teachersLine(topic.teachers)}
+														</span>
+													) : null}
+												</span>
+												{!isAll && 'isActive' in topic && !topic.isActive ? (
+													<EyeOff className="size-3.5 text-muted-foreground" />
+												) : null}
+												<span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs text-muted-foreground">
+													{isAll && (testsLoading || testsError) ? '…' : (topic.testsCount ?? 0)}
+												</span>
+											</button>
+											{isAll ? null : (
 												<DropdownMenu>
 													<DropdownMenuTrigger asChild>
-														<Button variant="ghost" size="icon" className="rounded-full">
+														<Button
+															variant="ghost"
+															size="icon"
+															className="rounded-full opacity-0 group-hover:opacity-100"
+														>
 															<MoreHorizontal className="size-4" />
 														</Button>
 													</DropdownMenuTrigger>
 													<DropdownMenuContent align="end">
-														<DropdownMenuItem onClick={() => handleExport(test.id, false)}>
+														{catalog ? (
+															<DropdownMenuItem onClick={() => handleEditTopic(topic as Topic)}>
+																<Edit className="mr-2 size-4" />
+																Редактировать
+															</DropdownMenuItem>
+														) : null}
+														<DropdownMenuItem asChild>
+															<Link href={`/admin/tests/${(topic as Topic).slug}`}>
+																<ArrowRight className="mr-2 size-4" />
+																Открыть тему
+															</Link>
+														</DropdownMenuItem>
+														<DropdownMenuItem onClick={() => handleExportTopic((topic as Topic).slug, false)}>
 															<Download className="mr-2 size-4" />
 															Экспорт
 														</DropdownMenuItem>
-														<DropdownMenuItem onClick={() => handleExport(test.id, true)}>
+														<DropdownMenuItem onClick={() => handleExportTopic((topic as Topic).slug, true)}>
 															<Download className="mr-2 size-4" />
 															Экспорт с ответами
 														</DropdownMenuItem>
-														<DropdownMenuSeparator />
-														<DropdownMenuItem onClick={() => handleDeleteTest(test)} className="text-destructive">
-															<Trash2 className="mr-2 size-4" />
-															Удалить
-														</DropdownMenuItem>
+														{catalog ? (
+															<>
+																<DropdownMenuSeparator />
+																<DropdownMenuItem
+																	onClick={() => handleDeleteTopic(topic as Topic)}
+																	className="text-destructive"
+																>
+																	<Trash2 className="mr-2 size-4" />
+																	Удалить
+																</DropdownMenuItem>
+															</>
+														) : null}
 													</DropdownMenuContent>
 												</DropdownMenu>
-											</div>
+											)}
 										</div>
-
-										<div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">
-											<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
-												<FileText className="size-3.5" />
-												{test.questionsCount ?? 0} вопросов
-											</span>
-											<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
-												<Clock3 className="size-3.5" />
-												{test.timeLimitMinutes ? `${test.timeLimitMinutes} мин` : 'без таймера'}
-											</span>
-											<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
-												обновлён {formatDate(test.updatedAt)}
-											</span>
-										</div>
-									</article>
-								))
+									)
+								})
 							)}
 						</div>
-					</ScrollArea>
-				</section>
-			</section>
+					</aside>
 
-			<TopicFormDialog
-				open={topicDialogOpen}
-				onOpenChange={setTopicDialogOpen}
-				editingTopic={editingTopic}
-				initialOrder={topics.length}
-				showIsActive
-				onSaved={() => {
-					mutateTopics()
-					mutateTests()
-				}}
-			/>
+					<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+						<div className="flex flex-col gap-4 pb-3 tab-sm:flex-row tab-sm:items-end tab-sm:justify-between">
+							<div>
+								<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
+									{selectedTopicData ? selectedTopicData.slug : 'все темы'}
+								</p>
+								<h2 className="mt-2 font-serif text-3xl">{selectedTopicData?.title ?? 'Все тесты'}</h2>
+							</div>
+							<div className="rounded-full bg-secondary px-4 py-2 text-sm text-muted-foreground">
+								{filteredTests.length} из {allTests.length}
+							</div>
+						</div>
+
+						<ScrollArea>
+							<div className="mt-3 h-full max-h-[calc(100dvh-34rem)] space-y-3">
+								{testsLoading ? (
+									<LoadingState />
+								) : testsError ? (
+									<p role="alert">Не удалось загрузить тесты</p>
+								) : filteredTests.length === 0 ? (
+									<div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">
+										{selectedTopic ? 'В этой теме пока нет тестов.' : 'Создайте первый тест.'}
+									</div>
+								) : (
+									filteredTests.map((test) => (
+										<article
+											key={test.id}
+											className="rounded-3xl border border-border/70 bg-secondary/45 p-unit transition-colors hover:bg-secondary/70"
+										>
+											<div className="grid gap-4 tab-sm:grid-cols-[1fr_auto] tab-sm:items-start">
+												<Link href={`/admin/tests/${test.topicSlug}/${test.slug}`} className="group min-w-0">
+													<div className="flex flex-wrap items-center gap-2">
+														<h3 className="font-serif text-2xl leading-tight group-hover:text-primary">{test.title}</h3>
+														<Badge variant={test.isPublished ? 'default' : 'secondary'} className="rounded-full">
+															{test.isPublished ? 'Опубликован' : 'Черновик'}
+														</Badge>
+													</div>
+													<p className="mt-2 text-sm text-muted-foreground">{test.topicTitle}</p>
+												</Link>
+
+												<div className="flex items-center justify-between gap-2 tab-sm:justify-end">
+													<Button asChild variant="outline" className="rounded-full bg-card">
+														<Link href={`/admin/tests/${test.topicSlug}/${test.slug}`}>Редактировать</Link>
+													</Button>
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button variant="ghost" size="icon" className="rounded-full">
+																<MoreHorizontal className="size-4" />
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
+															<DropdownMenuItem onClick={() => handleExport(test.id, false)}>
+																<Download className="mr-2 size-4" />
+																Экспорт
+															</DropdownMenuItem>
+															<DropdownMenuItem onClick={() => handleExport(test.id, true)}>
+																<Download className="mr-2 size-4" />
+																Экспорт с ответами
+															</DropdownMenuItem>
+															<DropdownMenuSeparator />
+															<DropdownMenuItem onClick={() => handleDeleteTest(test)} className="text-destructive">
+																<Trash2 className="mr-2 size-4" />
+																Удалить
+															</DropdownMenuItem>
+														</DropdownMenuContent>
+													</DropdownMenu>
+												</div>
+											</div>
+
+											<div className="mt-5 flex flex-wrap gap-2 text-sm text-muted-foreground">
+												<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
+													<FileText className="size-3.5" />
+													{test.questionsCount ?? 0} вопросов
+												</span>
+												<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
+													<Clock3 className="size-3.5" />
+													{test.timeLimitMinutes ? `${test.timeLimitMinutes} мин` : 'без таймера'}
+												</span>
+												<span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1">
+													обновлён {formatDate(test.updatedAt)}
+												</span>
+											</div>
+										</article>
+									))
+								)}
+							</div>
+						</ScrollArea>
+					</section>
+				</section>
+			)}
+
+			{catalog ? (
+				<TopicFormDialog
+					open={topicDialogOpen}
+					onOpenChange={setTopicDialogOpen}
+					editingTopic={editingTopic}
+					initialOrder={topics.length}
+					showIsActive
+					onSaved={() => {
+						mutateTopics()
+						mutateTests()
+					}}
+				/>
+			) : null}
 			{alertDialog}
 		</div>
 	)

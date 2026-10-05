@@ -139,6 +139,7 @@ export interface Topic {
 	isActive: boolean
 	createdAt: string
 	testsCount?: number
+	teachers?: { id: string; name: string | null; firstName: string | null; lastName: string | null }[]
 }
 
 export interface Test {
