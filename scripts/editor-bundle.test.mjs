@@ -127,3 +127,88 @@ test('without a mode the script prints usage and exits non-zero', () => {
 	assert.notEqual(result.status, 0)
 	assert.match(result.stderr, /usage/)
 })
+
+function writeBudget(t, routes) {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-budget-'))
+	t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+	const file = path.join(dir, 'budget.json')
+	fs.writeFileSync(file, JSON.stringify({ routes }))
+	return file
+}
+
+function checkFixture(t) {
+	const [questionRoute, draftRoute] = EDITOR_ROUTES
+	const clean = ['.next/static/chunks/core.js', '.next/static/chunks/page.js']
+	const dir = makeWebDir(t, { stats: [routeEntry(questionRoute, clean), routeEntry(draftRoute, clean)] })
+	const raw = sizeOf(clean, (buffer) => buffer)
+	const gzip = sizeOf(clean, (buffer) => zlib.gzipSync(buffer))
+	return { dir, questionRoute, draftRoute, raw, gzip }
+}
+
+test('--check: sizes within budget and no emoji-list in first load exits 0 with "editor bundle OK"', (t) => {
+	const { dir, questionRoute, draftRoute, raw, gzip } = checkFixture(t)
+	const budget = writeBudget(t, { [questionRoute]: { raw, gzip }, [draftRoute]: { raw, gzip } })
+	const result = run(['--check', '--web-dir', dir, '--budget', budget])
+	assert.equal(result.status, 0, result.stderr)
+	assert.match(result.stdout, /editor bundle OK/)
+})
+
+test('--check: raw size over budget exits 1 and names the route and numbers', (t) => {
+	const { dir, questionRoute, draftRoute, raw, gzip } = checkFixture(t)
+	const budget = writeBudget(t, { [questionRoute]: { raw: raw - 1, gzip }, [draftRoute]: { raw, gzip } })
+	const result = run(['--check', '--web-dir', dir, '--budget', budget])
+	assert.equal(result.status, 1)
+	assert.ok(result.stderr.includes(questionRoute), result.stderr)
+	assert.ok(!result.stderr.includes(draftRoute), result.stderr)
+	assert.ok(result.stderr.includes(String(raw)), result.stderr)
+	assert.ok(result.stderr.includes(String(raw - 1)), result.stderr)
+	assert.doesNotMatch(result.stdout, /editor bundle OK/)
+})
+
+test('--check: gzip size over budget exits 1 and names the route and numbers', (t) => {
+	const { dir, questionRoute, draftRoute, raw, gzip } = checkFixture(t)
+	const budget = writeBudget(t, { [questionRoute]: { raw, gzip }, [draftRoute]: { raw, gzip: gzip - 1 } })
+	const result = run(['--check', '--web-dir', dir, '--budget', budget])
+	assert.equal(result.status, 1)
+	assert.ok(result.stderr.includes(draftRoute), result.stderr)
+	assert.ok(result.stderr.includes(String(gzip)), result.stderr)
+	assert.ok(result.stderr.includes(String(gzip - 1)), result.stderr)
+})
+
+test('--check: emoji-list in first load exits 1 even within budget', (t) => {
+	const [questionRoute, draftRoute] = EDITOR_ROUTES
+	const clean = ['.next/static/chunks/core.js', '.next/static/chunks/page.js']
+	const withEmoji = [...clean, '.next/static/chunks/emoji.js']
+	const dir = makeWebDir(t, { stats: [routeEntry(questionRoute, withEmoji), routeEntry(draftRoute, clean)] })
+	const big = { raw: 1_000_000, gzip: 1_000_000 }
+	const budget = writeBudget(t, { [questionRoute]: big, [draftRoute]: big })
+	const result = run(['--check', '--web-dir', dir, '--budget', budget])
+	assert.equal(result.status, 1)
+	assert.ok(result.stderr.includes(questionRoute), result.stderr)
+	assert.match(result.stderr, /emoji\.js/)
+})
+
+test('--check: budget without an editor route exits 1 and names the route', (t) => {
+	const { dir, questionRoute, draftRoute, raw, gzip } = checkFixture(t)
+	const budget = writeBudget(t, { [questionRoute]: { raw, gzip } })
+	const result = run(['--check', '--web-dir', dir, '--budget', budget])
+	assert.equal(result.status, 1)
+	assert.ok(result.stderr.includes(draftRoute), result.stderr)
+})
+
+test('--check: missing budget file exits 1 and names the path', (t) => {
+	const { dir } = checkFixture(t)
+	const missing = path.join(dir, 'no-budget.json')
+	const result = run(['--check', '--web-dir', dir, '--budget', missing])
+	assert.equal(result.status, 1)
+	assert.ok(result.stderr.includes(missing), result.stderr)
+})
+
+test('repository budget lists both editor routes with raw and gzip byte limits', () => {
+	const budget = JSON.parse(fs.readFileSync(new URL('./editor-bundle-budget.json', import.meta.url), 'utf8'))
+	assert.deepEqual(Object.keys(budget.routes).sort(), [...EDITOR_ROUTES].sort())
+	for (const route of EDITOR_ROUTES) {
+		assert.ok(Number.isInteger(budget.routes[route].raw) && budget.routes[route].raw > 0, route)
+		assert.ok(Number.isInteger(budget.routes[route].gzip) && budget.routes[route].gzip > 0, route)
+	}
+})

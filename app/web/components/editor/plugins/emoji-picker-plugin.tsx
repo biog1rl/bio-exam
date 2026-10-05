@@ -10,12 +10,13 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { MenuOption, useBasicTypeaheadTriggerMatch } from '@lexical/react/LexicalTypeaheadMenuPlugin'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import { $createTextNode, $getSelection, $isRangeSelection, TextNode } from 'lexical'
 import dynamic from 'next/dynamic'
 
+import { type EmojiEntry, getLoadedEmojiTable, loadEmojiTable } from '@/components/editor/utils/emoji-table'
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
 
 const LexicalTypeaheadMenuPlugin = dynamic(
@@ -42,32 +43,22 @@ class EmojiOption extends MenuOption {
 	}
 }
 
-type Emoji = {
-	emoji: string
-	description: string
-	category: string
-	aliases: Array<string>
-	tags: Array<string>
-	unicode_version: string
-	ios_version: string
-	skin_tones?: boolean
-}
-
 const MAX_EMOJI_SUGGESTION_COUNT = 10
 
 export function EmojiPickerPlugin() {
 	const [editor] = useLexicalComposerContext()
 	const [queryString, setQueryString] = useState<string | null>(null)
-	const [emojis, setEmojis] = useState<Array<Emoji>>([])
+	const [emojis, setEmojis] = useState<readonly EmojiEntry[] | null>(getLoadedEmojiTable)
+	const previousQuery = useRef<string | null>(null)
 
-	useEffect(() => {
-		let mounted = true
-		import('../utils/emoji-list').then((file) => {
-			if (mounted) setEmojis(file.emojiList)
-		})
-		return () => {
-			mounted = false
-		}
+	const onQueryChange = useCallback((query: string | null) => {
+		const opened = previousQuery.current === null && query !== null
+		previousQuery.current = query
+		setQueryString(query)
+		if (!opened) return
+		const loaded = getLoadedEmojiTable()
+		if (loaded) setEmojis(loaded)
+		else loadEmojiTable().then(setEmojis, () => undefined)
 	}, [])
 
 	const emojiOptions = useMemo(
@@ -122,7 +113,7 @@ export function EmojiPickerPlugin() {
 
 	return (
 		<LexicalTypeaheadMenuPlugin
-			onQueryChange={setQueryString}
+			onQueryChange={onQueryChange}
 			onSelectOption={onSelectOption}
 			triggerFn={checkForTriggerMatch}
 			options={options}

@@ -17,6 +17,7 @@
 		"test": "turbo run test",
 		"verify": "node scripts/verify.mjs",
 		"e2e": "node scripts/e2e.mjs",
+		"editor:budget": "node scripts/editor-bundle.mjs --check",
 		"format": "oxfmt .",
 		"format:check": "oxfmt --check ."
 	},

@@ -1,0 +1,12 @@
+{
+	"routes": {
+		"/admin/tests/[topicSlug]/[testSlug]/questions/[questionId]": {
+			"raw": 2732396,
+			"gzip": 769896
+		},
+		"/admin/tests/[topicSlug]/[testSlug]/questions/drafts/[draftId]": {
+			"raw": 2732396,
+			"gzip": 769896
+		}
+	}
+}

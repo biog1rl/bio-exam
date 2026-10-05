@@ -135,3 +135,15 @@ export function isPluginEnabled(pluginName: AvailablePlugin, config?: PluginConf
 
 	return true
 }
+
+export const OPTIONAL_PLUGIN_GROUPS = {
+	emoji: ['EmojiPicker'],
+	mentions: ['Mentions'],
+	code: ['CodeActionMenu'],
+} as const satisfies Record<string, readonly AvailablePlugin[]>
+
+export type OptionalPluginGroup = keyof typeof OPTIONAL_PLUGIN_GROUPS
+
+export function isPluginGroupEnabled(group: OptionalPluginGroup, config?: PluginConfig): boolean {
+	return OPTIONAL_PLUGIN_GROUPS[group].some((name) => isPluginEnabled(name, config))
+}

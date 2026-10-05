@@ -21,8 +21,15 @@ import { TablePlugin } from '@lexical/react/LexicalTablePlugin'
 
 import { useState } from 'react'
 
+import dynamic from 'next/dynamic'
+
 import { ContentEditable } from '@/components/editor/editor-ui/content-editable'
-import { AvailablePlugin, PluginConfig, isPluginEnabled } from '@/components/editor/plugins-config'
+import {
+	AvailablePlugin,
+	PluginConfig,
+	isPluginEnabled,
+	isPluginGroupEnabled,
+} from '@/components/editor/plugins-config'
 import { ActionsPlugin } from '@/components/editor/plugins/actions/actions-plugin'
 import { ClearEditorActionPlugin } from '@/components/editor/plugins/actions/clear-editor-plugin'
 import { CounterCharacterPlugin } from '@/components/editor/plugins/actions/counter-character-plugin'
@@ -34,7 +41,6 @@ import { SpeechToTextPlugin } from '@/components/editor/plugins/actions/speech-t
 import { TreeViewPlugin } from '@/components/editor/plugins/actions/tree-view-plugin'
 import { AutoLinkPlugin } from '@/components/editor/plugins/auto-link-plugin'
 import { AutocompletePlugin } from '@/components/editor/plugins/autocomplete-plugin'
-import { CodeActionMenuPlugin } from '@/components/editor/plugins/code-action-menu-plugin'
 import { CodeHighlightPlugin } from '@/components/editor/plugins/code-highlight-plugin'
 import { ComponentPickerMenuPlugin } from '@/components/editor/plugins/component-picker-menu-plugin'
 import { ContextMenuPlugin } from '@/components/editor/plugins/context-menu-plugin'
@@ -43,7 +49,6 @@ import { DraggableBlockPlugin } from '@/components/editor/plugins/draggable-bloc
 import { AutoEmbedPlugin } from '@/components/editor/plugins/embeds/auto-embed-plugin'
 import { TwitterPlugin } from '@/components/editor/plugins/embeds/twitter-plugin'
 import { YouTubePlugin } from '@/components/editor/plugins/embeds/youtube-plugin'
-import { EmojiPickerPlugin } from '@/components/editor/plugins/emoji-picker-plugin'
 import { EmojisPlugin } from '@/components/editor/plugins/emojis-plugin'
 import { FloatingLinkEditorPlugin } from '@/components/editor/plugins/floating-link-editor-plugin'
 import { FloatingTextFormatToolbarPlugin } from '@/components/editor/plugins/floating-text-format-plugin'
@@ -52,7 +57,6 @@ import { KeywordsPlugin } from '@/components/editor/plugins/keywords-plugin'
 import { LayoutPlugin } from '@/components/editor/plugins/layout-plugin'
 import { LinkPlugin } from '@/components/editor/plugins/link-plugin'
 import { ListMaxIndentLevelPlugin } from '@/components/editor/plugins/list-max-indent-level-plugin'
-import { MentionsPlugin } from '@/components/editor/plugins/mentions-plugin'
 import { AlignmentPickerPlugin } from '@/components/editor/plugins/picker/alignment-picker-plugin'
 import { BulletedListPickerPlugin } from '@/components/editor/plugins/picker/bulleted-list-picker-plugin'
 import { CheckListPickerPlugin } from '@/components/editor/plugins/picker/check-list-picker-plugin'
@@ -105,6 +109,17 @@ import { ButtonGroup } from '@/components/ui/button-group'
 import { Separator } from '@/components/ui/separator'
 
 import { DocPathProvider } from './context/doc-path-context'
+
+const EmojiPluginGroup = dynamic(() => import('./plugins/optional/emoji').then((mod) => mod.EmojiPluginGroup), {
+	ssr: false,
+})
+const MentionsPluginGroup = dynamic(
+	() => import('./plugins/optional/mentions').then((mod) => mod.MentionsPluginGroup),
+	{ ssr: false }
+)
+const CodePluginGroup = dynamic(() => import('./plugins/optional/code').then((mod) => mod.CodePluginGroup), {
+	ssr: false,
+})
 
 const placeholder = 'Press / for commands...'
 
@@ -240,7 +255,7 @@ export function Plugins({
 					{p('Hashtag') && <HashtagPlugin />}
 					<HistoryPlugin />
 
-					{p('Mentions') && <MentionsPlugin />}
+					{isPluginGroupEnabled('mentions', pluginConfig) && <MentionsPluginGroup pluginConfig={pluginConfig} />}
 					{p('DraggableBlock') && <DraggableBlockPlugin anchorElem={floatingAnchorElem} />}
 					{p('Keywords') && <KeywordsPlugin />}
 					{p('Emojis') && <EmojisPlugin />}
@@ -253,7 +268,9 @@ export function Plugins({
 					{p('YouTube') && <YouTubePlugin />}
 
 					{p('CodeHighlight') && <CodeHighlightPlugin />}
-					{p('CodeActionMenu') && <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />}
+					{isPluginGroupEnabled('code', pluginConfig) && (
+						<CodePluginGroup pluginConfig={pluginConfig} anchorElem={floatingAnchorElem} />
+					)}
 
 					{p('MarkdownShortcut') && (
 						<MarkdownShortcutPlugin
@@ -307,7 +324,7 @@ export function Plugins({
 
 					{p('ContextMenu') && <ContextMenuPlugin />}
 					{p('DragDropPaste') && <DragDropPastePlugin />}
-					{p('EmojiPicker') && <EmojiPickerPlugin />}
+					{isPluginGroupEnabled('emoji', pluginConfig) && <EmojiPluginGroup pluginConfig={pluginConfig} />}
 
 					{p('FloatingLinkEditor') && (
 						<FloatingLinkEditorPlugin
