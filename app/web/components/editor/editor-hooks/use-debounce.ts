@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 
-import { createDebounced, type Debounced } from './debounced'
+import type { DebouncedFunc } from 'lodash'
+import debounce from 'lodash/debounce'
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
@@ -20,14 +21,11 @@ export function useDebounce<T extends (...args: never[]) => void>(
 	fn: T,
 	ms: number,
 	maxWait?: number
-): Debounced<Parameters<T>> {
+): DebouncedFunc<(...args: Parameters<T>) => void> {
 	const fnRef = useLatestRef(fn)
 
 	const debounced = useMemo(
-		() =>
-			createDebounced(callLatest<Parameters<T>>(fnRef), ms, {
-				maxWait: maxWait ?? ms,
-			}),
+		() => debounce(callLatest<Parameters<T>>(fnRef), ms, { maxWait: maxWait ?? ms }),
 		[fnRef, ms, maxWait]
 	)
 
