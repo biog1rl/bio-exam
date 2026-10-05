@@ -8,6 +8,7 @@ import { ru } from 'date-fns/locale'
 import { ArrowRight, CalendarIcon, CheckCircle2, Clock3, FileText, Search, XCircle } from 'lucide-react'
 import Link from 'next/link'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -68,16 +69,18 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: string |
 	)
 }
 
-function AttemptsEmptyState({ filtered }: { filtered: boolean }) {
+function emptyAttemptsText(filtered: boolean, zoneAll: boolean) {
+	if (filtered) return 'Измените поиск, тему, студента или дату, чтобы расширить выборку.'
+	if (!zoneAll) return 'Здесь появятся попытки учеников по вашим темам.'
+	return 'Когда студенты начнут проходить тесты, здесь появится журнал результатов.'
+}
+
+function AttemptsEmptyState({ filtered, zoneAll }: { filtered: boolean; zoneAll: boolean }) {
 	return (
 		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
 			<FileText className="size-7 text-primary" />
 			<h2 className="mt-5 font-serif text-3xl">{filtered ? 'Ничего не найдено' : 'Попыток пока нет'}</h2>
-			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-				{filtered
-					? 'Измените поиск, тему, студента или дату, чтобы расширить выборку.'
-					: 'Когда студенты начнут проходить тесты, здесь появится журнал результатов.'}
-			</p>
+			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{emptyAttemptsText(filtered, zoneAll)}</p>
 		</section>
 	)
 }
@@ -131,6 +134,8 @@ function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
 }
 
 export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListItem[]; total: number }) {
+	const { can } = useAuth()
+	const zoneAll = can('zone', 'all')
 	const [query, setQuery] = useState('')
 	const [topicSlug, setTopicSlug] = useState('all')
 	const [studentId, setStudentId] = useState('all')
@@ -306,7 +311,7 @@ export function AdminAttemptsClient({ rows, total }: { rows: AdminAttemptListIte
 			</section>
 
 			{filteredRows.length === 0 ? (
-				<AttemptsEmptyState filtered={hasFilters} />
+				<AttemptsEmptyState filtered={hasFilters} zoneAll={zoneAll} />
 			) : (
 				<section className="space-y-2">
 					{filteredRows.map((attempt) => (

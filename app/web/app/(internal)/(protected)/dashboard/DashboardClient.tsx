@@ -711,7 +711,11 @@ export default function DashboardClient() {
 							{adminTopicsQuery.isLoading || adminTestsQuery.isLoading ? (
 								<Skeleton className="h-75 rounded-3xl" />
 							) : teacherTopicData.length === 0 ? (
-								<EmptyPanel>Нет тем для отображения.</EmptyPanel>
+								<EmptyPanel>
+									{can('zone', 'all')
+										? 'Нет тем для отображения.'
+										: 'Вам ещё не закреплены темы. Обратитесь к администратору.'}
+								</EmptyPanel>
 							) : (
 								<ChartContainer config={teacherChartConfig} className="h-75 w-full">
 									<BarChart data={teacherTopicData}>

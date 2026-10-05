@@ -6,17 +6,21 @@ import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import useSWR from 'swr'
 
 import { DeleteGroupDialog } from '@/components/groups/DeleteGroupDialog'
-import { GroupSheet } from '@/components/groups/GroupSheet'
+import { GroupSheet, type GroupSheetGroup } from '@/components/groups/GroupSheet'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { TEACHER_GROUPS_EMPTY, groupsEmptyState, ownerLabel } from '@/lib/groups/group-form'
 
-type Group = { id: string; name: string; memberCount: number; createdAt: string }
+type Group = GroupSheetGroup
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export default function GroupsClient() {
+	const { can } = useAuth()
+	const zoneAll = can('zone', 'all')
 	const { data, isLoading, mutate } = useSWR<{ groups: Group[] }>('/api/groups', fetcher)
 	const [search, setSearch] = useState('')
 	const [sheetOpen, setSheetOpen] = useState(false)
@@ -29,20 +33,19 @@ export default function GroupsClient() {
 		const q = search.toLowerCase().trim()
 		return groups.filter((g) => g.name.toLowerCase().includes(q))
 	}, [groups, search])
+	const columns = zoneAll ? 4 : 3
+	const emptyState = groupsEmptyState({ zoneAll, groups: groups.length, search })
+
+	const openCreate = () => {
+		setEditTarget(null)
+		setSheetOpen(true)
+	}
 
 	return (
 		<div className="space-y-4">
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<h1 className="text-xl font-semibold">Группы</h1>
-				<Button
-					size="icon"
-					variant="outline"
-					aria-label="Создать группу"
-					onClick={() => {
-						setEditTarget(null)
-						setSheetOpen(true)
-					}}
-				>
+				<Button size="icon" variant="outline" aria-label="Создать группу" onClick={openCreate}>
 					<PlusIcon />
 				</Button>
 			</div>
@@ -60,6 +63,7 @@ export default function GroupsClient() {
 						<TableHeader>
 							<TableRow>
 								<TableHead>Название</TableHead>
+								{zoneAll && <TableHead>Владелец</TableHead>}
 								<TableHead>Участников</TableHead>
 								<TableHead />
 							</TableRow>
@@ -71,6 +75,11 @@ export default function GroupsClient() {
 										<TableCell>
 											<Skeleton className="h-4 w-48" />
 										</TableCell>
+										{zoneAll && (
+											<TableCell>
+												<Skeleton className="h-4 w-32" />
+											</TableCell>
+										)}
 										<TableCell>
 											<Skeleton className="h-4 w-8" />
 										</TableCell>
@@ -82,15 +91,29 @@ export default function GroupsClient() {
 
 							{!isLoading && !data && (
 								<TableRow>
-									<TableCell colSpan={3} className="text-center text-muted-foreground">
+									<TableCell colSpan={columns} className="text-center text-muted-foreground">
 										Не удалось загрузить группы. Обновите страницу.
 									</TableCell>
 								</TableRow>
 							)}
 
-							{!isLoading && data && filtered.length === 0 && (
+							{!isLoading && data && filtered.length === 0 && emptyState === 'teacher-empty' && (
 								<TableRow>
-									<TableCell colSpan={3} className="text-center text-muted-foreground">
+									<TableCell colSpan={columns} className="whitespace-normal">
+										<div className="flex flex-col items-start gap-3 rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">
+											<p>{TEACHER_GROUPS_EMPTY}</p>
+											<Button className="w-full mob:w-auto" onClick={openCreate}>
+												<PlusIcon aria-hidden="true" />
+												Создать группу
+											</Button>
+										</div>
+									</TableCell>
+								</TableRow>
+							)}
+
+							{!isLoading && data && filtered.length === 0 && emptyState === 'default' && (
+								<TableRow>
+									<TableCell colSpan={columns} className="text-center text-muted-foreground">
 										{search ? 'Группы не найдены. Попробуйте изменить запрос.' : 'Групп пока нет'}
 									</TableCell>
 								</TableRow>
@@ -101,11 +124,14 @@ export default function GroupsClient() {
 								filtered.map((g) => (
 									<TableRow key={g.id}>
 										<TableCell>{g.name}</TableCell>
+										{zoneAll && <TableCell>{ownerLabel(g.owner)}</TableCell>}
 										<TableCell>{g.memberCount}</TableCell>
 										<TableCell>
 											<div className="flex justify-end gap-2">
 												<Button
 													size="icon"
+													variant="outline"
+													aria-label="Изменить группу"
 													onClick={() => {
 														setEditTarget(g)
 														setSheetOpen(true)
@@ -113,7 +139,12 @@ export default function GroupsClient() {
 												>
 													<PencilIcon />
 												</Button>
-												<Button size="icon" variant="destructive" onClick={() => setDeleteTarget(g)}>
+												<Button
+													size="icon"
+													variant="destructive"
+													aria-label="Удалить группу"
+													onClick={() => setDeleteTarget(g)}
+												>
 													<Trash2Icon />
 												</Button>
 											</div>

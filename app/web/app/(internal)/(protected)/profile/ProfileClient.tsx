@@ -107,8 +107,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 
 	const canEditAvatar = can('users', 'edit')
 
-	const { data: myGroupData } = useSWR<{ group: { id: string; name: string } | null }>('/api/groups/my', fetcher)
-	const myGroup = myGroupData?.group ?? null
+	const { data: myGroupsData } = useSWR<{ groups?: { id: string; name: string }[] }>('/api/groups/my', fetcher)
+	const myGroups = myGroupsData?.groups ?? []
 
 	useEffect(() => {
 		if (me) {
@@ -283,14 +283,16 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									placeholder="Введите логин"
 								/>
 							</FormField>
-							{myGroup && (
+							{myGroups.length > 0 && (
 								<div className="flex flex-wrap items-center gap-2 rounded-3xl bg-secondary/70 px-4 py-3">
 									<span className="font-mono text-[0.6875rem] tracking-[0.16em] text-muted-foreground uppercase">
-										Группа
+										Группы
 									</span>
-									<Badge variant="secondary" className="rounded-full">
-										{myGroup.name}
-									</Badge>
+									{myGroups.map((g) => (
+										<Badge key={g.id} variant="secondary" className="max-w-full rounded-full">
+											<span className="truncate">{g.name}</span>
+										</Badge>
+									))}
 								</div>
 							)}
 							<Button onClick={handleSaveProfile} disabled={isLoading} className="w-full">

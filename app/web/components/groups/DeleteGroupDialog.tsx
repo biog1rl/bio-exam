@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { toast } from 'sonner'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -15,6 +16,7 @@ import {
 	AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { apiFetch } from '@/lib/api-fetch'
+import { TEACHER_DELETE_NOTE } from '@/lib/groups/group-form'
 
 interface Group {
 	id: string
@@ -28,6 +30,8 @@ interface Props {
 }
 
 export function DeleteGroupDialog({ group, onOpenChange, onDeleted }: Props) {
+	const { can } = useAuth()
+	const zoneAll = can('zone', 'all')
 	const [deleting, setDeleting] = useState(false)
 
 	const handleDelete = async () => {
@@ -52,6 +56,7 @@ export function DeleteGroupDialog({ group, onOpenChange, onDeleted }: Props) {
 					<AlertDialogTitle>Удалить группу?</AlertDialogTitle>
 					<AlertDialogDescription>
 						Группа «{group?.name}» будет удалена. Это действие нельзя отменить.
+						{!zoneAll && ` ${TEACHER_DELETE_NOTE}`}
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
