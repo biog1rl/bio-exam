@@ -7,16 +7,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import {
-	studentGroups,
-	testAssignments,
-	testAttempts,
-	tests,
-	topics,
-	userGroups,
-	users,
-	userRoles,
-} from '../../db/schema.js'
+import { testAssignments, testAttempts, tests, topics, userGroups, users, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
@@ -27,6 +18,7 @@ import {
 	canAssign,
 	canAssignMany,
 	canReadUser,
+	groupOwners,
 	hasGlobalZone,
 	ineligibleTeacherGroupMembers,
 	loadRoleTraits,
@@ -324,20 +316,14 @@ router.patch(
 			if (!existing) return res.status(404).json({ error: ERROR_MESSAGES.USER_NOT_FOUND })
 
 			// Проверить существование группы если groupId указан
-			const found =
-				groupIds.length === 0
-					? []
-					: await db
-							.select({ id: studentGroups.id, ownerId: studentGroups.ownerId })
-							.from(studentGroups)
-							.where(inArray(studentGroups.id, groupIds))
-			if (found.length !== groupIds.length) {
+			const owners = await groupOwners(groupIds)
+			if (owners.size !== groupIds.length) {
 				return res.status(404).json({ error: 'Группа не найдена' })
 			}
 
 			const current = await db.select({ groupId: userGroups.groupId }).from(userGroups).where(eq(userGroups.userId, id))
 			const currentIds = new Set(current.map((row) => row.groupId))
-			const joinsTeacherGroup = found.some((group) => group.ownerId !== null && !currentIds.has(group.id))
+			const joinsTeacherGroup = groupIds.some((groupId) => owners.get(groupId) != null && !currentIds.has(groupId))
 			if (joinsTeacherGroup) {
 				const { notStudent, deactivated } = await ineligibleTeacherGroupMembers([id])
 				if (notStudent.length > 0) return res.status(400).json({ error: NOT_STUDENT_MEMBER })
