@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 import TestEditorClient from './TestEditorClient'
 
-export const metadata: Metadata = { title: 'Редактор теста - bio-exam' }
+export const metadata: Metadata = { title: 'Редактор теста' }
 
 interface Props {
 	params: Promise<{ topicSlug: string; testSlug: string }>

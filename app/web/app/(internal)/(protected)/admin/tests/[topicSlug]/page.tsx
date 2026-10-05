@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 import TopicTestsClient from './TopicTestsClient'
 
-export const metadata: Metadata = { title: 'Тема тестов - bio-exam' }
+export const metadata: Metadata = { title: 'Тема тестов' }
 
 interface Props {
 	params: Promise<{ topicSlug: string }>

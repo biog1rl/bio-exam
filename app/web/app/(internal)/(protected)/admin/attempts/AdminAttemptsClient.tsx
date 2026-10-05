@@ -263,6 +263,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 			<section className="rounded-4xl border border-border/80 bg-card/90 p-3 tab-sm:p-4">
 				<div className="mb-3 max-w-xs">
 					<UserStatusFilter
+						align="start"
 						value={statusFilter}
 						onChange={(status) => {
 							setStatusFilter(status)

@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 import NewQuestionDraftPageClient from './NewQuestionDraftPageClient'
 
-export const metadata: Metadata = { title: 'Новый вопрос - bio-exam' }
+export const metadata: Metadata = { title: 'Новый вопрос' }
 
 interface Props {
 	params: Promise<{ topicSlug: string; testSlug: string }>

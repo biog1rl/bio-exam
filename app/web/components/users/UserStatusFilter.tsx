@@ -22,10 +22,12 @@ export function UserStatusFilter({
 	value,
 	onChange,
 	label = 'Статус студентов',
+	align = 'end',
 }: {
 	value: UserStatus
 	onChange: (value: UserStatus) => void
 	label?: string
+	align?: 'start' | 'end'
 }) {
 	return (
 		<DropdownMenu>
@@ -34,7 +36,7 @@ export function UserStatusFilter({
 					<Filter />
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end">
+			<DropdownMenuContent align={align}>
 				<DropdownMenuRadioGroup value={value} onValueChange={(value) => onChange(value as UserStatus)}>
 					{options.map((option) => (
 						<DropdownMenuRadioItem

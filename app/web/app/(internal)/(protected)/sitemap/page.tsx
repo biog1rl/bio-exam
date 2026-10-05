@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { getServerMe } from '@/lib/session/server'
 import { visibleSiteMap } from '@/lib/site-map'
 
-export const metadata: Metadata = { title: 'Карта сайта - bio-exam' }
+export const metadata: Metadata = { title: 'Карта сайта' }
 
 export default async function SiteMapPage() {
 	const me = await getServerMe()

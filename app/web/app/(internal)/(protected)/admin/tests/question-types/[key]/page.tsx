@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 import QuestionTypeDetailsPageClient from './QuestionTypeDetailsPageClient'
 
-export const metadata: Metadata = { title: 'Тип вопроса - bio-exam' }
+export const metadata: Metadata = { title: 'Тип вопроса' }
 
 interface Props {
 	params: Promise<{ key: string }>
