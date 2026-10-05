@@ -145,10 +145,11 @@ describe('шесть прежних функций шва по зоне (D-11)',
 		expect(await zoneScope(['zone.all']).scope.canReviewAttempt(userReq(A), 'attempt-y')).toBe(false)
 	})
 
-	test('canReadUser: users.read и участник группы запрашивающего, zone.all — любой', async () => {
+	test('canReadUser: users.read и ученик группы запрашивающего, zone.all — любой', async () => {
 		const teacher = zoneScope(['users.read']).scope
 		expect(await teacher.canReadUser(userReq(A), S)).toBe(true)
-		expect(await teacher.canReadUser(userReq(A), T)).toBe(true)
+		expect(await teacher.canReadUser(userReq(A), T)).toBe(false)
+		expect(await teacher.canReadUser(userReq(A), M)).toBe(false)
 		expect(await teacher.canReadUser(userReq(A), S2)).toBe(false)
 		expect(await teacher.canReadUser(userReq(B), S)).toBe(false)
 		expect(await teacher.canReadUser(userReq(B), S2)).toBe(true)
@@ -318,10 +319,13 @@ describe('новые функции шва по зоне (D-11)', () => {
 		expect(admin.counts.size).toBe(0)
 	})
 
-	test('canAssistSignIn: учитель — ученик своей группы, zone.all — по users.edit', async () => {
-		const teacher = zoneScope([]).scope
+	test('canAssistSignIn: учитель — users.read и ученик своей группы, zone.all — по users.edit', async () => {
+		const teacher = zoneScope(['users.read']).scope
 		expect(await teacher.canAssistSignIn(userReq(A), S)).toBe(true)
 		expect(await teacher.canAssistSignIn(userReq(A), S2)).toBe(false)
+		expect(await teacher.canAssistSignIn(userReq(A), T)).toBe(false)
+		expect(await zoneScope([]).scope.canAssistSignIn(userReq(A), S)).toBe(false)
+		expect(await zoneScope(['users.invite', 'groups.manage_groups']).scope.canAssistSignIn(userReq(A), S)).toBe(false)
 		const admin = zoneScope(['zone.all', 'users.edit']).scope
 		expect(await admin.canAssistSignIn(userReq(A), S2)).toBe(true)
 		expect(await admin.canAssistSignIn(userReq(A), T)).toBe(true)
@@ -417,7 +421,9 @@ describe('in-memory загрузчик зоны', () => {
 		expect(await loader.topicOfAttempt('missing')).toBeNull()
 		expect(await loader.groupOwnerOf(GA)).toEqual({ ownerId: null })
 		expect(await loader.groupOwnerOf('missing')).toBeNull()
-		expect(await loader.isMemberOfOwnedGroup(A, T)).toBe(true)
+		expect(await loader.isMemberOfOwnedGroup(A, S)).toBe(true)
+		expect(await loader.isMemberOfOwnedGroup(A, T)).toBe(false)
+		expect(await loader.isMemberOfOwnedGroup(A, M)).toBe(false)
 		expect(await loader.isMemberOfOwnedGroup(A, S2)).toBe(false)
 	})
 })

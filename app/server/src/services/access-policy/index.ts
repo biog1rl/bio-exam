@@ -77,6 +77,7 @@ export {
 	setGroupOwner,
 	setTopicTeachers,
 	studentOnlyFilter,
+	studentOnlySql,
 	topicTeachers,
 	zoneOwnerCandidates,
 	type ZoneExecutor,

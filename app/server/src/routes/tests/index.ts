@@ -1522,6 +1522,12 @@ function studentAttemptsInScope(scope: TestScope): SQL | undefined {
 	return scope.all ? notStaff : and(notStaff, inArray(tests.topicId, scope.topicIds))
 }
 
+function studentNameIn(scope: TestScope): SQL<string> {
+	return scope.all
+		? sql<string>`coalesce(${users.name}, ${users.firstName}, ${users.login}, 'Пользователь')`
+		: sql<string>`coalesce(${users.name}, ${users.firstName}, 'Пользователь')`
+}
+
 function isEmptyScope(scope: TestScope): boolean {
 	return !scope.all && scope.topicIds.length === 0
 }
@@ -1563,7 +1569,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 				topicSlug: topics.slug,
 				topicTitle: topics.title,
 				studentId: users.id,
-				studentName: sql<string>`coalesce(${users.name}, ${users.firstName}, ${users.login}, 'Пользователь')`,
+				studentName: studentNameIn(scope),
 				submittedAt: testAttempts.submittedAt,
 				earnedPoints: testAttempts.earnedPoints,
 				totalPoints: testAttempts.totalPoints,
@@ -1643,7 +1649,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 				topicTitle: topics.title,
 				studentId: users.id,
 				studentIsActive: users.isActive,
-				studentName: sql<string>`coalesce(${users.name}, ${users.firstName}, ${users.login}, 'Пользователь')`,
+				studentName: studentNameIn(scope),
 				submittedAt: testAttempts.submittedAt,
 				earnedPoints: testAttempts.earnedPoints,
 				totalPoints: testAttempts.totalPoints,

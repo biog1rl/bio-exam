@@ -13,6 +13,7 @@ import {
 	canReadTest,
 	canWriteTest,
 	hasGlobalZone,
+	hasPermission,
 	userScope,
 } from '../../services/access-policy/index.js'
 
@@ -130,21 +131,28 @@ assignmentsRouter.post(
 				res.status(403).json({ error: 'Forbidden' })
 				return
 			}
+			if (!(await hasPermission(req, 'tests.manage_assignments'))) {
+				res.status(403).json({ error: 'Forbidden' })
+				return
+			}
 			const adminId = req.authUser!.id
 
 			const members = await db
 				.select({ userId: userGroups.userId })
 				.from(userGroups)
 				.where(eq(userGroups.groupId, groupId))
+			const memberIds = members.map(({ userId }) => userId)
+			const allowed = await canAssignMany(req, [testId], memberIds)
+			const assignees = memberIds.filter((userId) => allowed(testId, userId))
 
-			if (members.length === 0) {
+			if (assignees.length === 0) {
 				res.json({ ok: true, assigned: 0 })
 				return
 			}
 
 			const inserted = await db
 				.insert(testAssignments)
-				.values(members.map(({ userId }) => ({ testId, userId, assignedBy: adminId })))
+				.values(assignees.map((userId) => ({ testId, userId, assignedBy: adminId })))
 				.onConflictDoNothing()
 				.returning({ id: testAssignments.userId })
 

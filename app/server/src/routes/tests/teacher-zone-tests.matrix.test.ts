@@ -1,3 +1,5 @@
+import { STAFF_ROLE_KEYS } from '@bio-exam/rbac'
+
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import { afterAll, beforeAll, describe, test } from 'vitest'
@@ -756,6 +758,30 @@ row(['teacherA'], 'GET /admin/dashboard', '200 без попыток разде�
 	const keys = attemptKeys(latest)
 	assert.ok(!keys.includes('s2Y') && !keys.includes('s3Y'), `попытки раздела Y: ${keys.join(' ')}`)
 })
+row(
+	['teacherA'],
+	'GET /admin/dashboard positive',
+	'200: latestAttempts мира s1X s2X, summary по попыткам учеников раздела X',
+	async (p) => {
+		const reply = await send(p, 'GET', '/admin/dashboard')
+		expectStatus(reply, 200)
+		assert.deepEqual(attemptKeys(reply.body.latestAttempts), ['s1X', 's2X'])
+		const expected = await ctx.pgPool.query<{ total: number; students: number; passed: number }>(
+			`SELECT count(*)::int AS total, count(DISTINCT ta.user_id)::int AS students, count(*) FILTER (WHERE ta.passed)::int AS passed
+		FROM test_attempts ta
+		INNER JOIN tests t ON t.id = ta.test_id
+		WHERE t.topic_id = $1
+		AND NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = ta.user_id AND r.role_key = ANY($2::text[]))`,
+			[w.topics.X.id, [...STAFF_ROLE_KEYS]]
+		)
+		const summary = reply.body.summary as { totalAttempts: number; activeStudents: number; passedAttempts: number }
+		const counts = expected.rows[0]
+		assert.ok(counts && counts.total >= 2, `попыток учеников раздела X: ${JSON.stringify(counts)}`)
+		assert.equal(summary.totalAttempts, counts.total)
+		assert.equal(summary.activeStudents, counts.students)
+		assert.equal(summary.passedAttempts, counts.passed)
+	}
+)
 status([['s1', 403]], 'GET /admin/dashboard', (p) => send(p, 'GET', '/admin/dashboard'))
 row(['adminNoZone'], 'GET /admin/dashboard', '200 и totalAttempts 0', async (p) => {
 	const reply = await send(p, 'GET', '/admin/dashboard')
@@ -782,6 +808,53 @@ for (const [profile, expected] of [
 		assert.equal(reply.body.total, rows.length)
 	})
 }
+async function withoutS2Names(run: () => Promise<void>): Promise<void> {
+	const saved = await ctx.pgPool.query<{ first_name: string | null; last_name: string | null }>(
+		'SELECT first_name, last_name FROM users WHERE id = $1',
+		[w.users.s2.id]
+	)
+	await ctx.pgPool.query('UPDATE users SET first_name = NULL, last_name = NULL WHERE id = $1', [w.users.s2.id])
+	try {
+		await run()
+	} finally {
+		await ctx.pgPool.query('UPDATE users SET first_name = $2, last_name = $3 WHERE id = $1', [
+			w.users.s2.id,
+			saved.rows[0]?.first_name ?? null,
+			saved.rows[0]?.last_name ?? null,
+		])
+	}
+}
+
+function studentNameOf(list: unknown, attemptId: string): unknown {
+	return rowsOf(list, 'попыток').find((item) => item.attemptId === attemptId)?.studentName
+}
+
+row(
+	['teacherA'],
+	'GET /admin/attempts studentName',
+	'у ученика без имени нет логина в списке и на панели',
+	async (p) => {
+		await withoutS2Names(async () => {
+			const list = await send(p, 'GET', '/admin/attempts?limit=100')
+			expectStatus(list, 200)
+			const fromList = studentNameOf(list.body.rows, w.attempts.s2X)
+			assert.equal(typeof fromList, 'string')
+			assert.notEqual(fromList, w.users.s2.login)
+			const dashboard = await send(p, 'GET', '/admin/dashboard')
+			expectStatus(dashboard, 200)
+			const fromDashboard = studentNameOf(dashboard.body.latestAttempts, w.attempts.s2X)
+			assert.equal(typeof fromDashboard, 'string')
+			assert.notEqual(fromDashboard, w.users.s2.login)
+		})
+	}
+)
+row(['admin'], 'GET /admin/attempts studentName', 'у ученика без имени прежняя подпись логином', async (p) => {
+	await withoutS2Names(async () => {
+		const list = await send(p, 'GET', '/admin/attempts?limit=100')
+		expectStatus(list, 200)
+		assert.equal(studentNameOf(list.body.rows, w.attempts.s2X), w.users.s2.login)
+	})
+})
 status([['s1', 403]], 'GET /admin/attempts', (p) => send(p, 'GET', '/admin/attempts?limit=100'))
 row(['adminNoZone'], 'GET /admin/attempts', '200 пусто и total 0', async (p) => {
 	const reply = await send(p, 'GET', '/admin/attempts?limit=100')

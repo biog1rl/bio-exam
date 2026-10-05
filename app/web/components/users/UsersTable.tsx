@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { groupsCell, groupsTitle, usersEmptyText } from '@/lib/users/invite-form'
+import { groupsCell, groupsTitle, showReinvite, usersEmptyText } from '@/lib/users/invite-form'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import type { UserRow } from '@/types/users'
 
@@ -130,11 +130,12 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				searchQuery={searchQuery}
 				canEditRow={effectiveCanEdit}
 				canInvite={canInvite}
+				zoneAll={!teacherView}
 				onEditClick={handleEditClick}
 				onReinviteClick={handleReinviteClick}
 			/>
 		))
-	}, [isLoading, filteredRows, searchQuery, cols, effectiveCanEdit, canInvite, showActions, emptyText])
+	}, [isLoading, filteredRows, searchQuery, cols, effectiveCanEdit, canInvite, teacherView, showActions, emptyText])
 
 	return (
 		<>
@@ -163,7 +164,10 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 						const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
 						const nameDisplay = fullName || user.name || '—'
 						const loginDisplay = user.login ?? '—'
-						const allowReinvite = !active && canInvite
+						const allowReinvite = showReinvite(
+							{ isActive: active, activatedAt: user.activatedAt },
+							{ canInvite, zoneAll: !teacherView }
+						)
 						const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
 
 						return (

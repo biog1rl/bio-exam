@@ -77,7 +77,7 @@ const INVENTORY = [
 	route(ASSIGNMENT_ROUTES, 'get', '/', OBJECT, ['canReadTest(']),
 	route(ASSIGNMENT_ROUTES, 'post', '/', OBJECT, ['canAssign(']),
 	route(ASSIGNMENT_ROUTES, 'delete', '/:userId', OBJECT, [REMOVE_ASSIGNMENT]),
-	route(ASSIGNMENT_ROUTES, 'post', '/group/:groupId', OBJECT, ['canWriteTest(', 'canManageGroup(']),
+	route(ASSIGNMENT_ROUTES, 'post', '/group/:groupId', OBJECT, ['canWriteTest(', 'canManageGroup(', 'canAssignMany(']),
 	...['get', 'patch', 'delete'].map((method) => route(GROUP_ROUTES, method, '/:groupId', OBJECT, ['canManageGroup('])),
 	route(GROUP_ROUTES, 'get', '/', LIST, ['groupScope(']),
 	route(USER_ROUTES, 'get', '/:userId/test-assignments', OBJECT, ['canReadUser(']),

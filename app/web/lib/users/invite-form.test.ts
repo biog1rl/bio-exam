@@ -13,6 +13,7 @@ import {
 	parseInviteGroups,
 	reinviteErrorText,
 	showGroupField,
+	showReinvite,
 	usersEmptyText,
 } from './invite-form'
 
@@ -58,6 +59,20 @@ test('inviteErrorText: 5xx и прочие коды дают общий текс
 
 test('inviteErrorText: сбой сети', () => {
 	assert.equal(inviteErrorText({ network: true }), 'Не удалось связаться с сервером. Проверьте соединение.')
+})
+
+test('showReinvite: учитель — только неактивированному, администратор — любому неактивному', () => {
+	const pending = { isActive: false, activatedAt: null }
+	const deactivated = { isActive: false, activatedAt: '2026-10-01T10:00:00.000Z' }
+	const active = { isActive: true, activatedAt: '2026-10-01T10:00:00.000Z' }
+	assert.equal(showReinvite(pending, { canInvite: true, zoneAll: false }), true)
+	assert.equal(showReinvite(deactivated, { canInvite: true, zoneAll: false }), false)
+	assert.equal(showReinvite(active, { canInvite: true, zoneAll: false }), false)
+	assert.equal(showReinvite(pending, { canInvite: true, zoneAll: true }), true)
+	assert.equal(showReinvite(deactivated, { canInvite: true, zoneAll: true }), true)
+	assert.equal(showReinvite(active, { canInvite: true, zoneAll: true }), false)
+	assert.equal(showReinvite(pending, { canInvite: false, zoneAll: true }), false)
+	assert.equal(showReinvite(pending, { canInvite: false, zoneAll: false }), false)
 })
 
 test('reinviteErrorText: 403 и 409 по UI-SPEC, остальное как раньше', () => {

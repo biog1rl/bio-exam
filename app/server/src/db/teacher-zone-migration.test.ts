@@ -120,7 +120,7 @@ afterAll(async () => {
 	if (copyDir) fs.rmSync(copyDir, { recursive: true, force: true })
 })
 
-describe('teacher_zones migration applied over existing data', () => {
+describe('teacher_zones migration applied over existing data', { shuffle: false }, () => {
 	test('the real migrator applies only the teacher zones migration and records its manifest sha256', async () => {
 		const target = teacherZonesEntry()
 		const manifest = readManifest()

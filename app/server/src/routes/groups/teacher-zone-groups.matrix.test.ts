@@ -240,12 +240,76 @@ row(['teacherA'], 'POST /api/groups member deactivated', '400 деактивир
 	expectStatus(await send(p, 'POST', '', { name, memberIds: [await deactivatedId()] }), 400)
 	await expectNoGroup(name)
 })
-row(['teacherA'], 'POST /api/groups member invited', '201 приглашённый, ещё не активирован', async (p) => {
-	const person = await w.freshUser({ isActive: false, activated: false })
-	const reply = await send(p, 'POST', '', { name: uniqueName(), memberIds: [person.id] })
-	expectStatus(reply, 201)
-	assert.deepEqual(await membersOf(createdId(reply)), [person.id])
-})
+row(
+	['teacherA'],
+	'POST /api/groups member invited',
+	'201 свой приглашённый из другой своей группы, ещё не активирован',
+	async (p) => {
+		const person = await w.freshUser({ isActive: false, activated: false })
+		await w.freshGroup({ owner: w.users.teacherA.id, members: [person.id] })
+		const reply = await send(p, 'POST', '', { name: uniqueName(), memberIds: [person.id] })
+		expectStatus(reply, 201)
+		assert.deepEqual(await membersOf(createdId(reply)), [person.id])
+	}
+)
+row(
+	['teacherA'],
+	'POST /api/groups member invited outside zone',
+	'400 приглашённый без групп учителя и группа не создана',
+	async (p) => {
+		const name = uniqueName()
+		const person = await w.freshUser({ isActive: false, activated: false })
+		expectStatus(await send(p, 'POST', '', { name, memberIds: [person.id] }), 400)
+		await expectNoGroup(name)
+	}
+)
+row(
+	['teacherB'],
+	'POST /api/groups member invited of teacherA',
+	'400 чужой приглашённый и группа не создана',
+	async (p) => {
+		const name = uniqueName()
+		expectStatus(await send(p, 'POST', '', { name, memberIds: [w.users.invited.id] }), 400)
+		await expectNoGroup(name)
+		assert.deepEqual(await membersOf(w.groups.G), [w.users.s1.id, w.users.invited.id].sort())
+	}
+)
+row(
+	['teacherB'],
+	'PATCH /api/groups/:freshB member invited of teacherA',
+	'400 чужой приглашённый и состав не изменился',
+	async (p) => {
+		const members = [await studentId()]
+		const groupId = await w.freshGroup({ owner: w.users.teacherB.id, members })
+		expectStatus(await send(p, 'PATCH', `/${groupId}`, { memberIds: [...members, w.users.invited.id] }), 400)
+		assert.deepEqual(await membersOf(groupId), members)
+	}
+)
+row(
+	['teacherB'],
+	'PATCH /api/groups/:freshB member invited by admin',
+	'400 приглашённый админом без группы и состав не изменился',
+	async (p) => {
+		const members = [await studentId()]
+		const groupId = await w.freshGroup({ owner: w.users.teacherB.id, members })
+		const person = await w.freshUser({ isActive: false, activated: false })
+		expectStatus(await send(p, 'PATCH', `/${groupId}`, { memberIds: [...members, person.id] }), 400)
+		assert.deepEqual(await membersOf(groupId), members)
+	}
+)
+row(
+	['teacherA'],
+	'PATCH /api/groups/:fresh own invited kept',
+	'200 переименование группы со своим приглашённым',
+	async (p) => {
+		const person = await w.freshUser({ isActive: false, activated: false })
+		const groupId = await w.freshGroup({ owner: w.users.teacherA.id, members: [person.id] })
+		const name = uniqueName()
+		expectStatus(await send(p, 'PATCH', `/${groupId}`, { name, memberIds: [person.id] }), 200)
+		assert.equal(await groupByName(name), groupId)
+		assert.deepEqual(await membersOf(groupId), [person.id])
+	}
+)
 row(['admin'], 'POST /api/groups ownerId teacher', '201 и владелец — учитель', async (p) => {
 	const owner = await teacherId()
 	const reply = await send(p, 'POST', '', { name: uniqueName(), memberIds: [], ownerId: owner })

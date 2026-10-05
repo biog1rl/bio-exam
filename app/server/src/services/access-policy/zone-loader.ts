@@ -48,6 +48,12 @@ export function studentOnlyFilter(userId: AnyPgColumn): SQL {
 	return sql`(exists (select 1 from ${userRoles} where ${userRoles.userId} = ${userId} and ${userRoles.roleKey} = ${STUDENT_ROLE_KEY}) and not exists (select 1 from ${userRoles} where ${userRoles.userId} = ${userId} and ${userRoles.roleKey} <> ${STUDENT_ROLE_KEY}) and not exists (select 1 from ${rbacUserGrants} where ${rbacUserGrants.userId} = ${userId} and ${rbacUserGrants.allow} = true))`
 }
 
+export function studentOnlySql(userIdExpr: string, values: unknown[]): string {
+	values.push(STUDENT_ROLE_KEY)
+	const roleKey = `$${values.length}::text`
+	return `(exists (select 1 from user_roles sr where sr.user_id = ${userIdExpr} and sr.role_key = ${roleKey}) and not exists (select 1 from user_roles sr where sr.user_id = ${userIdExpr} and sr.role_key <> ${roleKey}) and not exists (select 1 from rbac_user_grants sg where sg.user_id = ${userIdExpr} and sg.allow = true))`
+}
+
 export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 	return {
 		async topicIdsOf(userId) {
@@ -107,7 +113,9 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 				.select({ userId: userGroups.userId })
 				.from(userGroups)
 				.innerJoin(studentGroups, eq(studentGroups.id, userGroups.groupId))
-				.where(and(eq(studentGroups.ownerId, ownerId), eq(userGroups.userId, userId)))
+				.where(
+					and(eq(studentGroups.ownerId, ownerId), eq(userGroups.userId, userId), studentOnlyFilter(userGroups.userId))
+				)
 				.limit(1)
 			return Boolean(row)
 		},
@@ -170,6 +178,7 @@ export function createInMemoryZoneLoader(snapshot: ZoneSnapshot): ZoneLoader {
 			return group ? { ownerId: group.ownerId } : null
 		},
 		async isMemberOfOwnedGroup(ownerId, userId) {
+			if (!isSnapshotStudent(snapshot, userId)) return false
 			return ownedGroups(snapshot, ownerId).some((group) => group.members.includes(userId))
 		},
 		async studentIdsInOwnedGroups(ownerId, userIds) {

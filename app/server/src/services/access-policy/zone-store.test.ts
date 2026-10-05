@@ -230,6 +230,8 @@ describe('загрузчик зоны Drizzle', () => {
 		expect(await loader.groupOwnerOf('00000000-0000-4000-8000-000000000000')).toBeNull()
 		expect(await loader.isMemberOfOwnedGroup(ids.teacherA, ids.student)).toBe(true)
 		expect(await loader.isMemberOfOwnedGroup(ids.teacherA, ids.student2)).toBe(false)
+		expect(await loader.isMemberOfOwnedGroup(ids.teacherA, ids.teacherInGroup)).toBe(false)
+		expect(await loader.isMemberOfOwnedGroup(ids.teacherA, ids.methodist)).toBe(false)
 	})
 
 	test('ошибка базы пробрасывается, доступ не выдаётся', async () => {
@@ -365,11 +367,11 @@ describe('чтение зоны для показа и правило «учен
 		}
 	})
 
-	test('ineligibleTeacherGroupMembers: не ученики и деактивированные, приглашённый допустим', async () => {
+	test('ineligibleTeacherGroupMembers: не ученики, деактивированные и отдельно неактивированные', async () => {
 		expect(
 			await store.ineligibleTeacherGroupMembers([ids.student, ids.invited, ids.deactivated, ids.methodist])
-		).toEqual({ notStudent: [ids.methodist], deactivated: [ids.deactivated] })
-		expect(await store.ineligibleTeacherGroupMembers([])).toEqual({ notStudent: [], deactivated: [] })
+		).toEqual({ notStudent: [ids.methodist], deactivated: [ids.deactivated], pending: [ids.invited] })
+		expect(await store.ineligibleTeacherGroupMembers([])).toEqual({ notStudent: [], deactivated: [], pending: [] })
 	})
 
 	test('studentIdsInOwnedGroups отдаёт только учеников групп владельца', async () => {

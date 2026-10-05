@@ -5,7 +5,7 @@ import { studentGroups, teacherTopics, userRoles, users } from '../../db/schema.
 import { loadRoleTraits } from './role-traits.js'
 import { studentOnlyFilter, zoneIds } from './zone-loader.js'
 
-export { studentOnlyFilter } from './zone-loader.js'
+export { studentOnlyFilter, studentOnlySql } from './zone-loader.js'
 
 export type ZoneExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -170,10 +170,10 @@ export async function nonStudentUserIds(userIds: string[], executor: ZoneExecuto
 export async function ineligibleTeacherGroupMembers(
 	userIds: string[],
 	executor: ZoneExecutor = db
-): Promise<{ notStudent: string[]; deactivated: string[] }> {
+): Promise<{ notStudent: string[]; deactivated: string[]; pending: string[] }> {
 	const unique = [...new Set(userIds)]
 	const wanted = zoneIds(unique)
-	if (unique.length === 0) return { notStudent: [], deactivated: [] }
+	if (unique.length === 0) return { notStudent: [], deactivated: [], pending: [] }
 	const rows =
 		wanted.length === 0
 			? []
@@ -189,6 +189,7 @@ export async function ineligibleTeacherGroupMembers(
 	const byId = new Map(rows.map((row) => [row.id, row]))
 	const notStudent: string[] = []
 	const deactivated: string[] = []
+	const pending: string[] = []
 	for (const userId of unique) {
 		const row = byId.get(userId)
 		if (!row || !row.isStudent) {
@@ -196,6 +197,7 @@ export async function ineligibleTeacherGroupMembers(
 			continue
 		}
 		if (!row.isActive && row.activatedAt !== null) deactivated.push(userId)
+		if (!row.isActive && row.activatedAt === null) pending.push(userId)
 	}
-	return { notStudent, deactivated }
+	return { notStudent, deactivated, pending }
 }

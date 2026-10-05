@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { TableRow, TableCell } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { highlightText } from '@/lib/search/highlight'
-import { groupsCell, groupsTitle } from '@/lib/users/invite-form'
+import { groupsCell, groupsTitle, showReinvite } from '@/lib/users/invite-form'
 import type { UserRow } from '@/types/users'
 
 type Props = {
@@ -18,14 +18,23 @@ type Props = {
 	searchQuery?: string
 	canEditRow: boolean
 	canInvite: boolean
+	zoneAll: boolean
 	onEditClick: (u: UserRow) => void
 	onReinviteClick: (u: UserRow) => void
 }
 
-export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditClick, onReinviteClick }: Props) {
+export function UserRowItem({
+	user,
+	searchQuery,
+	canEditRow,
+	canInvite,
+	zoneAll,
+	onEditClick,
+	onReinviteClick,
+}: Props) {
 	const active = Boolean(user.isActive)
 	const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-	const allowReinvite = !active && canInvite
+	const allowReinvite = showReinvite({ isActive: active, activatedAt: user.activatedAt }, { canInvite, zoneAll })
 	const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
 
 	const loginDisplay = user.login ?? '—'

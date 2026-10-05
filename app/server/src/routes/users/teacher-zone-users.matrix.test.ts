@@ -271,6 +271,91 @@ row(['admin'], 'GET /users groups', 'у строки s1 groups содержит 
 	for (const item of groups) assert.equal(typeof item.name, 'string', `нет name у группы ${JSON.stringify(item)}`)
 })
 
+row(['teacherA'], 'GET /users groups', 'у строки s1 groups только G: группы вне зоны не видны', async (p) => {
+	const { rows } = await listUsers(p)
+	const s1 = rows.find((item) => item.id === w.users.s1.id)
+	assert.ok(s1, 'нет строки s1')
+	const groups = rowsOf(s1.groups, 'групп s1')
+	assert.deepEqual(
+		groups.map((item) => item.id),
+		[w.groups.G]
+	)
+})
+row(['teacherA'], 'GET /users createdByName', 'кем создан — имя без логина', async (p) => {
+	const groupId = await w.freshGroup({ owner: w.users.teacherA.id })
+	const invite = await send(p, 'POST', '/auth/invites', { firstName: 'Новый', groupId })
+	expectStatus(invite, 200)
+	const { rows } = await listUsers(p)
+	const created = rows.find((item) => item.id === invite.body.userId)
+	assert.ok(created, 'нет строки приглашённого')
+	assert.equal(created.createdByName, `Имя ${w.prefix} teacherA Фамилия ${w.prefix} teacherA`)
+})
+row(['admin'], 'GET /users createdByName', 'кем создан — прежняя подпись с логином', async (p) => {
+	const groupId = await w.freshGroup({ owner: w.users.teacherA.id })
+	const invite = await send('teacherA', 'POST', '/auth/invites', { firstName: 'Новый', groupId })
+	expectStatus(invite, 200)
+	const { rows } = await listUsers(p)
+	const created = rows.find((item) => item.id === invite.body.userId)
+	assert.ok(created, 'нет строки приглашённого')
+	assert.equal(created.createdByName, w.users.teacherA.login)
+})
+row(
+	['teacherA'],
+	'GET /users staff in own group',
+	'админ в группе учителя и повышенный ученик: строк нет, карточка 403',
+	async (p) => {
+		const groupId = await w.freshGroup({ owner: w.users.teacherA.id })
+		const invite = await send('admin', 'POST', '/auth/invites', {
+			roleKey: 'admin',
+			login: `${w.prefix}_staff_${Date.now()}`,
+			groupId,
+		})
+		expectStatus(invite, 200)
+		const staffId = String(invite.body.userId)
+		const promoted = (await w.freshUser({ groups: [groupId] })).id
+		expectStatus(await send('admin', 'PATCH', `/users/${promoted}`, { roles: ['teacher'] }), 200)
+		const { rows } = await listUsers(p)
+		const ids = rows.map((item) => item.id)
+		assert.ok(!ids.includes(staffId), 'админ из группы учителя в списке')
+		assert.ok(!ids.includes(promoted), 'повышенный ученик в списке')
+		expectStatus(await send(p, 'GET', `/users/${staffId}/test-assignments`), 403)
+		expectStatus(await send(p, 'GET', `/users/${promoted}/test-assignments`), 403)
+	}
+)
+
+let sharedStudent: Promise<string> | null = null
+
+function studentOfBothTeachers(): Promise<string> {
+	sharedStudent ??= w.freshUser({ groups: [w.groups.G, w.groups.GB] }).then((user) => user.id)
+	return sharedStudent
+}
+
+for (const [profile, topic] of [
+	['teacherA', 'X'],
+	['teacherB', 'Y'],
+] as Array<[ZoneProfile, ZoneTopicKey]>) {
+	row([profile], 'GET /users student of G and GB', '200 и ученик в списке', async (p) => {
+		const student = await studentOfBothTeachers()
+		const { rows } = await listUsers(p)
+		assert.ok(
+			rows.some((item) => item.id === student),
+			'ученика двух учителей нет в списке'
+		)
+	})
+	row([profile], 'GET /users/:shared/test-assignments', '200', async (p) => {
+		expectStatus(await send(p, 'GET', `/users/${await studentOfBothTeachers()}/test-assignments`), 200)
+	})
+	row([profile], 'DELETE /users/:shared/login-throttle', '200', async (p) => {
+		expectStatus(await send(p, 'DELETE', `/users/${await studentOfBothTeachers()}/login-throttle`), 200)
+	})
+	row([profile], `POST /users/:shared/test-assignments fresh${topic}`, '200 и назначение есть', async (p) => {
+		const student = await studentOfBothTeachers()
+		const created = await freshTestOf(topic)
+		expectStatus(await send(p, 'POST', `/users/${student}/test-assignments`, { testId: created.id }), 200)
+		assert.equal(await assignmentExists(created.id, student), true)
+	})
+}
+
 const S2_ATTEMPTS: Array<[ZoneProfile, ZoneAttemptKey[]]> = [
 	['teacherA', ['s2X']],
 	['teacherB', ['s2Y']],
@@ -435,6 +520,52 @@ row(['teacherA'], 'POST /api/tests/:freshY/assignments/group/:own', '403 и на
 	expectStatus(await send(p, 'POST', `/tests/${created.id}/assignments/group/${groupId}`), 403)
 	assert.equal(await assignmentExists(created.id, student), false)
 })
+
+async function denyGrant(userId: string, key: string): Promise<void> {
+	const [domain, action] = key.split('.')
+	await ctx.pgPool.query('INSERT INTO rbac_user_grants (user_id, domain, action, allow) VALUES ($1, $2, $3, false)', [
+		userId,
+		domain,
+		action,
+	])
+}
+
+row(
+	['teacherA'],
+	'POST /api/tests/:fresh/assignments/group/:own deny manage_assignments',
+	'403 учителю с запретом tests.manage_assignments и назначения нет',
+	async () => {
+		const teacher = await w.freshUser({ role: 'teacher' })
+		const topic = await w.freshTopic()
+		await attachTopic(teacher.id, topic.id)
+		await denyGrant(teacher.id, 'tests.manage_assignments')
+		const student = await ungroupedStudent()
+		const groupId = await w.freshGroup({ owner: teacher.id, members: [student] })
+		const created = await w.freshTest(topic)
+		const reply = await call(ctx, 'POST', `/api/tests/${created.id}/assignments/group/${groupId}`, {
+			cookies: teacher.cookie,
+		})
+		expectStatus(reply, 403)
+		assert.equal(await assignmentExists(created.id, student), false)
+	}
+)
+row(
+	['teacherA'],
+	'POST /api/tests/:freshX/assignments/group/:own with staff',
+	'200, ученик назначен, персоналу в группе назначения нет',
+	async (p) => {
+		const student = await ungroupedStudent()
+		const staff = (await w.freshUser({ role: 'admin' })).id
+		const groupId = await w.freshGroup({ owner: w.users.teacherA.id, members: [student] })
+		await ctx.db.insert(ctx.schema.userGroups).values({ groupId, userId: staff })
+		const created = await freshTestOf('X')
+		const reply = await send(p, 'POST', `/tests/${created.id}/assignments/group/${groupId}`)
+		expectStatus(reply, 200)
+		assert.equal(reply.body.assigned, 1)
+		assert.equal(await assignmentExists(created.id, student), true)
+		assert.equal(await assignmentExists(created.id, staff), false)
+	}
+)
 
 row(
 	['teacherA'],

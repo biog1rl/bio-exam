@@ -23,7 +23,7 @@ type Row = { profile: ZoneProfile; route: string; title: string; run: (profile: 
 
 type Scope = 'tests' | 'questions' | 'users' | 'groups' | 'attempts'
 
-type SearchItem = { type: string; id: string; href: string }
+type SearchItem = { type: string; id: string; href: string; subtitle?: string; snippetHtml?: string }
 
 type Category = { scope: string; available: boolean; items: SearchItem[] }
 
@@ -195,6 +195,18 @@ row(['teacherA'], 'GET /search users', 'только s1 и invited', async (p) =
 	const { items } = await search(p, 'users')
 	assert.deepEqual(personKeys(items), ['invited', 's1'])
 })
+row(['teacherA'], 'GET /search users staff in own group', 'персонал из своей группы не находится', async (p) => {
+	const staff = await w.freshUser({ role: 'admin' })
+	const student = await w.freshUser()
+	await w.freshGroup({ owner: w.users.teacherA.id, members: [staff.id, student.id] })
+	const staffItems = ofType((await search(p, 'users', staff.login)).items, 'user')
+	assert.ok(!staffItems.some((item) => item.id === staff.id), 'персонал найден')
+	const studentItems = ofType((await search(p, 'users', student.login)).items, 'user')
+	assert.ok(
+		studentItems.some((item) => item.id === student.id),
+		'ученик своей группы не найден'
+	)
+})
 unavailable(['s1'], 'users')
 
 row(['admin'], 'GET /search groups', 'G GB GA', async (p) => {
@@ -212,9 +224,28 @@ row(['admin'], 'GET /search attempts', 'все попытки мира со сс
 	assert.deepEqual(attemptKeys(items), ['s1X', 's2X', 's2Y', 's3Y', 'teacherAX'])
 	expectHrefs(items, '/admin/attempts/')
 })
-row(['teacherA'], 'GET /search attempts', 'только попытки по тестам раздела X', async (p) => {
-	const { items } = await search(p, 'attempts')
-	assert.deepEqual(attemptKeys(items), ['s1X', 's2X', 'teacherAX'])
+row(
+	['teacherA'],
+	'GET /search attempts',
+	'только попытки учеников по тестам раздела X, без предпросмотра',
+	async (p) => {
+		const { items } = await search(p, 'attempts')
+		assert.deepEqual(attemptKeys(items), ['s1X', 's2X'])
+	}
+)
+row(['teacherA'], 'GET /search attempts student name', 'в подписи попытки s2 имя без логина', async (p) => {
+	const { items } = await search(p, 'attempts', `Тест ${w.tests.tX.slug}`)
+	const item = items.find((entry) => entry.id === w.attempts.s2X)
+	assert.ok(item, 'нет попытки s2X')
+	assert.ok(item.subtitle?.includes(`Имя ${w.prefix} s2`), `подпись ${item.subtitle}`)
+	assert.ok(!item.subtitle?.includes(w.users.s2.login), `логин в подписи ${item.subtitle}`)
+	assert.ok(!item.snippetHtml?.includes(w.users.s2.login), `логин во фрагменте ${item.snippetHtml}`)
+})
+row(['admin'], 'GET /search attempts student name', 'в подписи попытки s2 прежний логин', async (p) => {
+	const { items } = await search(p, 'attempts', `Тест ${w.tests.tX.slug}`)
+	const item = items.find((entry) => entry.id === w.attempts.s2X)
+	assert.ok(item, 'нет попытки s2X')
+	assert.ok(item.subtitle?.includes(w.users.s2.login), `подпись ${item.subtitle}`)
 })
 row(['s3'], 'GET /search attempts', 'пусто: назначение tY снято', async (p) => {
 	const { items } = await search(p, 'attempts')

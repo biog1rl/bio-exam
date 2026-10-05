@@ -168,6 +168,7 @@ export function createAccessScope(check: PermissionCheck, zones: ZoneLoader): Ac
 		canAssistSignIn: async (req, studentId) => {
 			if (!req.authUser?.id) return false
 			if (await check(req, 'zone.all')) return check(req, 'users.edit')
+			if (!(await check(req, 'users.read'))) return false
 			return canManageStudent(req, studentId)
 		},
 		hasGlobalZone,

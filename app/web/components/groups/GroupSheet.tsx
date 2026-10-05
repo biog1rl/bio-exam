@@ -26,6 +26,7 @@ import {
 	OWNER_HINT,
 	candidatesSource,
 	candidatesState,
+	groupSaveDisabled,
 	groupSaveErrorText,
 	groupSavePayload,
 	ownerLabel,
@@ -377,7 +378,11 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 				</div>
 
 				<SheetFooter className="flex-col gap-2 px-4">
-					<Button className="w-full" onClick={handleSave} disabled={saving}>
+					<Button
+						className="w-full"
+						onClick={handleSave}
+						disabled={groupSaveDisabled({ saving, editing: Boolean(group), membersLoading })}
+					>
 						{saving ? 'Сохранение...' : 'Сохранить группу'}
 					</Button>
 					<span

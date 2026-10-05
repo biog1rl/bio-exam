@@ -48,6 +48,14 @@ function parseJson(text: string): unknown {
 	}
 }
 
+export function showReinvite(
+	user: { isActive: boolean; activatedAt: string | null },
+	access: { canInvite: boolean; zoneAll: boolean }
+): boolean {
+	if (!access.canInvite || user.isActive) return false
+	return access.zoneAll || user.activatedAt === null
+}
+
 export function reinviteErrorText(input: { status: number; text: string }): string {
 	if (input.status === 403) return FORBIDDEN_ACTION
 	if (input.status === 409) return serverErrorText(parseJson(input.text)) ?? (input.text || `HTTP ${input.status}`)

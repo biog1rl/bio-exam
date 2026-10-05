@@ -23,6 +23,7 @@ import {
 	ineligibleTeacherGroupMembers,
 	loadRoleTraits,
 	releaseZone,
+	studentOnlyFilter,
 	testScope,
 	userScope,
 } from '../../services/access-policy/index.js'
@@ -123,11 +124,20 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 		}
 		const zoneFilter = scope.all
 			? undefined
-			: sql`exists (select 1 from ${userGroups} where ${userGroups.userId} = ${users.id} and ${inArray(userGroups.groupId, scope.groupIds)})`
+			: and(
+					sql`exists (select 1 from ${userGroups} where ${userGroups.userId} = ${users.id} and ${inArray(userGroups.groupId, scope.groupIds)})`,
+					studentOnlyFilter(users.id)
+				)
 
 		const [{ total }] = await db.select({ total: count() }).from(users).where(zoneFilter)
 
 		const createdByUser = alias(users, 'createdByUser')
+		const createdByName = scope.all
+			? sql<string | null>`coalesce(${createdByUser.name}, ${createdByUser.login})`
+			: sql<
+					string | null
+				>`coalesce(${createdByUser.name}, nullif(concat_ws(' ', ${createdByUser.firstName}, ${createdByUser.lastName}), ''))`
+		const groupsInZone = scope.all ? sql`` : sql` and ${inArray(sql`ug.group_id`, scope.groupIds)}`
 
 		const rows = await db
 			.select({
@@ -144,7 +154,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 				invitedAt: users.invitedAt,
 				activatedAt: users.activatedAt,
 				createdAt: users.createdAt,
-				createdByName: sql<string | null>`coalesce(${createdByUser.name}, ${createdByUser.login})`.as('createdByName'),
+				createdByName: createdByName.as('createdByName'),
 				roles: sql<string[]>`
           coalesce(array_agg(${userRoles.roleKey}) filter (where ${userRoles.roleKey} is not null), '{}')
         `.as('roles'),
@@ -156,7 +166,7 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
           coalesce((select json_agg(json_build_object('id', sg.id, 'name', sg.name) order by sg.name, sg.id)
            from user_groups ug
            inner join student_groups sg on sg.id = ug.group_id
-           where ug.user_id = ${users.id}), '[]'::json)
+           where ug.user_id = ${users.id}${groupsInZone}), '[]'::json)
         `.as('groups'),
 			})
 			.from(users)
@@ -183,7 +193,9 @@ router.get('/', sessionRequired(), requirePerm('users', 'read'), async (req, res
 				users.phone,
 				users.email,
 				createdByUser.name,
-				createdByUser.login
+				createdByUser.login,
+				createdByUser.firstName,
+				createdByUser.lastName
 			)
 			.orderBy(desc(users.createdAt))
 			.limit(limit)

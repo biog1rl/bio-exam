@@ -212,6 +212,66 @@ row(
 	}
 )
 
+function tokenOf(link: unknown): string {
+	const token = String(link).split('/invite/')[1]
+	assert.ok(token, `нет токена в ссылке ${String(link)}`)
+	return token
+}
+
+async function validateStatus(token: string): Promise<number> {
+	return (await call(ctx, 'GET', `/api/auth/invites/validate/${token}`)).status
+}
+
+row(
+	['teacherB'],
+	'POST /groups invited of teacherA then reissue',
+	'B: создание группы 400, перевыпуск 403, ссылка A действует',
+	async (p) => {
+		const group = await teacherAGroup()
+		const invite = await send('teacherA', 'POST', '/api/auth/invites', inviteBody(uniqueLogin(), { groupId: group }))
+		expectStatus(invite, 200)
+		const person = String(invite.body.userId)
+		const linkA = tokenOf(invite.body.inviteLink)
+		const name = `Группа ${w.prefix} ${crypto.randomUUID().slice(0, 8)}`
+		expectStatus(await send(p, 'POST', '/api/groups', { name, memberIds: [person] }), 400)
+		expectStatus(await send(p, 'POST', '/api/auth/invites', { userId: person }), 403)
+		assert.equal(await validateStatus(linkA), 200)
+		assert.equal(await inviteCount(person), 1)
+	}
+)
+row(
+	['teacherB'],
+	'PATCH /groups invited by admin then reissue',
+	'B: добавление в свою группу 400, перевыпуск 403',
+	async (p) => {
+		const invite = await send('admin', 'POST', '/api/auth/invites', inviteBody(uniqueLogin(), { roleKey: 'user' }))
+		expectStatus(invite, 200)
+		const person = String(invite.body.userId)
+		const linkAdmin = tokenOf(invite.body.inviteLink)
+		const group = await teacherBGroup()
+		expectStatus(await send(p, 'PATCH', `/api/groups/${group}`, { memberIds: [person] }), 400)
+		assert.equal(await inGroup(person, group), false)
+		expectStatus(await send(p, 'POST', '/api/auth/invites', { userId: person }), 403)
+		assert.equal(await validateStatus(linkAdmin), 200)
+	}
+)
+row(
+	['teacherA'],
+	'POST /groups own invited then reissue',
+	'A: вторая своя группа со своим приглашённым 201, перевыпуск 200',
+	async (p) => {
+		const group = await teacherAGroup()
+		const invite = await send(p, 'POST', '/api/auth/invites', inviteBody(uniqueLogin(), { groupId: group }))
+		expectStatus(invite, 200)
+		const person = String(invite.body.userId)
+		const name = `Группа ${w.prefix} ${crypto.randomUUID().slice(0, 8)}`
+		expectStatus(await send(p, 'POST', '/api/groups', { name, memberIds: [person] }), 201)
+		const reissue = await send(p, 'POST', '/api/auth/invites', { userId: person })
+		expectStatus(reissue, 200)
+		assert.equal(await validateStatus(tokenOf(reissue.body.inviteLink)), 200)
+	}
+)
+
 row(['admin'], 'POST /invites roleKey teacher', '200 и роль teacher', async (p) => {
 	const login = uniqueLogin()
 	expectStatus(await send(p, 'POST', '/api/auth/invites', inviteBody(login, { roleKey: 'teacher' })), 200)
@@ -290,6 +350,55 @@ for (const [profile, kind, expected] of ASSIST_CASES) {
 		}
 	})
 }
+
+async function teacherWithDenied(keys: string[]): Promise<{ teacher: ZoneUser; groupId: string }> {
+	const teacher = await w.freshUser({ role: 'teacher' })
+	for (const key of keys) {
+		const [domain, action] = key.split('.')
+		await ctx.pgPool.query('INSERT INTO rbac_user_grants (user_id, domain, action, allow) VALUES ($1, $2, $3, false)', [
+			teacher.id,
+			domain,
+			action,
+		])
+	}
+	const groupId = await w.freshGroup({ owner: teacher.id })
+	return { teacher, groupId }
+}
+
+row(['teacherA'], 'DELETE /api/users/:own/login-throttle deny users.read', '403 и блок на месте', async () => {
+	const { teacher, groupId } = await teacherWithDenied(['users.read'])
+	const student = await w.freshUser({ groups: [groupId] })
+	await blockLogin(student.login)
+	expectStatus(await call(ctx, 'DELETE', `/api/users/${student.id}/login-throttle`, { cookies: teacher.cookie }), 403)
+	assert.equal(await throttleRows(student.login), 1)
+})
+row(['teacherA'], 'POST /api/users/:own/sessions/revoke deny users.read', '403 и сеанс жив', async () => {
+	const { teacher, groupId } = await teacherWithDenied(['users.read'])
+	const student = await w.freshUser({ groups: [groupId] })
+	expectStatus(await call(ctx, 'POST', `/api/users/${student.id}/sessions/revoke`, { cookies: teacher.cookie }), 403)
+	assert.equal(await meStatus(student.cookie), 200)
+})
+row(
+	['teacherA'],
+	'DELETE /api/users/:own/login-throttle deny groups and invite',
+	'200: помощь со входом держится на users.read',
+	async () => {
+		const { teacher, groupId } = await teacherWithDenied(['groups.manage_groups', 'users.invite'])
+		const student = await w.freshUser({ groups: [groupId] })
+		await blockLogin(student.login)
+		expectStatus(await call(ctx, 'DELETE', `/api/users/${student.id}/login-throttle`, { cookies: teacher.cookie }), 200)
+		assert.equal(await throttleRows(student.login), 0)
+	}
+)
+row(['teacherA'], 'POST /invites userId own invited deny users.invite', '403 и ссылка не создана', async () => {
+	const { teacher, groupId } = await teacherWithDenied(['users.invite'])
+	const student = await w.freshUser({ isActive: false, activated: false, groups: [groupId] })
+	expectStatus(
+		await call(ctx, 'POST', '/api/auth/invites', { cookies: teacher.cookie, body: { userId: student.id } }),
+		403
+	)
+	assert.equal(await inviteCount(student.id), 0)
+})
 
 for (const [profile, expected] of [
 	['admin', 404],

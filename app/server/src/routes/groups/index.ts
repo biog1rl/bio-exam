@@ -9,6 +9,7 @@ import { validateUUID } from '../../middleware/validateParams.js'
 import { CreateGroupSchema, PatchGroupSchema } from '../../schemas/groups.js'
 import {
 	canManageGroup,
+	canManageStudent,
 	groupOwners,
 	groupScope,
 	hasGlobalZone,
@@ -26,6 +27,7 @@ export const groupsRouter = Router()
 
 const NOT_STUDENT_MEMBER = 'В группу учителя можно добавить только учеников'
 const DEACTIVATED_MEMBER = 'Деактивированного ученика нельзя добавить в группу'
+const PENDING_MEMBER = 'Ученика, который ещё не принял приглашение, добавляет в группу его учитель или администратор'
 const STAFF_IN_TEACHER_GROUP = 'В группе учителя могут быть только ученики'
 const OWNER_NOT_CANDIDATE = 'Учитель не найден или не активен'
 const CANDIDATES_MIN_QUERY = 2
@@ -37,11 +39,18 @@ function escapeLikePattern(value: string): string {
 
 type RuleViolation = { status: number; body: Record<string, unknown> }
 
-async function teacherMemberViolation(userIds: string[], executor: ZoneExecutor): Promise<RuleViolation | null> {
+async function teacherMemberViolation(
+	req: Request,
+	userIds: string[],
+	executor: ZoneExecutor
+): Promise<RuleViolation | null> {
 	if (userIds.length === 0) return null
-	const { notStudent, deactivated } = await ineligibleTeacherGroupMembers(userIds, executor)
+	const { notStudent, deactivated, pending } = await ineligibleTeacherGroupMembers(userIds, executor)
 	if (notStudent.length > 0) return { status: 400, body: { error: NOT_STUDENT_MEMBER } }
 	if (deactivated.length > 0) return { status: 400, body: { error: DEACTIVATED_MEMBER } }
+	for (const userId of pending) {
+		if (!(await canManageStudent(req, userId))) return { status: 400, body: { error: PENDING_MEMBER } }
+	}
 	return null
 }
 
@@ -235,7 +244,7 @@ groupsRouter.post('/', sessionRequired(), requirePerm('groups', 'manage_groups')
 		const ownerId = global ? (parsed.data.ownerId ?? null) : requesterId
 		const violation = global
 			? await ownerViolation(ownerId, memberIds, db)
-			: await teacherMemberViolation(memberIds, db)
+			: await teacherMemberViolation(req, memberIds, db)
 		if (violation) {
 			res.status(violation.status).json(violation.body)
 			return
@@ -294,6 +303,7 @@ groupsRouter.patch('/:groupId', validateUUID('groupId'), sessionRequired(), asyn
 			} else if (!global && memberIds !== undefined) {
 				const known = new Set(currentIds)
 				const memberProblem = await teacherMemberViolation(
+					req,
 					memberIds.filter((userId) => !known.has(userId)),
 					tx
 				)

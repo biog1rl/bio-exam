@@ -5,12 +5,22 @@ import {
 	candidatesHint,
 	candidatesSource,
 	candidatesState,
+	groupSaveDisabled,
 	groupSaveErrorText,
 	groupSavePayload,
 	groupsEmptyState,
 	ownerLabel,
 	personLabel,
 } from './group-form'
+
+test('groupSaveDisabled: правка группы ждёт загрузки состава, новая группа не ждёт', () => {
+	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersLoading: true }), true)
+	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersLoading: false }), false)
+	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersLoading: true }), false)
+	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersLoading: false }), false)
+	assert.equal(groupSaveDisabled({ saving: true, editing: false, membersLoading: false }), true)
+	assert.equal(groupSaveDisabled({ saving: true, editing: true, membersLoading: false }), true)
+})
 
 test('candidatesSource: учитель ищет на сервере от двух символов', () => {
 	assert.equal(candidatesSource({ zoneAll: false, query: 'Ан' }), '/api/groups/candidates?q=%D0%90%D0%BD')

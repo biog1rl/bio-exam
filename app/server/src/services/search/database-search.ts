@@ -1,8 +1,8 @@
-import type { PermissionKey } from '@bio-exam/rbac'
+import { STAFF_ROLE_KEYS, type PermissionKey } from '@bio-exam/rbac'
 
 import { pgPool } from '../../db/index.js'
 import { transliterate } from '../../lib/transliterate.js'
-import type { GroupScope, TestScope, UserScope } from '../access-policy/index.js'
+import { studentOnlySql, type GroupScope, type TestScope, type UserScope } from '../access-policy/index.js'
 import { highlightSnippet } from './highlight.js'
 
 export type SearchScope = 'all' | 'tests' | 'questions' | 'users' | 'groups' | 'attempts'
@@ -259,6 +259,7 @@ async function searchUsers(params: { query: string; like: string; limit: number;
 	if (!params.users.all) {
 		values.push(params.users.groupIds)
 		zone = `and exists (select 1 from user_groups ug where ug.user_id = u.id and ug.group_id = any($${values.length}::uuid[]))`
+		zone += ` and ${studentOnlySql('u.id', values)}`
 	}
 
 	return queryRows(
@@ -338,9 +339,15 @@ async function searchAttempts(params: {
 	const staff = hasTestZone(tests)
 	const values: unknown[] = [params.query, params.like, params.likeAlt, params.limit]
 	let whereAccess = ''
+	let student = 'coalesce(u.name, u.login)'
+	let studentMatch = 'u.name, u.login'
 	if (!tests.all && staff) {
 		values.push(tests.topicIds)
 		whereAccess = `and te.topic_id = any($${values.length}::uuid[])`
+		values.push([...STAFF_ROLE_KEYS])
+		whereAccess += ` and not exists (select 1 from user_roles r where r.user_id = ta.user_id and r.role_key = any($${values.length}::text[]))`
+		student = `coalesce(u.name, nullif(concat_ws(' ', u.first_name, u.last_name), ''), 'Ученик')`
+		studentMatch = `u.name, u.first_name, u.last_name`
 	}
 	if (!staff) {
 		values.push(params.access.userId)
@@ -353,8 +360,8 @@ async function searchAttempts(params: {
 				'attempt'::text as type,
 				ta.id::text as id,
 				(te.title || ' · ' || round(ta.score_percentage::numeric)::text || '%') as title,
-				concat_ws(' · ', top.title, coalesce(u.name, u.login), case when ta.passed then 'Сдано' else 'Не сдано' end, ta.submitted_at::date::text) as subtitle,
-				concat_ws(' · ', top.title, coalesce(u.name, u.login), case when ta.passed then 'Сдано' else 'Не сдано' end, ta.submitted_at::date::text) as snippet_source,
+				concat_ws(' · ', top.title, ${student}, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.submitted_at::date::text) as subtitle,
+				concat_ws(' · ', top.title, ${student}, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.submitted_at::date::text) as snippet_source,
 				case
 					when ${staff ? 'true' : 'false'} then ('/admin/attempts/' || ta.id::text)
 					else ('/tests/' || top.slug || '/' || te.slug)
@@ -364,8 +371,8 @@ async function searchAttempts(params: {
 					extensions.similarity(coalesce(top.title, ''), $1),
 					extensions.similarity(coalesce(u.name, ''), $1),
 					case
-						when concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text) ilike $2 escape '\\'
-							or concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text) ilike $3 escape '\\'
+						when concat_ws(' ', te.title, top.title, ${studentMatch}, ta.score_percentage::text, ta.submitted_at::date::text) ilike $2 escape '\\'
+							or concat_ws(' ', te.title, top.title, ${studentMatch}, ta.score_percentage::text, ta.submitted_at::date::text) ilike $3 escape '\\'
 						then 1
 						else 0
 					end
@@ -375,9 +382,9 @@ async function searchAttempts(params: {
 			inner join topics top on top.id = te.topic_id
 			inner join users u on u.id = ta.user_id
 			where (
-				concat_ws(' ', te.title, top.title, u.name, u.login, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.score_percentage::text, ta.submitted_at::date::text) ilike $2 escape '\\'
-				or concat_ws(' ', te.title, top.title, u.name, u.login, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.score_percentage::text, ta.submitted_at::date::text) ilike $3 escape '\\'
-				or extensions.similarity(concat_ws(' ', te.title, top.title, u.name, u.login, ta.score_percentage::text, ta.submitted_at::date::text), $1) > 0.08
+				concat_ws(' ', te.title, top.title, ${studentMatch}, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.score_percentage::text, ta.submitted_at::date::text) ilike $2 escape '\\'
+				or concat_ws(' ', te.title, top.title, ${studentMatch}, case when ta.passed then 'Сдано' else 'Не сдано' end, ta.score_percentage::text, ta.submitted_at::date::text) ilike $3 escape '\\'
+				or extensions.similarity(concat_ws(' ', te.title, top.title, ${studentMatch}, ta.score_percentage::text, ta.submitted_at::date::text), $1) > 0.08
 			)
 			${whereAccess}
 			order by score desc, ta.submitted_at desc
