@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 
 import { Upload, X, Loader2, Pencil } from 'lucide-react'
 
+import { versionedUrl } from '@/lib/assets/versioned-url'
 import { cn } from '@/lib/utils/cn'
 
 import { Avatar, AvatarFallback, AvatarImage } from './avatar'
@@ -277,7 +278,7 @@ export function ImageUpload({
 				{value ? (
 					<div className="group relative">
 						<Avatar className="h-32 w-32" key={imageKey}>
-							<AvatarImage src={`${value}?v=${imageKey}`} alt="Avatar" />
+							<AvatarImage src={versionedUrl(value, imageKey)} alt="Avatar" />
 							<AvatarFallback>Avatar</AvatarFallback>
 						</Avatar>
 						{!disabled && (

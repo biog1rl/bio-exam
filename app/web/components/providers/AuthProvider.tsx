@@ -5,6 +5,7 @@ import { can as canRbac } from '@bio-exam/rbac'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
+import { versionedUrl } from '@/lib/assets/versioned-url'
 import { sessionClient, type AuthMe, type LoadMeOutcome } from '@/lib/session/client'
 import { createKeepAlive, type KeepAlive } from '@/lib/session/keep-alive'
 import { LOGGED_OUT_PATH } from '@/lib/session/redirect'
@@ -68,7 +69,7 @@ export function AuthProvider({
 			await new Promise<void>((resolve) => {
 				const img = new Image()
 				img.onload = img.onerror = () => resolve()
-				img.src = `${newAvatarUrl}?v=${newVersion}`
+				img.src = versionedUrl(newAvatarUrl, newVersion)
 			})
 		}
 

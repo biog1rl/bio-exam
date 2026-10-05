@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
 import { getInitials } from '@/helpers/getAvatarColor'
+import { versionedUrl } from '@/lib/assets/versioned-url'
 import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
 
 export function NavUser() {
@@ -29,7 +30,7 @@ export function NavUser() {
 	const displayEmail = me?.login
 	const avatarRaw = me?.avatarCropped || me?.avatar
 	// Добавляем версию для cache-busting, чтобы браузер загружал новое изображение
-	const avatar = avatarRaw ? `${avatarRaw}?v=${avatarVersion}` : undefined
+	const avatar = avatarRaw ? versionedUrl(avatarRaw, avatarVersion) : undefined
 	const avatarColor = me?.avatarColor
 
 	const initials = getInitials(me?.firstName, me?.lastName)

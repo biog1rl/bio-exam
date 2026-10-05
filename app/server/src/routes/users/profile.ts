@@ -16,9 +16,12 @@ const router = Router()
 
 // Валидация для обновления профиля
 const updateProfileSchema = z.object({
-	firstName: z.string().min(1, 'Имя обязательно').max(50, 'Имя слишком длинное').optional(),
-	lastName: z.string().min(1, 'Фамилия обязательна').max(50, 'Фамилия слишком длинная').optional(),
-	login: z.string().min(3, 'Логин должен содержать минимум 3 символа').max(30, 'Логин слишком длинный').optional(),
+	firstName: z.string().min(1, 'Имя обязательно').max(50, 'Имя слишком длинное').nullable().optional(),
+	lastName: z.string().min(1, 'Фамилия обязательна').max(50, 'Фамилия слишком длинная').nullable().optional(),
+	login: z.preprocess(
+		(value) => (value === null ? undefined : value),
+		z.string().min(3, 'Логин должен содержать минимум 3 символа').max(30, 'Логин слишком длинный').optional()
+	),
 	avatar: z
 		.string()
 		.url('Некорректный URL аватара')
@@ -29,8 +32,9 @@ const updateProfileSchema = z.object({
 	avatarColor: z
 		.string()
 		.regex(/^#[0-9A-Fa-f]{6}$/, 'Некорректный цвет')
+		.nullable()
 		.optional(),
-	initials: z.string().min(1, 'Инициалы обязательны').max(5, 'Максимум 5 символов').optional(),
+	initials: z.string().min(1, 'Инициалы обязательны').max(5, 'Максимум 5 символов').nullable().optional(),
 	birthdate: z
 		.string()
 		.transform((val: string) => {
@@ -48,8 +52,8 @@ const updateProfileSchema = z.object({
 		})
 		.optional()
 		.or(z.null()),
-	telegram: z.string().trim().max(100, 'Telegram слишком длинный').optional(),
-	phone: z.string().trim().max(50, 'Телефон слишком длинный').optional(),
+	telegram: z.string().trim().max(100, 'Telegram слишком длинный').nullable().optional(),
+	phone: z.string().trim().max(50, 'Телефон слишком длинный').nullable().optional(),
 	email: z.string().email('Некорректный email').optional().or(z.literal('')).or(z.null()),
 })
 
