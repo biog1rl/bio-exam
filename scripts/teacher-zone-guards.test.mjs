@@ -18,13 +18,18 @@ const SCHEMA_FILE = 'app/server/src/db/schema.ts'
 const TEST_SUPPORT_DIR = 'app/server/src/test-support/'
 const TEACHER_ZONE_WORLD = 'app/server/src/test-support/teacher-zone-world.ts'
 
-const TESTS_ROUTES = 'app/server/src/routes/tests/index.ts'
 const TOPIC_ROUTES = 'app/server/src/routes/tests/admin/topics.ts'
 const TESTS_LIST_ROUTES = 'app/server/src/routes/tests/admin/tests-list.ts'
 const TESTS_BY_SLUG_ROUTES = 'app/server/src/routes/tests/admin/tests-by-slug.ts'
 const QUESTION_TYPE_ROUTES = 'app/server/src/routes/tests/admin/question-types.ts'
 const SCORING_RULE_ROUTES = 'app/server/src/routes/tests/admin/scoring-rules.ts'
 const QUESTION_DRAFT_ROUTES = 'app/server/src/routes/tests/admin/question-drafts.ts'
+const TESTS_CORE_ROUTES = 'app/server/src/routes/tests/admin/tests-core.ts'
+const QUESTION_ROUTES = 'app/server/src/routes/tests/admin/questions.ts'
+const TESTS_DELETE_ROUTES = 'app/server/src/routes/tests/admin/tests-delete.ts'
+const ASSET_ROUTES = 'app/server/src/routes/tests/admin/assets.ts'
+const EXPORT_ROUTES = 'app/server/src/routes/tests/admin/export.ts'
+const ATTEMPT_ROUTES = 'app/server/src/routes/tests/admin/attempts.ts'
 const ASSIGNMENT_ROUTES = 'app/server/src/routes/tests/assignments.ts'
 const GROUP_ROUTES = 'app/server/src/routes/groups/index.ts'
 const USER_ROUTES = 'app/server/src/routes/users/index.ts'
@@ -33,13 +38,18 @@ const SESSION_ROUTES = 'app/server/src/routes/users/sessions.ts'
 const INVITE_ROUTES = 'app/server/src/routes/auth/invites.ts'
 
 const ROUTE_FILES = {
-	[TESTS_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[TOPIC_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[TESTS_LIST_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[TESTS_BY_SLUG_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[QUESTION_TYPE_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[SCORING_RULE_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[QUESTION_DRAFT_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[TESTS_CORE_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[QUESTION_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[TESTS_DELETE_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[ASSET_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[EXPORT_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[ATTEMPT_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ASSIGNMENT_ROUTES]: { router: 'assignmentsRouter', mount: '/api/tests/:testId/assignments' },
 	[GROUP_ROUTES]: { router: 'groupsRouter', mount: '/api/groups' },
 	[USER_ROUTES]: { router: 'router', mount: '/api/users' },
@@ -82,12 +92,12 @@ const INVENTORY = [
 		[QUESTION_DRAFT_ROUTES, 'patch', '/:testId/question-drafts/:draftId'],
 		[QUESTION_DRAFT_ROUTES, 'delete', '/:testId/question-drafts/:draftId'],
 	].map(([file, method, routePath]) => route(file, method, routePath, OBJECT, ['canWriteTest('])),
-	route(TESTS_ROUTES, 'get', '/admin/attempts/:attemptId', OBJECT, ['canReviewAttempt(']),
+	route(ATTEMPT_ROUTES, 'get', '/admin/attempts/:attemptId', OBJECT, ['canReviewAttempt(']),
 	...[
 		[TOPIC_ROUTES, '/topics'],
 		[TESTS_LIST_ROUTES, '/'],
-		[TESTS_ROUTES, '/admin/dashboard'],
-		[TESTS_ROUTES, '/admin/attempts'],
+		[ATTEMPT_ROUTES, '/admin/dashboard'],
+		[ATTEMPT_ROUTES, '/admin/attempts'],
 	].map(([file, routePath]) => route(file, 'get', routePath, LIST, ['testScope('])),
 	route(ASSIGNMENT_ROUTES, 'get', '/', OBJECT, ['canReadTest(']),
 	route(ASSIGNMENT_ROUTES, 'post', '/', OBJECT, ['canAssign(']),

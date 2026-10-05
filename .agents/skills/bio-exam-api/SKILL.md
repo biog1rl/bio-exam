@@ -37,7 +37,15 @@ Express владеет данными и политикой доступа (`doc
 - `app/server/src/services/attempt-sessions`: доступ к попытке (`checkAttemptAccess`, `findVisibleTest`), старт и черновик сессии (`startAttemptSession`, `saveSessionDraft`), сдача (`precheckSubmit`, `submitAttempt`, `closeExpiredSession`).
 - `app/server/src/services/scored-attempt`: оценка (`scoreSubmission`), хранимые факты, чтение результата (`readAttemptView`, `readAdminAttemptView`) и вид попытки (`buildAttemptView`).
 - `testAttempts.results` читается только в `app/server/src/services/scored-attempt`; маршруты попытки не читают `answer_keys` и назначения напрямую: это держит `scripts/attempt-integrity-guards.test.mjs`.
-- Маршруты: `app/server/src/routes/tests/public.ts` (ученик) и `app/server/src/routes/tests/index.ts`.
+- Маршруты: `app/server/src/routes/tests/public.ts` (ученик); дашборд, список попыток и разбор попытки у персонала - `app/server/src/routes/tests/admin/attempts.ts`.
+
+## Маршруты тестов
+
+- `/api/tests` собирает `app/server/src/routes/tests/index.ts`: только импорты, `Router()`, `router.use(...)` по порядку и `export default router`, без обработчиков и импортов базы, `drizzle-orm`, хранилища и `services/question-content`. Это держит `scripts/tests-router-composition.test.mjs`.
+- Маршруты персонала - суброутеры `app/server/src/routes/tests/admin/`, один файл на понятие: `topics.ts`, `tests-list.ts`, `question-types.ts`, `scoring-rules.ts`, `tests-by-slug.ts`, `question-drafts.ts`, `tests-core.ts`, `questions.ts`, `tests-delete.ts`, `assets.ts`, `export.ts`, `attempts.ts`. В файле локальный `const router = Router()`, полные пути от `/api/tests` и `export { router as <имя>Router }`; общие помощники - `app/server/src/routes/tests/admin/shared.ts`. Новый суброутер монтируется в `index.ts`, иначе падает `scripts/tests-router-composition.test.mjs`.
+- Назначения теста - `app/server/src/routes/tests/assignments.ts`, монтируется как `/:testId/assignments` между `export.ts` и `attempts.ts`. Маршруты ученика - `app/server/src/routes/tests/public.ts`, монтируется в `app/server/src/routes/index.ts` после `/tests`.
+- Порядок `router.use(...)` значим: `GET /:id` с `validateUUID` отвечает 400 на любой односегментный путь, зарегистрированный после него (`/topics`, `/question-types`, `/scoring-rules`). Порядок держит снимок `app/server/route-inventory.txt`: после правки маршрута или middleware снимок перегенерирует `routes:inventory` (`node scripts/with-test-db.mjs -- yarn workspace @bio-exam/server routes:inventory`), перенос без изменения поведения проверяет `routes:inventory --check`.
+- ZIP-экспорт: обработчики `app/server/src/routes/tests/admin/export.ts` вызывают `prepareTestArchive` или `prepareTopicArchive`, доставку делает `sendArchive` из `app/server/src/routes/tests/export-response.ts` поверх `streamArchive` и `archiveToBuffer` из `app/server/src/services/question-content/export.ts`. Потоковое ядро архива - `app/server/src/services/storage/zip.ts`. Файлы `app/server/src/routes/tests` не импортируют `services/storage`.
 
 ## Содержимое вопроса и файлы
 

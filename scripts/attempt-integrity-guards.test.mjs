@@ -17,7 +17,7 @@ const TEST_RUNNER = 'app/web/components/tests/TestRunner.tsx'
 const SERVER_ROOT = 'app/server/src'
 const SERVER_ROUTES = 'app/server/src/routes'
 const PUBLIC_ROUTES = 'app/server/src/routes/tests/public.ts'
-const TESTS_ROUTES = 'app/server/src/routes/tests/index.ts'
+const ADMIN_ATTEMPT_ROUTES = 'app/server/src/routes/tests/admin/attempts.ts'
 const ACCESS_POLICY_DIR = 'app/server/src/services/access-policy/'
 const SEARCH_ROUTE = 'app/server/src/routes/search.ts'
 const SEARCH_DIR = 'app/server/src/services/search/'
@@ -211,11 +211,11 @@ function adminReviewHandler(source) {
 }
 
 function adminReviewViolations(root) {
-	const source = fs.readFileSync(path.join(root, TESTS_ROUTES), 'utf8')
+	const source = fs.readFileSync(path.join(root, ADMIN_ATTEMPT_ROUTES), 'utf8')
 	const handler = adminReviewHandler(source)
-	if (!handler) return [`${TESTS_ROUTES}: нет обработчика ${ADMIN_REVIEW_ROUTE}`]
+	if (!handler) return [`${ADMIN_ATTEMPT_ROUTES}: нет обработчика ${ADMIN_REVIEW_ROUTE}`]
 	const violations = formatHits(
-		TESTS_ROUTES,
+		ADMIN_ATTEMPT_ROUTES,
 		findLines(
 			[
 				{
@@ -228,7 +228,7 @@ function adminReviewViolations(root) {
 		)
 	)
 	if (!handler.body.includes('canReviewAttempt(')) {
-		violations.push(`${TESTS_ROUTES}: обработчик ${ADMIN_REVIEW_ROUTE} не вызывает canReviewAttempt(`)
+		violations.push(`${ADMIN_ATTEMPT_ROUTES}: обработчик ${ADMIN_REVIEW_ROUTE} не вызывает canReviewAttempt(`)
 	}
 	return violations
 }
@@ -397,7 +397,7 @@ test('проба: вставка запрещённой строки в копи
 		}
 		copyWith(TEST_RUNNER, 'const probeVerdicts = computeVerdicts({})')
 		copyWith(PUBLIC_ROUTES, `const probeAccess = await hasPermission(req, ${q}tests.read${q})`)
-		copyWith(TESTS_ROUTES, 'const probeKeys = answerKeys')
+		copyWith(ADMIN_ATTEMPT_ROUTES, 'const probeKeys = answerKeys')
 		copyWith(`${SEARCH_DIR}database-search.ts`, 'const privileged = isPrivileged(access)')
 		const searchRoute = path.join(tmp, SEARCH_ROUTE)
 		fs.mkdirSync(path.dirname(searchRoute), { recursive: true })
@@ -416,7 +416,7 @@ test('проба: вставка запрещённой строки в копи
 
 		const review = adminReviewViolations(tmp)
 		assert.equal(review.length, 1, review.join('\n'))
-		assert.match(review[0], /^app\/server\/src\/routes\/tests\/index\.ts:\d+: .*answerKeys/)
+		assert.match(review[0], /^app\/server\/src\/routes\/tests\/admin\/attempts\.ts:\d+: .*answerKeys/)
 
 		const search = searchViolations(tmp)
 		assert.equal(search.length, 1, search.join('\n'))
