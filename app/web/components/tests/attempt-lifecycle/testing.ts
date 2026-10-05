@@ -109,9 +109,10 @@ export function sessionOf(
 export function requestError(
 	status: number,
 	code: string | null = null,
-	attemptId: string | null = null
+	attemptId: string | null = null,
+	extra: { reason?: string; limit?: number } = {}
 ): AttemptRequestError {
-	return new AttemptRequestError(status, code, attemptId)
+	return new AttemptRequestError(status, code, attemptId, extra.reason ?? null, extra.limit ?? null)
 }
 
 export const ATTEMPT_ID = '44444444-4444-4444-8444-444444444444'

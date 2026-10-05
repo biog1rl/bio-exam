@@ -32,7 +32,7 @@ import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { type AttemptNotice, saveIndicatorView, setMatchingPair, toggleOption } from './attempt-lifecycle'
 import { useAttemptLifecycle } from './attempt-lifecycle/use-attempt-lifecycle'
-import { type AttemptBanner, bannerFor, SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
+import { answersInvalidBanner, type AttemptBanner, bannerFor, SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
 
 type Props = {
 	test: PublicTestDetail
@@ -248,7 +248,11 @@ function AttemptRunner({
 				: snapshot.submitFailed
 					? 'retry'
 					: null
-	const bannerView = banner ? bannerFor(banner) : null
+	const bannerView = snapshot.submitRejection
+		? answersInvalidBanner(snapshot.submitRejection)
+		: banner
+			? bannerFor(banner)
+			: null
 	const saveIndicator = snapshot.saveIndicator ? saveIndicatorView(snapshot.saveIndicator) : null
 
 	return (

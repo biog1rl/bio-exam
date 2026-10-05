@@ -1,3 +1,5 @@
+import { SHORT_TEXT_MAX_LENGTH } from '@bio-exam/exam-core'
+
 import type { PublicTestQuestion, TestAnswerValue } from '@/lib/tests/types'
 
 import { Checkbox } from '../ui/checkbox'
@@ -83,6 +85,7 @@ export function QuestionInput({
 					value={typeof answer === 'string' ? answer : ''}
 					onChange={(event) => onInputTextAnswer(question.id, event.target.value)}
 					placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
+					maxLength={template === 'short_text' ? SHORT_TEXT_MAX_LENGTH : undefined}
 					disabled={disabled}
 					className="bg-white"
 				/>

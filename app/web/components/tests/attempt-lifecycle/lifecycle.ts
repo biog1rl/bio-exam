@@ -11,7 +11,12 @@ import {
 import { createSaveQueue, type SaveOutcome, type SaveQueue, type SaveQueueState } from '@/lib/drafts/save-queue'
 import type { AttemptDraftSaveResult } from '@/lib/tests/api'
 
-import { classifyStartFailure, classifySubmitFailure, type SubmitFailure } from '../attempt-submit-flow'
+import {
+	classifyStartFailure,
+	classifySubmitFailure,
+	type SubmitFailure,
+	type SubmitRejection,
+} from '../attempt-submit-flow'
 import { resolveClientAttemptId, storedClientAttemptId, type ClientAttemptStorage } from '../client-attempt-id'
 import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit } from '../telemetry'
 import { resolveRestoredDraft, type RestoredDraft } from './restore'
@@ -63,6 +68,7 @@ export type AttemptSnapshot = {
 	blockReason: AttemptBlockReason | null
 	alreadySubmittedAttemptId: string | null
 	submitFailed: boolean
+	submitRejection: SubmitRejection | null
 	answers: Readonly<Record<string, AnswerValue>>
 	currentQuestionId: string | null
 	startedAt: string | null
@@ -178,6 +184,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let snapshot: AttemptSnapshot | null = null
 	let indicatorTimer: unknown = null
 	let submitFailed = false
+	let submitRejection: SubmitRejection | null = null
 	let alreadySubmittedAttemptId: string | null = null
 	let result: AttemptView | null = null
 	let showTimeUp = false
@@ -564,6 +571,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		leaveActive()
 		if (auto) autoFired = true
 		submitFailed = false
+		submitRejection = null
 		if (auto) writeFrozen()
 		phase = auto ? 'autoSubmitting' : 'submitting'
 		emit()
@@ -644,6 +652,13 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			if (auto) removeFrozen()
 			return 'retry'
 		}
+		if (failure.kind === 'answers-invalid') {
+			if (auto) removeFrozen()
+			submitRejection = { reason: failure.reason, limit: failure.limit }
+			enterActive(false)
+			emit()
+			return 'settled'
+		}
 		if (failure.kind === 'already-submitted' || failure.kind === 'time-expired') {
 			queue?.discard()
 			clearAttemptKeys(storage, keys, failure.kind)
@@ -689,6 +704,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		blockReason = null
 		alreadySubmittedAttemptId = null
 		submitFailed = false
+		submitRejection = null
 		result = null
 		showTimeUp = false
 		clearDraftState()
@@ -736,6 +752,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			blockReason,
 			alreadySubmittedAttemptId,
 			submitFailed,
+			submitRejection,
 			answers,
 			currentQuestionId: position,
 			startedAt: session?.startedAt ?? null,
@@ -755,6 +772,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			blockReason = null
 			alreadySubmittedAttemptId = null
 			submitFailed = false
+			submitRejection = null
 			result = null
 			showTimeUp = false
 			segmentStartedAt = null
@@ -801,6 +819,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		answer(questionId, value) {
 			if (!initialized || phase !== 'active' || !knownQuestions.has(questionId)) return
 			answers = { ...answers, [questionId]: value }
+			submitRejection = null
 			pending.add(questionId)
 			recordAnswer(storage, keys.wal, { sessionId: session?.sessionId ?? null, questionId, value, position })
 			if (session) queue?.set(questionId, value)

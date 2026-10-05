@@ -1,4 +1,10 @@
-import type { AttemptSession, AttemptView, SaveAttemptDraftRequest, SubmitAttemptRequest } from '@bio-exam/exam-core'
+import {
+	SubmitAttemptErrorSchema,
+	type AttemptSession,
+	type AttemptView,
+	type SaveAttemptDraftRequest,
+	type SubmitAttemptRequest,
+} from '@bio-exam/exam-core'
 
 import { request, RequestError, requestJson, type RequestOptions } from '@/lib/http/request'
 
@@ -10,22 +16,42 @@ export class AttemptRequestError extends Error {
 	readonly status: number
 	readonly code: string | null
 	readonly attemptId: string | null
+	readonly reason: string | null
+	readonly limit: number | null
 
-	constructor(status: number, code: string | null, attemptId: string | null) {
+	constructor(
+		status: number,
+		code: string | null,
+		attemptId: string | null,
+		reason: string | null = null,
+		limit: number | null = null
+	) {
 		super(`HTTP ${status}`)
 		this.name = 'AttemptRequestError'
 		this.status = status
 		this.code = code
 		this.attemptId = attemptId
+		this.reason = reason
+		this.limit = limit
 	}
 }
 
-function readAttemptErrorBody(body: unknown): { code: string | null; attemptId: string | null } {
-	if (!body || typeof body !== 'object' || Array.isArray(body)) return { code: null, attemptId: null }
+function readAttemptErrorBody(body: unknown): {
+	code: string | null
+	attemptId: string | null
+	reason: string | null
+	limit: number | null
+} {
+	if (!body || typeof body !== 'object' || Array.isArray(body)) {
+		return { code: null, attemptId: null, reason: null, limit: null }
+	}
 	const record = body as Record<string, unknown>
+	const parsed = SubmitAttemptErrorSchema.safeParse(body)
 	return {
 		code: typeof record.error === 'string' ? record.error : null,
 		attemptId: typeof record.attemptId === 'string' ? record.attemptId : null,
+		reason: parsed.success ? (parsed.data.reason ?? null) : null,
+		limit: parsed.success ? (parsed.data.limit ?? null) : null,
 	}
 }
 
@@ -33,8 +59,8 @@ async function fetchAttemptJson<T>(url: string, options: RequestOptions<T>): Pro
 	const outcome = await request<T>(url, options)
 	if (outcome.ok) return outcome.data
 	if (outcome.kind === 'http' && outcome.status !== undefined) {
-		const { code, attemptId } = readAttemptErrorBody(outcome.body)
-		throw new AttemptRequestError(outcome.status, code, attemptId)
+		const { code, attemptId, reason, limit } = readAttemptErrorBody(outcome.body)
+		throw new AttemptRequestError(outcome.status, code, attemptId, reason, limit)
 	}
 	throw new RequestError(outcome)
 }

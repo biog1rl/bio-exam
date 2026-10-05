@@ -18,6 +18,7 @@ import {
 	readJson,
 	requestError,
 	response,
+	seededStorage,
 	sessionOf,
 	settle,
 	setupLifecycle,
@@ -429,6 +430,91 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.equal(lifecycle.getSnapshot().showTimeUp, false)
 		assert.equal(storage.data.has(KEYS.frozen), false)
 		assert.deepEqual(presentKeys(storage), ['session', 'wal', 'clientAttemptId'])
+	})
+
+	test.each(
+		[
+			{ reason: 'foreign_question', extra: {} },
+			{ reason: 'unknown_question_type', extra: {} },
+			{ reason: 'short_text_too_long', extra: { limit: 200 } },
+			{ reason: 'open_text_too_long', extra: { limit: 5000 } },
+		].map((row): [string, typeof row] => [row.reason, row])
+	)(
+		'422 ANSWERS_INVALID %s: отказ в снимке, сдача доступна, ключи на месте, повтор уходит и завершается',
+		async (_name, { reason, extra }) => {
+			const { lifecycle, storage, fakeApi } = await activeWithAnswer()
+			fakeApi.queueSubmit(requestError(422, SUBMIT_ERROR_CODES.answersInvalid, null, { reason, ...extra }))
+			await lifecycle.submit()
+			const snapshot = lifecycle.getSnapshot()
+			assert.equal(snapshot.phase, 'active')
+			assert.equal(snapshot.blockReason, null)
+			assert.equal(snapshot.submitFailed, false)
+			assert.deepEqual(snapshot.submitRejection, { reason, limit: extra.limit ?? null })
+			assert.equal(snapshot.interactionDisabled, false)
+			assert.deepEqual(snapshot.answers, { [Q1]: 'a' })
+			assert.deepEqual(presentKeys(storage), ['session', 'wal', 'clientAttemptId'])
+			fakeApi.queueSubmit(attemptViewOf())
+			await lifecycle.submit()
+			assert.equal(fakeApi.submit.mock.calls.length, 2)
+			assert.equal(lifecycle.getSnapshot().submitRejection, null)
+			assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+			assert.deepEqual(presentKeys(storage), [])
+		}
+	)
+
+	test('отказ ANSWERS_INVALID снимается новым ответом', async () => {
+		const { lifecycle, fakeApi } = await activeWithAnswer()
+		fakeApi.queueSubmit(
+			requestError(422, SUBMIT_ERROR_CODES.answersInvalid, null, { reason: 'short_text_too_long', limit: 200 })
+		)
+		await lifecycle.submit()
+		assert.notEqual(lifecycle.getSnapshot().submitRejection, null)
+		lifecycle.answer(Q1, 'b')
+		assert.equal(lifecycle.getSnapshot().submitRejection, null)
+	})
+
+	test('автосдача получила ANSWERS_INVALID: сама не повторяется, frozenKey удалён, ответы и ключи на месте', async () => {
+		const { lifecycle, storage, fakeApi } = await activeWithAnswer({ timeLimitMinutes: null })
+		fakeApi.queueSubmit(
+			requestError(422, SUBMIT_ERROR_CODES.answersInvalid, null, { reason: 'short_text_too_long', limit: 200 })
+		)
+		await lifecycle.submit({ auto: true })
+		await vi.advanceTimersByTimeAsync(10_000)
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(fakeApi.submit.mock.calls.length, 1)
+		assert.equal(snapshot.phase, 'active')
+		assert.equal(snapshot.submitFailed, false)
+		assert.deepEqual(snapshot.submitRejection, { reason: 'short_text_too_long', limit: 200 })
+		assert.equal(snapshot.showTimeUp, false)
+		assert.deepEqual(snapshot.answers, { [Q1]: 'a' })
+		assert.equal(storage.data.has(KEYS.frozen), false)
+		assert.deepEqual(presentKeys(storage), ['session', 'wal', 'clientAttemptId'])
+	})
+
+	test('перезагрузка после ANSWERS_INVALID: чужой id из копии не уходит в сдачу, сдача завершается', async () => {
+		const foreign = '99999999-9999-4999-8999-999999999999'
+		const storage = seededStorage({
+			session: { sessionId: 's1' },
+			clientAttempt: { sessionId: 's1', clientAttemptId: 'c1' },
+			wal: { sessionId: 's1', answers: { [Q1]: 'a', [foreign]: 'x' }, pending: [] },
+		})
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		fakeApi.queueSubmit(requestError(422, SUBMIT_ERROR_CODES.answersInvalid, null, { reason: 'foreign_question' }))
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.deepEqual(lifecycle.getSnapshot().submitRejection, { reason: 'foreign_question', limit: null })
+		fakeApi.queueSubmit(attemptViewOf())
+		await lifecycle.submit()
+		const requests = fakeApi.submitRequests()
+		assert.equal(requests.length, 2)
+		for (const request of requests) {
+			assert.equal(request.clientAttemptId, 'c1')
+			assert.equal(foreign in request.answers, false)
+			assert.equal(request.answers[Q1], 'a')
+		}
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
 	})
 
 	test('автосдача упала с 403: frozenKey удалён, blocked submit-not-assigned', async () => {

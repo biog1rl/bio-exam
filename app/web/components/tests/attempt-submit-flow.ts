@@ -1,4 +1,10 @@
-import { SUBMIT_ERROR_CODES } from '@bio-exam/exam-core'
+import {
+	ANSWER_VIOLATION_REASONS,
+	OPEN_TEXT_MAX_LENGTH,
+	SHORT_TEXT_MAX_LENGTH,
+	SUBMIT_ERROR_CODES,
+	type AnswerViolationReason,
+} from '@bio-exam/exam-core'
 
 import { AttemptRequestError } from '@/lib/tests/api'
 
@@ -7,7 +13,10 @@ export type SubmitFailure =
 	| { kind: 'time-expired' }
 	| { kind: 'not-assigned' }
 	| { kind: 'not-found' }
+	| { kind: 'answers-invalid'; reason: AnswerViolationReason; limit: number | null }
 	| { kind: 'retry' }
+
+export type SubmitRejection = { reason: AnswerViolationReason; limit: number | null }
 
 export type StartFailure = 'not-assigned' | 'failed'
 
@@ -55,6 +64,27 @@ const BANNERS: Record<AttemptBanner, AttemptBannerView> = {
 	retry: { message: 'Не удалось сохранить ответы. Попробуйте еще раз.', action: 'retry' },
 }
 
+const THOUSANDS = new Intl.NumberFormat('ru-RU')
+
+const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> = {
+	short_text_too_long: {
+		message: `Краткий ответ не может быть длиннее ${THOUSANDS.format(SHORT_TEXT_MAX_LENGTH)} знаков. Сократите ответ и отправьте снова.`,
+		action: null,
+	},
+	open_text_too_long: {
+		message: `Текст ответа не может быть длиннее ${THOUSANDS.format(OPEN_TEXT_MAX_LENGTH)} знаков. Сократите ответ и отправьте снова.`,
+		action: null,
+	},
+	foreign_question: {
+		message: 'В ответах есть вопрос, которого нет в этом тесте. Обновите страницу: тест мог измениться.',
+		action: 'reload',
+	},
+	unknown_question_type: {
+		message: 'Один из вопросов больше не поддерживается в этой версии страницы. Обновите страницу.',
+		action: 'reload',
+	},
+}
+
 const ALL_ATTEMPT_KEYS: readonly AttemptStorageKey[] = ['session', 'wal', 'frozen', 'clientAttemptId']
 
 const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorageKey[]> = {
@@ -75,6 +105,10 @@ export function classifySubmitFailure(error: unknown): SubmitFailure {
 	if (error.status === 422 && error.code === SUBMIT_ERROR_CODES.timeExpired) return { kind: 'time-expired' }
 	if (error.status === 403) return { kind: 'not-assigned' }
 	if (error.status === 404) return { kind: 'not-found' }
+	if (error.status === 422 && error.code === SUBMIT_ERROR_CODES.answersInvalid) {
+		const reason = ANSWER_VIOLATION_REASONS.find((known) => known === error.reason)
+		if (reason) return { kind: 'answers-invalid', reason, limit: error.limit }
+	}
 	return { kind: 'retry' }
 }
 
@@ -85,6 +119,10 @@ export function classifyStartFailure(error: unknown): StartFailure {
 
 export function bannerFor(banner: AttemptBanner): AttemptBannerView {
 	return BANNERS[banner]
+}
+
+export function answersInvalidBanner(rejection: SubmitRejection): AttemptBannerView {
+	return ANSWERS_INVALID_BANNERS[rejection.reason]
 }
 
 export function storageKeysToClear(event: AttemptStorageEvent): readonly AttemptStorageKey[] {
