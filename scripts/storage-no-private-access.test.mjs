@@ -53,6 +53,7 @@ const EXCEPTIONS = []
 
 const ROLES_FILE = 'packages/rbac/src/roles.ts'
 const TESTS_ROUTER = 'app/server/src/routes/tests/index.ts'
+const TESTS_ADMIN_ROUTERS = 'app/server/src/routes/tests/admin'
 
 const SCOPED_ROUTES = [
 	['get', '/by-slug/:topicSlug/:testSlug'],
@@ -164,6 +165,12 @@ function collectSources(relativeDir, includeTests) {
 	}
 	walk(path.join(REPO_ROOT, relativeDir))
 	return files.sort()
+}
+
+function testsRouterSource() {
+	const admin = collectSources(TESTS_ADMIN_ROUTERS, false)
+	assert.ok(admin.length > 0, `${TESTS_ADMIN_ROUTERS}: нет файлов суброутеров`)
+	return [path.join(REPO_ROOT, TESTS_ROUTER), ...admin].map((file) => fs.readFileSync(file, 'utf8')).join('\n')
 }
 
 function relativePath(file) {
@@ -322,7 +329,10 @@ test('роль user в packages/rbac не выдаёт users (PRIV-01)', () => {
 })
 
 test('объектные маршруты routes/tests проверяют доступ функциями зоны, а не requirePerm', () => {
-	const source = fs.readFileSync(path.join(REPO_ROOT, TESTS_ROUTER), 'utf8')
-	assert.ok(registrations(source).length >= SCOPED_ROUTES.length, `${TESTS_ROUTER}: мало регистраций`)
+	const source = testsRouterSource()
+	assert.ok(
+		registrations(source).length >= SCOPED_ROUTES.length,
+		`${TESTS_ROUTER} и ${TESTS_ADMIN_ROUTERS}: мало регистраций`
+	)
 	assert.deepEqual(scopeGateViolations(source), [], 'доступ к тесту и теме решает services/access-policy/scope.ts')
 })

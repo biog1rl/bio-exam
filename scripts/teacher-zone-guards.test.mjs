@@ -19,6 +19,12 @@ const TEST_SUPPORT_DIR = 'app/server/src/test-support/'
 const TEACHER_ZONE_WORLD = 'app/server/src/test-support/teacher-zone-world.ts'
 
 const TESTS_ROUTES = 'app/server/src/routes/tests/index.ts'
+const TOPIC_ROUTES = 'app/server/src/routes/tests/admin/topics.ts'
+const TESTS_LIST_ROUTES = 'app/server/src/routes/tests/admin/tests-list.ts'
+const TESTS_BY_SLUG_ROUTES = 'app/server/src/routes/tests/admin/tests-by-slug.ts'
+const QUESTION_TYPE_ROUTES = 'app/server/src/routes/tests/admin/question-types.ts'
+const SCORING_RULE_ROUTES = 'app/server/src/routes/tests/admin/scoring-rules.ts'
+const QUESTION_DRAFT_ROUTES = 'app/server/src/routes/tests/admin/question-drafts.ts'
 const ASSIGNMENT_ROUTES = 'app/server/src/routes/tests/assignments.ts'
 const GROUP_ROUTES = 'app/server/src/routes/groups/index.ts'
 const USER_ROUTES = 'app/server/src/routes/users/index.ts'
@@ -28,6 +34,12 @@ const INVITE_ROUTES = 'app/server/src/routes/auth/invites.ts'
 
 const ROUTE_FILES = {
 	[TESTS_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[TOPIC_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[TESTS_LIST_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[TESTS_BY_SLUG_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[QUESTION_TYPE_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[SCORING_RULE_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[QUESTION_DRAFT_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ASSIGNMENT_ROUTES]: { router: 'assignmentsRouter', mount: '/api/tests/:testId/assignments' },
 	[GROUP_ROUTES]: { router: 'groupsRouter', mount: '/api/groups' },
 	[USER_ROUTES]: { router: 'router', mount: '/api/users' },
@@ -46,34 +58,37 @@ const route = (file, method, routePath, kind, calls) => ({ file, method, path: r
 
 const INVENTORY = [
 	...[
-		['post', '/topics'],
-		['patch', '/topics/:id'],
-		['delete', '/topics/:id'],
-		['put', '/topics/:id/teachers'],
-		['get', '/topics/teacher-options'],
-		['post', '/question-types'],
-		['patch', '/question-types/:key'],
-		['delete', '/question-types/:key'],
-		['put', '/scoring-rules/global'],
-	].map(([method, routePath]) => route(TESTS_ROUTES, method, routePath, OBJECT, ['canManageCatalog('])),
+		[TOPIC_ROUTES, 'post', '/topics'],
+		[TOPIC_ROUTES, 'patch', '/topics/:id'],
+		[TOPIC_ROUTES, 'delete', '/topics/:id'],
+		[TOPIC_ROUTES, 'put', '/topics/:id/teachers'],
+		[TOPIC_ROUTES, 'get', '/topics/teacher-options'],
+		[QUESTION_TYPE_ROUTES, 'post', '/question-types'],
+		[QUESTION_TYPE_ROUTES, 'patch', '/question-types/:key'],
+		[QUESTION_TYPE_ROUTES, 'delete', '/question-types/:key'],
+		[SCORING_RULE_ROUTES, 'put', '/scoring-rules/global'],
+	].map(([file, method, routePath]) => route(file, method, routePath, OBJECT, ['canManageCatalog('])),
 	...[
-		['get', '/question-types/tests/:id/overrides'],
-		['get', '/scoring-rules/tests/:id'],
-	].map(([method, routePath]) => route(TESTS_ROUTES, method, routePath, OBJECT, ['canReadTest('])),
+		[QUESTION_TYPE_ROUTES, 'get', '/question-types/tests/:id/overrides'],
+		[SCORING_RULE_ROUTES, 'get', '/scoring-rules/tests/:id'],
+	].map(([file, method, routePath]) => route(file, method, routePath, OBJECT, ['canReadTest('])),
 	...[
-		['put', '/question-types/tests/:id/overrides/:key'],
-		['delete', '/question-types/tests/:id/overrides/:key'],
-		['put', '/scoring-rules/tests/:id'],
-		['post', '/:testId/question-drafts'],
-		['get', '/:testId/question-drafts'],
-		['get', '/:testId/question-drafts/:draftId'],
-		['patch', '/:testId/question-drafts/:draftId'],
-		['delete', '/:testId/question-drafts/:draftId'],
-	].map(([method, routePath]) => route(TESTS_ROUTES, method, routePath, OBJECT, ['canWriteTest('])),
+		[QUESTION_TYPE_ROUTES, 'put', '/question-types/tests/:id/overrides/:key'],
+		[QUESTION_TYPE_ROUTES, 'delete', '/question-types/tests/:id/overrides/:key'],
+		[SCORING_RULE_ROUTES, 'put', '/scoring-rules/tests/:id'],
+		[QUESTION_DRAFT_ROUTES, 'post', '/:testId/question-drafts'],
+		[QUESTION_DRAFT_ROUTES, 'get', '/:testId/question-drafts'],
+		[QUESTION_DRAFT_ROUTES, 'get', '/:testId/question-drafts/:draftId'],
+		[QUESTION_DRAFT_ROUTES, 'patch', '/:testId/question-drafts/:draftId'],
+		[QUESTION_DRAFT_ROUTES, 'delete', '/:testId/question-drafts/:draftId'],
+	].map(([file, method, routePath]) => route(file, method, routePath, OBJECT, ['canWriteTest('])),
 	route(TESTS_ROUTES, 'get', '/admin/attempts/:attemptId', OBJECT, ['canReviewAttempt(']),
-	...['/topics', '/', '/admin/dashboard', '/admin/attempts'].map((routePath) =>
-		route(TESTS_ROUTES, 'get', routePath, LIST, ['testScope('])
-	),
+	...[
+		[TOPIC_ROUTES, '/topics'],
+		[TESTS_LIST_ROUTES, '/'],
+		[TESTS_ROUTES, '/admin/dashboard'],
+		[TESTS_ROUTES, '/admin/attempts'],
+	].map(([file, routePath]) => route(file, 'get', routePath, LIST, ['testScope('])),
 	route(ASSIGNMENT_ROUTES, 'get', '/', OBJECT, ['canReadTest(']),
 	route(ASSIGNMENT_ROUTES, 'post', '/', OBJECT, ['canAssign(']),
 	route(ASSIGNMENT_ROUTES, 'delete', '/:userId', OBJECT, [REMOVE_ASSIGNMENT]),
@@ -439,7 +454,7 @@ test('проба: requirePerm на объектном маршруте, удал
 	try {
 		for (const file of Object.keys(ROUTE_FILES)) copyFile(tmp, file)
 		const teachersRoute = `router.put(${q}/topics/:id/teachers${q}, validateUUID(${q}id${q}), sessionRequired(), async`
-		copyFile(tmp, TESTS_ROUTES, (source) => {
+		copyFile(tmp, TOPIC_ROUTES, (source) => {
 			assert.ok(source.includes(teachersRoute), teachersRoute)
 			return source.replace(
 				teachersRoute,
@@ -457,7 +472,7 @@ test('проба: requirePerm на объектном маршруте, удал
 
 		const inventory = inventoryViolations(tmp)
 		assert.deepEqual(inventory, [
-			`${TESTS_ROUTES}: PUT /api/tests/topics/:id/teachers (${OBJECT}): requirePerm( в регистрации, доступ решает функция шва`,
+			`${TOPIC_ROUTES}: PUT /api/tests/topics/:id/teachers (${OBJECT}): requirePerm( в регистрации, доступ решает функция шва`,
 			`${ASSIGNMENT_ROUTES}: POST /api/tests/:testId/assignments (${OBJECT}): обработчик не вызывает canAssign(`,
 			`${INVITE_ROUTES}: POST /api/auth/invites (${COARSE}): обработчик не вызывает canManageStudent(`,
 		])
