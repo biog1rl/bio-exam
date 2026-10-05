@@ -45,48 +45,60 @@ test('save шлёт PATCH черновика с payload и lockVersion и воз
 	assert.equal(init.keepalive, false)
 })
 
-test('save переводит статусы ответа в исход', async () => {
-	const cases: Array<[number, string]> = [
-		[409, 'conflict'],
-		[403, 'forbidden'],
-		[404, 'gone'],
-		[500, 'failed'],
-		[400, 'failed'],
-		[401, 'failed'],
-	]
-	for (const [status, kind] of cases) {
-		respond(status, { error: 'x' })
+test.each(
+	(
+		[
+			{
+				name: 'save переводит статусы ответа в исход',
+				cases: [
+					[409, { error: 'x' }, 'conflict'],
+					[403, { error: 'x' }, 'forbidden'],
+					[404, { error: 'x' }, 'gone'],
+					[500, { error: 'x' }, 'failed'],
+					[400, { error: 'x' }, 'failed'],
+					[401, { error: 'x' }, 'failed'],
+				],
+			},
+			{ name: 'save переводит статусы без тела в исход', cases: [[409, undefined, 'conflict']] },
+		] as { name: string; cases: [number, unknown, string][] }[]
+	).map((row): [string, { name: string; cases: [number, unknown, string][] }] => [row.name, row])
+)('%s', async (_name, { cases }) => {
+	for (const [status, body, kind] of cases) {
+		respond(status, body)
 		assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: false }), { kind })
 	}
 })
 
-test('save переводит статусы без тела в исход', async () => {
-	respond(409)
-	assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: false }), {
-		kind: 'conflict',
-	})
-})
-
-test('save при 200 без числовой версии возвращает failed', async () => {
-	respond(200, { draft: {} })
-	assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: false }), { kind: 'failed' })
-	respond(200, { draft: { lockVersion: '3' } })
-	assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: false }), { kind: 'failed' })
-})
-
-test('save при некорректном теле 200 возвращает failed', async () => {
-	apiFetchMock.mockResolvedValueOnce(new Response('not json', { status: 200 }))
-	assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: false }), { kind: 'failed' })
-})
-
-test('save при сетевой ошибке возвращает failed', async () => {
-	apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-	assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: false }), { kind: 'failed' })
-})
-
-test('save при истёкшей сессии возвращает failed', async () => {
-	apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())
-	assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive: true }), { kind: 'failed' })
+test.each(
+	(
+		[
+			{
+				name: '200 без числовой версии',
+				keepalive: false,
+				arrange: [() => respond(200, { draft: {} }), () => respond(200, { draft: { lockVersion: '3' } })],
+			},
+			{
+				name: 'некорректном теле 200',
+				keepalive: false,
+				arrange: [() => apiFetchMock.mockResolvedValueOnce(new Response('not json', { status: 200 }))],
+			},
+			{
+				name: 'сетевой ошибке',
+				keepalive: false,
+				arrange: [() => apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))],
+			},
+			{
+				name: 'истёкшей сессии',
+				keepalive: true,
+				arrange: [() => apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())],
+			},
+		] as { name: string; keepalive: boolean; arrange: (() => void)[] }[]
+	).map((row): [string, { name: string; keepalive: boolean; arrange: (() => void)[] }] => [row.name, row])
+)('save при %s возвращает failed', async (_name, { keepalive, arrange }) => {
+	for (const step of arrange) {
+		step()
+		assert.deepEqual(await questionDraftAutosaveApi('t1', 'd1').save({}, 1, { keepalive }), { kind: 'failed' })
+	}
 })
 
 test('save с keepalive и телом больше лимита не шлёт запрос', async () => {

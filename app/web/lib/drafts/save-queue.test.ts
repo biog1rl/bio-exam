@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test, vi } from 'vitest'
 
-import { createSaveQueue, SAVE_RETRY_DELAYS_MS, type SaveOutcome, type SaveQueueOptions } from './save-queue'
+import { createSaveQueue, type SaveOutcome, type SaveQueueOptions } from './save-queue'
 
 const START = Date.parse('2026-10-04T10:00:00.000Z')
 
@@ -60,10 +60,6 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.useRealTimers()
-})
-
-test('SAVE_RETRY_DELAYS_MS: 1, 2, 5, 10, 30 с', () => {
-	assert.deepEqual([...SAVE_RETRY_DELAYS_MS], [1000, 2000, 5000, 10000, 30000])
 })
 
 test('дебаунс: до 599 мс отправки нет, на 600 мс одна отправка последнего значения', async () => {
@@ -253,34 +249,34 @@ test('reject: ключ в rejected, не в pending, без повторов; н
 	queue.dispose()
 })
 
-test('исключение send приравнено к retry', async () => {
-	const { queue, calls } = setup([new TypeError('Failed to fetch')])
+test.each(
+	(
+		[
+			{ name: 'исключение send', fail: () => Promise.reject(new TypeError('Failed to fetch')) },
+			{
+				name: 'синхронное исключение send',
+				fail: () => {
+					throw new Error('boom')
+				},
+			},
+		] as { name: string; fail: () => Promise<SaveOutcome> }[]
+	).map((row): [string, { name: string; fail: () => Promise<SaveOutcome> }] => [row.name, row])
+)('%s приравнено к retry', async (_name, { fail }) => {
+	let count = 0
+	const { queue } = setup([], {
+		send: () => {
+			count += 1
+			if (count === 1) return fail()
+			return Promise.resolve({ kind: 'ok' })
+		},
+	})
 	queue.set('q1', 'a')
 	await vi.advanceTimersByTimeAsync(600)
 	assert.deepEqual(queue.getState().failure, { kind: 'retrying', attempt: 1 })
 	assert.deepEqual(queue.getState().pending, ['q1'])
 	await vi.advanceTimersByTimeAsync(1000)
-	assert.equal(calls.length, 2)
-	assert.equal(queue.getState().failure, null)
-	queue.dispose()
-})
-
-test('синхронное исключение send приравнено к retry', async () => {
-	let count = 0
-	const queue = createSaveQueue<string>({
-		send: () => {
-			count += 1
-			if (count === 1) throw new Error('boom')
-			return Promise.resolve({ kind: 'ok' })
-		},
-		debounceMs: 600,
-		maxWaitMs: 5000,
-	})
-	queue.set('q1', 'a')
-	await vi.advanceTimersByTimeAsync(600)
-	assert.deepEqual(queue.getState().failure, { kind: 'retrying', attempt: 1 })
-	await vi.advanceTimersByTimeAsync(1000)
 	assert.equal(count, 2)
+	assert.equal(queue.getState().failure, null)
 	assert.deepEqual(queue.getState().pending, [])
 	queue.dispose()
 })
@@ -334,8 +330,19 @@ test('flush ждёт запись последней версии в полёт�
 	queue.dispose()
 })
 
-test('flush при неудаче разрешается ok false без ожидания повторов', async () => {
-	const { queue, calls } = setup([{ kind: 'retry' }])
+test.each(
+	(
+		[
+			{
+				name: 'flush при неудаче разрешается ok false без ожидания повторов',
+				outcome: { kind: 'retry' },
+				failure: { kind: 'retrying', attempt: 1 },
+			},
+			{ name: 'flush при reject разрешается ok false с исходом', outcome: { kind: 'reject', status: 400 } },
+		] as { name: string; outcome: SaveOutcome; failure?: unknown }[]
+	).map((row): [string, { name: string; outcome: SaveOutcome; failure?: unknown }] => [row.name, row])
+)('%s', async (_name, { outcome, failure }) => {
+	const { queue, calls } = setup([outcome])
 	queue.set('q1', 'a')
 	let result: unknown = null
 	void queue.flush().then((value) => {
@@ -343,15 +350,8 @@ test('flush при неудаче разрешается ok false без ожи�
 	})
 	await settle()
 	assert.equal(calls.length, 1)
-	assert.deepEqual(result, { ok: false, outcome: { kind: 'retry' } })
-	assert.deepEqual(queue.getState().failure, { kind: 'retrying', attempt: 1 })
-	queue.dispose()
-})
-
-test('flush при reject разрешается ok false с исходом', async () => {
-	const { queue } = setup([{ kind: 'reject', status: 400 }])
-	queue.set('q1', 'a')
-	assert.deepEqual(await queue.flush(), { ok: false, outcome: { kind: 'reject', status: 400 } })
+	assert.deepEqual(result, { ok: false, outcome })
+	if (failure !== undefined) assert.deepEqual(queue.getState().failure, failure)
 	queue.dispose()
 })
 

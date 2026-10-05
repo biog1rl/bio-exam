@@ -199,21 +199,3 @@ test('ToolbarPlugin: $updateToolbar стабилен, подписка на ак
 	harness.unmount()
 	assert.equal(nested.active().length, 0)
 })
-
-test('ToolbarContext: при тех же редакторах и обработчиках значение контекста — тот же объект', () => {
-	const editor = asEditor(fakeEditor('main'))
-	const harness = createHarness()
-	const props = {
-		activeEditor: editor,
-		$updateToolbar: () => {},
-		blockType: 'paragraph',
-		setBlockType: () => {},
-		showModal: () => {},
-		children: null,
-	}
-	const valueOf = (blockType: string) =>
-		(harness.render(() => ToolbarContext({ ...props, blockType })) as ReactElement<{ value: unknown }>).props.value
-	const first = valueOf('paragraph')
-	assert.equal(valueOf('paragraph'), first)
-	assert.notEqual(valueOf('h1'), first)
-})

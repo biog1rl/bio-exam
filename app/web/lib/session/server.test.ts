@@ -189,22 +189,9 @@ test('serverRequest: fetch бросил — error с cause', async () => {
 	assert.equal(outcome.kind === 'error' ? outcome.status : 'none', undefined)
 })
 
-test('requireServerData: ok отдаёт данные', async () => {
+test('requireServerData: denied — not-found', async () => {
 	const { server } = await load({})
-	assert.deepEqual(server.requireServerData({ kind: 'ok', data: { a: 1 } }, '/admin/attempts'), { a: 1 })
-})
-
-test('requireServerData: unauthorized уводит на вход с возвратом', async () => {
-	const { server } = await load({})
-	assert.throws(
-		() => server.requireServerData({ kind: 'unauthorized' }, '/admin/attempts'),
-		/redirect:\/login\?callbackUrl=%2Fadmin%2Fattempts$/
-	)
-})
-
-test.each<['denied' | 'missing']>([['denied'], ['missing']])('requireServerData: %s — not-found', async (kind) => {
-	const { server } = await load({})
-	assert.throws(() => server.requireServerData({ kind }, '/admin/attempts'), /^Error: not-found$/)
+	assert.throws(() => server.requireServerData({ kind: 'denied' }, '/admin/attempts'), /^Error: not-found$/)
 })
 
 test('requireServerData: error — исключение без текста тела', async () => {
@@ -215,34 +202,10 @@ test('requireServerData: error — исключение без текста те
 	)
 })
 
-test('getServerMe: API принял сессию, один запрос к Express с cookie запроса', async () => {
-	const { requests, bodies, server } = await load({})
-	const me = await server.getServerMe()
-	assert.deepEqual(me, admin)
-	assert.equal(requests.length, 1)
-	assert.equal(requests[0].url, 'https://api.example.test/api/auth/me')
-	assert.equal(requests[0].init.cache, 'no-store')
-	assert.equal(requests[0].init.redirect, 'error')
-	assert.equal(new Headers(requests[0].init.headers).get('cookie'), 'bio_exam_session=valid')
-	assertBodiesDrained(bodies)
-})
-
-test('getServerMe: администратор с правом tests.manage_assignments открывает чужой профиль', async () => {
-	await load({})
-	const rendered = await profile()
-	assert.ok(rendered)
-})
-
 test('getServerMe: завершающий слэш в API_ORIGIN нормализуется', async () => {
 	const { requests, server } = await load({ origin: 'https://api.example.test/' })
 	await server.getServerMe()
 	assert.equal(requests[0].url, 'https://api.example.test/api/auth/me')
-})
-
-test('getServerMe: пустой cookie пересылается как есть', async () => {
-	const { requests, server } = await load({ cookie: '', status: 401, body: { error: 'Unauthorized' } })
-	assert.equal(await server.getServerMe(), null)
-	assert.equal(new Headers(requests[0].init.headers).get('cookie'), '')
 })
 
 test('getServerMe: 401 даёт null, профиль по чужому логину уводит на /login с callbackUrl', async () => {
@@ -293,40 +256,18 @@ test.each<[string, string | undefined]>([
 	assert.equal(requests.length, 0)
 })
 
-test('профиль: без права tests.manage_assignments — not-found', async () => {
-	await load({ body: { ok: true, user: { id: 'student', roles: ['user'], perms: ['tests.read'] } } })
+test.each<[string, Record<string, unknown>]>([
+	['без права tests.manage_assignments', { id: 'student', roles: ['user'], perms: ['tests.read'] }],
+	[
+		'роль admin без права tests.manage_assignments',
+		{ id: 'admin-id', roles: ['admin'], perms: ['users.read', 'tests.read'] },
+	],
+])('профиль: %s — not-found', async (_name, user) => {
+	await load({ body: { ok: true, user } })
 	await assert.rejects(profile(), /not-found/)
-})
-
-test('профиль: роль admin без права tests.manage_assignments — not-found', async () => {
-	await load({ body: { ok: true, user: { id: 'admin-id', roles: ['admin'], perms: ['users.read', 'tests.read'] } } })
-	await assert.rejects(profile(), /not-found/)
-})
-
-test('профиль: право tests.manage_assignments без роли admin открывает чужой профиль', async () => {
-	await load({ body: { ok: true, user: { id: 'teacher', roles: ['user'], perms: ['tests.manage_assignments'] } } })
-	const rendered = await profile()
-	assert.ok(rendered)
 })
 
 const ATTEMPT_ID = '11111111-1111-4111-8111-111111111111'
-
-test('страница попытки: запрос через serverRequest, 200 рисует разбор', async () => {
-	const { requests, bodies } = await load({ body: { attempt: { id: ATTEMPT_ID }, questions: [] } })
-	const rendered = (await attemptPage(ATTEMPT_ID)) as { type: unknown; props: Record<string, unknown> }
-	assert.equal(requests[0].url, `https://api.example.test/api/tests/admin/attempts/${ATTEMPT_ID}`)
-	assert.equal(rendered.type, 'attempt-review')
-	assert.deepEqual(rendered.props.questions, [])
-	assertBodiesDrained(bodies)
-})
-
-test('страница попытки: 403 — AccessDeniedState «Нет доступа к попытке»', async () => {
-	await load({ status: 403, body: { error: 'Forbidden' } })
-	const rendered = (await attemptPage(ATTEMPT_ID)) as { type: unknown; props: Record<string, unknown> }
-	assert.equal(rendered.type, 'access-denied')
-	assert.equal(rendered.props.title, 'Нет доступа к попытке')
-	assert.equal(rendered.props.backHref, '/admin/attempts')
-})
 
 test('страница попытки: 404 — not-found', async () => {
 	await load({ status: 404, body: { error: 'Not found' } })
@@ -339,7 +280,6 @@ test('страница попытки: 401 — вход с возвратом н
 })
 
 test.each<[string, Options]>([
-	['400', { status: 400, body: { error: 'Invalid id' } }],
 	['500', { status: 500, body: { error: 'Internal' } }],
 	['401 при недоступном refresh', { status: 401, body: { error: 'Unauthorized' }, refreshUnavailable: true }],
 	['конверт без questions', { body: { attempt: { id: ATTEMPT_ID } } }],

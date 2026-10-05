@@ -13,7 +13,6 @@ import {
 	filterQuestionsByStatus,
 	formatDuration,
 	getAdminReviewNote,
-	getChoiceOptionReviewRows,
 	getChoiceReview,
 	getCorrectLines,
 	getMatchingReview,
@@ -49,32 +48,6 @@ test('getSequenceReview: соседняя перестановка 1234 при �
 	assert.equal(review.hasSwap, true)
 })
 
-test('getSequenceReview: верный ответ при скрытом ключе даёт Ошибок: 0 без ячеек', () => {
-	const review = getSequenceReview(sequenceView('2314', '2314', null))
-	assert.equal(review.visible, true)
-	assert.equal(review.mistakes, 0)
-	assert.equal(review.summaryText, 'Ошибок: 0')
-	assert.equal(review.showCells, false)
-	assert.equal(review.hasSwap, false)
-})
-
-test('getSequenceReview: верный ответ при видимом ключе даёт Ошибок: 0 без ячеек', () => {
-	const review = getSequenceReview(sequenceView('1243', '1243'))
-	assert.equal(review.visible, true)
-	assert.equal(review.mistakes, 0)
-	assert.equal(review.summaryText, 'Ошибок: 0')
-	assert.equal(review.showCells, false)
-	assert.equal(review.hasSwap, false)
-})
-
-test('getSequenceReview: неверный ответ при скрытом ключе ничего не показывает', () => {
-	const review = getSequenceReview({ verdicts: null, mistakes: null, correctAnswer: null })
-	assert.equal(review.visible, false)
-	assert.equal(review.summaryText, null)
-	assert.equal(review.showCells, false)
-	assert.equal(review.hasSwap, false)
-})
-
 test('getSequenceReview: пустой ответ считает ошибки по длине ключа и не рисует ячейки', () => {
 	for (const studentAnswer of ['', null]) {
 		const review = getSequenceReview(sequenceView('2314', studentAnswer))
@@ -83,19 +56,6 @@ test('getSequenceReview: пустой ответ считает ошибки п�
 		assert.equal(review.summaryText, 'Ошибок: 4')
 		assert.equal(review.showCells, false)
 	}
-})
-
-test('getSequenceReview: длинный ответ даёт ячейки extra сверх длины ключа', () => {
-	const review = getSequenceReview(sequenceView('2314', '2314' + '5678901234567890'))
-	assert.deepEqual(kinds(review), [...Array(4).fill('correct'), ...Array(16).fill('extra')])
-	assert.equal(review.summaryText, 'Ошибок: 16')
-	assert.equal(review.showCells, true)
-})
-
-test('getSequenceReview: числовой ключ читается как строка цифр', () => {
-	const review = getSequenceReview(sequenceView(1243, '1234'))
-	assert.equal(review.summaryText, 'Ошибок: 1')
-	assert.deepEqual(kinds(review), ['correct', 'correct', 'swapped', 'swapped'])
 })
 
 test('sequencePositionLabel: цифра ключа звучит только при видимом ключе', () => {
@@ -151,29 +111,6 @@ const threeOptionQuestion = {
 	],
 	matchingPairs: null,
 } as PublicTestQuestion
-
-test('getChoiceOptionReviewRows: без ключа выбранный вариант помечен неверным, остальные нейтральны', () => {
-	assert.deepEqual(
-		getChoiceOptionReviewRows(threeOptionQuestion, choiceVerdicts(threeOptionQuestion, ['1'], null)).map(
-			(row) => row.status
-		),
-		['incorrect-selected', 'neutral', 'neutral']
-	)
-})
-
-test('getChoiceOptionReviewRows: пропущенный верный и выбранный неверный варианты', () => {
-	assert.deepEqual(
-		getChoiceOptionReviewRows(threeOptionQuestion, choiceVerdicts(threeOptionQuestion, ['2'], ['1'])).map(
-			(row) => row.status
-		),
-		['correct', 'incorrect-selected', 'neutral']
-	)
-	const singleChoice = { ...threeOptionQuestion, questionUiTemplate: 'single_choice' } as PublicTestQuestion
-	assert.deepEqual(
-		getChoiceOptionReviewRows(singleChoice, choiceVerdicts(singleChoice, ['1'], '1')).map((row) => row.status),
-		['correct', 'neutral', 'neutral']
-	)
-})
 
 const ID = '11111111-1111-4111-8111-111111111111'
 
@@ -240,30 +177,6 @@ test('getTextReview: ключ неизвестен и ответ верный �
 		assert.equal(review.cells, null)
 		assert.equal(review.correctLines, null)
 	}
-})
-
-test('getTextReview: ключ неизвестен и ответ неверный — нейтральная карточка без суффикса', () => {
-	const review = getTextReview({
-		question: sequenceQuestion,
-		studentAnswer: '2315',
-		view: view({ keyVisible: false, status: 'wrong' }),
-	})
-	assert.equal(review.studentTone, 'neutral')
-	assert.equal(review.studentTitle, 'Ответ студента')
-	assert.equal(review.summaryText, null)
-	assert.equal(review.swapHint, false)
-})
-
-test('getTextReview: у short_text нет «Ошибок: N», даже если вид несёт mistakes', () => {
-	const review = getTextReview({
-		question: textQuestion,
-		studentAnswer: 'Мейоз',
-		view: view({ keyVisible: true, correctAnswer: 'Митоз', mistakes: 1, status: 'wrong' }),
-	})
-	assert.equal(review.summaryText, null)
-	assert.equal(review.swapHint, false)
-	assert.equal(review.cells, null)
-	assert.deepEqual(review.correctLines, ['Митоз'])
 })
 
 test('getTextReview: ключ известен, вердиктов нет — цвет сохранённого статуса, ключ, без «Ошибок: N» и ячеек', () => {

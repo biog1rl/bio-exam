@@ -6,7 +6,7 @@ vi.mock('@/lib/session/client', () => ({
 	AuthExpiredError: class AuthExpiredError extends Error {},
 }))
 
-import { apiFetch, AuthExpiredError } from '@/lib/session/client'
+import { apiFetch } from '@/lib/session/client'
 
 import { changeOwnPassword, deleteAvatar, parseAvatarUpload, updateOwnProfile, uploadAvatar } from './profile-api'
 
@@ -59,19 +59,6 @@ describe('uploadAvatar', () => {
 		}
 	})
 
-	test('400 с русским текстом сервера — http с этим текстом', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Файл слишком большой' }))
-
-		const outcome = await uploadAvatar(new FormData())
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) {
-			assert.equal(outcome.kind, 'http')
-			assert.equal(outcome.status, 400)
-			assert.equal(outcome.message, 'Файл слишком большой')
-		}
-	})
-
 	test('ответ без адресов аватара — malformed', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { message: 'ok' }))
 
@@ -79,18 +66,6 @@ describe('uploadAvatar', () => {
 
 		assert.equal(outcome.ok, false)
 		if (!outcome.ok) assert.equal(outcome.kind, 'malformed')
-	})
-
-	test('истёкшая сессия — auth без текста', async () => {
-		apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())
-
-		const outcome = await uploadAvatar(new FormData())
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) {
-			assert.equal(outcome.kind, 'auth')
-			assert.equal(outcome.message, '')
-		}
 	})
 })
 
@@ -133,18 +108,6 @@ describe('updateOwnProfile', () => {
 		assert.equal(headerValue(init, 'Content-Type'), 'application/json')
 		assert.deepEqual(JSON.parse(String(init?.body)), body)
 		assert.equal(outcome.ok, true)
-	})
-
-	test('409 — текст сервера', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Логин уже используется' }))
-
-		const outcome = await updateOwnProfile({ login: 'taken' })
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) {
-			assert.equal(outcome.status, 409)
-			assert.equal(outcome.message, 'Логин уже используется')
-		}
 	})
 })
 

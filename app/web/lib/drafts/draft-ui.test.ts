@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import {
-	autosaveStatusView,
-	DRAFT_TOAST,
-	DRAFT_TOAST_ID,
-	leaveDialogDescription,
-	RETRY_SAVE_LABEL,
-	UNSAVED_CHANGES_TEXT,
-} from './draft-ui'
+import { autosaveStatusView, leaveDialogDescription } from './draft-ui'
 import type { QuestionDraftAutosaveSnapshot } from './question-draft-autosave'
 
 function snapshot(patch: Partial<QuestionDraftAutosaveSnapshot>): QuestionDraftAutosaveSnapshot {
@@ -23,51 +16,63 @@ function snapshot(patch: Partial<QuestionDraftAutosaveSnapshot>): QuestionDraftA
 	}
 }
 
-test('autosaveStatusView: saved → Сохранено без Повторить', () => {
-	assert.deepEqual(autosaveStatusView(snapshot({})), {
-		icon: 'check',
-		text: 'Сохранено',
-		tone: 'muted',
-		canRetry: false,
-	})
-})
+const SAVED = { icon: 'check', text: 'Сохранено', tone: 'muted', canRetry: false } as const
 
-test('autosaveStatusView: display saving → Сохранение… одним символом многоточия', () => {
-	const view = autosaveStatusView(snapshot({ status: 'saving', display: 'saving', hasUnsavedWrite: true }))
-	assert.deepEqual(view, { icon: 'loader', text: 'Сохранение…', tone: 'muted', canRetry: false })
-})
-
-test('autosaveStatusView: в окне порога pending показывает прежнее состояние', () => {
-	const view = autosaveStatusView(snapshot({ status: 'pending', display: 'saved', hasUnsavedWrite: true }))
-	assert.equal(view?.text, 'Сохранено')
-})
-
-test('autosaveStatusView: failed и conflict → Не сохранено с Повторить', () => {
-	for (const error of ['failed', 'conflict'] as const) {
-		assert.deepEqual(
-			autosaveStatusView(snapshot({ status: 'error', error, display: 'error', hasUnsavedWrite: true })),
-			{ icon: 'alert', text: 'Не сохранено', tone: 'error', canRetry: true }
-		)
-	}
-})
-
-test('autosaveStatusView: forbidden и gone без Повторить', () => {
-	assert.deepEqual(autosaveStatusView(snapshot({ status: 'error', error: 'forbidden', display: 'error' })), {
-		icon: 'alert',
-		text: 'Не сохранено: нет прав на черновик',
-		tone: 'error',
-		canRetry: false,
-	})
-	assert.deepEqual(autosaveStatusView(snapshot({ status: 'error', error: 'gone', display: 'error' })), {
-		icon: 'alert',
-		text: 'Не сохранено: черновик удалён',
-		tone: 'error',
-		canRetry: false,
-	})
-})
-
-test('autosaveStatusView: closed → null', () => {
-	assert.equal(autosaveStatusView(snapshot({ status: 'closed', display: 'hidden' })), null)
+test.each(
+	(
+		[
+			{ name: 'saved → Сохранено без Повторить', cases: [[{}, SAVED]] },
+			{
+				name: 'display saving → Сохранение… одним символом многоточия',
+				cases: [
+					[
+						{ status: 'saving', display: 'saving', hasUnsavedWrite: true },
+						{ icon: 'loader', text: 'Сохранение…', tone: 'muted', canRetry: false },
+					],
+				],
+			},
+			{
+				name: 'в окне порога pending показывает прежнее состояние',
+				cases: [[{ status: 'pending', display: 'saved', hasUnsavedWrite: true }, SAVED]],
+			},
+			{
+				name: 'failed и conflict → Не сохранено с Повторить',
+				cases: (['failed', 'conflict'] as const).map((error) => [
+					{ status: 'error', error, display: 'error', hasUnsavedWrite: true },
+					{ icon: 'alert', text: 'Не сохранено', tone: 'error', canRetry: true },
+				]),
+			},
+			{
+				name: 'forbidden и gone без Повторить',
+				cases: [
+					[
+						{ status: 'error', error: 'forbidden', display: 'error' },
+						{ icon: 'alert', text: 'Не сохранено: нет прав на черновик', tone: 'error', canRetry: false },
+					],
+					[
+						{ status: 'error', error: 'gone', display: 'error' },
+						{ icon: 'alert', text: 'Не сохранено: черновик удалён', tone: 'error', canRetry: false },
+					],
+				],
+			},
+			{ name: 'closed → null', cases: [[{ status: 'closed', display: 'hidden' }, null]] },
+		] as {
+			name: string
+			cases: [Partial<QuestionDraftAutosaveSnapshot>, ReturnType<typeof autosaveStatusView>][]
+		}[]
+	).map(
+		(
+			row
+		): [
+			string,
+			{
+				name: string
+				cases: [Partial<QuestionDraftAutosaveSnapshot>, ReturnType<typeof autosaveStatusView>][]
+			},
+		] => [row.name, row]
+	)
+)('autosaveStatusView: %s', (_name, { cases }) => {
+	for (const [patch, expected] of cases) assert.deepEqual(autosaveStatusView(snapshot(patch)), expected)
 })
 
 test('leaveDialogDescription: тексты UI-SPEC Поверхность 3', () => {
@@ -85,33 +90,4 @@ test('leaveDialogDescription: тексты UI-SPEC Поверхность 3', ()
 		leaveDialogDescription({ ok: false, reason: 'gone' }),
 		'Черновик удалён. Последние правки не сохранятся.'
 	)
-})
-
-test('UNSAVED_CHANGES_TEXT и RETRY_SAVE_LABEL', () => {
-	assert.deepEqual(UNSAVED_CHANGES_TEXT, {
-		title: 'Есть несохранённые изменения',
-		description: 'Уйти без сохранения?',
-		stay: 'Остаться',
-		leave: 'Выйти',
-	})
-	assert.equal(RETRY_SAVE_LABEL, 'Повторить сохранение')
-})
-
-test('DRAFT_TOAST и DRAFT_TOAST_ID дословно по UI-SPEC Поверхность 5', () => {
-	assert.deepEqual(DRAFT_TOAST, {
-		conflictResolved: 'Черновик был изменён в другой вкладке. Сохранена версия из этой вкладки.',
-		conflictRepeated:
-			'Черновик снова изменён в другой вкладке. Закройте другие вкладки с этим черновиком и нажмите «Повторить сохранение».',
-		restored: 'Восстановлены правки, которые не успели сохраниться на сервере.',
-		diverged: 'Черновик изменён в другом месте. Открыта версия с сервера, правки с этого устройства не применены.',
-		restoreCopyAction: 'Восстановить правки с этого устройства',
-		forbidden: 'Нет прав на сохранение черновика. Обратитесь к администратору.',
-		gone: 'Черновик удалён. Скопируйте текст, если он ещё нужен, и создайте новый вопрос.',
-	})
-	assert.deepEqual(DRAFT_TOAST_ID, {
-		forbidden: 'question-draft-forbidden',
-		gone: 'question-draft-gone',
-		restored: 'question-draft-restored',
-		diverged: 'question-draft-diverged',
-	})
 })

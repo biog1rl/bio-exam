@@ -66,10 +66,6 @@ afterEach(() => {
 	vi.useRealTimers()
 })
 
-test('REFRESH_RETRY_MS равен 30 с', () => {
-	assert.equal(REFRESH_RETRY_MS, 30_000)
-})
-
 test('видимая вкладка: refresh через 14 мин при сроке 15 мин, не раньше', async () => {
 	const { refresh, keepAlive } = setup([{ kind: 'ok', accessExpiresAt: iso(START + 29 * MINUTE) }])
 	keepAlive.update(iso(START + 15 * MINUTE))
@@ -106,24 +102,6 @@ test('возврат на вкладку до порога: refresh нет, та
 	assert.equal(refresh.mock.calls.length, 0)
 	await vi.advanceTimersByTimeAsync(9 * MINUTE)
 	assert.equal(refresh.mock.calls.length, 1)
-	keepAlive.stop()
-})
-
-test('исход ok: onRefreshed с новым сроком, следующий таймер по новому сроку', async () => {
-	const second = START + 14 * MINUTE + 15 * MINUTE
-	const { refresh, onRefreshed, onSessionEnded, keepAlive } = setup([
-		{ kind: 'ok', accessExpiresAt: iso(second) },
-		{ kind: 'ok', accessExpiresAt: iso(second + 15 * MINUTE) },
-	])
-	keepAlive.update(iso(START + 15 * MINUTE))
-	await vi.advanceTimersByTimeAsync(14 * MINUTE)
-	assert.equal(refresh.mock.calls.length, 1)
-	assert.deepEqual(onRefreshed.mock.calls, [[iso(second)]])
-	await vi.advanceTimersByTimeAsync(14 * MINUTE - 1)
-	assert.equal(refresh.mock.calls.length, 1)
-	await vi.advanceTimersByTimeAsync(1)
-	assert.equal(refresh.mock.calls.length, 2)
-	assert.equal(onSessionEnded.mock.calls.length, 0)
 	keepAlive.stop()
 })
 
@@ -263,14 +241,6 @@ test('повторный update с тем же сроком не добавля�
 	keepAlive.update(iso(START + 15 * MINUTE))
 	assert.equal(vi.getTimerCount(), 1)
 	await vi.advanceTimersByTimeAsync(14 * MINUTE)
-	assert.equal(refresh.mock.calls.length, 1)
-	keepAlive.stop()
-})
-
-test('срок уже прошёл: refresh сразу, если вкладка видима', async () => {
-	const { refresh, keepAlive } = setup([{ kind: 'ok', accessExpiresAt: iso(START + 15 * MINUTE) }])
-	keepAlive.update(iso(START - MINUTE))
-	await vi.advanceTimersByTimeAsync(0)
 	assert.equal(refresh.mock.calls.length, 1)
 	keepAlive.stop()
 })

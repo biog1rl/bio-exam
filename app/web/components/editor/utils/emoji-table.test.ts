@@ -47,18 +47,31 @@ test('параллельные вызовы до загрузки делят о�
 	assert.equal(a, b)
 })
 
-test('шаблон :alias: совпадает с формой трансформера EMOJI и не хранит состояние', () => {
+test.each(
+	(
+		[
+			{
+				name: 'совпадает с формой трансформера EMOJI и не хранит состояние',
+				cases: [
+					['Привет :smile: мир', true],
+					['Привет :smile: мир', true],
+					['Время 10:30, без кодов', false],
+					['Текст без эмодзи', false],
+				],
+			},
+			{
+				name: 'требует букву: цифровые соотношения не считаются алиасом',
+				cases: [
+					['Соотношение 1:100:1', false],
+					['Расщепление 9:3:3:1', false],
+					['Код :1234: без букв', false],
+					['Медаль :1st_place_medal:', true],
+					['Привет :smile:', true],
+				],
+			},
+		] as { name: string; cases: [string, boolean][] }[]
+	).map((row): [string, { name: string; cases: [string, boolean][] }] => [row.name, row])
+)('шаблон :alias: %s', (_name, { cases }) => {
 	assert.equal(EMOJI_ALIAS_PATTERN.flags.includes('g'), false)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Привет :smile: мир'), true)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Привет :smile: мир'), true)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Время 10:30, без кодов'), false)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Текст без эмодзи'), false)
-})
-
-test('шаблон :alias: требует букву: цифровые соотношения не считаются алиасом', () => {
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Соотношение 1:100:1'), false)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Расщепление 9:3:3:1'), false)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Код :1234: без букв'), false)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Медаль :1st_place_medal:'), true)
-	assert.equal(EMOJI_ALIAS_PATTERN.test('Привет :smile:'), true)
+	for (const [text, expected] of cases) assert.equal(EMOJI_ALIAS_PATTERN.test(text), expected, text)
 })

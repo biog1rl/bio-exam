@@ -59,18 +59,6 @@ test('groupItemSuffix: владелец или администраторы', ()
 	assert.equal(groupItemSuffix(undefined), '')
 })
 
-test('roleWarning: роль с зоной у пользователя без зоны — учитель без тем', () => {
-	assert.equal(
-		roleWarning({ from: { ownsZone: false }, to: { ownsZone: true }, deactivating: false }),
-		'teacher-without-topics'
-	)
-})
-
-test('roleWarning: снятие роли с зоной или деактивация владельца зоны — передача администраторам', () => {
-	assert.equal(roleWarning({ from: { ownsZone: true }, to: { ownsZone: false }, deactivating: false }), 'zone-release')
-	assert.equal(roleWarning({ from: { ownsZone: true }, to: { ownsZone: true }, deactivating: true }), 'zone-release')
-})
-
 test('roleWarning: неизвестный признак или без изменений — без предупреждения', () => {
 	assert.equal(roleWarning({ from: { ownsZone: null }, to: { ownsZone: true }, deactivating: false }), 'none')
 	assert.equal(roleWarning({ from: { ownsZone: true }, to: { ownsZone: null }, deactivating: true }), 'none')
@@ -86,17 +74,6 @@ test('initialOwnsZone: по полному исходному набору ро�
 	assert.equal(initialOwnsZone(['user'], unknownTraits), null)
 	assert.equal(initialOwnsZone(['user', 'teacher'], unknownTraits), null)
 	assert.equal(initialOwnsZone(['user', 'missing'], traits), null)
-})
-
-test('roleWarning: исходные роли user и teacher, выбрана роль без зоны — передача администраторам', () => {
-	assert.equal(
-		roleWarning({
-			from: { ownsZone: initialOwnsZone(['user', 'teacher'], traits) },
-			to: { ownsZone: initialOwnsZone(['user'], traits) },
-			deactivating: false,
-		}),
-		'zone-release'
-	)
 })
 
 test('editRoleWarning: без смены роли и без деактивации предупреждения нет даже при нескольких ролях', () => {

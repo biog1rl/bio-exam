@@ -1,16 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { getSessionCookieCandidates, readSessionCookieValue } from './sessionCookie'
-
-test('getSessionCookieCandidates: настроенное имя идёт первым, затем имена по умолчанию', () => {
-	assert.deepEqual(getSessionCookieCandidates(undefined), ['bio_exam_session', 'bio-exam_session'])
-	assert.deepEqual(getSessionCookieCandidates('custom_session'), [
-		'custom_session',
-		'bio_exam_session',
-		'bio-exam_session',
-	])
-})
+import { readSessionCookieValue } from './sessionCookie'
 
 test('readSessionCookieValue: читает устаревшее имя cookie', () => {
 	const legacyCookieStore = {

@@ -61,32 +61,25 @@ test('раздел catalog открывает только zone.all', () => {
 	assert.equal(canAccessSection(new Set<PermissionKey>(['tests.read', 'tests.write']), 'catalog'), false)
 })
 
-test('только users.read открывает users и admin', () => {
-	const perms = new Set<PermissionKey>(['users.read'])
-	const open = ALL_SECTIONS.filter((section) => canAccessSection(perms, section)).sort()
-	assert.deepEqual(open, ['admin', 'users'])
+test.each(
+	(
+		[
+			{ name: 'только users.read открывает users и admin', perm: 'users.read', open: ['admin', 'users'] },
+			{
+				name: 'только tests.read открывает tests, attempts и admin, но не users',
+				perm: 'tests.read',
+				open: ['admin', 'attempts', 'tests'],
+			},
+			{ name: 'только rbac.read открывает rbac и admin, но не settings', perm: 'rbac.read', open: ['admin', 'rbac'] },
+		] as { name: string; perm: PermissionKey; open: Section[] }[]
+	).map((row): [string, { name: string; perm: PermissionKey; open: Section[] }] => [row.name, row])
+)('%s', (_name, { perm, open }) => {
+	const perms = new Set<PermissionKey>([perm])
+	assert.deepEqual(ALL_SECTIONS.filter((section) => canAccessSection(perms, section)).sort(), open)
 })
 
 test('роль user без прав не открывает ни один раздел', () => {
 	const perms = rolePerms('user')
 	assert.deepEqual([...perms], [])
 	for (const section of ALL_SECTIONS) assert.equal(canAccessSection(perms, section), false, section)
-})
-
-test('только tests.read открывает tests, attempts и admin, но не users', () => {
-	const perms = new Set<PermissionKey>(['tests.read'])
-	const open = ALL_SECTIONS.filter((section) => canAccessSection(perms, section)).sort()
-	assert.deepEqual(open, ['admin', 'attempts', 'tests'])
-	assert.equal(canAccessSection(perms, 'users'), false)
-})
-
-test('только rbac.read открывает rbac и admin, но не settings', () => {
-	const perms = new Set<PermissionKey>(['rbac.read'])
-	const open = ALL_SECTIONS.filter((section) => canAccessSection(perms, section)).sort()
-	assert.deepEqual(open, ['admin', 'rbac'])
-	assert.equal(canAccessSection(perms, 'settings'), false)
-})
-
-test('пустой набор прав не открывает ни один раздел', () => {
-	for (const section of ALL_SECTIONS) assert.equal(canAccessSection(new Set(), section), false, section)
 })

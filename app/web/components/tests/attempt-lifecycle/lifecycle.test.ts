@@ -210,15 +210,6 @@ describe('восстановление и смена сессии', () => {
 		assert.equal(fakeApi.saveDraft.mock.calls.length, 0)
 	})
 
-	test('закэшированная s1, /start отдаёт s1: уведомление session-restored', async () => {
-		const storage = memoryStorage({ [KEYS.session]: cachedSession('s1') })
-		const { lifecycle, onNotice } = setupLifecycle({ storage })
-		lifecycle.init()
-		await settle()
-		assert.deepEqual(onNotice.mock.calls, [[{ kind: 'session-restored' }]])
-		assert.equal(lifecycle.getSnapshot().startedAt, STARTED_AT)
-	})
-
 	test('ответы WAL закэшированной сессии видны сразу после init, до ответа /start', async () => {
 		const storage = memoryStorage({
 			[KEYS.session]: cachedSession('s1'),

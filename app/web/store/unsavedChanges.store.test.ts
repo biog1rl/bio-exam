@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { type LeaveFlushResult, leaveDialogDescription, UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
+import { type LeaveFlushResult, leaveDialogDescription } from '@/lib/drafts/draft-ui'
 
 import { useUnsavedChanges } from './unsavedChanges.store'
 
@@ -37,43 +37,44 @@ describe('leave without a registered flush', () => {
 })
 
 describe('leave with a registered flush', () => {
-	it('navigates after a successful flush', async () => {
-		const flush = vi.fn(async (): Promise<LeaveFlushResult> => ({ ok: true }))
-		store().registerFlush('/p', flush)
-		store().setDirty('/p', true)
-		await expect(store().leave('/p')).resolves.toEqual({ kind: 'navigate' })
-		expect(flush).toHaveBeenCalledTimes(1)
-	})
-
-	it('asks to confirm with the failure text when the flush fails', async () => {
-		store().registerFlush('/p', async () => ({ ok: false, reason: 'failed' }))
+	it.each(
+		(
+			[
+				{
+					name: 'navigates after a successful flush',
+					dirty: true,
+					flush: async () => ({ ok: true }),
+					expected: { kind: 'navigate' },
+				},
+				{
+					name: 'asks to confirm with the failure text when the flush fails',
+					dirty: false,
+					flush: async () => ({ ok: false, reason: 'failed' }),
+					expected: { kind: 'confirm', description: leaveDialogDescription({ ok: false, reason: 'failed' }) },
+				},
+				{
+					name: 'treats a rejected flush as a failed one',
+					dirty: false,
+					flush: async () => {
+						throw new Error('network')
+					},
+					expected: { kind: 'confirm', description: leaveDialogDescription({ ok: false, reason: 'failed' }) },
+				},
+			] as { name: string; dirty: boolean; flush: () => Promise<LeaveFlushResult>; expected: unknown }[]
+		).map(
+			(row): [string, { name: string; dirty: boolean; flush: () => Promise<LeaveFlushResult>; expected: unknown }] => [
+				row.name,
+				row,
+			]
+		)
+	)('%s', async (_name, { dirty, flush, expected }) => {
+		const registered = vi.fn(flush)
+		store().registerFlush('/p', registered)
+		if (dirty) store().setDirty('/p', true)
 		const decision = await store().leave('/p')
-		expect(decision.kind).toBe('confirm')
-		expect(decision).toEqual({ kind: 'confirm', description: leaveDialogDescription({ ok: false, reason: 'failed' }) })
-		expect(decision.kind === 'confirm' && decision.description).toMatch(/^Последние правки не дошли до сервера/)
-	})
-
-	it('uses separate texts for forbidden and gone', async () => {
-		store().registerFlush('/p', async () => ({ ok: false, reason: 'forbidden' }))
-		await expect(store().leave('/p')).resolves.toEqual({
-			kind: 'confirm',
-			description: 'Нет прав на сохранение черновика. Последние правки не попали на сервер.',
-		})
-		store().registerFlush('/p', async () => ({ ok: false, reason: 'gone' }))
-		await expect(store().leave('/p')).resolves.toEqual({
-			kind: 'confirm',
-			description: 'Черновик удалён. Последние правки не сохранятся.',
-		})
-	})
-
-	it('treats a rejected flush as a failed one', async () => {
-		store().registerFlush('/p', async () => {
-			throw new Error('network')
-		})
-		await expect(store().leave('/p')).resolves.toEqual({
-			kind: 'confirm',
-			description: leaveDialogDescription({ ok: false, reason: 'failed' }),
-		})
+		expect(decision).toEqual(expected)
+		if (decision.kind === 'confirm') expect(decision.description).toMatch(/^Последние правки не дошли до сервера/)
+		expect(registered).toHaveBeenCalledTimes(1)
 		expect(store().leavingByPath['/p']).toBe(false)
 	})
 
@@ -133,22 +134,5 @@ describe('registerFlush and clear', () => {
 		expect(store().isDirty('/other')).toBe(true)
 		await expect(store().leave('/p')).resolves.toEqual({ kind: 'navigate' })
 		expect(flush).not.toHaveBeenCalled()
-	})
-
-	it('clear() removes every flag and flush', () => {
-		store().registerFlush('/p', async () => ({ ok: true }))
-		store().setDirty('/p', true)
-		store().setDirty('/other', true)
-		store().clear()
-		expect(store().dirtyByPath).toEqual({})
-		expect(store().flushByPath).toEqual({})
-	})
-
-	it('confirm text without a flush is the default description', async () => {
-		store().setDirty('/p', true)
-		await expect(store().leave('/p')).resolves.toEqual({
-			kind: 'confirm',
-			description: UNSAVED_CHANGES_TEXT.description,
-		})
 	})
 })

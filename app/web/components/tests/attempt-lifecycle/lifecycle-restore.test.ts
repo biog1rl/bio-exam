@@ -74,59 +74,59 @@ describe('восстановление: сначала submit с сохранё�
 		assert.equal(fakeApi.start.mock.calls.length, 0)
 	})
 
-	test('422 TIME_EXPIRED: blocked time-expired, /start не вызывался', async () => {
+	test.each(
+		[
+			{
+				name: '422 TIME_EXPIRED: blocked time-expired, /start не вызывался',
+				failure: () => requestError(422, SUBMIT_ERROR_CODES.timeExpired),
+				blockReason: 'time-expired',
+				attemptId: undefined as string | undefined,
+				keys: [] as string[],
+				detachedWal: false,
+			},
+			{
+				name: '409: already-submitted с id попытки',
+				failure: () => requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID),
+				blockReason: 'already-submitted',
+				attemptId: ATTEMPT_ID as string | undefined,
+				keys: [] as string[],
+				detachedWal: false,
+			},
+			{
+				name: '403: submit-not-assigned, ключи на месте',
+				failure: () => requestError(403),
+				blockReason: 'submit-not-assigned',
+				attemptId: undefined as string | undefined,
+				keys: ['session', 'wal', 'clientAttemptId'],
+				detachedWal: false,
+			},
+			{
+				name: '404: not-found, WAL с sessionId null и всеми ответами в pending',
+				failure: () => requestError(404),
+				blockReason: 'not-found',
+				attemptId: undefined as string | undefined,
+				keys: ['wal'],
+				detachedWal: true,
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { failure, blockReason, attemptId, keys, detachedWal }) => {
 		const storage = resubmitStorage()
 		const fakeApi = fakeAttemptApi([sessionOf('s1')])
-		fakeApi.queueSubmit(requestError(422, SUBMIT_ERROR_CODES.timeExpired))
+		fakeApi.queueSubmit(failure())
 		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
 		lifecycle.init()
 		await settle()
 		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
-		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
+		assert.equal(lifecycle.getSnapshot().blockReason, blockReason)
+		if (attemptId !== undefined) assert.equal(lifecycle.getSnapshot().alreadySubmittedAttemptId, attemptId)
 		assert.equal(fakeApi.start.mock.calls.length, 0)
-		assert.deepEqual(presentKeys(storage), [])
-	})
-
-	test('409: already-submitted с id попытки', async () => {
-		const storage = resubmitStorage()
-		const fakeApi = fakeAttemptApi([sessionOf('s1')])
-		fakeApi.queueSubmit(requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID))
-		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
-		lifecycle.init()
-		await settle()
-		assert.equal(lifecycle.getSnapshot().blockReason, 'already-submitted')
-		assert.equal(lifecycle.getSnapshot().alreadySubmittedAttemptId, ATTEMPT_ID)
-		assert.equal(fakeApi.start.mock.calls.length, 0)
-		assert.deepEqual(presentKeys(storage), [])
-	})
-
-	test('403: submit-not-assigned, ключи на месте', async () => {
-		const storage = resubmitStorage()
-		const fakeApi = fakeAttemptApi([sessionOf('s1')])
-		fakeApi.queueSubmit(requestError(403))
-		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
-		lifecycle.init()
-		await settle()
-		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
-		assert.equal(lifecycle.getSnapshot().blockReason, 'submit-not-assigned')
-		assert.equal(fakeApi.start.mock.calls.length, 0)
-		assert.deepEqual(presentKeys(storage), ['session', 'wal', 'clientAttemptId'])
-	})
-
-	test('404: not-found, WAL с sessionId null и всеми ответами в pending', async () => {
-		const storage = resubmitStorage()
-		const fakeApi = fakeAttemptApi([sessionOf('s1')])
-		fakeApi.queueSubmit(requestError(404))
-		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
-		lifecycle.init()
-		await settle()
-		assert.equal(lifecycle.getSnapshot().blockReason, 'not-found')
-		assert.equal(fakeApi.start.mock.calls.length, 0)
-		assert.deepEqual(presentKeys(storage), ['wal'])
-		const wal = readJson(storage, KEYS.wal) as { sessionId: string | null; answers: object; pending: string[] }
-		assert.equal(wal.sessionId, null)
-		assert.deepEqual(wal.answers, { [Q1]: 'a' })
-		assert.deepEqual(wal.pending, [Q1])
+		assert.deepEqual(presentKeys(storage), keys)
+		if (detachedWal) {
+			const wal = readJson(storage, KEYS.wal) as { sessionId: string | null; answers: object; pending: string[] }
+			assert.equal(wal.sessionId, null)
+			assert.deepEqual(wal.answers, { [Q1]: 'a' })
+			assert.deepEqual(wal.pending, [Q1])
+		}
 	})
 
 	for (const [label, failure] of [

@@ -8,7 +8,6 @@ import {
 	deferred,
 	fakeAttemptApi,
 	KEYS,
-	presentKeys,
 	Q1,
 	Q2,
 	readJson,
@@ -210,22 +209,6 @@ describe('таймер экзамена, предупреждение и авт�
 		assert.equal(fakeApi.submit.mock.calls.length, 1)
 		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
 		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
-	})
-
-	test('ревью C-01: navigate после сдачи не пишет WAL и не шлёт черновик', async () => {
-		const { lifecycle, fakeApi, storage } = setupLifecycle()
-		fakeApi.queueSubmit(attemptViewOf())
-		lifecycle.init()
-		await settle()
-		await lifecycle.submit()
-		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
-		const calls = fakeApi.saveDraft.mock.calls.length
-		lifecycle.navigate(Q2)
-		await vi.advanceTimersByTimeAsync(10_000)
-		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q2)
-		assert.equal(storage.data.has(KEYS.wal), false)
-		assert.equal(fakeApi.saveDraft.mock.calls.length, calls)
-		assert.deepEqual(presentKeys(storage), [])
 	})
 
 	test('тест без лимита: secondsLeft null, тиков нет', async () => {

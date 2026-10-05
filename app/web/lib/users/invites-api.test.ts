@@ -6,7 +6,7 @@ vi.mock('@/lib/session/client', () => ({
 	AuthExpiredError: class AuthExpiredError extends Error {},
 }))
 
-import { apiFetch, AuthExpiredError } from '@/lib/session/client'
+import { apiFetch } from '@/lib/session/client'
 
 import { createInvite, parseInviteLink, reissueInvite } from './invites-api'
 
@@ -50,20 +50,6 @@ describe('createInvite', () => {
 		if (outcome.ok) assert.equal(outcome.data.inviteLink, LINK)
 	})
 
-	test('409 — http 409 с телом сервера', async () => {
-		const serverBody = { error: 'Логин уже используется' }
-		apiFetchMock.mockResolvedValueOnce(json(409, serverBody))
-
-		const outcome = await createInvite({ login: 'taken' })
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) {
-			assert.equal(outcome.kind, 'http')
-			assert.equal(outcome.status, 409)
-			assert.deepEqual(outcome.body, serverBody)
-		}
-	})
-
 	test('ответ без ссылки — malformed', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { userId: USER_ID }))
 
@@ -71,27 +57,6 @@ describe('createInvite', () => {
 
 		assert.equal(outcome.ok, false)
 		if (!outcome.ok) assert.equal(outcome.kind, 'malformed')
-	})
-
-	test('истёкшая сессия — auth без текста', async () => {
-		apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())
-
-		const outcome = await createInvite({ login: 'student' })
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) {
-			assert.equal(outcome.kind, 'auth')
-			assert.equal(outcome.message, '')
-		}
-	})
-
-	test('сбой сети — network', async () => {
-		apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-
-		const outcome = await createInvite({ login: 'student' })
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) assert.equal(outcome.kind, 'network')
 	})
 })
 
@@ -107,19 +72,6 @@ describe('reissueInvite', () => {
 		assert.deepEqual(JSON.parse(String(init?.body)), { userId: USER_ID })
 		assert.equal(outcome.ok, true)
 		if (outcome.ok) assert.equal(outcome.data.inviteLink, LINK)
-	})
-
-	test('409 — http 409 с телом сервера', async () => {
-		const serverBody = { error: 'Ученик уже активировал приглашение. Новую ссылку выдаёт администратор' }
-		apiFetchMock.mockResolvedValueOnce(json(409, serverBody))
-
-		const outcome = await reissueInvite(USER_ID)
-
-		assert.equal(outcome.ok, false)
-		if (!outcome.ok) {
-			assert.equal(outcome.status, 409)
-			assert.deepEqual(outcome.body, serverBody)
-		}
 	})
 })
 

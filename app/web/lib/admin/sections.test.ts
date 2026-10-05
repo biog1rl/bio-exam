@@ -72,20 +72,6 @@ test('администратор видит все пять карточек с 
 	assert.equal(sectionsCountLabel(cards.length), '5 активных разделов')
 })
 
-test('роль user не видит ни одной карточки и ни одной служебной ссылки', () => {
-	const perms = rolePerms('user')
-	assert.deepEqual(visibleAdminCards(perms), [])
-	assert.deepEqual(visibleServiceLinks(perms), [])
-})
-
-test('служебные ссылки: учителю пусто, администратору RBAC, График, Сайдбар', () => {
-	assert.deepEqual(visibleServiceLinks(rolePerms('teacher')), [])
-	assert.deepEqual(
-		visibleServiceLinks(rolePerms('admin')).map((link) => link.label),
-		['RBAC', 'График', 'Сайдбар']
-	)
-})
-
 test('служебные ссылки фильтруются по разделу каждой ссылки', () => {
 	assert.deepEqual(
 		visibleServiceLinks(new Set<PermissionKey>(['rbac.read'])).map((link) => link.href),

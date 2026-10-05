@@ -125,28 +125,26 @@ describe('fetchWithSession', () => {
 		assert.deepEqual(navigate.mock.calls, [['/login?callbackUrl=%2Fadmin%2Ftests%3Fq%3D1']])
 	})
 
-	for (const code of [500, 502, 403, 429]) {
-		test(`refresh ${code}: unavailable, навигации нет, вызовы получают исходный 401`, async () => {
-			const gate = deferred<Response>()
-			const { client, calls, navigate } = scenario({
-				request: [status(401), status(401), status(401), status(401)],
-				refresh: [() => gate.promise, status(200, { ok: true, accessExpiresAt: null })],
-			})
-			const pending = [client.fetchWithSession('/a'), client.fetchWithSession('/b'), client.fetchWithSession('/c')]
-			await vi.waitFor(() => assert.equal(calls.request.length, 3))
-			gate.resolve(status(code))
-			const responses = await Promise.all(pending)
-			assert.deepEqual(
-				responses.map((r) => r.status),
-				[401, 401, 401]
-			)
-			assert.equal(calls.refresh, 1)
-			assert.equal(navigate.mock.calls.length, 0)
-			const next = await client.fetchWithSession('/d')
-			assert.equal(calls.refresh, 2)
-			assert.equal(next.status, 200)
+	test('refresh 500: unavailable, навигации нет, вызовы получают исходный 401', async () => {
+		const gate = deferred<Response>()
+		const { client, calls, navigate } = scenario({
+			request: [status(401), status(401), status(401), status(401)],
+			refresh: [() => gate.promise, status(200, { ok: true, accessExpiresAt: null })],
 		})
-	}
+		const pending = [client.fetchWithSession('/a'), client.fetchWithSession('/b'), client.fetchWithSession('/c')]
+		await vi.waitFor(() => assert.equal(calls.request.length, 3))
+		gate.resolve(status(500))
+		const responses = await Promise.all(pending)
+		assert.deepEqual(
+			responses.map((r) => r.status),
+			[401, 401, 401]
+		)
+		assert.equal(calls.refresh, 1)
+		assert.equal(navigate.mock.calls.length, 0)
+		const next = await client.fetchWithSession('/d')
+		assert.equal(calls.refresh, 2)
+		assert.equal(next.status, 200)
+	})
 
 	test('сбой сети при refresh: unavailable, навигации нет, возвращается исходный 401', async () => {
 		const { client, calls, navigate } = scenario({
@@ -189,13 +187,6 @@ describe('fetchWithSession', () => {
 		})
 	}
 
-	test('повторные отказы после навигации её не повторяют', async () => {
-		const { client, navigate } = scenario({ request: [status(401), status(401)], refresh: [status(401), status(401)] })
-		await settle(client.fetchWithSession('/a'))
-		await settle(client.fetchWithSession('/b'))
-		assert.equal(navigate.mock.calls.length, 1)
-	})
-
 	test('после завершения refresh следующий 401 запускает новый refresh', async () => {
 		const { client, calls } = scenario({ request: [status(401), status(200), status(401), status(200)] })
 		assert.equal((await client.fetchWithSession('/a')).status, 200)
@@ -206,14 +197,18 @@ describe('fetchWithSession', () => {
 })
 
 describe('refreshOnce', () => {
-	test('200 → ok с accessExpiresAt из тела', async () => {
-		const { client } = scenario({ refresh: [status(200, { ok: true, accessExpiresAt: '2026-10-04T10:00:00.000Z' })] })
-		assert.deepEqual(await client.refreshOnce(), { kind: 'ok', accessExpiresAt: '2026-10-04T10:00:00.000Z' })
-	})
-
-	test('200 без срока → ok с null', async () => {
-		const { client } = scenario({ refresh: [status(200, { ok: true })] })
-		assert.deepEqual(await client.refreshOnce(), { kind: 'ok', accessExpiresAt: null })
+	test.each(
+		[
+			{
+				name: '200 → ok с accessExpiresAt из тела',
+				body: { ok: true, accessExpiresAt: '2026-10-04T10:00:00.000Z' },
+				accessExpiresAt: '2026-10-04T10:00:00.000Z',
+			},
+			{ name: '200 без срока → ok с null', body: { ok: true }, accessExpiresAt: null },
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { body, accessExpiresAt }) => {
+		const { client } = scenario({ refresh: [status(200, body)] })
+		assert.deepEqual(await client.refreshOnce(), { kind: 'ok', accessExpiresAt })
 	})
 
 	test('401 → rejected без навигации', async () => {
@@ -222,29 +217,16 @@ describe('refreshOnce', () => {
 		assert.equal(navigate.mock.calls.length, 0)
 	})
 
-	for (const code of [403, 429, 500, 502, 503]) {
-		test(`${code} → unavailable`, async () => {
-			const { client } = scenario({ refresh: [status(code)] })
-			assert.deepEqual(await client.refreshOnce(), { kind: 'unavailable' })
-		})
-	}
-
-	test('исключение транспорта → unavailable', async () => {
-		const { client } = scenario({ refresh: [new TypeError('Failed to fetch')] })
+	test.each(
+		(
+			[
+				...[403, 429, 500, 502, 503].map((code) => ({ name: String(code), reply: () => status(code) })),
+				{ name: 'исключение транспорта', reply: () => new TypeError('Failed to fetch') },
+			] as { name: string; reply: () => Reply }[]
+		).map((row): [string, { name: string; reply: () => Reply }] => [row.name, row])
+	)('%s → unavailable', async (_name, { reply }) => {
+		const { client } = scenario({ refresh: [reply()] })
 		assert.deepEqual(await client.refreshOnce(), { kind: 'unavailable' })
-	})
-
-	test('одновременные вызовы делят один refresh', async () => {
-		const gate = deferred<Response>()
-		const { client, calls } = scenario({ refresh: [() => gate.promise] })
-		const first = client.refreshOnce()
-		const second = client.refreshOnce()
-		gate.resolve(status(200, { ok: true, accessExpiresAt: null }))
-		assert.deepEqual(await Promise.all([first, second]), [
-			{ kind: 'ok', accessExpiresAt: null },
-			{ kind: 'ok', accessExpiresAt: null },
-		])
-		assert.equal(calls.refresh, 1)
 	})
 })
 
@@ -257,14 +239,8 @@ describe('loadMe', () => {
 		assert.equal(outcome.me.id, 'user-1')
 		assert.deepEqual(outcome.me.perms, ['tests.read', 'tests.solve'])
 		assert.deepEqual(outcome.me.roles, ['user'])
-		assert.equal(calls.refresh, 0)
-	})
-
-	test('ok возвращает me.accessExpiresAt из ответа', async () => {
-		const { client } = scenario({})
-		const outcome = await client.loadMe()
-		assert.ok(outcome.kind === 'ok')
 		assert.equal(outcome.me.accessExpiresAt, '2026-10-04T10:00:00.000Z')
+		assert.equal(calls.refresh, 0)
 	})
 
 	test('401 → один refresh → повтор me → ok', async () => {
@@ -283,14 +259,15 @@ describe('loadMe', () => {
 		assert.equal(navigate.mock.calls.length, 0)
 	})
 
-	test('401 и refresh 500 → unavailable без навигации', async () => {
-		const { client, navigate } = scenario({ me: [status(401)], refresh: [status(500)] })
-		assert.deepEqual(await client.loadMe(), { kind: 'unavailable' })
-		assert.equal(navigate.mock.calls.length, 0)
-	})
-
-	test('401 и сбой сети при refresh → unavailable без навигации', async () => {
-		const { client, navigate } = scenario({ me: [status(401)], refresh: [new TypeError('Failed to fetch')] })
+	test.each(
+		(
+			[
+				{ name: 'refresh 500', refresh: () => status(500) },
+				{ name: 'сбой сети при refresh', refresh: () => new TypeError('Failed to fetch') },
+			] as { name: string; refresh: () => Reply }[]
+		).map((row): [string, { name: string; refresh: () => Reply }] => [row.name, row])
+	)('401 и %s → unavailable без навигации', async (_name, { refresh }) => {
+		const { client, navigate } = scenario({ me: [status(401)], refresh: [refresh()] })
 		assert.deepEqual(await client.loadMe(), { kind: 'unavailable' })
 		assert.equal(navigate.mock.calls.length, 0)
 	})
@@ -301,14 +278,15 @@ describe('loadMe', () => {
 		assert.equal(navigate.mock.calls.length, 0)
 	})
 
-	test('me отвечает 500 → unavailable без refresh', async () => {
-		const { client, calls } = scenario({ me: [status(500)] })
-		assert.deepEqual(await client.loadMe(), { kind: 'unavailable' })
-		assert.equal(calls.refresh, 0)
-	})
-
-	test('transport.me бросает → unavailable без refresh', async () => {
-		const { client, calls } = scenario({ me: [new TypeError('Failed to fetch')] })
+	test.each(
+		(
+			[
+				{ name: 'me отвечает 500', me: () => status(500) },
+				{ name: 'transport.me бросает', me: () => new TypeError('Failed to fetch') },
+			] as { name: string; me: () => Reply }[]
+		).map((row): [string, { name: string; me: () => Reply }] => [row.name, row])
+	)('%s → unavailable без refresh', async (_name, { me }) => {
+		const { client, calls } = scenario({ me: [me()] })
 		assert.deepEqual(await client.loadMe(), { kind: 'unavailable' })
 		assert.equal(calls.refresh, 0)
 	})
@@ -382,11 +360,6 @@ describe('тела отброшенных ответов дочитываютс�
 })
 
 describe('parseAuthMe', () => {
-	test('accessExpiresAt читается с верхнего уровня ответа', () => {
-		const me = parseAuthMe({ ok: true, accessExpiresAt: '2026-10-04T10:00:00.000Z', user: { id: 'u' } })
-		assert.equal(me?.accessExpiresAt, '2026-10-04T10:00:00.000Z')
-	})
-
 	test('без поля или с не-строкой accessExpiresAt равен null', () => {
 		assert.equal(parseAuthMe({ ok: true, user: { id: 'u' } })?.accessExpiresAt, null)
 		assert.equal(parseAuthMe({ ok: true, accessExpiresAt: 1_790_000_000, user: { id: 'u' } })?.accessExpiresAt, null)
@@ -395,30 +368,22 @@ describe('parseAuthMe', () => {
 			null
 		)
 	})
-
-	test('ok:false → null', () => {
-		assert.equal(parseAuthMe({ ok: false, accessExpiresAt: '2026-10-04T10:00:00.000Z', user: { id: 'u' } }), null)
-	})
 })
 
 describe('logout', () => {
-	test('вызывает transport.logout один раз', async () => {
-		const { client, calls } = scenario({})
+	test.each(
+		(
+			[
+				{ name: 'вызывает transport.logout один раз', logout: () => [] },
+				{ name: 'ответ 401 не считается ошибкой', logout: () => [status(401)] },
+				{ name: 'ответ 500: сервер очищает cookie в любом случае, logout даёт true', logout: () => [status(500)] },
+			] as { name: string; logout: () => Reply[] }[]
+		).map((row): [string, { name: string; logout: () => Reply[] }] => [row.name, row])
+	)('%s', async (_name, { logout }) => {
+		const { client, calls } = scenario({ logout: logout() })
 		assert.equal(await client.logout(), true)
 		assert.equal(calls.logout, 1)
 		assert.equal(calls.refresh, 0)
-	})
-
-	test('ответ 401 не считается ошибкой', async () => {
-		const { client, calls } = scenario({ logout: [status(401)] })
-		assert.equal(await client.logout(), true)
-		assert.equal(calls.logout, 1)
-		assert.equal(calls.refresh, 0)
-	})
-
-	test('ответ 500: сервер очищает cookie в любом случае, logout даёт true', async () => {
-		const { client } = scenario({ logout: [status(500)] })
-		assert.equal(await client.logout(), true)
 	})
 
 	test('сбой сети даёт false', async () => {

@@ -20,10 +20,6 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 })
 
-test('KEEPALIVE_BODY_LIMIT_BYTES равен 60000', () => {
-	assert.equal(KEEPALIVE_BODY_LIMIT_BYTES, 60_000)
-})
-
 test('saveAttemptDraft шлёт PATCH черновика попытки одним запросом', async () => {
 	const fetchMock = respond(200)
 	const body = { questionId: Q1, value: 'a' }

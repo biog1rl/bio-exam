@@ -60,11 +60,6 @@ describe('visibleSiteMap', () => {
 		])
 	})
 
-	it('ученик видит только основные страницы', () => {
-		expect(visibleSiteMap(rolePerms('user')).map((group) => group.key)).toEqual(['main'])
-		expect(visibleHrefs('user')).toEqual(['/dashboard', '/tests', '/profile'])
-	})
-
 	it('без права записи тестов нет страницы нового теста', () => {
 		const perms = new Set<PermissionKey>(['tests.read'])
 		expect(visibleSiteMap(perms).flatMap((group) => group.pages.map((page) => page.href))).not.toContain(

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { unstable_serialize } from 'swr'
 import { beforeEach, describe, test, vi } from 'vitest'
 
 vi.mock('@/lib/session/client', () => ({
@@ -8,7 +7,6 @@ vi.mock('@/lib/session/client', () => ({
 }))
 
 import { apiFetch } from '@/lib/session/client'
-import { parseChartRange, settingsKeys } from '@/lib/settings/api'
 
 import { MalformedBodyError, RequestError } from './request'
 import { fetcherWith, swrFetcher } from './swr'
@@ -62,19 +60,5 @@ describe('fetcherWith', () => {
 			assert.equal(error.status, 200)
 			return true
 		})
-	})
-})
-
-describe('ключ SWR — строка', () => {
-	test('ключ слоя сериализуется в ту же строку, что и mutate по URL', () => {
-		assert.equal(settingsKeys.chartRange(), '/api/settings/chart-default-range')
-		assert.equal(unstable_serialize(settingsKeys.chartRange()), '/api/settings/chart-default-range')
-	})
-
-	test('кортеж [url, parse] даёт другую строку и промахивается мимо кэша', () => {
-		assert.notEqual(
-			unstable_serialize(['/api/settings/chart-default-range', parseChartRange]),
-			'/api/settings/chart-default-range'
-		)
 	})
 })

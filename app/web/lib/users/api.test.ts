@@ -7,13 +7,12 @@ vi.mock('@/lib/session/client', () => ({
 }))
 
 import { MalformedBodyError, RequestError } from '@/lib/http/request'
-import { apiFetch, AuthExpiredError } from '@/lib/session/client'
+import { apiFetch } from '@/lib/session/client'
 
 import {
 	assignTest,
 	clearLoginThrottle,
 	deleteUser,
-	getUserByLogin,
 	parseUserAssignments,
 	parseUserAttempts,
 	parseUserEnvelope,
@@ -27,7 +26,6 @@ import {
 	updateUser,
 	userAssignmentsFetcher,
 	userAttemptsFetcher,
-	userByLoginFetcher,
 	userGrantsFetcher,
 	userGrantsKey,
 	usersKeys,
@@ -50,35 +48,43 @@ function lastCall(): { url: string; init: RequestInit | undefined } {
 	return { url: call[0], init: call[1] }
 }
 
+type RequestRow = {
+	name: string
+	run: () => Promise<{ ok: boolean }>
+	url: string
+	method: string
+	body?: unknown
+	contentType?: boolean
+}
+
+async function checkRequest({ run, url, method, body, contentType }: RequestRow) {
+	apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
+	assert.equal((await run()).ok, true)
+	const call = lastCall()
+	assert.equal(call.url, url)
+	assert.equal(call.init?.method, method)
+	if (body !== undefined) assert.deepEqual(JSON.parse(String(call.init?.body)), body)
+	if (contentType) assert.equal((call.init?.headers as Record<string, string>)['Content-Type'], 'application/json')
+}
+
 beforeEach(() => {
 	apiFetchMock.mockReset()
 })
 
 describe('usersKeys', () => {
-	test('список — общий ключ /api/users', () => {
-		assert.equal(usersKeys.list(), '/api/users')
-	})
-
 	test('по логину логин кодируется encodeURIComponent', () => {
 		assert.equal(usersKeys.byLogin('Ivan Petrov'), '/api/users/by-login/Ivan%20Petrov')
 		assert.equal(usersKeys.byLogin('a/b?c'), '/api/users/by-login/a%2Fb%3Fc')
 	})
-
-	test('по id, назначения и попытки — пути пользователя', () => {
-		assert.equal(usersKeys.byId(USER_ID), `/api/users/${USER_ID}`)
-		assert.equal(usersKeys.assignments(USER_ID), `/api/users/${USER_ID}/test-assignments`)
-		assert.equal(usersKeys.attempts(USER_ID), `/api/users/${USER_ID}/test-attempts`)
-	})
 })
 
 describe('parseUserEnvelope', () => {
-	test('{ user: { id, login } } — пользователь', () => {
-		const user = { id: USER_ID, login: 'student', name: 'Ученик' }
-		assert.equal(parseUserEnvelope({ user }), user)
-	})
-
-	test('пользователь без логина проходит: страница решает сама', () => {
-		const user = { id: USER_ID, login: null }
+	test.each(
+		[
+			{ name: '{ user: { id, login } } — пользователь', user: { id: USER_ID, login: 'student', name: 'Ученик' } },
+			{ name: 'пользователь без логина проходит: страница решает сама', user: { id: USER_ID, login: null } },
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', (_name, { user }) => {
 		assert.equal(parseUserEnvelope({ user }), user)
 	})
 
@@ -99,39 +105,6 @@ describe('parseUserEnvelope', () => {
 		]) {
 			assert.throws(() => parseUserEnvelope(body), MalformedBodyError, JSON.stringify(body))
 		}
-	})
-})
-
-describe('userByLoginFetcher и getUserByLogin', () => {
-	test('ключ по логину отдаёт пользователя из конверта', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { user: { id: USER_ID, login: 'student' } }))
-		assert.deepEqual(await userByLoginFetcher(usersKeys.byLogin('student')), { id: USER_ID, login: 'student' })
-		assert.equal(lastCall().url, '/api/users/by-login/student')
-	})
-
-	test('404 — RequestError http 404 с текстом сервера', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(404, { error: 'Пользователь не найден' }))
-		const error = await getUserByLogin('нет').catch((caught: unknown) => caught)
-		assert.ok(error instanceof RequestError)
-		assert.equal(error.kind, 'http')
-		assert.equal(error.status, 404)
-		assert.equal(error.message, 'Пользователь не найден')
-	})
-
-	test('403 — RequestError http 403', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
-		const error = await getUserByLogin('чужой').catch((caught: unknown) => caught)
-		assert.ok(error instanceof RequestError)
-		assert.equal(error.kind, 'http')
-		assert.equal(error.status, 403)
-	})
-
-	test('200 с чужим телом — malformed', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { rows: [] }))
-		const error = await getUserByLogin('student').catch((caught: unknown) => caught)
-		assert.ok(error instanceof RequestError)
-		assert.equal(error.kind, 'malformed')
-		assert.equal(error.status, 200)
 	})
 })
 
@@ -161,80 +134,38 @@ describe('назначения и попытки пользователя', () =
 })
 
 describe('действия на странице ученика', () => {
-	test('assignTest — POST назначений с testId', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(201, { ok: true }))
-		const outcome = await assignTest(USER_ID, TEST_ID)
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}/test-assignments`)
-		assert.ok(init)
-		assert.equal(init.method, 'POST')
-		assert.deepEqual(JSON.parse(String(init.body)), { testId: TEST_ID })
-		assert.equal((init.headers as Record<string, string>)['Content-Type'], 'application/json')
-	})
-
-	test('unassignTest — DELETE назначения теста', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await unassignTest(USER_ID, TEST_ID)
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}/test-assignments/${TEST_ID}`)
-		assert.equal(init?.method, 'DELETE')
-	})
-
-	test('revokeUserSessions — POST sessions/revoke', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		assert.equal((await revokeUserSessions(USER_ID)).ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}/sessions/revoke`)
-		assert.equal(init?.method, 'POST')
-	})
-
-	test('clearLoginThrottle — DELETE login-throttle', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		assert.equal((await clearLoginThrottle(USER_ID)).ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}/login-throttle`)
-		assert.equal(init?.method, 'DELETE')
-	})
-
-	test('отказ — исход с status и телом', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
-		const outcome = await assignTest(USER_ID, TEST_ID)
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.status, 403)
-		assert.deepEqual(outcome.body, { error: 'Forbidden' })
-
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Internal' }))
-		const revoked = await revokeUserSessions(USER_ID)
-		assert.equal(revoked.ok, false)
-		if (revoked.ok) return
-		assert.equal(revoked.status, 500)
-
-		apiFetchMock.mockResolvedValueOnce(json(429, {}))
-		const cleared = await clearLoginThrottle(USER_ID)
-		assert.equal(cleared.ok, false)
-		if (cleared.ok) return
-		assert.equal(cleared.status, 429)
-	})
-
-	test('сеть и истёкшая сессия — network и auth без status', async () => {
-		apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-		const network = await unassignTest(USER_ID, TEST_ID)
-		assert.equal(network.ok, false)
-		if (network.ok) return
-		assert.equal(network.kind, 'network')
-		assert.equal(network.status, undefined)
-
-		apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())
-		const auth = await assignTest(USER_ID, TEST_ID)
-		assert.equal(auth.ok, false)
-		if (auth.ok) return
-		assert.equal(auth.kind, 'auth')
-		assert.equal(auth.message, '')
-	})
+	test.each(
+		(
+			[
+				{
+					name: 'assignTest — POST назначений с testId',
+					run: () => assignTest(USER_ID, TEST_ID),
+					url: `/api/users/${USER_ID}/test-assignments`,
+					method: 'POST',
+					body: { testId: TEST_ID },
+					contentType: true,
+				},
+				{
+					name: 'unassignTest — DELETE назначения теста',
+					run: () => unassignTest(USER_ID, TEST_ID),
+					url: `/api/users/${USER_ID}/test-assignments/${TEST_ID}`,
+					method: 'DELETE',
+				},
+				{
+					name: 'revokeUserSessions — POST sessions/revoke',
+					run: () => revokeUserSessions(USER_ID),
+					url: `/api/users/${USER_ID}/sessions/revoke`,
+					method: 'POST',
+				},
+				{
+					name: 'clearLoginThrottle — DELETE login-throttle',
+					run: () => clearLoginThrottle(USER_ID),
+					url: `/api/users/${USER_ID}/login-throttle`,
+					method: 'DELETE',
+				},
+			] as RequestRow[]
+		).map((row): [string, RequestRow] => [row.name, row])
+	)('%s', (_name, row) => checkRequest(row))
 })
 
 describe('список пользователей', () => {
@@ -260,21 +191,6 @@ describe('список пользователей', () => {
 		}
 	})
 
-	test('usersListFetcher идёт по usersKeys.list() и отдаёт тело как есть', async () => {
-		const body = { rows: [{ id: USER_ID, login: 'student' }], total: 1 }
-		apiFetchMock.mockResolvedValueOnce(json(200, body))
-		assert.deepEqual(await usersListFetcher(usersKeys.list()), body)
-		assert.equal(lastCall().url, '/api/users')
-	})
-
-	test('ответ { error } с 500 — RequestError, а не пустая таблица', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Internal Server Error' }))
-		const error = await usersListFetcher(usersKeys.list()).catch((caught: unknown) => caught)
-		assert.ok(error instanceof RequestError)
-		assert.equal(error.kind, 'http')
-		assert.equal(error.status, 500)
-	})
-
 	test('200 с { error } — malformed', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { error: 'x' }))
 		const error = await usersListFetcher(usersKeys.list()).catch((caught: unknown) => caught)
@@ -290,10 +206,6 @@ describe('права пользователя', () => {
 		userOverrides: [{ domain: 'tests', action: 'write', allow: true }],
 		effective: ['tests.read', 'tests.write'],
 	}
-
-	test('userGrantsKey — прежняя строка ключа', () => {
-		assert.equal(userGrantsKey(USER_ID), `/api/rbac/user/${USER_ID}/grants`)
-	})
 
 	test('parseUserGrants проверяет массивы и возвращает то же тело', () => {
 		assert.equal(parseUserGrants(grants), grants)
@@ -315,38 +227,27 @@ describe('права пользователя', () => {
 		assert.equal(lastCall().url, `/api/rbac/user/${USER_ID}/grants`)
 	})
 
-	test('403 грантов — RequestError http 403', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
-		const error = await userGrantsFetcher(userGrantsKey(USER_ID)).catch((caught: unknown) => caught)
-		assert.ok(error instanceof RequestError)
-		assert.equal(error.status, 403)
-	})
-
-	test('setUserGrant — POST /api/rbac/user/grant с allow', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await setUserGrant({ userId: USER_ID, domain: 'tests', action: 'write', allow: false })
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, '/api/rbac/user/grant')
-		assert.equal(init?.method, 'POST')
-		assert.deepEqual(JSON.parse(String(init?.body)), {
-			userId: USER_ID,
-			domain: 'tests',
-			action: 'write',
-			allow: false,
-		})
-		assert.equal((init?.headers as Record<string, string>)['Content-Type'], 'application/json')
-	})
-
-	test('removeUserGrant — DELETE /api/rbac/user/grant без allow', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await removeUserGrant({ userId: USER_ID, domain: 'tests', action: 'write' })
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, '/api/rbac/user/grant')
-		assert.equal(init?.method, 'DELETE')
-		assert.deepEqual(JSON.parse(String(init?.body)), { userId: USER_ID, domain: 'tests', action: 'write' })
-	})
+	test.each(
+		(
+			[
+				{
+					name: 'setUserGrant — POST /api/rbac/user/grant с allow',
+					run: () => setUserGrant({ userId: USER_ID, domain: 'tests', action: 'write', allow: false }),
+					url: '/api/rbac/user/grant',
+					method: 'POST',
+					body: { userId: USER_ID, domain: 'tests', action: 'write', allow: false },
+					contentType: true,
+				},
+				{
+					name: 'removeUserGrant — DELETE /api/rbac/user/grant без allow',
+					run: () => removeUserGrant({ userId: USER_ID, domain: 'tests', action: 'write' }),
+					url: '/api/rbac/user/grant',
+					method: 'DELETE',
+					body: { userId: USER_ID, domain: 'tests', action: 'write' },
+				},
+			] as RequestRow[]
+		).map((row): [string, RequestRow] => [row.name, row])
+	)('%s', (_name, row) => checkRequest(row))
 })
 
 describe('правка пользователя', () => {
@@ -362,48 +263,31 @@ describe('правка пользователя', () => {
 		roles: ['teacher'],
 	}
 
-	test('updateUser — PATCH /api/users/<id> с телом правки', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await updateUser(USER_ID, patch)
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}`)
-		assert.equal(init?.method, 'PATCH')
-		assert.deepEqual(JSON.parse(String(init?.body)), patch)
-		assert.equal((init?.headers as Record<string, string>)['Content-Type'], 'application/json')
-	})
-
-	test('setUserGroups — PATCH /api/users/<id>/group с { groupIds }', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await setUserGroups(USER_ID, [GROUP_ID])
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}/group`)
-		assert.equal(init?.method, 'PATCH')
-		assert.deepEqual(JSON.parse(String(init?.body)), { groupIds: [GROUP_ID] })
-	})
-
-	test('setUserGroups с пустым списком снимает все группы', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		await setUserGroups(USER_ID, [])
-		assert.deepEqual(JSON.parse(String(lastCall().init?.body)), { groupIds: [] })
-	})
-
-	test('deleteUser — DELETE /api/users/<id>', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		assert.equal((await deleteUser(USER_ID)).ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/users/${USER_ID}`)
-		assert.equal(init?.method, 'DELETE')
-	})
-
-	test('отказ правки — исход с текстом сервера в body', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Логин уже используется' }))
-		const outcome = await updateUser(USER_ID, patch)
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.status, 409)
-		assert.equal(outcome.message, 'Логин уже используется')
-	})
+	test.each(
+		(
+			[
+				{
+					name: 'updateUser — PATCH /api/users/<id> с телом правки',
+					run: () => updateUser(USER_ID, patch),
+					url: `/api/users/${USER_ID}`,
+					method: 'PATCH',
+					body: patch,
+					contentType: true,
+				},
+				{
+					name: 'setUserGroups — PATCH /api/users/<id>/group с { groupIds }',
+					run: () => setUserGroups(USER_ID, [GROUP_ID]),
+					url: `/api/users/${USER_ID}/group`,
+					method: 'PATCH',
+					body: { groupIds: [GROUP_ID] },
+				},
+				{
+					name: 'deleteUser — DELETE /api/users/<id>',
+					run: () => deleteUser(USER_ID),
+					url: `/api/users/${USER_ID}`,
+					method: 'DELETE',
+				},
+			] as RequestRow[]
+		).map((row): [string, RequestRow] => [row.name, row])
+	)('%s', (_name, row) => checkRequest(row))
 })

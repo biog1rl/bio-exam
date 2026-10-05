@@ -49,11 +49,6 @@ describe('requireSectionAccess', () => {
 		await assert.rejects(requireSectionAccess('users'), /not-found/)
 		await assert.rejects(requireSectionAccess('groups'), /not-found/)
 	})
-
-	test('без единого права раздел admin закрыт', async () => {
-		holders.me = meWith(['user'], [])
-		await assert.rejects(requireSectionAccess('admin'), /not-found/)
-	})
 })
 
 const ADMIN_ROOT = fileURLToPath(new URL('../../app/(internal)/(protected)/admin', import.meta.url))

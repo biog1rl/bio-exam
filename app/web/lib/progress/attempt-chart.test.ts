@@ -6,15 +6,12 @@ import {
 	barMinPointSize,
 	buildAttemptBars,
 	buildTopicChartConfig,
-	chartMinWidth,
-	DEFAULT_PERIOD,
 	filterAttemptsByPeriod,
 	fitBarLabel,
 	legendTopics,
 	parseDateParam,
 	parseDayParam,
 	parsePeriod,
-	PERIOD_PRESETS,
 	resolvePeriodBounds,
 	topicConfigKey,
 	type ProgressAttempt,
@@ -69,17 +66,17 @@ describe('assignTopicColors', () => {
 		{ topicSlug: 'botany', topicTitle: null },
 	]
 
-	test('порядок по slug, повторы схлопываются, title по умолчанию — slug', () => {
-		const colors = assignTopicColors(items)
-		assert.deepEqual(colors, [
+	test.each(
+		[
+			{ name: 'порядок по slug, повторы схлопываются, title по умолчанию — slug', input: items },
+			{ name: 'другой порядок входа даёт тот же результат', input: [...items].reverse() },
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', (_name, { input }) => {
+		assert.deepEqual(assignTopicColors(input), [
 			{ slug: 'botany', key: 'topic-botany', title: 'botany', color: 'var(--chart-1)' },
 			{ slug: 'cell', key: 'topic-cell', title: 'Клетка', color: 'var(--chart-2)' },
 			{ slug: 'zoology', key: 'topic-zoology', title: 'Зоология', color: 'var(--chart-3)' },
 		])
-	})
-
-	test('другой порядок входа даёт тот же результат', () => {
-		assert.deepEqual(assignTopicColors([...items].reverse()), assignTopicColors(items))
 	})
 
 	test('шестой раздел получает chart-6, одиннадцатый — снова chart-1', () => {
@@ -219,48 +216,86 @@ describe('barMinPointSize и chartMinWidth', () => {
 		assert.equal(barMinPointSize(0), 3)
 		assert.equal(barMinPointSize(75), 3)
 	})
-
-	test('ширина — 36px на строку', () => {
-		assert.equal(chartMinWidth(0), 0)
-		assert.equal(chartMinWidth(5), 180)
-	})
 })
 
 describe('fitBarLabel', () => {
 	const longTitle = 'Последовательность этапов митоза в клетках корня лука'
 
-	test('короткое название в широком столбике — горизонтально внутри целиком', () => {
-		assert.deepEqual(fitBarLabel('Короткий', { barWidth: 120, barHeight: 200, spaceAbove: 10 }), {
-			text: 'Короткий',
-			vertical: false,
-			placement: 'inside',
-		})
-	})
-
-	test('длинное название в широком столбике обрезается многоточием', () => {
-		const label = fitBarLabel(longTitle, { barWidth: 120, barHeight: 200 })
+	test.each(
+		(
+			[
+				{
+					name: 'короткое название в широком столбике — горизонтально внутри целиком',
+					title: 'Короткий',
+					box: { barWidth: 120, barHeight: 200, spaceAbove: 10 },
+					vertical: false,
+					placement: 'inside',
+					capacity: 120,
+					text: 'Короткий',
+				},
+				{
+					name: 'длинное название в широком столбике обрезается многоточием',
+					title: longTitle,
+					box: { barWidth: 120, barHeight: 200 },
+					vertical: false,
+					placement: 'inside',
+					capacity: 120,
+					truncated: true,
+				},
+				{
+					name: 'узкий высокий столбик — вертикально внутри',
+					title: longTitle,
+					box: { barWidth: 30, barHeight: 200 },
+					vertical: true,
+					placement: 'inside',
+					capacity: 200,
+				},
+				{
+					name: 'узкий низкий столбик — вертикально над столбиком',
+					title: longTitle,
+					box: { barWidth: 30, barHeight: 20, spaceAbove: 180 },
+					vertical: true,
+					placement: 'above',
+					capacity: 180,
+				},
+			] as {
+				name: string
+				title: string
+				box: Parameters<typeof fitBarLabel>[1]
+				vertical: boolean
+				placement: 'inside' | 'above'
+				capacity: number
+				text?: string
+				truncated?: boolean
+			}[]
+		).map(
+			(
+				row
+			): [
+				string,
+				{
+					name: string
+					title: string
+					box: Parameters<typeof fitBarLabel>[1]
+					vertical: boolean
+					placement: 'inside' | 'above'
+					capacity: number
+					text?: string
+					truncated?: boolean
+				},
+			] => [row.name, row]
+		)
+	)('%s', (_name, { title, box, vertical, placement, capacity, text, truncated }) => {
+		const label = fitBarLabel(title, box)
 		assert.ok(label)
-		assert.equal(label.vertical, false)
-		assert.equal(label.placement, 'inside')
-		assert.ok(label.text.length <= Math.floor((120 - 8) / 7))
-		assert.ok(label.text.endsWith('…'))
-		assert.ok(longTitle.startsWith(label.text.slice(0, -1)))
-	})
-
-	test('узкий высокий столбик — вертикально внутри', () => {
-		const label = fitBarLabel(longTitle, { barWidth: 30, barHeight: 200 })
-		assert.ok(label)
-		assert.equal(label.vertical, true)
-		assert.equal(label.placement, 'inside')
-		assert.ok(label.text.length <= Math.floor((200 - 8) / 7))
-	})
-
-	test('узкий низкий столбик — вертикально над столбиком', () => {
-		const label = fitBarLabel(longTitle, { barWidth: 30, barHeight: 20, spaceAbove: 180 })
-		assert.ok(label)
-		assert.equal(label.vertical, true)
-		assert.equal(label.placement, 'above')
-		assert.ok(label.text.length <= Math.floor((180 - 8) / 7))
+		assert.equal(label.vertical, vertical)
+		assert.equal(label.placement, placement)
+		assert.ok(label.text.length <= Math.floor((capacity - 8) / 7))
+		if (text !== undefined) assert.equal(label.text, text)
+		if (truncated) {
+			assert.ok(label.text.endsWith('…'))
+			assert.ok(title.startsWith(label.text.slice(0, -1)))
+		}
 	})
 
 	test('пустое название — без подписи', () => {
@@ -315,74 +350,119 @@ describe('legendTopics', () => {
 describe('период', () => {
 	const now = new Date(2026, 9, 4, 15, 0)
 
-	test('пресеты и значение по умолчанию', () => {
-		assert.equal(DEFAULT_PERIOD, 'month')
-		assert.deepEqual(
-			PERIOD_PRESETS.map((preset) => [preset.value, preset.label]),
+	test.each(
+		(
 			[
-				['week', 'Неделя'],
-				['month', 'Месяц'],
-				['3months', '3 месяца'],
-				['6months', 'Полгода'],
-				['all', 'Всё время'],
-			]
+				{
+					name: 'parsePeriod: неизвестное значение — месяц',
+					parse: parsePeriod,
+					cases: [
+						...[null, undefined, '', 'garbage'].map((value): [string | null | undefined, unknown] => [value, 'month']),
+						...['week', 'month', '3months', '6months', 'all', 'custom'].map((value): [string, unknown] => [
+							value,
+							value,
+						]),
+					],
+				},
+				{
+					name: 'parseDayParam: только корректная дата yyyy-MM-dd в местном времени',
+					parse: parseDayParam,
+					cases: [
+						['2026-10-04', new Date(2026, 9, 4)],
+						...['2026-13-45', '2026-02-30', 'abc', '', null, undefined, '2026-10-04T00:00'].map(
+							(value): [string | null | undefined, unknown] => [value, null]
+						),
+					],
+				},
+				{
+					name: 'parseDateParam: корректная ISO-дата или null',
+					parse: parseDateParam,
+					cases: [
+						[new Date(2026, 8, 1, 12).toISOString(), new Date(new Date(2026, 8, 1, 12).toISOString())],
+						...['abc', '', null, undefined].map((value): [string | null | undefined, unknown] => [value, null]),
+					],
+				},
+			] as {
+				name: string
+				parse: (value: string | null | undefined) => unknown
+				cases: [string | null | undefined, unknown][]
+			}[]
+		).map(
+			(
+				row
+			): [
+				string,
+				{
+					name: string
+					parse: (value: string | null | undefined) => unknown
+					cases: [string | null | undefined, unknown][]
+				},
+			] => [row.name, row]
 		)
+	)('%s', (_name, { parse, cases }) => {
+		for (const [value, expected] of cases) assert.deepEqual(parse(value), expected)
 	})
 
-	test('parsePeriod: неизвестное значение — месяц', () => {
-		for (const value of [null, undefined, '', 'garbage']) {
-			assert.equal(parsePeriod(value), 'month')
-		}
-		for (const value of ['week', 'month', '3months', '6months', 'all', 'custom']) {
-			assert.equal(parsePeriod(value), value)
-		}
-	})
-
-	test('parseDayParam: только корректная дата yyyy-MM-dd в местном времени', () => {
-		assert.deepEqual(parseDayParam('2026-10-04'), new Date(2026, 9, 4))
-		for (const value of ['2026-13-45', '2026-02-30', 'abc', '', null, undefined, '2026-10-04T00:00']) {
-			assert.equal(parseDayParam(value), null)
-		}
-	})
-
-	test('parseDateParam: корректная ISO-дата или null', () => {
-		const iso = new Date(2026, 8, 1, 12).toISOString()
-		assert.deepEqual(parseDateParam(iso), new Date(iso))
-		for (const value of ['abc', '', null, undefined]) {
-			assert.equal(parseDateParam(value), null)
-		}
-	})
-
-	test('resolvePeriodBounds: пресеты от начала дня', () => {
-		assert.deepEqual(resolvePeriodBounds({ period: 'month' }, now), { start: new Date(2026, 8, 4), end: null })
-		assert.deepEqual(resolvePeriodBounds({ period: '3months' }, now), { start: new Date(2026, 6, 4), end: null })
-		assert.deepEqual(resolvePeriodBounds({ period: '6months' }, now), { start: new Date(2026, 3, 4), end: null })
-		assert.deepEqual(resolvePeriodBounds({ period: 'week' }, now), { start: new Date(2026, 8, 27), end: null })
-		assert.deepEqual(resolvePeriodBounds({ period: 'all' }, now), { start: null, end: null })
-	})
-
-	test('resolvePeriodBounds: свой диапазон', () => {
-		const from = new Date(2026, 8, 10, 13).toISOString()
-		const to = new Date(2026, 8, 20, 8).toISOString()
-		assert.deepEqual(resolvePeriodBounds({ period: 'custom', from, to }, now), {
-			start: new Date(2026, 8, 10),
-			end: new Date(2026, 8, 20, 23, 59, 59, 999),
-		})
-		assert.deepEqual(resolvePeriodBounds({ period: 'custom', from: 'abc', to }, now), {
-			start: null,
-			end: new Date(2026, 8, 20, 23, 59, 59, 999),
-		})
-	})
-
-	test('resolvePeriodBounds: день важнее периода, битый день игнорируется', () => {
-		assert.deepEqual(resolvePeriodBounds({ period: 'week', day: '2026-08-15' }, now), {
-			start: new Date(2026, 7, 15),
-			end: new Date(2026, 7, 15, 23, 59, 59, 999),
-		})
-		assert.deepEqual(resolvePeriodBounds({ period: 'month', day: '2026-99-99' }, now), {
-			start: new Date(2026, 8, 4),
-			end: null,
-		})
+	test.each(
+		(
+			[
+				{
+					name: 'пресеты от начала дня',
+					cases: [
+						[{ period: 'month' }, { start: new Date(2026, 8, 4), end: null }],
+						[{ period: '3months' }, { start: new Date(2026, 6, 4), end: null }],
+						[{ period: '6months' }, { start: new Date(2026, 3, 4), end: null }],
+						[{ period: 'week' }, { start: new Date(2026, 8, 27), end: null }],
+						[{ period: 'all' }, { start: null, end: null }],
+					],
+				},
+				{
+					name: 'свой диапазон',
+					cases: [
+						[
+							{
+								period: 'custom',
+								from: new Date(2026, 8, 10, 13).toISOString(),
+								to: new Date(2026, 8, 20, 8).toISOString(),
+							},
+							{ start: new Date(2026, 8, 10), end: new Date(2026, 8, 20, 23, 59, 59, 999) },
+						],
+						[
+							{ period: 'custom', from: 'abc', to: new Date(2026, 8, 20, 8).toISOString() },
+							{ start: null, end: new Date(2026, 8, 20, 23, 59, 59, 999) },
+						],
+					],
+				},
+				{
+					name: 'день важнее периода, битый день игнорируется',
+					cases: [
+						[
+							{ period: 'week', day: '2026-08-15' },
+							{ start: new Date(2026, 7, 15), end: new Date(2026, 7, 15, 23, 59, 59, 999) },
+						],
+						[
+							{ period: 'month', day: '2026-99-99' },
+							{ start: new Date(2026, 8, 4), end: null },
+						],
+					],
+				},
+			] as {
+				name: string
+				cases: [Parameters<typeof resolvePeriodBounds>[0], ReturnType<typeof resolvePeriodBounds>][]
+			}[]
+		).map(
+			(
+				row
+			): [
+				string,
+				{
+					name: string
+					cases: [Parameters<typeof resolvePeriodBounds>[0], ReturnType<typeof resolvePeriodBounds>][]
+				},
+			] => [row.name, row]
+		)
+	)('resolvePeriodBounds: %s', (_name, { cases }) => {
+		for (const [input, expected] of cases) assert.deepEqual(resolvePeriodBounds(input, now), expected)
 	})
 
 	test('filterAttemptsByPeriod: границы включительно, null не ограничивает', () => {

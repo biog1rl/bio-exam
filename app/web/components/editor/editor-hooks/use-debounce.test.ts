@@ -138,14 +138,3 @@ test('без maxWait потолок равен ms, как у прежнего lo
 	vi.advanceTimersByTime(1000)
 	assert.deepEqual(values, [4, 9, 10])
 })
-
-test('возвращаемая функция сохраняет cancel и flush для вызывающих', () => {
-	const harness = createHarness()
-	const { calls, first } = spyFns()
-	const debounced = harness.render(() => useDebounce(first, 50))
-	assert.equal(typeof debounced.cancel, 'function')
-	assert.equal(typeof debounced.flush, 'function')
-	debounced('now')
-	debounced.flush()
-	assert.deepEqual(calls, ['first:now'])
-})

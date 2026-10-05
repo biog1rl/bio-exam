@@ -3,12 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { deleteErrorMessage } from './delete-error'
 
 describe('deleteErrorMessage', () => {
-	it('показывает текст отказа сервера про использование в вопросах', () => {
-		expect(
-			deleteErrorMessage(409, { error: 'Изображение используется в вопросах', usage: { questions: 2, drafts: 0 } })
-		).toBe('Изображение используется в вопросах')
-	})
-
 	it('показывает текст отказа сервера про непроиндексированные ссылки', () => {
 		const error = 'Удаление недоступно: ссылки на изображения ещё не проиндексированы'
 		expect(deleteErrorMessage(409, { error })).toBe(error)

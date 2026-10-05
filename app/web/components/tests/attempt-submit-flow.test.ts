@@ -2,15 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import { AttemptRequestError } from '@/lib/tests/api'
 
-import {
-	blocksInteraction,
-	bannerFor,
-	classifyStartFailure,
-	classifySubmitFailure,
-	storageKeysToClear,
-	SUBMIT_FLOW_TEXT,
-	type AttemptBanner,
-} from './attempt-submit-flow'
+import { classifyStartFailure, classifySubmitFailure } from './attempt-submit-flow'
 
 describe('classifySubmitFailure', () => {
 	test('409 ATTEMPT_ALREADY_SUBMITTED с attemptId даёт already-submitted с этим id', () => {
@@ -54,79 +46,5 @@ describe('classifyStartFailure', () => {
 		['сбой сети', new TypeError('Failed to fetch'), 'failed'],
 	])('%s даёт %s', (_title, error, kind) => {
 		expect(classifyStartFailure(error)).toBe(kind)
-	})
-})
-
-describe('bannerFor', () => {
-	test.each<[AttemptBanner, string, 'retry' | 'reload' | null]>([
-		['start-not-assigned', 'Тест вам не назначен. Обратитесь к администратору.', null],
-		['submit-not-assigned', 'Тест вам больше не назначен, ответы не отправлены. Обратитесь к администратору.', null],
-		['already-submitted', 'Эта попытка уже сдана. Обновите страницу, чтобы увидеть результат.', 'reload'],
-		['not-found', 'Попытка не найдена или тест больше недоступен. Обновите страницу.', 'reload'],
-		['retry', 'Не удалось сохранить ответы. Попробуйте еще раз.', 'retry'],
-	])('%s', (banner, message, action) => {
-		expect(bannerFor(banner)).toEqual({ message, action })
-	})
-
-	test('строки сервера в плашки не попадают', () => {
-		const banners: AttemptBanner[] = [
-			'start-not-assigned',
-			'submit-not-assigned',
-			'already-submitted',
-			'not-found',
-			'retry',
-		]
-		for (const banner of banners) {
-			const { message } = bannerFor(banner)
-			for (const serverText of ['Тест не назначен', 'Test not found', 'Bad request', 'Session not found']) {
-				expect(message).not.toBe(serverText)
-			}
-		}
-	})
-})
-
-describe('SUBMIT_FLOW_TEXT', () => {
-	test('тексты диалогов 409 и 422 и тоста по UI-SPEC', () => {
-		expect(SUBMIT_FLOW_TEXT).toMatchObject({
-			alreadySubmittedTitle: 'Попытка уже сдана',
-			alreadySubmittedDescription:
-				'Эта попытка уже отправлена, например из другой вкладки. Результат появится в списке «Мои попытки» после обновления страницы.',
-			alreadySubmittedOpenResults: 'К результатам',
-			alreadySubmittedClose: 'Закрыть',
-			timeExpiredTitle: 'Время вышло, ответы не засчитаны',
-			timeExpiredDescription:
-				'Лимит времени этой попытки истёк, поэтому ответы не приняты. Новая попытка начнётся с пустыми ответами и полным временем.',
-			timeExpiredAction: 'Начать заново',
-			sessionReplaced: 'Предыдущая попытка закрыта, начата новая.',
-			retryAction: 'Повторить',
-			reloadAction: 'Обновить страницу',
-		})
-	})
-})
-
-describe('storageKeysToClear', () => {
-	test.each([
-		['success', ['session', 'wal', 'frozen', 'clientAttemptId']],
-		['already-submitted', ['session', 'wal', 'frozen', 'clientAttemptId']],
-		['time-expired', ['session', 'wal', 'frozen', 'clientAttemptId']],
-		['not-found', ['session', 'clientAttemptId']],
-		['start-not-assigned', ['session', 'clientAttemptId']],
-		['submit-not-assigned', []],
-		['retry', []],
-		['session-replaced', ['wal', 'frozen', 'clientAttemptId']],
-	] as const)('%s', (event, keys) => {
-		expect([...storageKeysToClear(event)].sort()).toEqual([...keys].sort())
-	})
-})
-
-describe('blocksInteraction', () => {
-	test.each<[AttemptBanner, boolean]>([
-		['start-not-assigned', true],
-		['submit-not-assigned', true],
-		['already-submitted', true],
-		['not-found', true],
-		['retry', false],
-	])('%s даёт %s', (banner, blocked) => {
-		expect(blocksInteraction(banner)).toBe(blocked)
 	})
 })

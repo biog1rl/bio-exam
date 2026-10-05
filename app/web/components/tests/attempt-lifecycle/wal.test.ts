@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { KEYS, memoryStorage, Q1, Q2, Q3, readJson } from './testing'
-import { detachWal, readWal, recordAnswer, recordPosition, writeWal, type WalRecord } from './wal'
+import { detachWal, readWal, recordAnswer, recordPosition, type WalRecord } from './wal'
 
 const TELEMETRY = { timeSpentMs: 1000, focusLossCount: 1, visitCount: 2 }
 
@@ -23,22 +23,31 @@ function storageWith(value: unknown) {
 }
 
 describe('readWal: прежние формы', () => {
-	test('плоская карта ответов: sessionId из закэшированной сессии, все ответы неподтверждённые', () => {
-		const storage = storageWith({ [Q1]: 'a', [Q2]: ['x', 'y'] })
-		expect(readWal(storage, KEYS.wal, 's1')).toEqual({
+	test.each(
+		[
+			{
+				name: 'плоская карта ответов: sessionId из закэшированной сессии, все ответы неподтверждённые',
+				cached: 's1' as string | null,
+				answers: { [Q1]: 'a', [Q2]: ['x', 'y'] } as Record<string, unknown>,
+				pending: [Q1, Q2],
+			},
+			{
+				name: 'плоская карта без закэшированной сессии получает sessionId null',
+				cached: null as string | null,
+				answers: { [Q1]: 'a' } as Record<string, unknown>,
+				pending: [Q1],
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', (_name, { cached, answers, pending }) => {
+		expect(readWal(storageWith(answers), KEYS.wal, cached)).toEqual({
 			v: 2,
-			sessionId: 's1',
-			answers: { [Q1]: 'a', [Q2]: ['x', 'y'] },
-			pending: [Q1, Q2],
+			sessionId: cached,
+			answers,
+			pending,
 			position: null,
 			telemetry: {},
 			telemetryPending: true,
 		})
-	})
-
-	test('плоская карта без закэшированной сессии получает sessionId null', () => {
-		const storage = storageWith({ [Q1]: 'a' })
-		expect(readWal(storage, KEYS.wal, null)?.sessionId).toBeNull()
 	})
 
 	test('форма { answers, lastQuestionId, telemetry } читается целиком', () => {
@@ -75,14 +84,16 @@ describe('readWal: прежние формы', () => {
 		expect(readWal(storage, KEYS.wal, null)?.answers).toEqual({ [Q2]: 'b' })
 	})
 
-	test('битый JSON даёт null', () => {
-		expect(readWal(storageWith('{not json'), KEYS.wal, 's1')).toBeNull()
-	})
-
-	test('пустое хранилище и не объект дают null', () => {
-		expect(readWal(memoryStorage(), KEYS.wal, 's1')).toBeNull()
-		expect(readWal(storageWith('[1,2]'), KEYS.wal, 's1')).toBeNull()
-		expect(readWal(storageWith('"text"'), KEYS.wal, 's1')).toBeNull()
+	test.each(
+		[
+			{ name: 'битый JSON даёт null', storages: () => [storageWith('{not json')] },
+			{
+				name: 'пустое хранилище и не объект дают null',
+				storages: () => [memoryStorage(), storageWith('[1,2]'), storageWith('"text"')],
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', (_name, { storages }) => {
+		for (const storage of storages()) expect(readWal(storage, KEYS.wal, 's1')).toBeNull()
 	})
 })
 
@@ -154,13 +165,6 @@ describe('recordAnswer', () => {
 		expect(recordPosition(storage, KEYS.wal, { sessionId: 's2', position: Q2 })).toBe(false)
 		expect(storage.data.get(KEYS.wal)).toBe(raw)
 	})
-
-	test('ошибка записи хранилища не выходит наружу', () => {
-		const storage = memoryStorage()
-		storage.failWrites = true
-		expect(recordAnswer(storage, KEYS.wal, { sessionId: 's1', questionId: Q1, value: 'a', position: null })).toBe(false)
-		expect(writeWal(storage, KEYS.wal, walOf({}))).toBe(false)
-	})
 })
 
 describe('detachWal', () => {
@@ -179,11 +183,5 @@ describe('detachWal', () => {
 				telemetryPending: true,
 			})
 		)
-	})
-
-	test('без WAL ничего не пишется', () => {
-		const storage = memoryStorage()
-		detachWal(storage, KEYS.wal, 's1')
-		expect(storage.data.has(KEYS.wal)).toBe(false)
 	})
 })

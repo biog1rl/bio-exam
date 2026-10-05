@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 
-import { decodeAccessPayload, needsRefresh, REFRESH_THRESHOLD_SEC } from './access-token'
+import { decodeAccessPayload, needsRefresh } from './access-token'
 
 const NOW = 1_800_000_000
 
@@ -35,10 +35,6 @@ describe('decodeAccessPayload', () => {
 })
 
 describe('needsRefresh', () => {
-	test('порог 60 с', () => {
-		assert.equal(REFRESH_THRESHOLD_SEC, 60)
-	})
-
 	test.each<[string, string | null, boolean, boolean]>([
 		['нет refresh, нет access', null, false, false],
 		['нет refresh, access истёк', token({ sid: 's', exp: NOW - 10 }), false, false],

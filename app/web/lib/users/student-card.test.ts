@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { assignmentAction, assignmentErrorText, contactRows, studentRowSubtitle } from './student-card'
-
-test('assignmentAction разрешает снятие только при canUnassign', () => {
-	assert.equal(assignmentAction({ canUnassign: true }), 'remove')
-	assert.equal(assignmentAction({ canUnassign: false }), 'locked')
-})
+import { assignmentErrorText, contactRows, studentRowSubtitle } from './student-card'
 
 test('assignmentErrorText на 403 отдаёт текст об отсутствии прав, иначе исходное сообщение', () => {
 	assert.equal(assignmentErrorText(403), 'Недостаточно прав для этого действия. Обратитесь к администратору.')

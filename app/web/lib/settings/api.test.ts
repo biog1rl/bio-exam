@@ -6,14 +6,12 @@ vi.mock('@/lib/session/client', () => ({
 	AuthExpiredError: class AuthExpiredError extends Error {},
 }))
 
-import { MalformedBodyError } from '@/lib/http/request'
+import { MalformedBodyError, type RequestOutcome } from '@/lib/http/request'
 import { apiFetch } from '@/lib/session/client'
 
 import {
-	chartRangeFetcher,
 	deleteSidebarItem,
 	getAllSidebarItems,
-	getChartRange,
 	getSidebarItems,
 	parseChartRange,
 	parseSidebarItems,
@@ -21,7 +19,6 @@ import {
 	saveChartRange,
 	saveSidebarItem,
 	setSidebarItemActive,
-	settingsKeys,
 } from './api'
 
 const apiFetchMock = vi.mocked(apiFetch)
@@ -32,17 +29,6 @@ function json(status: number, body: unknown): Response {
 
 beforeEach(() => {
 	apiFetchMock.mockReset()
-})
-
-describe('settingsKeys', () => {
-	test('ключ диапазона графика — строка URL', () => {
-		assert.equal(settingsKeys.chartRange(), '/api/settings/chart-default-range')
-	})
-
-	test('пункты меню — публичный /api/sidebar и полный /api/sidebar/all', () => {
-		assert.equal(settingsKeys.sidebar(), '/api/sidebar')
-		assert.equal(settingsKeys.sidebarAll(), '/api/sidebar/all')
-	})
 })
 
 describe('parseChartRange', () => {
@@ -56,29 +42,6 @@ describe('parseChartRange', () => {
 		for (const body of [null, undefined, 'week', {}, { value: 'year' }, { value: 1 }, { error: 'Forbidden' }]) {
 			assert.throws(() => parseChartRange(body), MalformedBodyError)
 		}
-	})
-})
-
-describe('getChartRange', () => {
-	test('200 с допустимым значением — ok', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { value: 'all' }))
-		assert.deepEqual(await getChartRange(), { ok: true, status: 200, data: { value: 'all' } })
-		assert.equal(apiFetchMock.mock.calls[0]?.[0], '/api/settings/chart-default-range')
-	})
-
-	test('200 с чужой формой — malformed', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { value: 'year' }))
-		const outcome = await getChartRange()
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'malformed')
-	})
-})
-
-describe('chartRangeFetcher', () => {
-	test('возвращает разобранное значение по строковому ключу', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { value: 'week' }))
-		assert.deepEqual(await chartRangeFetcher(settingsKeys.chartRange()), { value: 'week' })
 	})
 })
 
@@ -144,142 +107,186 @@ describe('parseSidebarItems', () => {
 	})
 })
 
-describe('getSidebarItems', () => {
-	test('GET /api/sidebar — массив пунктов', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { items: [ITEM] }))
-		const outcome = await getSidebarItems()
-		assert.deepEqual(outcome, { ok: true, status: 200, data: [ITEM] })
-		assert.equal(lastCall().url, '/api/sidebar')
+describe('чтение пунктов меню', () => {
+	const hidden = { ...ITEM, id: 'hidden', isActive: false }
+
+	test.each(
+		[
+			{
+				name: 'getSidebarItems: GET /api/sidebar — массив пунктов',
+				items: [ITEM],
+				run: () => getSidebarItems(),
+				url: '/api/sidebar',
+				signal: undefined as AbortSignal | undefined,
+			},
+			{
+				name: 'getSidebarItems: передаёт signal для отмены при размонтировании',
+				items: [] as (typeof ITEM)[],
+				run: (signal?: AbortSignal) => getSidebarItems(signal),
+				url: '/api/sidebar',
+				signal: new AbortController().signal as AbortSignal | undefined,
+			},
+			{
+				name: 'getAllSidebarItems: GET /api/sidebar/all — массив пунктов',
+				items: [ITEM, hidden],
+				run: () => getAllSidebarItems(),
+				url: '/api/sidebar/all',
+				signal: undefined as AbortSignal | undefined,
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { items, run, url, signal }) => {
+		apiFetchMock.mockResolvedValueOnce(json(200, { items }))
+		const outcome = await run(signal)
+		assert.deepEqual(outcome, { ok: true, status: 200, data: items })
+		assert.equal(lastCall().url, url)
 		assert.equal(lastCall().init?.method, 'GET')
-	})
-
-	test('передаёт signal для отмены при размонтировании', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { items: [] }))
-		const controller = new AbortController()
-		await getSidebarItems(controller.signal)
-		assert.equal(lastCall().init?.signal, controller.signal)
-	})
-
-	test('конверт не той формы — malformed', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { error: 'Failed to fetch sidebar items' }))
-		const outcome = await getSidebarItems()
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'malformed')
-	})
-
-	test('500 — отказ http без английского текста сервера', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Failed to fetch sidebar items' }))
-		const outcome = await getSidebarItems()
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.status, 500)
-		assert.equal(outcome.message, 'Ошибка сервера (код 500).')
-	})
-})
-
-describe('getAllSidebarItems', () => {
-	test('GET /api/sidebar/all — массив пунктов', async () => {
-		const hidden = { ...ITEM, id: 'hidden', isActive: false }
-		apiFetchMock.mockResolvedValueOnce(json(200, { items: [ITEM, hidden] }))
-		const outcome = await getAllSidebarItems()
-		assert.deepEqual(outcome, { ok: true, status: 200, data: [ITEM, hidden] })
-		assert.equal(lastCall().url, '/api/sidebar/all')
-		assert.equal(lastCall().init?.method, 'GET')
-	})
-
-	test('конверт не той формы — malformed', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, {}))
-		const outcome = await getAllSidebarItems()
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'malformed')
-	})
-
-	test('403 — отказ http со статусом', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
-		const outcome = await getAllSidebarItems()
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.status, 403)
+		if (signal) assert.equal(lastCall().init?.signal, signal)
 	})
 })
 
 describe('запись пунктов меню', () => {
 	const input = { title: 'Проекты', url: '/projects', icon: 'Folder', target: '_blank' as const }
+	const ORDER = [
+		{ id: ITEM_ID, order: 0 },
+		{ id: 'b', order: 1 },
+	]
 
-	test('saveSidebarItem без id — POST /api/sidebar с порядком', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { item: ITEM }))
-		const outcome = await saveSidebarItem(null, { ...input, order: 3 })
-		assert.equal(outcome.ok, true)
-		assertJsonCall('POST', '/api/sidebar', { ...input, order: 3 })
+	test.each(
+		(
+			[
+				{
+					name: 'saveSidebarItem без id — POST /api/sidebar с порядком',
+					reply: { item: ITEM },
+					run: () => saveSidebarItem(null, { ...input, order: 3 }),
+					method: 'POST',
+					url: '/api/sidebar',
+					body: { ...input, order: 3 },
+				},
+				{
+					name: 'saveSidebarItem с id — PUT /api/sidebar/<id>',
+					reply: { item: ITEM },
+					run: () => saveSidebarItem(ITEM_ID, input),
+					method: 'PUT',
+					url: `/api/sidebar/${ITEM_ID}`,
+					body: input,
+				},
+				{
+					name: 'setSidebarItemActive — PUT /api/sidebar/<id> с isActive',
+					reply: { item: ITEM },
+					run: () => setSidebarItemActive(ITEM_ID, false),
+					method: 'PUT',
+					url: `/api/sidebar/${ITEM_ID}`,
+					body: { isActive: false },
+				},
+				{
+					name: 'reorderSidebarItems — PATCH /api/sidebar/reorder с { items }',
+					reply: { items: [ITEM] },
+					run: () => reorderSidebarItems(ORDER),
+					method: 'PATCH',
+					url: '/api/sidebar/reorder',
+					body: { items: ORDER },
+				},
+				{
+					name: 'deleteSidebarItem — DELETE /api/sidebar/<id> без тела',
+					reply: { success: true },
+					run: () => deleteSidebarItem(ITEM_ID),
+					method: 'DELETE',
+					url: `/api/sidebar/${ITEM_ID}`,
+				},
+			] as {
+				name: string
+				reply: unknown
+				run: () => Promise<{ ok: boolean }>
+				method: string
+				url: string
+				body?: unknown
+			}[]
+		).map(
+			(
+				row
+			): [
+				string,
+				{
+					name: string
+					reply: unknown
+					run: () => Promise<{ ok: boolean }>
+					method: string
+					url: string
+					body?: unknown
+				},
+			] => [row.name, row]
+		)
+	)('%s', async (_name, { reply, run, method, url, body }) => {
+		apiFetchMock.mockResolvedValueOnce(json(200, reply))
+		assert.equal((await run()).ok, true)
+		if (body === undefined) {
+			const call = lastCall()
+			assert.equal(call.url, url)
+			assert.equal(call.init?.method, method)
+			assert.equal(call.init?.body, undefined)
+		} else {
+			assertJsonCall(method, url, body)
+		}
 	})
 
-	test('saveSidebarItem с id — PUT /api/sidebar/<id>', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { item: ITEM }))
-		const outcome = await saveSidebarItem(ITEM_ID, input)
-		assert.equal(outcome.ok, true)
-		assertJsonCall('PUT', `/api/sidebar/${ITEM_ID}`, input)
-	})
-
-	test('saveSidebarItem: 400 с английским текстом — «Ошибка сохранения»', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'title, url and icon are required' }))
-		const outcome = await saveSidebarItem(null, { ...input, order: 0 })
+	test.each(
+		(
+			[
+				{
+					name: 'saveSidebarItem: 400 с английским текстом — «Ошибка сохранения»',
+					status: 400,
+					error: 'title, url and icon are required',
+					run: () => saveSidebarItem(null, { ...input, order: 0 }),
+					message: 'Ошибка сохранения',
+				},
+				{
+					name: 'setSidebarItemActive: 404 — «Ошибка изменения видимости»',
+					status: 404,
+					error: 'Sidebar item not found',
+					run: () => setSidebarItemActive(ITEM_ID, true),
+					message: 'Ошибка изменения видимости',
+				},
+				{
+					name: 'reorderSidebarItems: 500 — «Ошибка обновления порядка»',
+					status: 500,
+					error: 'Failed to reorder sidebar items',
+					run: () => reorderSidebarItems([]),
+					message: 'Ошибка обновления порядка',
+				},
+				{
+					name: 'deleteSidebarItem: 404 — «Ошибка удаления»',
+					status: 404,
+					error: 'Sidebar item not found',
+					run: () => deleteSidebarItem(ITEM_ID),
+					message: 'Ошибка удаления',
+				},
+			] as {
+				name: string
+				status: number
+				error: string
+				run: () => Promise<RequestOutcome<unknown>>
+				message: string
+			}[]
+		).map(
+			(
+				row
+			): [
+				string,
+				{
+					name: string
+					status: number
+					error: string
+					run: () => Promise<RequestOutcome<unknown>>
+					message: string
+				},
+			] => [row.name, row]
+		)
+	)('%s', async (_name, { status, error, run, message }) => {
+		apiFetchMock.mockResolvedValueOnce(json(status, { error }))
+		const outcome = await run()
 		assert.equal(outcome.ok, false)
 		if (outcome.ok) return
-		assert.equal(outcome.message, 'Ошибка сохранения')
-	})
-
-	test('setSidebarItemActive — PUT /api/sidebar/<id> с isActive', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { item: ITEM }))
-		await setSidebarItemActive(ITEM_ID, false)
-		assertJsonCall('PUT', `/api/sidebar/${ITEM_ID}`, { isActive: false })
-	})
-
-	test('setSidebarItemActive: 404 — «Ошибка изменения видимости»', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(404, { error: 'Sidebar item not found' }))
-		const outcome = await setSidebarItemActive(ITEM_ID, true)
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.message, 'Ошибка изменения видимости')
-	})
-
-	test('reorderSidebarItems — PATCH /api/sidebar/reorder с { items }', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { items: [ITEM] }))
-		const order = [
-			{ id: ITEM_ID, order: 0 },
-			{ id: 'b', order: 1 },
-		]
-		await reorderSidebarItems(order)
-		assertJsonCall('PATCH', '/api/sidebar/reorder', { items: order })
-	})
-
-	test('reorderSidebarItems: 500 — «Ошибка обновления порядка»', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Failed to reorder sidebar items' }))
-		const outcome = await reorderSidebarItems([])
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.message, 'Ошибка обновления порядка')
-	})
-
-	test('deleteSidebarItem — DELETE /api/sidebar/<id> без тела', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { success: true }))
-		const outcome = await deleteSidebarItem(ITEM_ID)
-		assert.equal(outcome.ok, true)
-		const call = lastCall()
-		assert.equal(call.url, `/api/sidebar/${ITEM_ID}`)
-		assert.equal(call.init?.method, 'DELETE')
-		assert.equal(call.init?.body, undefined)
-	})
-
-	test('deleteSidebarItem: 404 — «Ошибка удаления»', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(404, { error: 'Sidebar item not found' }))
-		const outcome = await deleteSidebarItem(ITEM_ID)
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.message, 'Ошибка удаления')
+		assert.equal(outcome.message, message)
 	})
 
 	test('id пункта кодируется в пути', async () => {

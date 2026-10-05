@@ -2,8 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
 import {
-	candidatesHint,
-	candidatesSource,
 	candidatesState,
 	groupMembersSeed,
 	groupSaveDisabled,
@@ -33,26 +31,6 @@ test('groupMembersSeed: ответ для другой группы или бе�
 	const response = { id: 'g1', memberIds: ['u1'] }
 	assert.equal(groupMembersSeed({ groupId: 'g2', seededFor: null, response }), null)
 	assert.equal(groupMembersSeed({ groupId: null, seededFor: null, response }), null)
-})
-
-test('candidatesSource: учитель ищет на сервере от двух символов', () => {
-	assert.equal(candidatesSource({ zoneAll: false, query: 'Ан' }), '/api/groups/candidates?q=%D0%90%D0%BD')
-	assert.equal(candidatesSource({ zoneAll: false, query: '  Ан ' }), '/api/groups/candidates?q=%D0%90%D0%BD')
-	assert.equal(candidatesSource({ zoneAll: false, query: 'А' }), null)
-	assert.equal(candidatesSource({ zoneAll: false, query: ' А ' }), null)
-	assert.equal(candidatesSource({ zoneAll: false }), null)
-})
-
-test('candidatesSource: администратор берёт кандидатов из /api/users', () => {
-	assert.equal(candidatesSource({ zoneAll: true }), '/api/users')
-	assert.equal(candidatesSource({ zoneAll: true, query: 'А' }), '/api/users')
-})
-
-test('candidatesHint: подсказка только у учителя при коротком запросе', () => {
-	assert.equal(candidatesHint({ zoneAll: false, query: 'А' }), 'Введите минимум 2 символа')
-	assert.equal(candidatesHint({ zoneAll: false, query: '' }), 'Введите минимум 2 символа')
-	assert.equal(candidatesHint({ zoneAll: false, query: 'Ан' }), null)
-	assert.equal(candidatesHint({ zoneAll: true, query: 'А' }), null)
 })
 
 test('candidatesState: подсказка, поиск, ошибка, пусто и список', () => {

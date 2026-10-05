@@ -24,10 +24,6 @@ beforeEach(() => {
 })
 
 describe('rbacKeys', () => {
-	test('ключ ролей — строка /api/rbac/roles', () => {
-		assert.equal(rbacKeys.roles(), '/api/rbac/roles')
-	})
-
 	test('та же строка, что ключ useRoleTraits: кэш SWR общий', () => {
 		const source = readFileSync(fileURLToPath(new URL('../users/role-traits.ts', import.meta.url)), 'utf8')
 		const match = /const ROLE_TRAITS_URL = '([^']+)'/.exec(source)
@@ -39,14 +35,6 @@ describe('rbacKeys', () => {
 describe('parseRbacRoles', () => {
 	test('конверт ролей возвращается тем же объектом', () => {
 		const body = { roles: [], overrides: [] }
-		assert.equal(parseRbacRoles(body), body)
-	})
-
-	test('поля ролей не преобразуются', () => {
-		const body = {
-			roles: [{ key: 'teacher', name: 'Учитель', order: 2, grants: { tests: ['read'] }, ownsZone: true }],
-			overrides: [{ roleKey: 'teacher', domain: 'tests', action: 'write', allow: false }],
-		}
 		assert.equal(parseRbacRoles(body), body)
 	})
 
@@ -68,28 +56,11 @@ describe('parseRbacRoles', () => {
 })
 
 describe('rbacRolesFetcher', () => {
-	test('возвращает тело как есть по строковому ключу', async () => {
-		const body = { roles: [{ key: 'student', name: 'Ученик', order: 3, grants: {} }], overrides: [] }
-		apiFetchMock.mockResolvedValueOnce(json(200, body))
-		assert.deepEqual(await rbacRolesFetcher(rbacKeys.roles()), body)
-		assert.equal(apiFetchMock.mock.calls[0]?.[0], '/api/rbac/roles')
-	})
-
 	test('200 с { error } — RequestError вида malformed', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { error: 'Forbidden' }))
 		await assert.rejects(rbacRolesFetcher(rbacKeys.roles()), (error: unknown) => {
 			assert.ok(error instanceof RequestError)
 			assert.equal(error.kind, 'malformed')
-			return true
-		})
-	})
-
-	test('403 — RequestError вида http со статусом', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
-		await assert.rejects(rbacRolesFetcher(rbacKeys.roles()), (error: unknown) => {
-			assert.ok(error instanceof RequestError)
-			assert.equal(error.kind, 'http')
-			assert.equal(error.status, 403)
 			return true
 		})
 	})

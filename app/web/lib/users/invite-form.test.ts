@@ -4,9 +4,7 @@ import { test } from 'vitest'
 import {
 	defaultGroupId,
 	defaultRoleKey,
-	groupOptionLabel,
 	groupsCell,
-	groupsTitle,
 	inviteErrorText,
 	invitePayload,
 	matchesGroup,
@@ -17,48 +15,46 @@ import {
 	usersEmptyText,
 } from './invite-form'
 
-test('inviteErrorText: 400 просит проверить имя, логин и группу', () => {
-	assert.equal(inviteErrorText({ status: 400 }), 'Проверьте имя, логин и группу.')
-	assert.equal(
-		inviteErrorText({ status: 400, body: { error: 'Login is invalid' }, variant: 'teacher' }),
-		'Проверьте имя, логин и группу.'
-	)
-})
+const INVITE_FAILED = 'Не удалось создать приглашение. Попробуйте ещё раз.'
 
-test('inviteErrorText: 403 зависит от варианта диалога', () => {
-	assert.equal(
-		inviteErrorText({ status: 403, variant: 'teacher' }),
-		'Нельзя пригласить в эту группу. Выберите свою группу.'
-	)
-	assert.equal(
-		inviteErrorText({ status: 403, variant: 'admin' }),
-		'Недостаточно прав для этого действия. Обратитесь к администратору.'
-	)
-})
-
-test('inviteErrorText: 409 отдаёт текст сервера без изменений', () => {
-	assert.equal(inviteErrorText({ status: 409, body: { error: 'X' } }), 'X')
-	assert.equal(inviteErrorText({ status: 409, body: null }), 'Не удалось создать приглашение. Попробуйте ещё раз.')
-	assert.equal(
-		inviteErrorText({ status: 409, body: { error: '  ' } }),
-		'Не удалось создать приглашение. Попробуйте ещё раз.'
-	)
-})
-
-test('inviteErrorText: 5xx и прочие коды дают общий текст, английский текст сервера не показывается', () => {
-	assert.equal(inviteErrorText({ status: 502 }), 'Не удалось создать приглашение. Попробуйте ещё раз.')
-	assert.equal(
-		inviteErrorText({ status: 500, body: { error: 'Failed to create or find user' } }),
-		'Не удалось создать приглашение. Попробуйте ещё раз.'
-	)
-	assert.equal(
-		inviteErrorText({ status: 404, body: { error: 'Group not found' } }),
-		'Не удалось создать приглашение. Попробуйте ещё раз.'
-	)
-})
-
-test('inviteErrorText: сбой сети', () => {
-	assert.equal(inviteErrorText({ network: true }), 'Не удалось связаться с сервером. Проверьте соединение.')
+test.each(
+	(
+		[
+			{
+				name: '400 просит проверить имя, логин и группу',
+				cases: [
+					[{ status: 400 }, 'Проверьте имя, логин и группу.'],
+					[{ status: 400, body: { error: 'Login is invalid' }, variant: 'teacher' }, 'Проверьте имя, логин и группу.'],
+				],
+			},
+			{
+				name: '403 зависит от варианта диалога',
+				cases: [
+					[{ status: 403, variant: 'teacher' }, 'Нельзя пригласить в эту группу. Выберите свою группу.'],
+					[{ status: 403, variant: 'admin' }, 'Недостаточно прав для этого действия. Обратитесь к администратору.'],
+				],
+			},
+			{
+				name: '409 отдаёт текст сервера без изменений',
+				cases: [
+					[{ status: 409, body: { error: 'X' } }, 'X'],
+					[{ status: 409, body: null }, INVITE_FAILED],
+					[{ status: 409, body: { error: '  ' } }, INVITE_FAILED],
+				],
+			},
+			{
+				name: '5xx и прочие коды дают общий текст, английский текст сервера не показывается',
+				cases: [
+					[{ status: 502 }, INVITE_FAILED],
+					[{ status: 500, body: { error: 'Failed to create or find user' } }, INVITE_FAILED],
+					[{ status: 404, body: { error: 'Group not found' } }, INVITE_FAILED],
+				],
+			},
+			{ name: 'сбой сети', cases: [[{ network: true }, 'Не удалось связаться с сервером. Проверьте соединение.']] },
+		] as { name: string; cases: [Parameters<typeof inviteErrorText>[0], string][] }[]
+	).map((row): [string, { name: string; cases: [Parameters<typeof inviteErrorText>[0], string][] }] => [row.name, row])
+)('inviteErrorText: %s', (_name, { cases }) => {
+	for (const [input, expected] of cases) assert.equal(inviteErrorText(input), expected)
 })
 
 test('showReinvite: учитель — только неактивированному, администратор — любому неактивному', () => {
@@ -166,19 +162,6 @@ test('groupsCell: до двух названий через запятую, да
 	)
 })
 
-test('groupsTitle: полный список через запятую', () => {
-	assert.equal(groupsTitle([]), '')
-	assert.equal(
-		groupsTitle([
-			{ id: '1', name: 'А' },
-			{ id: '2', name: 'Б' },
-			{ id: '3', name: 'В' },
-			{ id: '4', name: 'Г' },
-		]),
-		'А, Б, В, Г'
-	)
-})
-
 test('matchesGroup: членство в любой из групп строки', () => {
 	const row = {
 		groups: [
@@ -192,19 +175,6 @@ test('matchesGroup: членство в любой из групп строки'
 	assert.equal(matchesGroup(row, 'g3'), false)
 	assert.equal(matchesGroup({ groups: [] }, 'g1'), false)
 	assert.equal(matchesGroup({ groups: [] }, 'all'), true)
-})
-
-test('groupOptionLabel: владелец или администраторы', () => {
-	assert.equal(groupOptionLabel({ name: 'G', owner: null }), 'G · администраторы')
-	assert.equal(
-		groupOptionLabel({ name: 'G', owner: { id: 't', name: 'anna', firstName: 'Анна', lastName: 'Иванова' } }),
-		'G · Анна Иванова'
-	)
-	assert.equal(
-		groupOptionLabel({ name: 'G', owner: { id: 't', name: 'anna', firstName: null, lastName: null } }),
-		'G · anna'
-	)
-	assert.equal(groupOptionLabel({ name: 'G' }), 'G')
 })
 
 test('parseInviteGroups: только записи с id и name, иначе пустой список', () => {

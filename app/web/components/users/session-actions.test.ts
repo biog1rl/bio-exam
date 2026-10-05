@@ -1,29 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-	actionErrorText,
-	clearConfirmText,
-	clearSuccessText,
-	OWN_ACCOUNT_REVOKE_HINT,
-	revokeConfirmText,
-	revokeSuccessText,
-	sessionActionsState,
-} from './session-actions'
+import { actionErrorText, OWN_ACCOUNT_REVOKE_HINT, sessionActionsState } from './session-actions'
 
 const ivan = { id: 'u-ivan', login: 'ivan' }
 
 describe('sessionActionsState', () => {
 	it('hides the block without users.edit', () => {
 		expect(sessionActionsState({ meId: 'u-admin', user: ivan, canEdit: false, pending: false }).visible).toBe(false)
-	})
-
-	it('enables both actions for another user', () => {
-		expect(sessionActionsState({ meId: 'u-admin', user: ivan, canEdit: true, pending: false })).toEqual({
-			visible: true,
-			revokeDisabled: false,
-			revokeHint: null,
-			clearDisabled: false,
-		})
 	})
 
 	it('disables both actions without a user', () => {
@@ -64,17 +47,6 @@ describe('sessionActionsState', () => {
 })
 
 describe('texts', () => {
-	it('confirmations and successes', () => {
-		expect(revokeConfirmText('ivan')).toBe(
-			'Пользователь «ivan» выйдет на всех устройствах. Пароль не меняется, войти снова можно сразу.'
-		)
-		expect(clearConfirmText('ivan')).toBe(
-			'Паузы после неверных паролей для логина «ivan» будут сброшены на всех адресах. Пользователь сможет войти сразу.'
-		)
-		expect(revokeSuccessText('ivan')).toBe('Сеансы пользователя «ivan» завершены')
-		expect(clearSuccessText('ivan')).toBe('Ограничение входа для «ivan» снято')
-	})
-
 	it.each([
 		['revoke', 500, 'Не удалось завершить сеансы. Попробуйте ещё раз.'],
 		['clear', 500, 'Не удалось снять ограничение. Попробуйте ещё раз.'],

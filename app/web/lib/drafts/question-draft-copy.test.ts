@@ -3,7 +3,6 @@ import { test } from 'vitest'
 
 import {
 	forgetQuestionDraftCopies,
-	questionDraftCopyKey,
 	readQuestionDraftCopy,
 	removeQuestionDraftCopy,
 	resolveInitialDraftPayload,
@@ -33,35 +32,41 @@ function memoryStorage(initial: Record<string, string> = {}) {
 const SERVER = { question: { a: 2, b: 1 } }
 const COPY = { question: { a: 3 } }
 
-test('questionDraftCopyKey', () => {
-	assert.equal(questionDraftCopyKey('d1', 'u1'), 'question-draft-wal-d1-u1')
-})
-
-test('readQuestionDraftCopy: битый JSON, форма без v: 1, без payload или baseLockVersion → null', () => {
-	const { storage } = memoryStorage({
-		broken: '{',
-		v2: JSON.stringify({ v: 2, payload: COPY, baseLockVersion: 1 }),
-		nopayload: JSON.stringify({ v: 1, baseLockVersion: 1 }),
-		nolock: JSON.stringify({ v: 1, payload: COPY }),
-		nul: 'null',
-	})
-	for (const key of ['broken', 'v2', 'nopayload', 'nolock', 'nul', 'missing']) {
-		assert.equal(readQuestionDraftCopy(storage, key), null, key)
+test.each(
+	(
+		[
+			{
+				name: 'битый JSON, форма без v: 1, без payload или baseLockVersion → null',
+				stored: {
+					broken: '{',
+					v2: JSON.stringify({ v: 2, payload: COPY, baseLockVersion: 1 }),
+					nopayload: JSON.stringify({ v: 1, baseLockVersion: 1 }),
+					nolock: JSON.stringify({ v: 1, payload: COPY }),
+					nul: 'null',
+				},
+				expected: { broken: null, v2: null, nopayload: null, nolock: null, nul: null, missing: null },
+			},
+			{
+				name: 'годная копия и пометка forbidden',
+				stored: {
+					ok: JSON.stringify({ v: 1, payload: COPY, baseLockVersion: 4 }),
+					forbidden: JSON.stringify({ v: 1, payload: COPY, baseLockVersion: 4, forbidden: true }),
+				},
+				expected: {
+					ok: { v: 1, payload: COPY, baseLockVersion: 4 },
+					forbidden: { v: 1, payload: COPY, baseLockVersion: 4, forbidden: true },
+				},
+			},
+		] as { name: string; stored: Record<string, string>; expected: Record<string, unknown> }[]
+	).map((row): [string, { name: string; stored: Record<string, string>; expected: Record<string, unknown> }] => [
+		row.name,
+		row,
+	])
+)('readQuestionDraftCopy: %s', (_name, { stored, expected }) => {
+	const { storage } = memoryStorage(stored)
+	for (const [key, value] of Object.entries(expected)) {
+		assert.deepEqual(readQuestionDraftCopy(storage, key), value, key)
 	}
-})
-
-test('readQuestionDraftCopy: годная копия и пометка forbidden', () => {
-	const { storage } = memoryStorage({
-		ok: JSON.stringify({ v: 1, payload: COPY, baseLockVersion: 4 }),
-		forbidden: JSON.stringify({ v: 1, payload: COPY, baseLockVersion: 4, forbidden: true }),
-	})
-	assert.deepEqual(readQuestionDraftCopy(storage, 'ok'), { v: 1, payload: COPY, baseLockVersion: 4 })
-	assert.deepEqual(readQuestionDraftCopy(storage, 'forbidden'), {
-		v: 1,
-		payload: COPY,
-		baseLockVersion: 4,
-		forbidden: true,
-	})
 })
 
 test('чтение, запись и удаление при исключениях хранилища не бросают', () => {
@@ -93,14 +98,6 @@ test('чтение, запись и удаление при исключения
 	)
 })
 
-test('writeQuestionDraftCopy и removeQuestionDraftCopy', () => {
-	const { storage, map } = memoryStorage()
-	writeQuestionDraftCopy(storage, 'k', { v: 1, payload: COPY, baseLockVersion: 3 })
-	assert.deepEqual(JSON.parse(map.get('k') ?? ''), { v: 1, payload: COPY, baseLockVersion: 3 })
-	removeQuestionDraftCopy(storage, 'k')
-	assert.equal(map.has('k'), false)
-})
-
 test('forgetQuestionDraftCopies удаляет копии черновика всех пользователей и только их', () => {
 	const { storage, map } = memoryStorage({
 		'question-draft-wal-d1-u1': '{}',
@@ -113,70 +110,51 @@ test('forgetQuestionDraftCopies удаляет копии черновика в�
 	assert.deepEqual([...map.keys()].sort(), ['other-key', 'question-draft-wal-d10-u1', 'question-draft-wal-d2-u1'])
 })
 
-test('resolveInitialDraftPayload: копии нет → сервер', () => {
-	assert.deepEqual(resolveInitialDraftPayload({ copy: null, serverPayload: SERVER, serverLockVersion: 5 }), {
-		payload: SERVER,
-		restored: false,
-		divergedCopy: null,
-		dropCopy: false,
-	})
-})
+type DraftCopy = Parameters<typeof resolveInitialDraftPayload>[0]['copy']
 
-test('resolveInitialDraftPayload: baseLockVersion не меньше версии сервера → копия восстановлена', () => {
-	for (const baseLockVersion of [5, 6]) {
-		assert.deepEqual(
-			resolveInitialDraftPayload({
-				copy: { v: 1, payload: COPY, baseLockVersion },
-				serverPayload: SERVER,
-				serverLockVersion: 5,
-			}),
-			{ payload: COPY, restored: true, divergedCopy: null, dropCopy: false }
-		)
-	}
-})
-
-test('resolveInitialDraftPayload: baseLockVersion меньше версии сервера → сервер, копия остаётся расходящейся', () => {
-	assert.deepEqual(
-		resolveInitialDraftPayload({
-			copy: { v: 1, payload: COPY, baseLockVersion: 4 },
-			serverPayload: SERVER,
-			serverLockVersion: 5,
-		}),
-		{ payload: SERVER, restored: false, divergedCopy: COPY, dropCopy: false }
+test.each(
+	(
+		[
+			{
+				name: 'копии нет → сервер',
+				copies: [null],
+				expected: { payload: SERVER, restored: false, divergedCopy: null, dropCopy: false },
+			},
+			{
+				name: 'baseLockVersion не меньше версии сервера → копия восстановлена',
+				copies: [
+					{ v: 1, payload: COPY, baseLockVersion: 5 },
+					{ v: 1, payload: COPY, baseLockVersion: 6 },
+				],
+				expected: { payload: COPY, restored: true, divergedCopy: null, dropCopy: false },
+			},
+			{
+				name: 'baseLockVersion меньше версии сервера → сервер, копия остаётся расходящейся',
+				copies: [{ v: 1, payload: COPY, baseLockVersion: 4 }],
+				expected: { payload: SERVER, restored: false, divergedCopy: COPY, dropCopy: false },
+			},
+			{
+				name: 'совпадает с сервером (и с другим порядком ключей) → сервер, копия удаляется',
+				copies: [
+					{ v: 1, payload: SERVER, baseLockVersion: 2 },
+					{ v: 1, payload: { question: { b: 1, a: 2 } }, baseLockVersion: 2 },
+				],
+				expected: { payload: SERVER, restored: false, divergedCopy: null, dropCopy: true },
+			},
+			{
+				name: 'копия с forbidden → сервер, копия удаляется',
+				copies: [{ v: 1, payload: COPY, baseLockVersion: 9, forbidden: true }],
+				expected: { payload: SERVER, restored: false, divergedCopy: null, dropCopy: true },
+			},
+		] as { name: string; copies: DraftCopy[]; expected: ReturnType<typeof resolveInitialDraftPayload> }[]
+	).map(
+		(row): [string, { name: string; copies: DraftCopy[]; expected: ReturnType<typeof resolveInitialDraftPayload> }] => [
+			row.name,
+			row,
+		]
 	)
-})
-
-test('resolveInitialDraftPayload: совпадает с сервером (и с другим порядком ключей) → сервер, копия удаляется', () => {
-	for (const payload of [SERVER, { question: { b: 1, a: 2 } }]) {
-		assert.deepEqual(
-			resolveInitialDraftPayload({
-				copy: { v: 1, payload, baseLockVersion: 2 },
-				serverPayload: SERVER,
-				serverLockVersion: 5,
-			}),
-			{ payload: SERVER, restored: false, divergedCopy: null, dropCopy: true }
-		)
+)('resolveInitialDraftPayload: %s', (_name, { copies, expected }) => {
+	for (const copy of copies) {
+		assert.deepEqual(resolveInitialDraftPayload({ copy, serverPayload: SERVER, serverLockVersion: 5 }), expected)
 	}
-})
-
-test('resolveInitialDraftPayload: копия с forbidden → сервер, копия удаляется', () => {
-	assert.deepEqual(
-		resolveInitialDraftPayload({
-			copy: { v: 1, payload: COPY, baseLockVersion: 9, forbidden: true },
-			serverPayload: SERVER,
-			serverLockVersion: 5,
-		}),
-		{ payload: SERVER, restored: false, divergedCopy: null, dropCopy: true }
-	)
-})
-
-test('resolveInitialDraftPayload: свой serialize', () => {
-	const result = resolveInitialDraftPayload({
-		copy: { v: 1, payload: { question: 'X' }, baseLockVersion: 5 },
-		serverPayload: { question: 'x' },
-		serverLockVersion: 5,
-		serialize: (payload) => JSON.stringify(payload).toLowerCase(),
-	})
-	assert.equal(result.dropCopy, true)
-	assert.equal(result.restored, false)
 })

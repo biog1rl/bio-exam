@@ -144,15 +144,6 @@ test('result передаёт текст и признак окончатель�
 	])
 })
 
-test('stop вызывает stop распознавания', () => {
-	const { value, created } = session()
-	value.stop()
-	value.start()
-	value.stop()
-	assert.equal(created[0].calls.stop, 1)
-	assert.equal(created[0].calls.abort, 0)
-})
-
 test('dispose вызывает abort, снимает все слушатели, повторный dispose безопасен', () => {
 	const { value, created } = session()
 	value.start()

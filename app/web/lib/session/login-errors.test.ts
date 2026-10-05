@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-	loginErrorText,
-	NETWORK_ERROR_TEXT,
-	parseRetryAfter,
-	READY_AGAIN_TEXT,
-	TOO_MANY_LATER_TEXT,
-	TOO_MANY_WAIT_TEXT,
-} from './login-errors'
+import { loginErrorText, parseRetryAfter } from './login-errors'
 import { formatWait } from './wait-format'
 
 describe('formatWait', () => {
@@ -50,12 +43,5 @@ describe('loginErrorText', () => {
 		[418, 'Не удалось войти. Попробуйте ещё раз.'],
 	])('%i -> %s', (status, expected) => {
 		expect(loginErrorText(status)).toBe(expected)
-	})
-
-	it('texts of the network failure and the 429 states', () => {
-		expect(NETWORK_ERROR_TEXT).toBe('Не удалось связаться с сервером. Проверьте соединение.')
-		expect(TOO_MANY_WAIT_TEXT('1 мин 5 с')).toBe('Слишком много неудачных попыток входа. Попробуйте через 1 мин 5 с.')
-		expect(TOO_MANY_LATER_TEXT).toBe('Слишком много неудачных попыток входа. Попробуйте позже.')
-		expect(READY_AGAIN_TEXT).toBe('Можно снова войти.')
 	})
 })

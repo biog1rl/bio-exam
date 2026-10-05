@@ -259,24 +259,28 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.deepEqual(wal.pending, [Q1])
 	})
 
-	test('409 ATTEMPT_ALREADY_SUBMITTED с attemptId: blocked already-submitted, id попытки, удалены все четыре ключа', async () => {
+	test.each(
+		[
+			{
+				name: '409 ATTEMPT_ALREADY_SUBMITTED с attemptId: blocked already-submitted, id попытки, удалены все четыре ключа',
+				attemptId: ATTEMPT_ID as string | undefined,
+				expectedId: ATTEMPT_ID as string | null,
+			},
+			{
+				name: '409 ATTEMPT_ALREADY_SUBMITTED без attemptId: alreadySubmittedAttemptId null',
+				attemptId: undefined as string | undefined,
+				expectedId: null as string | null,
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { attemptId, expectedId }) => {
 		const { lifecycle, storage, fakeApi } = await activeWithAnswer()
-		fakeApi.queueSubmit(requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID))
+		fakeApi.queueSubmit(requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, attemptId))
 		await lifecycle.submit()
 		const snapshot = lifecycle.getSnapshot()
 		assert.equal(snapshot.phase, 'blocked')
 		assert.equal(snapshot.blockReason, 'already-submitted')
-		assert.equal(snapshot.alreadySubmittedAttemptId, ATTEMPT_ID)
+		assert.equal(snapshot.alreadySubmittedAttemptId, expectedId)
 		assert.equal(snapshot.interactionDisabled, true)
-		assert.deepEqual(presentKeys(storage), [])
-	})
-
-	test('409 ATTEMPT_ALREADY_SUBMITTED без attemptId: alreadySubmittedAttemptId null', async () => {
-		const { lifecycle, storage, fakeApi } = await activeWithAnswer()
-		fakeApi.queueSubmit(requestError(409, 'ATTEMPT_ALREADY_SUBMITTED'))
-		await lifecycle.submit()
-		assert.equal(lifecycle.getSnapshot().blockReason, 'already-submitted')
-		assert.equal(lifecycle.getSnapshot().alreadySubmittedAttemptId, null)
 		assert.deepEqual(presentKeys(storage), [])
 	})
 

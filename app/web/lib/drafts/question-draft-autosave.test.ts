@@ -2,10 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test, vi } from 'vitest'
 
 import {
-	AUTOSAVE_SAVING_THRESHOLD_MS,
 	createQuestionDraftAutosave,
-	LEAVE_FLUSH_TIMEOUT_MS,
-	QUESTION_DRAFT_DEBOUNCE_MS,
 	type QuestionDraftAutosaveOptions,
 	type QuestionDraftNotice,
 	type QuestionDraftSaveResult,
@@ -127,12 +124,6 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.useRealTimers()
-})
-
-test('константы: дебаунс 700, предел досылки 5000, порог индикатора 1500', () => {
-	assert.equal(QUESTION_DRAFT_DEBOUNCE_MS, 700)
-	assert.equal(LEAVE_FLUSH_TIMEOUT_MS, 5000)
-	assert.equal(AUTOSAVE_SAVING_THRESHOLD_MS, 1500)
 })
 
 test('stableSerialize: порядок ключей объектов не важен, порядок массивов важен', () => {
@@ -456,6 +447,7 @@ test('dispose: досылка с lockVersion без keepalive и без ожид
 	assert.equal(page.count('beforeunload'), 0)
 	assert.equal(page.count('pagehide'), 0)
 	assert.deepEqual(readCopy(store!.map), { v: 1, payload: P1, baseLockVersion: 1 })
+	assert.equal(vi.getTimerCount(), 0)
 })
 
 test('StrictMode: start → dispose → start → change(p1) → через 700 мс save(p1) (M-1)', async () => {
@@ -829,12 +821,4 @@ test('StrictMode с восстановленной копией: запрос в
 	assert.equal(autosave.getSnapshot().status, 'saved')
 	assert.deepEqual(notices, ['restored'])
 	autosave.dispose()
-})
-
-test('dispose с несохранённой записью не оставляет таймеров модуля', async () => {
-	const { autosave } = setup([deferred()])
-	autosave.start()
-	autosave.change(P1)
-	autosave.dispose()
-	assert.equal(vi.getTimerCount(), 0)
 })

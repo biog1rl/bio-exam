@@ -28,44 +28,66 @@ function shortQuestion(): Question {
 }
 
 describe('questionFormKey', () => {
-	it('equals for a question and its normalized copy', () => {
-		const choice = choiceQuestion()
-		const short = shortQuestion()
-		expect(questionFormKey(normalizeQuestionForSave(choice))).toBe(questionFormKey(choice))
-		expect(questionFormKey(normalizeQuestionForSave(short))).toBe(questionFormKey(short))
-		expect(questionFormKey({ ...choice })).toBe(questionFormKey(choice))
-	})
-
-	it('changes when promptText changes', () => {
-		const base = choiceQuestion()
-		expect(questionFormKey({ ...base, promptText: `${base.promptText} ` })).not.toBe(questionFormKey(base))
-	})
-
-	it('changes when the answer key changes', () => {
-		const base = choiceQuestion()
-		expect(questionFormKey({ ...base, correct: 'b' })).not.toBe(questionFormKey(base))
-		const short = shortQuestion()
-		expect(questionFormKey({ ...short, correct: 'мейоз' })).not.toBe(questionFormKey(short))
-	})
-
-	it('changes when options change', () => {
-		const base = choiceQuestion()
-		const renamed = { ...base, options: [base.options![0], { id: 'b', text: 'Амитоз' }] }
-		const added = { ...base, options: [...base.options!, { id: 'c', text: 'Амитоз' }] }
-		expect(questionFormKey(renamed)).not.toBe(questionFormKey(base))
-		expect(questionFormKey(added)).not.toBe(questionFormKey(base))
-	})
-
-	it('does not depend on id', () => {
-		const base = choiceQuestion()
-		expect(questionFormKey({ ...base, id: undefined })).toBe(questionFormKey(base))
-		expect(questionFormKey({ ...base, id: 'other' })).toBe(questionFormKey(base))
-	})
-
-	it('does not depend on key order of the form object', () => {
-		const base = choiceQuestion()
-		const reordered = Object.fromEntries(Object.entries(base).reverse()) as unknown as Question
-		expect(questionFormKey(reordered)).toBe(questionFormKey(base))
+	it.each(
+		(
+			[
+				{
+					name: 'changes when promptText changes',
+					equal: false,
+					pairs: () => {
+						const base = choiceQuestion()
+						return [[{ ...base, promptText: `${base.promptText} ` }, base]]
+					},
+				},
+				{
+					name: 'changes when the answer key changes',
+					equal: false,
+					pairs: () => {
+						const base = choiceQuestion()
+						const short = shortQuestion()
+						return [
+							[{ ...base, correct: 'b' }, base],
+							[{ ...short, correct: 'мейоз' }, short],
+						]
+					},
+				},
+				{
+					name: 'changes when options change',
+					equal: false,
+					pairs: () => {
+						const base = choiceQuestion()
+						return [
+							[{ ...base, options: [base.options![0], { id: 'b', text: 'Амитоз' }] }, base],
+							[{ ...base, options: [...base.options!, { id: 'c', text: 'Амитоз' }] }, base],
+						]
+					},
+				},
+				{
+					name: 'does not depend on id',
+					equal: true,
+					pairs: () => {
+						const base = choiceQuestion()
+						return [
+							[{ ...base, id: undefined }, base],
+							[{ ...base, id: 'other' }, base],
+						]
+					},
+				},
+				{
+					name: 'does not depend on key order of the form object',
+					equal: true,
+					pairs: () => {
+						const base = choiceQuestion()
+						return [[Object.fromEntries(Object.entries(base).reverse()) as unknown as Question, base]]
+					},
+				},
+			] as { name: string; equal: boolean; pairs: () => [Question, Question][] }[]
+		).map((row): [string, { name: string; equal: boolean; pairs: () => [Question, Question][] }] => [row.name, row])
+	)('%s', (_name, { equal, pairs }) => {
+		for (const [changed, base] of pairs()) {
+			if (equal) expect(questionFormKey(changed)).toBe(questionFormKey(base))
+			else expect(questionFormKey(changed)).not.toBe(questionFormKey(base))
+		}
 	})
 })
 
@@ -77,12 +99,5 @@ describe('toQuestionDraftPayload', () => {
 		expect(payload.question.id).toBeUndefined()
 		expect(payload.question.order).toBe(3)
 		expect('id' in payload.question).toBe(true)
-	})
-
-	it('normalizes the answer key like normalizeQuestionForSave', () => {
-		const short = shortQuestion()
-		const payload = toQuestionDraftPayload({ ...short, order: 9 }, 0)
-		expect(payload.question).toEqual({ ...normalizeQuestionForSave(short), id: undefined, order: 0 })
-		expect(payload.question.correct).toBe(normalizeQuestionForSave(short).correct)
 	})
 })

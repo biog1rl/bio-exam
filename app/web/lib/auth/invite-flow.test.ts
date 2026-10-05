@@ -28,9 +28,14 @@ describe('inviteValidationOutcome', () => {
 		})
 	})
 
-	test('404, 410 и 500 — недействительно', () => {
-		for (const status of [404, 410, 500]) {
-			assert.deepEqual(inviteValidationOutcome(status, { error: 'x' }), {
+	test.each(
+		[
+			{ name: '404, 410 и 500', statuses: [404, 410, 500], body: { error: 'x' } as unknown },
+			{ name: '200 с телом не объектом', statuses: [200], body: null as unknown },
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s — недействительно', (_name, { statuses, body }) => {
+		for (const status of statuses) {
+			assert.deepEqual(inviteValidationOutcome(status, body), {
 				valid: false,
 				firstName: '',
 				lastName: '',
@@ -38,28 +43,31 @@ describe('inviteValidationOutcome', () => {
 			})
 		}
 	})
-
-	test('200 с телом не объектом — недействительно', () => {
-		assert.equal(inviteValidationOutcome(200, null).valid, false)
-	})
 })
 
 describe('inviteAcceptErrorText', () => {
-	test('первая ошибка поля логина', () => {
-		assert.equal(inviteAcceptErrorText({ details: { fieldErrors: { login: ['Логин занят'] } } }), 'Логин занят')
-	})
-
-	test('порядок полей: логин, пароль, токен, затем error', () => {
-		assert.equal(
-			inviteAcceptErrorText({ details: { fieldErrors: { password: ['Короткий пароль'], token: ['Токен'] } } }),
-			'Короткий пароль'
-		)
-		assert.equal(inviteAcceptErrorText({ details: { fieldErrors: { token: ['Токен'] } } }), 'Токен')
-		assert.equal(inviteAcceptErrorText({ error: 'Текст', details: { fieldErrors: {} } }), 'Текст')
-	})
-
-	test('текст error сервера', () => {
-		assert.equal(inviteAcceptErrorText({ error: 'Текст' }), 'Текст')
+	test.each(
+		(
+			[
+				{
+					name: 'первая ошибка поля логина',
+					cases: [[{ details: { fieldErrors: { login: ['Логин занят'] } } }, 'Логин занят']],
+				},
+				{
+					name: 'порядок полей: логин, пароль, токен, затем error',
+					cases: [
+						[{ details: { fieldErrors: { password: ['Короткий пароль'], token: ['Токен'] } } }, 'Короткий пароль'],
+						[{ details: { fieldErrors: { token: ['Токен'] } } }, 'Токен'],
+						[{ error: 'Текст', details: { fieldErrors: {} } }, 'Текст'],
+					],
+				},
+				{ name: 'текст error сервера', cases: [[{ error: 'Текст' }, 'Текст']] },
+			] as { name: string; cases: [unknown, string][] }[]
+		).map((row): [string, typeof row] => [row.name, row])
+	)('%s', (_name, { cases }) => {
+		for (const [body, expected] of cases) {
+			assert.equal(inviteAcceptErrorText(body), expected)
+		}
 	})
 
 	test('иное — запасной текст', () => {
@@ -75,17 +83,18 @@ describe('loginAfterAcceptText', () => {
 		assert.equal(loginAfterAcceptText(200), null)
 	})
 
-	test('401 входа после принятия — учётная запись активирована, войти вручную', () => {
-		assert.equal(loginAfterAcceptText(401), ACTIVATED_LOGIN_MANUALLY_TEXT)
+	test.each(
+		[
+			{ name: '401 входа после принятия — учётная запись активирована, войти вручную', statuses: [401] },
+			{ name: '429, 500 и сбой сети — тот же текст', statuses: [429, 500, 0] },
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', (_name, { statuses }) => {
+		for (const status of statuses) {
+			assert.equal(loginAfterAcceptText(status), ACTIVATED_LOGIN_MANUALLY_TEXT)
+		}
 		assert.equal(
 			ACTIVATED_LOGIN_MANUALLY_TEXT,
 			'Готово! Учётная запись активирована. Теперь вы можете войти по логину.'
 		)
-	})
-
-	test('429, 500 и сбой сети — тот же текст', () => {
-		for (const status of [429, 500, 0]) {
-			assert.equal(loginAfterAcceptText(status), ACTIVATED_LOGIN_MANUALLY_TEXT)
-		}
 	})
 })

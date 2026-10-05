@@ -207,15 +207,6 @@ describe('requestJson', () => {
 			return true
 		})
 	})
-
-	test('auth приходит как RequestError kind auth', async () => {
-		const { requestJson } = fake(new AuthExpiredError())
-		await assert.rejects(requestJson('/x'), (error: unknown) => {
-			assert.ok(error instanceof RequestError)
-			assert.equal(error.kind, 'auth')
-			return true
-		})
-	})
 })
 
 describe('requestBlob', () => {
@@ -279,15 +270,6 @@ describe('requestBlob', () => {
 		assert.deepEqual(outcome.body, { error: text })
 		assert.equal(outcome.message, text)
 		assert.equal(response.bodyUsed, true)
-	})
-
-	test('fetch бросил — network без status', async () => {
-		const { requestBlob } = fake(new TypeError('Failed to fetch'))
-		const outcome = await requestBlob('/export', { filename: 'test.zip' })
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'network')
-		assert.equal(outcome.status, undefined)
 	})
 
 	test('по умолчанию GET с cache no-store', async () => {

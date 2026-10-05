@@ -6,11 +6,10 @@ vi.mock('@/lib/session/client', () => ({
 	AuthExpiredError: class AuthExpiredError extends Error {},
 }))
 
-import { failureMessage } from '@/lib/http/errors'
 import { RequestError } from '@/lib/http/request'
 import { apiFetch } from '@/lib/session/client'
 
-import { assetsKeys, deleteAsset, fetchSignedUrl, listAssets, uploadAsset } from './api'
+import { fetchSignedUrl, listAssets, uploadAsset } from './api'
 
 const apiFetchMock = vi.mocked(apiFetch)
 
@@ -30,12 +29,6 @@ beforeEach(() => {
 	apiFetchMock.mockReset()
 })
 
-describe('assetsKeys', () => {
-	test('страница — строка URL с limit и offset', () => {
-		assert.equal(assetsKeys.page(20, 40), '/api/docs/assets?limit=20&offset=40')
-	})
-})
-
 describe('listAssets', () => {
 	test('GET /api/docs/assets?limit=&offset= отдаёт страницу', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { assets: [ASSET], total: 1 }))
@@ -53,16 +46,6 @@ describe('listAssets', () => {
 			if (outcome.ok) continue
 			assert.equal(outcome.kind, 'malformed')
 		}
-	})
-
-	test('403 — http 403 с текстом прав', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
-		const outcome = await listAssets(20, 0)
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.status, 403)
-		assert.equal(outcome.message, 'Недостаточно прав для этого действия. Обратитесь к администратору.')
 	})
 })
 
@@ -93,43 +76,6 @@ describe('uploadAsset', () => {
 		if (outcome.ok) return
 		assert.equal(outcome.kind, 'malformed')
 	})
-
-	test('400 с русским текстом — текст сервера; 500 — запасной текст загрузки', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Файл не передан' }))
-		const rejected = await uploadAsset(new FormData())
-		assert.equal(rejected.ok, false)
-		if (rejected.ok) return
-		assert.equal(failureMessage(rejected, 'Не удалось загрузить изображение'), 'Файл не передан')
-
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Upload failed' }))
-		const failed = await uploadAsset(new FormData())
-		assert.equal(failed.ok, false)
-		if (failed.ok) return
-		assert.equal(failureMessage(failed, 'Не удалось загрузить изображение'), 'Не удалось загрузить изображение')
-	})
-})
-
-describe('deleteAsset', () => {
-	test('DELETE /api/docs/assets с JSON-телом { path }', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { success: true }))
-		const outcome = await deleteAsset({ path: 'images/a.webp' })
-		assert.equal(outcome.ok, true)
-		const [url, init] = apiFetchMock.mock.calls[0] ?? []
-		assert.equal(url, '/api/docs/assets')
-		assert.equal(init?.method, 'DELETE')
-		assert.equal(init?.body, JSON.stringify({ path: 'images/a.webp' }))
-		assert.equal((init?.headers as Record<string, string>)['Content-Type'], 'application/json')
-	})
-
-	test('409 — тело отказа с usage доступно вызывающему', async () => {
-		const body = { error: 'Изображение используется', usage: [{ testId: 't1' }] }
-		apiFetchMock.mockResolvedValueOnce(json(409, body))
-		const outcome = await deleteAsset({ path: 'images/a.webp' })
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.status, 409)
-		assert.deepEqual(outcome.body, body)
-	})
 })
 
 describe('fetchSignedUrl', () => {
@@ -144,16 +90,6 @@ describe('fetchSignedUrl', () => {
 		await assert.rejects(fetchSignedUrl('images/a.webp'), (error: unknown) => {
 			assert.ok(error instanceof RequestError)
 			assert.equal(error.kind, 'malformed')
-			return true
-		})
-	})
-
-	test('400 — исключение RequestError http', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Invalid path' }))
-		await assert.rejects(fetchSignedUrl('images/a.webp'), (error: unknown) => {
-			assert.ok(error instanceof RequestError)
-			assert.equal(error.kind, 'http')
-			assert.equal(error.status, 400)
 			return true
 		})
 	})

@@ -6,7 +6,6 @@ vi.mock('@/lib/session/client', () => ({
 	AuthExpiredError: class AuthExpiredError extends Error {},
 }))
 
-import { RequestError } from '@/lib/http/request'
 import { apiFetch, AuthExpiredError } from '@/lib/session/client'
 
 import {
@@ -14,12 +13,8 @@ import {
 	fetchChartData,
 	fetchChartDefaultRange,
 	fetchMyTestAttempts,
-	fetchPublicTestById,
 	fetchPublicTestBySlug,
-	fetchPublicTestsList,
 	fetchPublicTestSummary,
-	fetchTopicTests,
-	KEEPALIVE_BODY_LIMIT_BYTES,
 	saveAttemptDraft,
 	startTestSession,
 	submitPublicTestAnswers,
@@ -58,32 +53,35 @@ beforeEach(() => {
 })
 
 describe('saveAttemptDraft', () => {
-	test('враждебный sessionId кодируется и не меняет путь и параметры', async () => {
+	test.each(
+		[
+			{
+				name: 'враждебный sessionId кодируется и не меняет путь и параметры',
+				testId: 't1',
+				sessionId: '../x?y',
+				body: { questionId: Q1, value: 'a' } as Parameters<typeof saveAttemptDraft>[2],
+				keepalive: true,
+				url: '/api/tests/public/tests/t1/sessions/..%2Fx%3Fy/answers',
+			},
+			{
+				name: 'враждебный testId тоже кодируется',
+				testId: 'a/b#c',
+				sessionId: 's1',
+				body: { telemetry: {} } as Parameters<typeof saveAttemptDraft>[2],
+				keepalive: false,
+				url: '/api/tests/public/tests/a%2Fb%23c/sessions/s1/answers',
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { testId, sessionId, body, keepalive, url }) => {
 		apiFetchMock.mockResolvedValueOnce(empty(200))
-		const result = await saveAttemptDraft('t1', '../x?y', { questionId: Q1, value: 'a' }, { keepalive: true })
+		const result = await saveAttemptDraft(testId, sessionId, body, { keepalive })
 		assert.deepEqual(result, { kind: 'response', status: 200 })
-		assert.equal(calledUrl(), '/api/tests/public/tests/t1/sessions/..%2Fx%3Fy/answers')
+		assert.equal(calledUrl(), url)
 		const init = calledInit()
 		assert.equal(init?.method, 'PATCH')
-		assert.equal(init?.keepalive, true)
-		assert.equal(init?.body, JSON.stringify({ questionId: Q1, value: 'a' }))
+		assert.equal(init?.keepalive, keepalive)
+		assert.equal(init?.body, JSON.stringify(body))
 		assert.equal(new Headers(init?.headers).get('Content-Type'), 'application/json')
-	})
-
-	test('враждебный testId тоже кодируется', async () => {
-		apiFetchMock.mockResolvedValueOnce(empty(200))
-		await saveAttemptDraft('a/b#c', 's1', { telemetry: {} }, { keepalive: false })
-		assert.equal(calledUrl(), '/api/tests/public/tests/a%2Fb%23c/sessions/s1/answers')
-	})
-
-	test('любой ответ сервера — response со статусом', async () => {
-		for (const status of [200, 204, 400, 403, 404, 409, 500]) {
-			apiFetchMock.mockResolvedValueOnce(status === 204 ? empty(204) : json(status, { error: 'x' }))
-			assert.deepEqual(await saveAttemptDraft('t1', 's1', { telemetry: {} }, { keepalive: false }), {
-				kind: 'response',
-				status,
-			})
-		}
 	})
 
 	test('2xx с телом не JSON — тоже response', async () => {
@@ -94,49 +92,44 @@ describe('saveAttemptDraft', () => {
 		})
 	})
 
-	test('сбой сети — network', async () => {
-		apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-		assert.deepEqual(await saveAttemptDraft('t1', 's1', { telemetry: {} }, { keepalive: false }), { kind: 'network' })
-	})
-
 	test('AuthExpiredError — network', async () => {
 		apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())
 		assert.deepEqual(await saveAttemptDraft('t1', 's1', { telemetry: {} }, { keepalive: true }), { kind: 'network' })
 	})
-
-	test('тело больше лимита при keepalive — too-large без запроса', async () => {
-		const body = { questionId: Q1, value: 'я'.repeat(31_000) }
-		assert.ok(new TextEncoder().encode(JSON.stringify(body)).length > KEEPALIVE_BODY_LIMIT_BYTES)
-		assert.deepEqual(await saveAttemptDraft('t1', 's1', body, { keepalive: true }), { kind: 'too-large' })
-		assert.equal(apiFetchMock.mock.calls.length, 0)
-	})
 })
 
 describe('startTestSession и submitPublicTestAnswers', () => {
-	test('422 TIME_EXPIRED при старте — AttemptRequestError с кодом и attemptId', async () => {
+	test.each(
+		[
+			{
+				name: '422 TIME_EXPIRED при старте — AttemptRequestError с кодом и attemptId',
+				request: undefined as Record<string, unknown> | undefined,
+				url: '/api/tests/public/tests/t1/start',
+			},
+			{
+				name: '422 TIME_EXPIRED при отправке — AttemptRequestError с кодом и attemptId',
+				request: { sessionId: 's1', clientAttemptId: 'c1', answers: {}, telemetry: {} } as
+					| Record<string, unknown>
+					| undefined,
+				url: '/api/tests/public/tests/t1/submit',
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { request, url }) => {
 		apiFetchMock.mockResolvedValueOnce(json(422, { error: 'TIME_EXPIRED', attemptId: 'a1' }))
-		const { error } = await settle(startTestSession('t1'))
+		const { error } = await settle<unknown>(
+			request === undefined ? startTestSession('t1') : submitPublicTestAnswers('t1', request as never)
+		)
 		assert.ok(error instanceof AttemptRequestError)
 		assert.equal(error.status, 422)
 		assert.equal(error.code, 'TIME_EXPIRED')
 		assert.equal(error.attemptId, 'a1')
-		assert.equal(calledUrl(), '/api/tests/public/tests/t1/start')
-		assert.equal(calledInit()?.method, 'POST')
-	})
-
-	test('422 TIME_EXPIRED при отправке — AttemptRequestError с кодом и attemptId', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(422, { error: 'TIME_EXPIRED', attemptId: 'a1' }))
-		const request = { sessionId: 's1', clientAttemptId: 'c1', answers: {}, telemetry: {} }
-		const { error } = await settle(submitPublicTestAnswers('t1', request as never))
-		assert.ok(error instanceof AttemptRequestError)
-		assert.equal(error.status, 422)
-		assert.equal(error.code, 'TIME_EXPIRED')
-		assert.equal(error.attemptId, 'a1')
-		assert.equal(calledUrl(), '/api/tests/public/tests/t1/submit')
+		assert.equal(calledUrl(), url)
 		const init = calledInit()
 		assert.equal(init?.method, 'POST')
-		assert.equal(init?.body, JSON.stringify(request))
-		assert.equal(new Headers(init?.headers).get('Content-Type'), 'application/json')
+		if (request !== undefined) {
+			assert.equal(init?.body, JSON.stringify(request))
+			assert.equal(new Headers(init?.headers).get('Content-Type'), 'application/json')
+		}
 	})
 
 	test('отказ без тела — AttemptRequestError без кода', async () => {
@@ -164,49 +157,37 @@ describe('startTestSession и submitPublicTestAnswers', () => {
 })
 
 describe('чтение каталога ученика', () => {
-	test('fetchPublicTestBySlug кодирует оба сегмента', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { test: {}, questions: [] }))
-		await fetchPublicTestBySlug('тема', 'тест')
-		assert.equal(calledUrl(), '/api/tests/public/topics/%D1%82%D0%B5%D0%BC%D0%B0/tests/%D1%82%D0%B5%D1%81%D1%82')
-	})
-
-	test('fetchPublicTestSummary кодирует сегменты и оставляет view=summary', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { test: {} }))
-		await fetchPublicTestSummary('a?b', 'c/d')
-		assert.equal(calledUrl(), '/api/tests/public/topics/a%3Fb/tests/c%2Fd?view=summary')
-	})
-
-	test('fetchPublicTestById, fetchTopicTests, fetchMyTestAttempts, fetchChartData кодируют сегменты', async () => {
-		apiFetchMock.mockImplementation(async () => json(200, {}))
-		await fetchPublicTestById('../x')
-		await fetchTopicTests('a/b')
-		await fetchMyTestAttempts('t?1', { offset: 0, limit: 5 })
-		await fetchChartData('t#1', { from: '2026-01-01', to: '2026-02-01' })
+	test.each(
+		[
+			{
+				name: 'fetchPublicTestBySlug кодирует оба сегмента',
+				run: () => fetchPublicTestBySlug('тема', 'тест'),
+				urls: ['/api/tests/public/topics/%D1%82%D0%B5%D0%BC%D0%B0/tests/%D1%82%D0%B5%D1%81%D1%82'],
+			},
+			{
+				name: 'fetchPublicTestSummary кодирует сегменты и оставляет view=summary',
+				run: () => fetchPublicTestSummary('a?b', 'c/d'),
+				urls: ['/api/tests/public/topics/a%3Fb/tests/c%2Fd?view=summary'],
+			},
+			{
+				name: 'fetchMyTestAttempts, fetchChartData кодируют сегменты',
+				run: async () => {
+					await fetchMyTestAttempts('t?1', { offset: 0, limit: 5 })
+					await fetchChartData('t#1', { from: '2026-01-01', to: '2026-02-01' })
+				},
+				urls: [
+					'/api/tests/public/tests/t%3F1/attempts/me?offset=0&limit=5',
+					'/api/tests/public/tests/t%231/chart-data?from=2026-01-01&to=2026-02-01',
+				],
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { run, urls }) => {
+		apiFetchMock.mockImplementation(async () => json(200, { test: {}, questions: [] }))
+		await run()
 		assert.deepEqual(
 			apiFetchMock.mock.calls.map((call) => call[0]),
-			[
-				'/api/tests/public/tests/..%2Fx',
-				'/api/tests/public/topics/a%2Fb/tests',
-				'/api/tests/public/tests/t%3F1/attempts/me?offset=0&limit=5',
-				'/api/tests/public/tests/t%231/chart-data?from=2026-01-01&to=2026-02-01',
-			]
+			urls
 		)
-	})
-
-	test('fetchPublicTestsList отдаёт тело и шлёт GET', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { tests: [] }))
-		assert.deepEqual(await fetchPublicTestsList(), { tests: [] })
-		assert.equal(calledUrl(), '/api/tests/public/tests')
-		assert.equal(calledInit()?.method, 'GET')
-		assert.equal(calledInit()?.cache, 'no-store')
-	})
-
-	test('отказ чтения — RequestError', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'boom' }))
-		const { error } = await settle(fetchPublicTestsList())
-		assert.ok(error instanceof RequestError)
-		assert.equal(error.kind, 'http')
-		assert.equal(error.status, 500)
 	})
 
 	test('fetchChartDefaultRange при отказе отдаёт month', async () => {

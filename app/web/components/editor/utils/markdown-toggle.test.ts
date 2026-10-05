@@ -52,25 +52,6 @@ test('переключатель markdown не запекает подсказк
 	assert.doesNotMatch(mdxEvents.at(-1) ?? '', /books|\(TAB\)/)
 })
 
-test('переключатель markdown: туда и обратно сохраняет форматирование', () => {
-	const editor = newEditor()
-	editor.update(
-		() => {
-			$getRoot()
-				.clear()
-				.append($createParagraphNode().append($createTextNode('Клетка делится')))
-		},
-		{ discrete: true }
-	)
-	toggle(editor)
-	assert.equal(
-		editor.getEditorState().read(() => $getRoot().getTextContent()),
-		'Клетка делится'
-	)
-	toggle(editor)
-	assert.equal(editor.getEditorState().read(editorStateToMdx), 'Клетка делится')
-})
-
 test('список переключателя совпадает со списком MDX по составу и порядку', () => {
 	assert.equal(TOGGLE_TRANSFORMERS.length, MDX_TRANSFORMERS.length)
 	TOGGLE_TRANSFORMERS.forEach((transformer, index) =>

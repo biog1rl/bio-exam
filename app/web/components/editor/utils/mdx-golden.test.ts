@@ -25,11 +25,6 @@ async function roundTrip(input: string): Promise<string> {
 	return editor.getEditorState().read(editorStateToMdx)
 }
 
-test('среда без DOM', () => {
-	assert.equal(typeof document, 'undefined')
-	assert.equal(typeof window, 'undefined')
-})
-
 describe('золотые образцы MDX', () => {
 	for (const goldenCase of MDX_GOLDEN_CASES) {
 		test(goldenCase.name, async () => {

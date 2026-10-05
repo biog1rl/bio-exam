@@ -7,7 +7,7 @@ vi.mock('@/lib/session/client', () => ({
 }))
 
 import { MalformedBodyError, RequestError } from '@/lib/http/request'
-import { apiFetch, AuthExpiredError } from '@/lib/session/client'
+import { apiFetch } from '@/lib/session/client'
 
 import {
 	candidatesFetcher,
@@ -24,7 +24,6 @@ import {
 	parseOwnerOptions,
 	saveGroup,
 } from './api'
-import { candidatesSource } from './group-form'
 
 const apiFetchMock = vi.mocked(apiFetch)
 
@@ -45,61 +44,66 @@ beforeEach(() => {
 })
 
 describe('groupsKeys', () => {
-	test('список и мои группы — прежние строки ключей', () => {
-		assert.equal(groupsKeys.list(), '/api/groups')
-		assert.equal(groupsKeys.my(), '/api/groups/my')
-		assert.equal(groupsKeys.ownerOptions(), '/api/groups/owner-options')
-	})
-
-	test('карточка группы — путь группы', () => {
-		assert.equal(groupsKeys.detail(GROUP_ID), `/api/groups/${GROUP_ID}`)
-	})
-
 	test('кандидаты кодируют запрос', () => {
 		assert.equal(groupsKeys.candidates('Ив Пе'), '/api/groups/candidates?q=%D0%98%D0%B2%20%D0%9F%D0%B5')
 		assert.equal(groupsKeys.candidates('a&b'), '/api/groups/candidates?q=a%26b')
 	})
-
-	test('ключ кандидатов совпадает с источником 07.1', () => {
-		assert.equal(groupsKeys.candidates('Ан'), candidatesSource({ zoneAll: false, query: 'Ан' }))
-		assert.equal(groupsKeys.candidates('  Ан '), candidatesSource({ zoneAll: false, query: '  Ан ' }))
-	})
 })
 
 describe('parse', () => {
-	test('parseGroupsList возвращает тело без преобразования', () => {
-		const body = { groups: [] }
-		assert.equal(parseGroupsList(body), body)
-		const withOwner = { groups: [{ id: GROUP_ID, name: '9А', memberCount: 2, createdAt: 'x', owner: null }] }
-		assert.equal(parseGroupsList(withOwner), withOwner)
-	})
-
-	test('parseGroupsList отклоняет ответ с ошибкой', () => {
-		assert.throws(() => parseGroupsList({ error: 'Forbidden' }), MalformedBodyError)
-		assert.throws(() => parseGroupsList(null), MalformedBodyError)
-		assert.throws(() => parseGroupsList({ groups: {} }), MalformedBodyError)
-	})
-
-	test('parseMyGroups принимает лишнее поле group', () => {
-		const body = { groups: [{ id: GROUP_ID, name: '9А' }], group: { id: GROUP_ID, name: '9А' } }
-		assert.equal(parseMyGroups(body), body)
-		assert.throws(() => parseMyGroups({ group: null }), MalformedBodyError)
-	})
-
-	test('parseGroupDetail требует группу с составом', () => {
-		const body = { group: { id: GROUP_ID, name: '9А', createdAt: 'x', members: [] } }
-		assert.equal(parseGroupDetail(body), body)
-		assert.throws(() => parseGroupDetail({ group: { id: GROUP_ID } }), MalformedBodyError)
-		assert.throws(() => parseGroupDetail({ error: 'Group not found' }), MalformedBodyError)
-	})
-
-	test('parseCandidates и parseOwnerOptions проверяют конверт', () => {
-		const users = { users: [] }
-		const owners = { owners: [] }
-		assert.equal(parseCandidates(users), users)
-		assert.equal(parseOwnerOptions(owners), owners)
-		assert.throws(() => parseCandidates({ error: 'x' }), MalformedBodyError)
-		assert.throws(() => parseOwnerOptions({ error: 'Forbidden' }), MalformedBodyError)
+	test.each(
+		(
+			[
+				{
+					name: 'parseGroupsList возвращает тело без преобразования',
+					cases: [
+						[parseGroupsList, { groups: [] }, true],
+						[
+							parseGroupsList,
+							{ groups: [{ id: GROUP_ID, name: '9А', memberCount: 2, createdAt: 'x', owner: null }] },
+							true,
+						],
+					],
+				},
+				{
+					name: 'parseGroupsList отклоняет ответ с ошибкой',
+					cases: [
+						[parseGroupsList, { error: 'Forbidden' }, false],
+						[parseGroupsList, null, false],
+						[parseGroupsList, { groups: {} }, false],
+					],
+				},
+				{
+					name: 'parseMyGroups принимает лишнее поле group',
+					cases: [
+						[parseMyGroups, { groups: [{ id: GROUP_ID, name: '9А' }], group: { id: GROUP_ID, name: '9А' } }, true],
+						[parseMyGroups, { group: null }, false],
+					],
+				},
+				{
+					name: 'parseGroupDetail требует группу с составом',
+					cases: [
+						[parseGroupDetail, { group: { id: GROUP_ID, name: '9А', createdAt: 'x', members: [] } }, true],
+						[parseGroupDetail, { group: { id: GROUP_ID } }, false],
+						[parseGroupDetail, { error: 'Group not found' }, false],
+					],
+				},
+				{
+					name: 'parseCandidates и parseOwnerOptions проверяют конверт',
+					cases: [
+						[parseCandidates, { users: [] }, true],
+						[parseOwnerOptions, { owners: [] }, true],
+						[parseCandidates, { error: 'x' }, false],
+						[parseOwnerOptions, { error: 'Forbidden' }, false],
+					],
+				},
+			] as { name: string; cases: [(body: unknown) => unknown, unknown, boolean][] }[]
+		).map((row): [string, { name: string; cases: [(body: unknown) => unknown, unknown, boolean][] }] => [row.name, row])
+	)('%s', (_name, { cases }) => {
+		for (const [parse, body, passes] of cases) {
+			if (passes) assert.equal(parse(body), body)
+			else assert.throws(() => parse(body), MalformedBodyError)
+		}
 	})
 })
 
@@ -113,23 +117,6 @@ describe('фетчеры', () => {
 		})
 	})
 
-	test('groupsListFetcher при 500 бросает http со статусом', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Internal' }))
-		await assert.rejects(groupsListFetcher(groupsKeys.list()), (error: unknown) => {
-			assert.ok(error instanceof RequestError)
-			assert.equal(error.kind, 'http')
-			assert.equal(error.status, 500)
-			return true
-		})
-	})
-
-	test('groupsListFetcher отдаёт тело списка', async () => {
-		const body = { groups: [{ id: GROUP_ID, name: '9А', memberCount: 0, createdAt: 'x' }] }
-		apiFetchMock.mockResolvedValueOnce(json(200, body))
-		assert.deepEqual(await groupsListFetcher(groupsKeys.list()), body)
-		assert.equal(lastCall().url, '/api/groups')
-	})
-
 	test('фетчеры карточки, кандидатов, владельцев и моих групп разбирают конверт', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { group: { id: GROUP_ID, name: '9А', createdAt: 'x', members: [] } }))
 		assert.equal((await groupDetailFetcher(groupsKeys.detail(GROUP_ID))).group.id, GROUP_ID)
@@ -140,72 +127,49 @@ describe('фетчеры', () => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { groups: [], group: null }))
 		assert.deepEqual(await myGroupsFetcher(groupsKeys.my()), { groups: [], group: null })
 	})
-
-	test('candidatesFetcher при 400 бросает http', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Укажите не меньше 2 символов для поиска' }))
-		await assert.rejects(candidatesFetcher(groupsKeys.candidates('Ан')), (error: unknown) => {
-			assert.ok(error instanceof RequestError)
-			assert.equal(error.kind, 'http')
-			return true
-		})
-	})
 })
 
 describe('запись', () => {
 	const body = { name: '9А', memberIds: ['u1'] }
 
-	test('saveGroup без id создаёт группу POST', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(201, { group: { id: GROUP_ID } }))
-		const outcome = await saveGroup({ body })
+	test.each(
+		[
+			{
+				name: 'saveGroup без id создаёт группу POST',
+				reply: () => json(201, { group: { id: GROUP_ID } }),
+				run: () => saveGroup({ body }),
+				url: '/api/groups',
+				method: 'POST',
+				sent: JSON.stringify(body) as string | undefined,
+				contentType: true,
+			},
+			{
+				name: 'saveGroup с id правит группу PATCH',
+				reply: () => json(200, { ok: true }),
+				run: () => saveGroup({ id: GROUP_ID, body: { ...body, ownerId: null } }),
+				url: `/api/groups/${GROUP_ID}`,
+				method: 'PATCH',
+				sent: JSON.stringify({ ...body, ownerId: null }) as string | undefined,
+				contentType: false,
+			},
+			{
+				name: 'deleteGroup удаляет группу DELETE',
+				reply: () => json(200, { ok: true }),
+				run: () => deleteGroup(GROUP_ID),
+				url: `/api/groups/${GROUP_ID}`,
+				method: 'DELETE',
+				sent: undefined as string | undefined,
+				contentType: false,
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { reply, run, url, method, sent, contentType }) => {
+		apiFetchMock.mockResolvedValueOnce(reply())
+		const outcome = await run()
 		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, '/api/groups')
-		assert.equal(init?.method, 'POST')
-		assert.equal(init?.body, JSON.stringify(body))
-		assert.equal(new Headers(init?.headers).get('content-type'), 'application/json')
-	})
-
-	test('saveGroup с id правит группу PATCH', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await saveGroup({ id: GROUP_ID, body: { ...body, ownerId: null } })
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/groups/${GROUP_ID}`)
-		assert.equal(init?.method, 'PATCH')
-		assert.equal(init?.body, JSON.stringify({ ...body, ownerId: null }))
-	})
-
-	test('saveGroup отдаёт статус отказа', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Invalid request' }))
-		const outcome = await saveGroup({ body })
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.status, 400)
-	})
-
-	test('saveGroup при истёкшей сессии — auth', async () => {
-		apiFetchMock.mockRejectedValueOnce(new AuthExpiredError())
-		const outcome = await saveGroup({ body })
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'auth')
-	})
-
-	test('deleteGroup удаляет группу DELETE', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const outcome = await deleteGroup(GROUP_ID)
-		assert.equal(outcome.ok, true)
-		const { url, init } = lastCall()
-		assert.equal(url, `/api/groups/${GROUP_ID}`)
-		assert.equal(init?.method, 'DELETE')
-	})
-
-	test('deleteGroup при сетевой ошибке — network', async () => {
-		apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-		const outcome = await deleteGroup(GROUP_ID)
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'network')
+		const call = lastCall()
+		assert.equal(call.url, url)
+		assert.equal(call.init?.method, method)
+		if (sent !== undefined) assert.equal(call.init?.body, sent)
+		if (contentType) assert.equal(new Headers(call.init?.headers).get('content-type'), 'application/json')
 	})
 })

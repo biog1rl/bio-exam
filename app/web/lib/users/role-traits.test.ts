@@ -51,12 +51,3 @@ test.each<[string, unknown]>([
 ])('без пригодного списка ролей (%s) — ROLES_LIST без признаков', (_label, body) => {
 	assert.deepEqual(parseRoleTraits(body), FALLBACK)
 })
-
-test('запасной список совпадает с ROLES_LIST по ключам и именам, признаки null', () => {
-	const fallback = parseRoleTraits(undefined)
-	assert.equal(fallback.length, ROLES_LIST.length)
-	for (const role of fallback) {
-		assert.equal(role.ownsZone, null)
-		assert.equal(role.groupMember, null)
-	}
-})

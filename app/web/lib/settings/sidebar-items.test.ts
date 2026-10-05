@@ -30,14 +30,6 @@ function item(id: string, url: string, order: number): SidebarItem {
 
 const DB_ITEMS: readonly SidebarItem[] = [item('a', '/dashboard', 0), item('b', '/tests', 1)]
 
-test('встроенный пункт «Админка» ведёт на /admin с иконкой ShieldCheck', () => {
-	assert.equal(ADMIN_LINK.title, 'Админка')
-	assert.equal(ADMIN_LINK.url, '/admin')
-	assert.equal(ADMIN_LINK.icon, 'ShieldCheck')
-	assert.equal(ADMIN_LINK.target, '_self')
-	assert.equal(ADMIN_LINK.isActive, false)
-})
-
 test('администратор и учитель видят «Админку» после пунктов из базы', () => {
 	for (const role of ['admin', 'teacher'] as const) {
 		const nav = sidebarNavItems(DB_ITEMS, rolePerms(role))

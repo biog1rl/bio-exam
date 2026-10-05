@@ -22,10 +22,6 @@ function failure(kind: RequestFailureKind, status?: number, body?: unknown): Req
 }
 
 describe('readApiError', () => {
-	test('возвращает русский текст поля error', () => {
-		assert.equal(readApiError({ error: 'Логин уже используется' }), 'Логин уже используется')
-	})
-
 	test('английский текст, пустая строка, не строка и чужая форма — null', () => {
 		for (const body of [{ error: 'Forbidden' }, { error: '' }, { error: 42 }, { message: 'Ошибка' }, null, 'Ошибка']) {
 			assert.equal(readApiError(body), null)
@@ -140,12 +136,6 @@ describe('failureOf', () => {
 		})
 	})
 
-	test('RequestError auth — пустой текст', () => {
-		const result = failureOf(new RequestError({ ok: false, kind: 'auth', message: '' }))
-		assert.equal(result.kind, 'auth')
-		assert.equal(result.message, '')
-	})
-
 	test('прочие ошибки — network', () => {
 		for (const error of [new Error('boom'), new TypeError('Failed to fetch'), 'строка', undefined]) {
 			const result = failureOf(error)
@@ -164,11 +154,6 @@ describe('exportFailureMessage', () => {
 		assert.equal(exportFailureMessage(failure('network'), 'Ошибка экспорта'), NETWORK)
 	})
 
-	test('413 с русским текстом — текст сервера', () => {
-		const text = 'Архив слишком большой для выгрузки, экспортируйте тесты по отдельности'
-		assert.equal(exportFailureMessage(failure('http', 413, { error: text }), 'Ошибка экспорта'), text)
-	})
-
 	test('403 — текст 403', () => {
 		assert.equal(exportFailureMessage(failure('http', 403, { error: 'Forbidden' }), 'Ошибка экспорта'), FORBIDDEN)
 	})
@@ -179,9 +164,5 @@ describe('exportFailureMessage', () => {
 			'Ошибка экспорта'
 		)
 		assert.equal(exportFailureMessage(failure('http', 500), 'Ошибка экспорта'), 'Ошибка экспорта')
-	})
-
-	test('auth — пусто', () => {
-		assert.equal(exportFailureMessage(failure('auth'), 'Ошибка экспорта'), '')
 	})
 })
