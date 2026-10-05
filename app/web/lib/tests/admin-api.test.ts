@@ -12,8 +12,16 @@ import { MalformedBodyError } from '@/lib/http/request'
 import { apiFetch } from '@/lib/session/client'
 
 import {
+	ATTEMPTS_LOAD_ERROR,
+	ATTEMPTS_PAGE_SIZE,
+	DEFAULT_ATTEMPTS_FILTERS,
+	adminAttemptsFetcher,
 	adminTestsKeys,
 	adminTestsListFetcher,
+	attemptsDayRange,
+	fetchAdminAttemptsPage,
+	mergeAttemptPages,
+	parseAdminAttempts,
 	deleteQuestionType,
 	deleteTest,
 	deleteTestQuestionTypeOverride,
@@ -610,5 +618,165 @@ describe('переопределения типа для теста', () => {
 		const removed = await deleteTestQuestionTypeOverride(TEST_ID, 'a')
 		assert.equal(removed.ok, false)
 		if (!removed.ok) assert.equal(removed.status, 403)
+	})
+})
+
+const STUDENT_ID = '77777777-7777-4777-8777-777777777777'
+
+function attemptRow(id: string) {
+	return {
+		attemptId: id,
+		testId: TEST_ID,
+		testTitle: 'Тест',
+		testSlug: 'test',
+		topicSlug: 'cell',
+		topicTitle: 'Клетка',
+		studentId: STUDENT_ID,
+		studentIsActive: true,
+		studentName: 'Иван',
+		submittedAt: '2026-10-01T10:00:00.000Z',
+		earnedPoints: 1,
+		totalPoints: 2,
+		scorePercentage: 50,
+		passed: false,
+	}
+}
+
+function attemptsPage(ids: string[], total: number, offset = 0) {
+	return {
+		rows: ids.map(attemptRow),
+		total,
+		limit: ATTEMPTS_PAGE_SIZE,
+		offset,
+		summary: { passed: 0, averageScore: 50 },
+		scopeTotal: total + 3,
+		facets: {
+			topics: [{ slug: 'cell', title: 'Клетка' }],
+			students: [{ id: STUDENT_ID, name: 'Иван', isActive: true }],
+		},
+	}
+}
+
+describe('список попыток: ключ и запрос', () => {
+	test('по умолчанию первая страница активных учеников', () => {
+		assert.equal(ATTEMPTS_PAGE_SIZE, 50)
+		assert.deepEqual(DEFAULT_ATTEMPTS_FILTERS, {
+			q: '',
+			topic: null,
+			student: null,
+			from: null,
+			to: null,
+			status: 'active',
+		})
+		assert.equal(adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS), '/api/tests/admin/attempts?limit=50&status=active')
+	})
+
+	test('фильтры попадают в строку ключа, поиск обрезается и кодируется, offset только после первой страницы', () => {
+		const key = adminTestsKeys.attempts(
+			{
+				q: '  50% a&b  ',
+				topic: 'cell',
+				student: STUDENT_ID,
+				from: '2026-09-30T21:00:00.000Z',
+				to: '2026-10-01T20:59:59.999Z',
+				status: 'all',
+			},
+			100
+		)
+		const url = new URL(key, 'https://web.test')
+		assert.equal(url.pathname, '/api/tests/admin/attempts')
+		assert.deepEqual(Object.fromEntries(url.searchParams), {
+			limit: '50',
+			offset: '100',
+			status: 'all',
+			q: '50% a&b',
+			topic: 'cell',
+			student: STUDENT_ID,
+			from: '2026-09-30T21:00:00.000Z',
+			to: '2026-10-01T20:59:59.999Z',
+		})
+		assert.equal(
+			adminTestsKeys.attempts({ ...DEFAULT_ATTEMPTS_FILTERS, q: '   ' }),
+			adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS)
+		)
+	})
+
+	test('даты: начало первого и конец последнего выбранного дня в локальном времени', () => {
+		const from = new Date(2026, 8, 30, 15, 20)
+		const to = new Date(2026, 9, 2, 8, 0)
+		assert.deepEqual(attemptsDayRange({ from, to }), {
+			from: new Date(2026, 8, 30, 0, 0, 0, 0).toISOString(),
+			to: new Date(2026, 9, 2, 23, 59, 59, 999).toISOString(),
+		})
+		assert.deepEqual(attemptsDayRange({ from }), {
+			from: new Date(2026, 8, 30, 0, 0, 0, 0).toISOString(),
+			to: new Date(2026, 8, 30, 23, 59, 59, 999).toISOString(),
+		})
+		assert.deepEqual(attemptsDayRange(undefined), { from: null, to: null })
+		assert.deepEqual(attemptsDayRange({ from: undefined }), { from: null, to: null })
+	})
+
+	test('parseAdminAttempts пропускает полный ответ и отвергает старую форму', () => {
+		const body = attemptsPage(['a'], 1)
+		assert.equal(parseAdminAttempts(body), body)
+		for (const bad of [
+			null,
+			[],
+			{ rows: [], total: 0, limit: 50, offset: 0 },
+			{ ...body, rows: {} },
+			{ ...body, total: '1' },
+			{ ...body, facets: { topics: [] } },
+			{ ...body, summary: null },
+			{ ...body, scopeTotal: undefined },
+		]) {
+			assert.throws(() => parseAdminAttempts(bad), MalformedBodyError, JSON.stringify(bad))
+		}
+	})
+
+	test('adminAttemptsFetcher и fetchAdminAttemptsPage идут по ключу', async () => {
+		const body = attemptsPage(['a'], 1)
+		apiFetchMock.mockResolvedValueOnce(json(200, body))
+		const key = adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS)
+		assert.deepEqual(await adminAttemptsFetcher(key), body)
+		assert.equal(lastUrl(), key)
+
+		apiFetchMock.mockResolvedValueOnce(json(200, attemptsPage(['b'], 2, 50)))
+		const outcome = await fetchAdminAttemptsPage(DEFAULT_ATTEMPTS_FILTERS, 50)
+		assert.equal(lastUrl(), '/api/tests/admin/attempts?limit=50&offset=50&status=active')
+		assert.equal(outcome.ok, true)
+
+		apiFetchMock.mockResolvedValueOnce(json(500, {}))
+		const failed = await fetchAdminAttemptsPage(DEFAULT_ATTEMPTS_FILTERS, 50)
+		assert.equal(failed.ok, false)
+		if (!failed.ok) assert.equal(failed.message, ATTEMPTS_LOAD_ERROR)
+		assert.equal(ATTEMPTS_LOAD_ERROR, 'Не удалось загрузить попытки')
+	})
+})
+
+describe('mergeAttemptPages', () => {
+	test('склеивает страницы по порядку, повтор на стыке не дублируется', () => {
+		const merged = mergeAttemptPages([attemptsPage(['a', 'b'], 5), attemptsPage(['b', 'c'], 5, 2)])
+		assert.deepEqual(
+			merged.rows.map((row) => row.attemptId),
+			['a', 'b', 'c']
+		)
+		assert.equal(merged.loaded, 4)
+		assert.equal(merged.total, 5)
+		assert.equal(merged.hasMore, true)
+	})
+
+	test('«Показать ещё» скрыта, когда загружено total', () => {
+		const merged = mergeAttemptPages([attemptsPage(['a', 'b'], 3), attemptsPage(['c'], 3, 2)])
+		assert.equal(merged.loaded, 3)
+		assert.equal(merged.hasMore, false)
+		assert.equal(mergeAttemptPages([attemptsPage(['a'], 1)]).hasMore, false)
+		assert.equal(mergeAttemptPages([attemptsPage([], 0)]).hasMore, false)
+	})
+
+	test('total берётся из последней страницы, пустая страница останавливает догрузку', () => {
+		const merged = mergeAttemptPages([attemptsPage(['a'], 9), attemptsPage([], 9, 1)])
+		assert.equal(merged.total, 9)
+		assert.equal(merged.hasMore, false)
+		assert.equal(mergeAttemptPages([attemptsPage(['a'], 1), attemptsPage(['b'], 4, 1)]).total, 4)
 	})
 })

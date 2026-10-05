@@ -1,7 +1,8 @@
 import { STAFF_ROLE_KEYS } from '@bio-exam/rbac'
 
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm'
 import { Router } from 'express'
+import { z } from 'zod'
 
 import { db } from '../../../db/index.js'
 import { questions, testAttempts, tests, topics, userRoles, users } from '../../../db/schema.js'
@@ -12,6 +13,7 @@ import { validateUUID } from '../../../middleware/validateParams.js'
 import { canReviewAttempt, testScope, type TestScope } from '../../../services/access-policy/index.js'
 import { questionMarkdownCandidates, readQuestionTexts } from '../../../services/question-content/index.js'
 import { readAdminAttemptView } from '../../../services/scored-attempt/index.js'
+import { escapeLike } from '../../../services/search/index.js'
 
 const router = Router()
 
@@ -28,6 +30,40 @@ function studentNameIn(scope: TestScope): SQL<string> {
 
 function isEmptyScope(scope: TestScope): boolean {
 	return !scope.all && scope.topicIds.length === 0
+}
+
+const AttemptsQuerySchema = z.object({
+	limit: z.coerce.number().int().min(1).max(100).default(50),
+	offset: z.coerce.number().int().min(0).default(0),
+	q: z.string().trim().max(200).default(''),
+	topic: z.string().trim().min(1).max(200).optional(),
+	student: z.string().uuid().optional(),
+	from: z.string().datetime({ offset: true }).optional(),
+	to: z.string().datetime({ offset: true }).optional(),
+	status: z.enum(['active', 'inactive', 'all']).default('all'),
+})
+
+type AttemptsQuery = z.infer<typeof AttemptsQuerySchema>
+
+function attemptFilters(scope: TestScope, query: AttemptsQuery): Array<SQL | undefined> {
+	const filters: Array<SQL | undefined> = []
+	if (query.topic) filters.push(eq(topics.slug, query.topic))
+	if (query.student) filters.push(eq(users.id, query.student))
+	if (query.from) filters.push(gte(testAttempts.submittedAt, new Date(query.from)))
+	if (query.to) filters.push(lte(testAttempts.submittedAt, new Date(query.to)))
+	if (query.status !== 'all') filters.push(eq(users.isActive, query.status === 'active'))
+	if (query.q) {
+		const pattern = `%${escapeLike(query.q)}%`
+		filters.push(
+			or(
+				ilike(studentNameIn(scope), pattern),
+				ilike(tests.title, pattern),
+				ilike(topics.title, pattern),
+				scope.all ? ilike(users.login, pattern) : undefined
+			)
+		)
+	}
+	return filters
 }
 
 router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
@@ -113,20 +149,41 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 
 router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
 	try {
-		const limitRaw = Number(req.query.limit ?? 50)
-		const offsetRaw = Number(req.query.offset ?? 0)
-		const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 100)
-		const offset = Math.max(Number.isFinite(offsetRaw) ? offsetRaw : 0, 0)
+		const parsed = AttemptsQuerySchema.safeParse(req.query)
+		if (!parsed.success) {
+			return res.status(400).json({ error: 'Invalid attempts query', details: parsed.error.flatten() })
+		}
+		const query = parsed.data
+		const { limit, offset } = query
 		const scope = await testScope(req)
 		if (isEmptyScope(scope)) {
-			return res.json({ rows: [], total: 0, limit, offset })
+			return res.json({
+				rows: [],
+				total: 0,
+				limit,
+				offset,
+				summary: { passed: 0, averageScore: 0 },
+				scopeTotal: 0,
+				facets: { topics: [], students: [] },
+			})
 		}
 		const visible = studentAttemptsInScope(scope)
+		const filtered = and(visible, ...attemptFilters(scope, query))
 
-		const [{ total: totalRaw }] = await db
+		const [counts] = await db
 			.select({
 				total: sql<number>`count(*)::int`,
+				passed: sql<number>`count(*) filter (where ${testAttempts.passed})::int`,
+				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
 			})
+			.from(testAttempts)
+			.innerJoin(users, eq(users.id, testAttempts.userId))
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.innerJoin(topics, eq(topics.id, tests.topicId))
+			.where(filtered)
+
+		const [scopeCounts] = await db
+			.select({ total: sql<number>`count(*)::int` })
 			.from(testAttempts)
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
 			.where(visible)
@@ -152,19 +209,42 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 			.innerJoin(users, eq(users.id, testAttempts.userId))
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
 			.innerJoin(topics, eq(topics.id, tests.topicId))
-			.where(visible)
-			.orderBy(desc(testAttempts.submittedAt))
+			.where(filtered)
+			.orderBy(desc(testAttempts.submittedAt), desc(testAttempts.id))
 			.limit(limit)
 			.offset(offset)
+
+		const topicFacets = await db
+			.selectDistinct({ slug: topics.slug, title: topics.title })
+			.from(testAttempts)
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.innerJoin(topics, eq(topics.id, tests.topicId))
+			.where(visible)
+			.orderBy(asc(topics.title), asc(topics.slug))
+
+		const studentName = studentNameIn(scope)
+		const studentFacets = await db
+			.selectDistinct({ id: users.id, name: studentName, isActive: users.isActive })
+			.from(testAttempts)
+			.innerJoin(users, eq(users.id, testAttempts.userId))
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.where(visible)
+			.orderBy(asc(studentName), asc(users.id))
 
 		res.json({
 			rows: rows.map((attempt) => ({
 				...attempt,
 				submittedAt: attempt.submittedAt instanceof Date ? attempt.submittedAt.toISOString() : attempt.submittedAt,
 			})),
-			total: Number(totalRaw ?? 0),
+			total: Number(counts?.total ?? 0),
 			limit,
 			offset,
+			summary: {
+				passed: Number(counts?.passed ?? 0),
+				averageScore: Number(counts?.averageScore ?? 0),
+			},
+			scopeTotal: Number(scopeCounts?.total ?? 0),
+			facets: { topics: topicFacets, students: studentFacets },
 		})
 	} catch (e) {
 		next(e)

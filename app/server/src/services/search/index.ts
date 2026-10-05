@@ -1,4 +1,4 @@
-export { searchDatabase } from './database-search.js'
+export { escapeLike, searchDatabase } from './database-search.js'
 export type {
 	SearchCategory,
 	SearchResponse,

@@ -15,9 +15,16 @@ export type AdminAttemptListItem = {
 	passed: boolean
 }
 
+export type AdminAttemptsTopicFacet = { slug: string; title: string }
+
+export type AdminAttemptsStudentFacet = { id: string; name: string; isActive: boolean }
+
 export type AdminAttemptsResponse = {
 	rows: AdminAttemptListItem[]
 	total: number
 	limit: number
 	offset: number
+	summary: { passed: number; averageScore: number }
+	scopeTotal: number
+	facets: { topics: AdminAttemptsTopicFacet[]; students: AdminAttemptsStudentFacet[] }
 }

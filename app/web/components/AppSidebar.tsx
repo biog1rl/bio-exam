@@ -10,7 +10,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from '@/components/ui/sidebar'
 import { getSidebarItems, type SidebarItem } from '@/lib/settings/api'
-import { sidebarNavItems } from '@/lib/settings/sidebar-items'
+import { activeSidebarUrl, sidebarNavItems } from '@/lib/settings/sidebar-items'
 import { cn } from '@/lib/utils/cn'
 
 import LogoSidebar from './LogoSidebar'
@@ -22,7 +22,6 @@ type NavLink = {
 	url: string
 	icon: LucideIcon
 	target?: HTMLAnchorElement['target']
-	isActive: boolean
 }
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
@@ -47,9 +46,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 				url: item.url,
 				icon: (Icons as any)[item.icon] || Icons.CircleIcon,
 				target: item.target,
-				isActive: item.isActive,
 			})),
 		[items, perms]
+	)
+	const activeUrl = activeSidebarUrl(
+		links.map((link) => link.url),
+		pathname
 	)
 
 	return (
@@ -63,8 +65,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 				<nav aria-label="Main navigation">
 					<ul className="flex w-full min-w-0 flex-col gap-2">
 						{links.map((item) => {
-							const isActive =
-								item.isActive || pathname === item.url || (item.url !== '/' && pathname.startsWith(`${item.url}/`))
+							const isActive = item.url === activeUrl
 							const Icon = item.icon
 
 							return (

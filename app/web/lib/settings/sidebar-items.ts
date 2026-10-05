@@ -22,6 +22,26 @@ export function sidebarNavItems(items: readonly SidebarItem[], perms: ReadonlySe
 	return [...items, ADMIN_LINK]
 }
 
+function normalizePath(url: string): string {
+	return url.length > 1 && url.endsWith('/') ? url.slice(0, -1) : url
+}
+
+function matchesPath(url: string, pathname: string): boolean {
+	if (!url.startsWith('/')) return false
+	const base = normalizePath(url)
+	if (base === '/') return pathname === '/'
+	return pathname === base || pathname.startsWith(`${base}/`)
+}
+
+export function activeSidebarUrl(urls: readonly string[], pathname: string): string | null {
+	let active: string | null = null
+	for (const url of urls) {
+		if (!matchesPath(url, pathname)) continue
+		if (active === null || normalizePath(url).length > normalizePath(active).length) active = url
+	}
+	return active
+}
+
 export type SidebarReloadFailure = 'silent' | 'block' | 'toast'
 
 export function sidebarReloadFailure(input: { loaded: boolean; kind: RequestFailureKind }): SidebarReloadFailure {

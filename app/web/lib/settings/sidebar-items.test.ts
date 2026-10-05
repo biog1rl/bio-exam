@@ -7,6 +7,7 @@ import type { SidebarItem } from './api'
 import {
 	ADMIN_LINK,
 	SIDEBAR_RELOAD_ERROR,
+	activeSidebarUrl,
 	moveSidebarItem,
 	sidebarNavItems,
 	sidebarReloadFailure,
@@ -97,4 +98,31 @@ test('moveSidebarItem: перенос на себя или неизвестны�
 	assert.equal(moveSidebarItem(items, 'a', 'a'), null)
 	assert.equal(moveSidebarItem(items, 'x', 'a'), null)
 	assert.equal(moveSidebarItem(items, 'a', 'x'), null)
+})
+
+test('activeSidebarUrl: флаг isActive из базы не делает пункт активным, активен только пункт текущего адреса', () => {
+	const urls = sidebarNavItems(DB_ITEMS, rolePerms('admin')).map((entry) => entry.url)
+	assert.ok(DB_ITEMS.every((entry) => entry.isActive))
+	assert.equal(activeSidebarUrl(urls, '/dashboard'), '/dashboard')
+	assert.equal(activeSidebarUrl(urls, '/tests'), '/tests')
+	assert.equal(activeSidebarUrl(urls, '/tests/cell/basics'), '/tests')
+	assert.equal(activeSidebarUrl(urls, '/profile'), null)
+	assert.equal(activeSidebarUrl(urls, '/testsuite'), null)
+})
+
+test('activeSidebarUrl: «Админка» активна на /admin и вложенных', () => {
+	const urls = sidebarNavItems(DB_ITEMS, rolePerms('teacher')).map((entry) => entry.url)
+	assert.equal(activeSidebarUrl(urls, '/admin'), '/admin')
+	assert.equal(activeSidebarUrl(urls, '/admin/attempts'), '/admin')
+	assert.equal(activeSidebarUrl(urls, '/admin/attempts/1'), '/admin')
+	assert.equal(activeSidebarUrl(urls, '/administrator'), null)
+})
+
+test('activeSidebarUrl: при вложенных пунктах активен самый точный, корень — только на /', () => {
+	const urls = ['/', '/admin', '/admin/users', 'https://example.test/docs']
+	assert.equal(activeSidebarUrl(urls, '/admin/users/42'), '/admin/users')
+	assert.equal(activeSidebarUrl(urls, '/admin/groups'), '/admin')
+	assert.equal(activeSidebarUrl(urls, '/'), '/')
+	assert.equal(activeSidebarUrl(urls, '/dashboard'), null)
+	assert.equal(activeSidebarUrl(['/admin/'], '/admin/users'), '/admin/')
 })

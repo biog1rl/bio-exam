@@ -81,7 +81,7 @@ function clampLimit(value: number): number {
 	return Math.max(1, Math.min(Math.trunc(value), 25))
 }
 
-function escapeLike(value: string): string {
+export function escapeLike(value: string): string {
 	return value.replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 

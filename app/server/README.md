@@ -132,6 +132,11 @@ Express API платформы тестирования Bio-Exam: данные, 
   только доступные пользователю тесты.
 - Разбор попытки `GET /api/tests/admin/attempts/:attemptId` требует право `tests.read` и проверку `canReviewAttempt`
   из того же модуля.
+- Список `GET /api/tests/admin/attempts` фильтрует на сервере: `limit` (1…100, по умолчанию 50), `offset`, `q`
+  (без учёта регистра по имени ученика, тесту и теме; логин — только при `zone.all`), `topic` (slug), `student`
+  (uuid), `from` и `to` (ISO-время, включительно), `status` (`active`, `inactive`, `all`; по умолчанию `all`). Неверный
+  параметр — 400. Ответ: `rows`, `total` с фильтрами, `limit`, `offset`, `summary` (`passed`, `averageScore`) по
+  отфильтрованному набору, `scopeTotal` и `facets` (`topics`, `students`) по всей зоне без фильтров.
 - `POST /api/tests/public/tests/:id/start` возвращает открытую сессию пары (тест, пользователь) или открывает новую
   (`test_sessions`). У пары открыта не больше одной сессии: частичный уникальный индекс `test_sessions_open_uniq` по
   строкам без `submitted_at` и `closed_at`. Ответ: `sessionId`, `startedAt` и черновик.
