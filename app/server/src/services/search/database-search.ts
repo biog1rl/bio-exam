@@ -39,13 +39,6 @@ type SearchAccess = {
 	users: UserScope
 }
 
-type SearchParams = {
-	query: string
-	scope: SearchScope
-	limit: number
-	access: SearchAccess
-}
-
 type RawSearchRow = {
 	type: SearchResultType
 	id: string
@@ -55,6 +48,18 @@ type RawSearchRow = {
 	href: string
 	score: number | string | null
 }
+
+export type SearchExecutor = (sqlText: string, values: unknown[]) => Promise<{ rows: RawSearchRow[] }>
+
+type SearchParams = {
+	query: string
+	scope: SearchScope
+	limit: number
+	access: SearchAccess
+	executor?: SearchExecutor
+}
+
+const defaultExecutor: SearchExecutor = (sqlText, values) => pgPool.query<RawSearchRow>(sqlText, values)
 
 const CATEGORY_TITLES: Record<Exclude<SearchScope, 'all'>, string> = {
 	tests: 'Тесты',
@@ -108,12 +113,23 @@ function toResult(row: RawSearchRow, query: string): SearchResultItem {
 	}
 }
 
-async function queryRows(sqlText: string, values: unknown[], query: string): Promise<SearchResultItem[]> {
-	const result = await pgPool.query<RawSearchRow>(sqlText, values)
+async function queryRows(
+	executor: SearchExecutor,
+	sqlText: string,
+	values: unknown[],
+	query: string
+): Promise<SearchResultItem[]> {
+	const result = await executor(sqlText, values)
 	return result.rows.map((row) => toResult(row, query))
 }
 
-async function searchTests(params: { query: string; like: string; limit: number; access: SearchAccess }) {
+async function searchTests(params: {
+	query: string
+	like: string
+	limit: number
+	access: SearchAccess
+	executor: SearchExecutor
+}) {
 	const tests = params.access.tests
 	if (hasTestZone(tests)) {
 		const values: unknown[] = [params.query, params.like, params.limit]
@@ -125,6 +141,7 @@ async function searchTests(params: { query: string; like: string; limit: number;
 			testZone = `and te.topic_id = any($${values.length}::uuid[])`
 		}
 		return queryRows(
+			params.executor,
 			`
 				select *
 				from (
@@ -181,6 +198,7 @@ async function searchTests(params: { query: string; like: string; limit: number;
 	}
 
 	return queryRows(
+		params.executor,
 		`
 			select
 				'test'::text as type,
@@ -213,7 +231,13 @@ async function searchTests(params: { query: string; like: string; limit: number;
 	)
 }
 
-async function searchQuestions(params: { query: string; like: string; limit: number; tests: TestScope }) {
+async function searchQuestions(params: {
+	query: string
+	like: string
+	limit: number
+	tests: TestScope
+	executor: SearchExecutor
+}) {
 	const values: unknown[] = [params.query, params.like, params.limit]
 	let zone = ''
 	if (!params.tests.all) {
@@ -222,6 +246,7 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 	}
 
 	return queryRows(
+		params.executor,
 		`
 			select
 				'question'::text as type,
@@ -253,7 +278,13 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 	)
 }
 
-async function searchUsers(params: { query: string; like: string; limit: number; users: UserScope }) {
+async function searchUsers(params: {
+	query: string
+	like: string
+	limit: number
+	users: UserScope
+	executor: SearchExecutor
+}) {
 	const values: unknown[] = [params.query, params.like, params.limit]
 	let zone = ''
 	if (!params.users.all) {
@@ -263,6 +294,7 @@ async function searchUsers(params: { query: string; like: string; limit: number;
 	}
 
 	return queryRows(
+		params.executor,
 		`
 			select
 				'user'::text as type,
@@ -291,7 +323,13 @@ async function searchUsers(params: { query: string; like: string; limit: number;
 	)
 }
 
-async function searchGroups(params: { query: string; like: string; limit: number; groups: GroupScope }) {
+async function searchGroups(params: {
+	query: string
+	like: string
+	limit: number
+	groups: GroupScope
+	executor: SearchExecutor
+}) {
 	const values: unknown[] = [params.query, params.like, params.limit]
 	let zone = ''
 	if (!params.groups.all) {
@@ -300,6 +338,7 @@ async function searchGroups(params: { query: string; like: string; limit: number
 	}
 
 	return queryRows(
+		params.executor,
 		`
 			select
 				'group'::text as type,
@@ -334,6 +373,7 @@ async function searchAttempts(params: {
 	likeAlt: string
 	limit: number
 	access: SearchAccess
+	executor: SearchExecutor
 }) {
 	const tests = params.access.tests
 	const staff = hasTestZone(tests)
@@ -355,6 +395,7 @@ async function searchAttempts(params: {
 	}
 
 	return queryRows(
+		params.executor,
 		`
 			select
 				'attempt'::text as type,
@@ -401,22 +442,27 @@ export async function searchDatabase(params: SearchParams): Promise<SearchRespon
 	const limit = clampLimit(params.limit)
 	const like = `%${escapeLike(query)}%`
 	const likeAlt = `%${escapeLike(alt)}%`
+	const executor = params.executor ?? defaultExecutor
 	const scopes: Exclude<SearchScope, 'all'>[] =
 		params.scope === 'all' ? ['tests', 'questions', 'users', 'groups', 'attempts'] : [params.scope]
 
-	const categories: SearchCategory[] = []
-	for (const scope of scopes) {
-		const available = canRunScope(scope, params.access)
-		let items: SearchResultItem[] = []
-		if (available && query.length >= 2) {
-			if (scope === 'tests') items = await searchTests({ query, like, limit, access: params.access })
-			if (scope === 'questions') items = await searchQuestions({ query, like, limit, tests: params.access.tests })
-			if (scope === 'users') items = await searchUsers({ query, like, limit, users: params.access.users })
-			if (scope === 'groups') items = await searchGroups({ query, like, limit, groups: params.access.groups })
-			if (scope === 'attempts') items = await searchAttempts({ query, like, likeAlt, limit, access: params.access })
-		}
-		categories.push({ scope, title: CATEGORY_TITLES[scope], available, items })
-	}
+	const categories: SearchCategory[] = await Promise.all(
+		scopes.map(async (scope): Promise<SearchCategory> => {
+			const available = canRunScope(scope, params.access)
+			let items: SearchResultItem[] = []
+			if (available && query.length >= 2) {
+				if (scope === 'tests') items = await searchTests({ query, like, limit, access: params.access, executor })
+				if (scope === 'questions')
+					items = await searchQuestions({ query, like, limit, tests: params.access.tests, executor })
+				if (scope === 'users') items = await searchUsers({ query, like, limit, users: params.access.users, executor })
+				if (scope === 'groups')
+					items = await searchGroups({ query, like, limit, groups: params.access.groups, executor })
+				if (scope === 'attempts')
+					items = await searchAttempts({ query, like, likeAlt, limit, access: params.access, executor })
+			}
+			return { scope, title: CATEGORY_TITLES[scope], available, items }
+		})
+	)
 
 	return {
 		query,
