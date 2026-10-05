@@ -15,7 +15,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { apiFetch } from '@/lib/api-fetch'
+import { deleteGroup } from '@/lib/groups/api'
 import { TEACHER_DELETE_NOTE } from '@/lib/groups/group-form'
 
 interface Group {
@@ -37,16 +37,14 @@ export function DeleteGroupDialog({ group, onOpenChange, onDeleted }: Props) {
 	const handleDelete = async () => {
 		if (!group) return
 		setDeleting(true)
-		try {
-			const res = await apiFetch(`/api/groups/${group.id}`, { method: 'DELETE' })
-			if (!res.ok) throw new Error()
-			onDeleted()
-			onOpenChange(false)
-		} catch {
-			toast.error('Не удалось удалить группу. Попробуйте ещё раз.')
-		} finally {
-			setDeleting(false)
+		const outcome = await deleteGroup(group.id)
+		setDeleting(false)
+		if (!outcome.ok) {
+			if (outcome.kind !== 'auth') toast.error('Не удалось удалить группу. Попробуйте ещё раз.')
+			return
 		}
+		onDeleted()
+		onOpenChange(false)
 	}
 
 	return (

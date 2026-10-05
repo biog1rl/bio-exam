@@ -65,8 +65,13 @@ export function groupSaveErrorText(status?: number): string {
 	return GENERIC_SAVE_ERROR
 }
 
-export function groupSaveDisabled(input: { saving: boolean; editing: boolean; membersLoading: boolean }): boolean {
-	return input.saving || (input.editing && input.membersLoading)
+export function groupSaveDisabled(input: {
+	saving: boolean
+	editing: boolean
+	membersLoading: boolean
+	membersFailed: boolean
+}): boolean {
+	return input.saving || (input.editing && (input.membersLoading || input.membersFailed))
 }
 
 export type GroupSavePayload = {

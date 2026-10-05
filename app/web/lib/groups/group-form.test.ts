@@ -14,12 +14,18 @@ import {
 } from './group-form'
 
 test('groupSaveDisabled: правка группы ждёт загрузки состава, новая группа не ждёт', () => {
-	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersLoading: true }), true)
-	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersLoading: false }), false)
-	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersLoading: true }), false)
-	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersLoading: false }), false)
-	assert.equal(groupSaveDisabled({ saving: true, editing: false, membersLoading: false }), true)
-	assert.equal(groupSaveDisabled({ saving: true, editing: true, membersLoading: false }), true)
+	const idle = { saving: false, membersFailed: false }
+	assert.equal(groupSaveDisabled({ ...idle, editing: true, membersLoading: true }), true)
+	assert.equal(groupSaveDisabled({ ...idle, editing: true, membersLoading: false }), false)
+	assert.equal(groupSaveDisabled({ ...idle, editing: false, membersLoading: true }), false)
+	assert.equal(groupSaveDisabled({ ...idle, editing: false, membersLoading: false }), false)
+	assert.equal(groupSaveDisabled({ ...idle, saving: true, editing: false, membersLoading: false }), true)
+	assert.equal(groupSaveDisabled({ ...idle, saving: true, editing: true, membersLoading: false }), true)
+})
+
+test('groupSaveDisabled: ошибка загрузки состава выключает сохранение правки', () => {
+	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersLoading: false, membersFailed: true }), true)
+	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersLoading: false, membersFailed: true }), false)
 })
 
 test('candidatesSource: учитель ищет на сервере от двух символов', () => {

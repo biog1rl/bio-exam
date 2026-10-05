@@ -17,33 +17,36 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { UserStatusFilter } from '@/components/users/UserStatusFilter'
-import { apiFetch } from '@/lib/api-fetch'
+import {
+	candidatesFetcher,
+	groupDetailFetcher,
+	groupsKeys,
+	ownerOptionsFetcher,
+	saveGroup,
+	type Candidate,
+	type Group,
+} from '@/lib/groups/api'
 import {
 	ADMINS_OWNER_LABEL,
 	CANDIDATES_EMPTY,
 	CANDIDATES_ERROR,
 	CANDIDATES_HINT,
+	MIN_CANDIDATE_QUERY,
 	OWNER_HINT,
-	candidatesSource,
 	candidatesState,
 	groupSaveDisabled,
 	groupSaveErrorText,
 	groupSavePayload,
 	ownerLabel,
 	personLabel,
-	type GroupOwner,
 } from '@/lib/groups/group-form'
+import { swrFetcher } from '@/lib/http/swr'
+import { usersKeys } from '@/lib/users/api'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cn } from '@/lib/utils'
 import type { UserRow } from '@/types/users'
 
-export interface GroupSheetGroup {
-	id: string
-	name: string
-	memberCount: number
-	createdAt: string
-	owner?: GroupOwner | null
-}
+export type GroupSheetGroup = Group
 
 interface Props {
 	open: boolean
@@ -52,27 +55,12 @@ interface Props {
 	onSaved: () => void
 }
 
-type GroupMember = { id: string; name: string | null; login: string | null; isActive: boolean }
-
-type Candidate = {
-	id: string
-	name: string | null
-	firstName: string | null
-	lastName: string | null
-}
-
 type Person = { label: string; isActive: boolean }
 
 const ADMINS_OWNER = 'admins'
 const SEARCH_DELAY_MS = 300
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
-
-const strictFetcher = async (url: string) => {
-	const res = await fetch(url)
-	if (!res.ok) throw new Error(`HTTP ${res.status}`)
-	return res.json()
-}
+type UsersList = { rows: UserRow[]; total: number }
 
 const displayName = (u: UserRow) => {
 	const full = [u.firstName, u.lastName].filter(Boolean).join(' ')
@@ -93,10 +81,8 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	const [debouncedQuery, setDebouncedQuery] = useState('')
 	const [ownerChoice, setOwnerChoice] = useState<string>(ADMINS_OWNER)
 
-	const { data: usersData } = useSWR<{ rows: UserRow[]; total: number }>(
-		zoneAll ? candidatesSource({ zoneAll: true }) : null,
-		fetcher
-	)
+	const { data: usersData, error: usersError } = useSWR<UsersList>(zoneAll ? usersKeys.list() : null, swrFetcher)
+	const usersFailed = zoneAll && usersError !== undefined && usersData === undefined
 	const allUsers = useMemo(() => usersData?.rows ?? [], [usersData])
 	const usersById = useMemo(() => new Map(allUsers.map((u) => [u.id, u])), [allUsers])
 	const visibleUsers = useMemo(
@@ -109,12 +95,14 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		return () => clearTimeout(timer)
 	}, [query])
 
-	const candidatesKey = !zoneAll && open ? candidatesSource({ zoneAll: false, query: debouncedQuery }) : null
+	const candidateQuery = debouncedQuery.trim()
+	const candidatesKey =
+		!zoneAll && open && candidateQuery.length >= MIN_CANDIDATE_QUERY ? groupsKeys.candidates(candidateQuery) : null
 	const {
 		data: candidatesData,
 		error: candidatesError,
 		isLoading: candidatesLoading,
-	} = useSWR<{ users: Candidate[] }>(candidatesKey, strictFetcher, { shouldRetryOnError: false })
+	} = useSWR(candidatesKey, candidatesFetcher, { shouldRetryOnError: false })
 	const candidates = useMemo(() => candidatesData?.users ?? [], [candidatesData])
 	const searchState = candidatesState({
 		query,
@@ -124,10 +112,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		count: candidates.length,
 	})
 
-	const { data: ownersData } = useSWR<{ owners: GroupOwner[] }>(
-		zoneAll && open ? '/api/groups/owner-options' : null,
-		fetcher
-	)
+	const { data: ownersData } = useSWR(zoneAll && open ? groupsKeys.ownerOptions() : null, ownerOptionsFetcher)
 	const ownerOptions = useMemo(() => {
 		const owners = ownersData?.owners ?? []
 		const current = group?.owner
@@ -135,10 +120,12 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		return owners
 	}, [ownersData, group])
 
-	const { data: groupData, isLoading: membersLoading } = useSWR<{ group?: { members?: GroupMember[] } }>(
-		open && group ? `/api/groups/${group.id}` : null,
-		fetcher
-	)
+	const {
+		data: groupData,
+		error: membersError,
+		isLoading: membersLoading,
+	} = useSWR(open && group ? groupsKeys.detail(group.id) : null, groupDetailFetcher, { revalidateOnFocus: false })
+	const membersFailed = Boolean(group) && membersError !== undefined && groupData === undefined
 
 	useEffect(() => {
 		if (!open) {
@@ -164,7 +151,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	}, [open, group])
 
 	useEffect(() => {
-		const members = groupData?.group?.members
+		const members = groupData?.group.members
 		if (!members) return
 		setSelectedIds(members.map((m) => m.id))
 		setPeople((prev) => {
@@ -203,29 +190,20 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 			return
 		}
 		setSaving(true)
-		try {
-			const payload = groupSavePayload({
-				zoneAll,
-				name,
-				memberIds: selectedIds,
-				ownerId: ownerChoice === ADMINS_OWNER ? null : ownerChoice,
-			})
-			const res = await apiFetch(group ? `/api/groups/${group.id}` : '/api/groups', {
-				method: group ? 'PATCH' : 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-			})
-			if (!res.ok) {
-				toast.error(groupSaveErrorText(res.status))
-				return
-			}
-			onSaved()
-			onOpenChange(false)
-		} catch {
-			toast.error(groupSaveErrorText())
-		} finally {
-			setSaving(false)
+		const payload = groupSavePayload({
+			zoneAll,
+			name,
+			memberIds: selectedIds,
+			ownerId: ownerChoice === ADMINS_OWNER ? null : ownerChoice,
+		})
+		const outcome = await saveGroup({ id: group?.id, body: payload })
+		setSaving(false)
+		if (!outcome.ok) {
+			if (outcome.kind !== 'auth') toast.error(groupSaveErrorText(outcome.status))
+			return
 		}
+		onSaved()
+		onOpenChange(false)
 	}
 
 	return (
@@ -353,6 +331,9 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 								</PopoverContent>
 							</Popover>
 
+							{membersFailed && <p className="text-xs text-destructive">Не удалось загрузить участников группы</p>}
+							{usersFailed && <p className="text-xs text-destructive">Не удалось загрузить список пользователей</p>}
+
 							{chips.length > 0 && (
 								<div className="mt-2 flex flex-wrap gap-2">
 									{chips.map((chip) => (
@@ -381,7 +362,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 					<Button
 						className="w-full"
 						onClick={handleSave}
-						disabled={groupSaveDisabled({ saving, editing: Boolean(group), membersLoading })}
+						disabled={groupSaveDisabled({ saving, editing: Boolean(group), membersLoading, membersFailed })}
 					>
 						{saving ? 'Сохранение...' : 'Сохранить группу'}
 					</Button>
