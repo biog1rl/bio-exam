@@ -1,17 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { apiFetch } from '@/lib/api-fetch'
-import { fetcher } from '@/lib/fetcher'
-
-type ChartRange = 'week' | 'month' | 'all'
+import { failureMessage } from '@/lib/http/errors'
+import { chartRangeFetcher, saveChartRange, settingsKeys, type ChartRange } from '@/lib/settings/api'
 
 const RANGE_OPTIONS: { value: ChartRange; label: string }[] = [
 	{ value: 'week', label: 'Неделя' },
@@ -20,8 +19,11 @@ const RANGE_OPTIONS: { value: ChartRange; label: string }[] = [
 ]
 
 export function ChartSettingsPageClient() {
-	const { data, mutate, isLoading } = useSWR<{ value: ChartRange }>('/api/settings/chart-default-range', fetcher)
+	const { data, error, mutate, isLoading } = useSWR(settingsKeys.chartRange(), chartRangeFetcher, {
+		revalidateOnFocus: false,
+	})
 
+	const titleRef = useRef<HTMLDivElement>(null)
 	const currentValue = data?.value ?? 'week'
 	const [selected, setSelected] = useState<ChartRange>(currentValue)
 	const [saving, setSaving] = useState(false)
@@ -34,32 +36,40 @@ export function ChartSettingsPageClient() {
 
 	const handleSave = async () => {
 		setSaving(true)
-		try {
-			const res = await apiFetch('/api/settings/chart-default-range', {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ value: selected }),
-			})
-			if (!res.ok) throw new Error(await res.text())
-			await mutate({ value: selected })
-			toast.success('Настройки сохранены')
-		} catch {
-			toast.error('Ошибка сохранения')
-		} finally {
-			setSaving(false)
+		const outcome = await saveChartRange(selected)
+		setSaving(false)
+		if (!outcome.ok) {
+			const message = failureMessage(outcome, 'Ошибка сохранения')
+			if (message) toast.error(message)
+			return
 		}
+		await mutate(outcome.data)
+		toast.success('Настройки сохранены')
 	}
+
+	const loadFailed = error !== undefined && data === undefined
 
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>Диапазон графика по умолчанию</CardTitle>
+				<CardTitle ref={titleRef} tabIndex={-1}>
+					Диапазон графика по умолчанию
+				</CardTitle>
 				<CardDescription>Применяется на всех страницах теста, если студент не выбрал свой диапазон</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-4">
-				{isLoading && <div>Загрузка…</div>}
+				{loadFailed ? (
+					<LoadErrorAlert
+						title="Не удалось загрузить настройку"
+						error={error}
+						onRetry={() => mutate()}
+						focusTarget={titleRef}
+					/>
+				) : null}
 
-				{!isLoading && (
+				{!loadFailed && isLoading && <div>Загрузка…</div>}
+
+				{!loadFailed && !isLoading && (
 					<>
 						<Select value={selected} onValueChange={(v) => setSelected(v as ChartRange)}>
 							<SelectTrigger className="w-48">
