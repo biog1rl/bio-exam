@@ -130,6 +130,45 @@ const TABLE_CHECKS = [
 	},
 ]
 
+const OWNER_WORD = /\b(?:ownerId|owner_id)\b/
+const GROUP_WRITE_CALL = /\b(?:insert|update)\(\s*(?:\w+\.)?studentGroups\s*\)\s*\.(?:values|set)\(/g
+const TEMPLATE_LITERAL = /`[^`]*`/g
+
+function balancedEnd(source, open) {
+	let depth = 0
+	for (let i = open; i < source.length; i++) {
+		if (source[i] === '(') depth++
+		else if (source[i] === ')') {
+			depth--
+			if (depth === 0) return i
+		}
+	}
+	return source.length
+}
+
+function groupOwnerWriteOffsets(source) {
+	const offsets = []
+	for (const match of source.matchAll(GROUP_WRITE_CALL)) {
+		const open = match.index + match[0].length - 1
+		if (OWNER_WORD.test(source.slice(open, balancedEnd(source, open)))) offsets.push(match.index)
+	}
+	return offsets
+}
+
+function multilineSqlOffsets(source) {
+	const offsets = []
+	for (const match of source.matchAll(TEMPLATE_LITERAL)) {
+		if (!match[0].includes('\n')) continue
+		if (/\bstudent_groups\b/.test(match[0]) && /\bowner_id\b/.test(match[0])) offsets.push(match.index)
+	}
+	return offsets
+}
+
+TABLE_CHECKS.push(
+	{ label: 'запись ownerId в studentGroups через .values( или .set(', scan: groupOwnerWriteOffsets },
+	{ label: 'owner_id и student_groups в одном многострочном SQL', scan: multilineSqlOffsets }
+)
+
 const TABLE_EXCEPTIONS = [
 	{ path: SCHEMA_FILE, reason: 'описание таблицы teacher_topics и колонки student_groups.owner_id' },
 	{
@@ -181,12 +220,23 @@ function collectSources(root, relativeDir, includeTests = false) {
 }
 
 function findLines(checks, source, lineOffset = 0) {
-	const hits = []
-	source.split('\n').forEach((line, index) => {
-		const labels = checks.filter((check) => check.match(line)).map((check) => check.label)
-		if (labels.length > 0) hits.push({ line: index + 1 + lineOffset, text: line.trim(), labels })
+	const lines = source.split('\n')
+	const byLine = new Map()
+	const add = (index, label) => {
+		if (!byLine.has(index)) byLine.set(index, [])
+		const labels = byLine.get(index)
+		if (!labels.includes(label)) labels.push(label)
+	}
+	lines.forEach((line, index) => {
+		for (const check of checks) if (check.match && check.match(line)) add(index, check.label)
 	})
-	return hits
+	for (const check of checks) {
+		if (!check.scan) continue
+		for (const offset of check.scan(source)) add(source.slice(0, offset).split('\n').length - 1, check.label)
+	}
+	return [...byLine.keys()]
+		.sort((a, b) => a - b)
+		.map((index) => ({ line: index + 1 + lineOffset, text: lines[index].trim(), labels: byLine.get(index) }))
 }
 
 function formatHits(relative, hits) {
@@ -342,6 +392,53 @@ test('детектор таблиц зоны находит запрещённы
 		'const owners = await groupOwners(groupIds)',
 	]) {
 		assert.deepEqual(findLines(TABLE_CHECKS, sample), [], sample)
+	}
+})
+
+test('детектор таблиц зоны ловит запись ownerId через .values(, .set( и многострочный SQL', () => {
+	const violating = [
+		'await tx.insert(studentGroups).values({ name, createdBy, ownerId })',
+		'await tx.update(studentGroups).set({ ownerId: next }).where(eq(studentGroups.id, id))',
+		'await tx\n\t.insert(schema.studentGroups)\n\t.values({\n\t\tname,\n\t\towner_id: owner,\n\t})\n\t.returning()',
+		'await db\n\t.update(studentGroups)\n\t.set({\n\t\tname,\n\t\tupdatedAt: new Date(),\n\t\townerId: owner,\n\t})',
+		'await pool.query(`\n\tUPDATE student_groups\n\tSET owner_id = $1\n\tWHERE id = $2\n`, [owner, id])',
+		'await pool.query(`\n\tINSERT INTO student_groups (name, created_by, owner_id)\n\tVALUES ($1, $2, $3)\n`)',
+	]
+	for (const sample of violating) {
+		const hits = findLines(TABLE_CHECKS, sample)
+		assert.ok(hits.length > 0, sample)
+	}
+	const multiline = findLines(TABLE_CHECKS, violating[2])
+	assert.equal(multiline.length, 1)
+	assert.equal(multiline[0].line, 2)
+	const allowed = [
+		'await tx.insert(studentGroups).values({ name, createdBy: requesterId }).returning()',
+		'await tx.update(studentGroups).set({ name, updatedAt: new Date() }).where(eq(studentGroups.id, id))',
+		'await tx\n\t.insert(studentGroups)\n\t.values({ name, createdBy })\n\t.returning()\nawait setGroupOwner(tx, { groupId, ownerId })',
+		'await tx.insert(questionDrafts).values({ ownerId, testId })',
+		'await tx.update(questionDrafts).set({ ownerId: next }).where(eq(questionDrafts.id, id))',
+		'await pool.query(`\n\tUPDATE question_drafts\n\tSET owner_id = $1\n`, [owner])',
+		'await pool.query(`\n\tselect sg.id\n\tfrom student_groups sg\n\twhere sg.id = $1\n`)',
+	]
+	for (const sample of allowed) assert.deepEqual(findLines(TABLE_CHECKS, sample), [], sample)
+})
+
+test('проба: запись ownerId через .set( и многострочный SQL в копии маршрута групп даёт нарушения с путём файла', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'teacher-zone-guards-'))
+	try {
+		copyFile(
+			tmp,
+			GROUP_ROUTES,
+			(source) =>
+				`${source}\nawait tx.update(studentGroups)\n\t.set({ ownerId: next })\n\t.where(eq(studentGroups.id, id))\nawait pool.query(\x60\n\tUPDATE student_groups\n\tSET owner_id = $1\n\x60)\n`
+		)
+		const found = tableViolations(tmp)
+		assert.equal(found.length, 2, found.join('\n'))
+		assert.match(found[0], /^app\/server\/src\/routes\/groups\/index\.ts:\d+: запись ownerId в studentGroups/)
+		assert.match(found[1], /^app\/server\/src\/routes\/groups\/index\.ts:\d+: owner_id и student_groups/)
+		assert.deepEqual(tableViolations(REPO_ROOT), [])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
 	}
 })
 

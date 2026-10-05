@@ -180,9 +180,11 @@ function snapshotOf(categories: Category[]): Snapshot[] {
 	return categories.map((category) => [
 		category.scope,
 		category.available,
-		category.items
-			.map((item) => worldKeys.get(`${item.type}:${item.id}`))
-			.filter((key): key is string => key !== undefined),
+		category.items.map((item) => {
+			const key = worldKeys.get(`${item.type}:${item.id}`)
+			assert.ok(key, `строка вне мира в ${category.scope}: ${item.type}:${item.id}`)
+			return key
+		}),
 	])
 }
 

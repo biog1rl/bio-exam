@@ -556,6 +556,14 @@ status(
 	'GET /topics/X/export',
 	(p) => download(p, `/topics/${w.topics.X.slug}/export`)
 )
+row(['teacherA'], 'GET /topics/X/export?withAnswers=true', '200 с answer_keys.json', async (p) => {
+	const reply = await download(p, `/topics/${w.topics.X.slug}/export?withAnswers=true`)
+	expectStatus(reply, 200)
+	assert.ok(
+		reply.entries.some((name) => name.endsWith('answer_keys.json')),
+		'нет answer_keys.json'
+	)
+})
 row(['readTestsAll'], 'GET /topics/X/export?withAnswers=true', '200 без answer_keys.json', async (p) => {
 	const reply = await download(p, `/topics/${w.topics.X.slug}/export?withAnswers=true`)
 	expectStatus(reply, 200)

@@ -196,3 +196,84 @@ export async function adminReviewSections(page: Page, attemptId: string, questio
 	await expect(page.locator('section[id^="question-"]')).toHaveCount(questionCount)
 	return page.locator('section[id^="question-"]').allInnerTexts()
 }
+
+export type OwnQuestion = {
+	type?: 'radio' | 'short_answer'
+	prompt: string
+	options?: { id: string; text: string }[]
+	correct: string
+}
+
+export type OwnTest = { id: string; slug: string; title: string; topicSlug: string }
+
+export async function currentUserId(page: Page): Promise<string> {
+	const response = await page.request.get('/api/auth/me')
+	expect(response.ok(), 'read current user').toBe(true)
+	return ((await response.json()) as { user: { id: string } }).user.id
+}
+
+export async function createOwnTest(
+	admin: Page,
+	student: Page,
+	options: { prefix: string; questions: OwnQuestion[]; timeLimitMinutes?: number }
+): Promise<OwnTest> {
+	const topics = await admin.request.get('/api/tests/topics')
+	expect(topics.ok(), 'setup: read topics').toBe(true)
+	const topic = ((await topics.json()) as { topics: { id: string; slug: string }[] }).topics.find(
+		(item) => item.slug === TOPIC_SLUG
+	)
+	if (!topic) throw new Error(`setup: no topic ${TOPIC_SLUG}`)
+	const suffix = Math.random().toString(36).slice(2, 8)
+	const slug = `${options.prefix}-${suffix}`
+	const title = `E2E ${options.prefix} ${suffix}`
+	const saved = await admin.request.post('/api/tests/save', {
+		data: {
+			topicId: topic.id,
+			title,
+			slug,
+			isPublished: true,
+			showCorrectAnswer: true,
+			timeLimitMinutes: options.timeLimitMinutes ?? null,
+			questions: options.questions.map((question, order) => ({
+				type: question.type ?? 'radio',
+				order,
+				points: 1,
+				options: question.options ?? null,
+				promptText: question.prompt,
+				correct: question.correct,
+			})),
+		},
+	})
+	expect(saved.status(), `setup: create test ${slug}: ${await saved.text()}`).toBe(201)
+	const id = ((await saved.json()) as { test: { id: string } }).test.id
+	const assigned = await admin.request.post(`/api/tests/${id}/assignments`, {
+		data: { userId: await currentUserId(student) },
+	})
+	expect(assigned.ok(), `setup: assign ${slug}: ${await assigned.text()}`).toBe(true)
+	return { id, slug, title, topicSlug: TOPIC_SLUG }
+}
+
+export async function deleteOwnTest(admin: Page, test: OwnTest): Promise<void> {
+	const response = await admin.request.delete(`/api/tests/${test.id}`)
+	expect([200, 404], `cleanup: delete test ${test.slug}`).toContain(response.status())
+}
+
+export async function attemptIdsOf(page: Page, testId: string): Promise<string[]> {
+	const response = await page.request.get(`/api/tests/public/tests/${testId}/attempts/me`)
+	expect(response.ok(), 'read own attempts').toBe(true)
+	return ((await response.json()) as { rows: { id: string }[] }).rows.map((row) => row.id)
+}
+
+export async function closeOpenSession(page: Page, testId: string): Promise<void> {
+	const started = await page.request.post(`/api/tests/public/tests/${testId}/start`)
+	if (!started.ok()) return
+	const { sessionId } = (await started.json()) as { sessionId: string }
+	const submitted = await page.request.post(`/api/tests/public/tests/${testId}/submit`, {
+		data: { sessionId, clientAttemptId: crypto.randomUUID(), answers: {} },
+	})
+	expect(submitted.ok(), `cleanup: submit open session ${sessionId}`).toBe(true)
+}
+
+export function isSubmitRequest(url: string, method: string): boolean {
+	return isSubmitResponse(url, method)
+}
