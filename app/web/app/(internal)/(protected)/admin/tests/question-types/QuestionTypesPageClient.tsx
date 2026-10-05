@@ -1,6 +1,6 @@
 'use client'
 
-import { QUESTION_UI_TEMPLATES } from '@bio-exam/exam-core'
+import { AUTO_SCORED_TEMPLATES } from '@bio-exam/exam-core'
 
 import { useMemo, useRef, useState } from 'react'
 
@@ -285,7 +285,7 @@ export default function QuestionTypesPageClient() {
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										{QUESTION_UI_TEMPLATES.map((template) => (
+										{AUTO_SCORED_TEMPLATES.map((template) => (
 											<SelectItem key={template} value={template}>
 												{TEMPLATE_META[template].label}
 											</SelectItem>

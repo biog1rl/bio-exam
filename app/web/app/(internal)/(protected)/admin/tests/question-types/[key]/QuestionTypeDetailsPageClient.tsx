@@ -1,6 +1,6 @@
 'use client'
 
-import { QUESTION_UI_TEMPLATES } from '@bio-exam/exam-core'
+import { AUTO_SCORED_TEMPLATES, isAutoScoredTemplate } from '@bio-exam/exam-core'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
@@ -129,21 +129,23 @@ function SwitchRow({
 	title,
 	hint,
 	checked,
+	disabled,
 	onCheckedChange,
 }: {
 	id: string
 	title: string
 	hint: string
 	checked: boolean
+	disabled?: boolean
 	onCheckedChange: (checked: boolean) => void
 }) {
 	return (
 		<div className="flex items-center justify-between gap-4 rounded-2xl bg-secondary/50 px-3 py-2">
-			<Label htmlFor={id} className="block cursor-pointer">
+			<Label htmlFor={id} className={disabled ? 'block' : 'block cursor-pointer'}>
 				<span className="block text-sm font-medium text-foreground">{title}</span>
 				<span className="block text-xs font-normal text-muted-foreground">{hint}</span>
 			</Label>
-			<Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+			<Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
 		</div>
 	)
 }
@@ -324,6 +326,8 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 	}
 
 	const questionType = typeData.questionType
+	const isOpenType = !isAutoScoredTemplate(questionType.uiTemplate)
+	const templateOptions = isOpenType ? [questionType.uiTemplate] : AUTO_SCORED_TEMPLATES
 	const scoringHref = selectedTest
 		? `/admin/tests/scoring?scope=test&topicSlug=${selectedTest.topicSlug}&testSlug=${selectedTest.slug}&type=${typeKey}`
 		: `/admin/tests/scoring?type=${typeKey}`
@@ -389,7 +393,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{QUESTION_UI_TEMPLATES.map((template) => (
+								{templateOptions.map((template) => (
 									<SelectItem key={template} value={template}>
 										{TEMPLATE_META[template].label}
 									</SelectItem>
@@ -441,8 +445,11 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 				<SwitchRow
 					id="type-active"
 					title="Тип доступен"
-					hint="Если выключить, тип нельзя выбрать в новых вопросах."
+					hint={
+						isOpenType ? 'Открытые вопросы пока недоступны.' : 'Если выключить, тип нельзя выбрать в новых вопросах.'
+					}
 					checked={globalForm.isActive}
+					disabled={isOpenType}
 					onCheckedChange={(checked) => setGlobalForm((prev) => (prev ? { ...prev, isActive: checked } : prev))}
 				/>
 			</Section>
@@ -462,11 +469,15 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 					</>
 				}
 			>
-				<QuestionTypeScoringRuleEditorFields
-					rule={globalForm.scoringRule}
-					uiTemplate={globalForm.uiTemplate}
-					onChange={(next) => setGlobalForm((prev) => (prev ? { ...prev, scoringRule: next } : prev))}
-				/>
+				{isOpenType ? (
+					<p className="text-sm text-muted-foreground">Баллы за открытый вопрос выставляет учитель: от 0 до 3.</p>
+				) : (
+					<QuestionTypeScoringRuleEditorFields
+						rule={globalForm.scoringRule}
+						uiTemplate={globalForm.uiTemplate}
+						onChange={(next) => setGlobalForm((prev) => (prev ? { ...prev, scoringRule: next } : prev))}
+					/>
+				)}
 			</Section>
 
 			<Section title="Для отдельного теста" description="Своё название типа или отключение только в выбранном тесте.">

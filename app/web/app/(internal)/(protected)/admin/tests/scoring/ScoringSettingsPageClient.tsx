@@ -1,5 +1,7 @@
 'use client'
 
+import { isAutoScoredTemplate } from '@bio-exam/exam-core'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Loader2, Save } from 'lucide-react'
@@ -126,9 +128,10 @@ export default function ScoringSettingsPageClient() {
 		async (key: string) => {
 			const fresh = await mutateRules()
 			if (!fresh || activeRulesKeyRef.current !== key) return
-			setTypes(fresh.questionTypes)
+			const scoredTypes = fresh.questionTypes.filter((item) => isAutoScoredTemplate(item.uiTemplate))
+			setTypes(scoredTypes)
 			const initialOverrides: Record<string, boolean> = {}
-			for (const item of fresh.questionTypes) {
+			for (const item of scoredTypes) {
 				initialOverrides[item.key] = Boolean(item.override?.scoringRuleOverride)
 			}
 			setOverrideEnabled(initialOverrides)

@@ -3,10 +3,13 @@ import {
 	QuestionTypeDefinitionSchema,
 	QuestionTypeScoringRuleSchema,
 	QuestionTypeValidationSchema,
+	getBuiltinQuestionTypeByKey,
+	isAutoScoredTemplate,
 } from '@bio-exam/exam-core'
 
 import { and, eq } from 'drizzle-orm'
 import { Router } from 'express'
+import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 
 import { db } from '../../../db/index.js'
@@ -24,6 +27,10 @@ import { canManageCatalog, canReadTest, canWriteTest } from '../../../services/a
 import { syncQuestionPointsForTestByTypeConfig, validateScoringRuleTemplateCompatibility } from './shared.js'
 
 const router = Router()
+
+const OPEN_TYPE_UNAVAILABLE_MESSAGE = 'Открытые вопросы пока недоступны'
+const OPEN_TYPE_SCORING_FIXED_MESSAGE = 'Баллы за открытый вопрос выставляет учитель: от 0 до 3'
+const OPEN_TYPE_SYSTEM_ONLY_MESSAGE = 'Открытый тип вопроса создаётся системой'
 
 const QuestionTypeKeySchema = z
 	.string()
@@ -131,6 +138,9 @@ router.post('/question-types', sessionRequired(), async (req, res, next) => {
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		}
+		if (!isAutoScoredTemplate(parsed.data.uiTemplate)) {
+			return res.status(400).json({ error: OPEN_TYPE_SYSTEM_ONLY_MESSAGE })
+		}
 		const normalizedCreate = QuestionTypeDefinitionSchema.safeParse({
 			...parsed.data,
 			isSystem: false,
@@ -199,10 +209,23 @@ router.patch('/question-types/:key', sessionRequired(), async (req, res, next) =
 			return res.status(400).json({ error: 'Cannot change uiTemplate for system question type' })
 		}
 		const nextUiTemplate = parsed.data.uiTemplate ?? existing.uiTemplate
+		if (!existing.isSystem && !isAutoScoredTemplate(nextUiTemplate)) {
+			return res.status(400).json({ error: OPEN_TYPE_SYSTEM_ONLY_MESSAGE })
+		}
 		const nextScoringRuleRaw = parsed.data.scoringRule ?? existing.scoringRule
 		const parsedNextRule = QuestionTypeScoringRuleSchema.safeParse(nextScoringRuleRaw)
 		if (!parsedNextRule.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsedNextRule.error.flatten() })
+		}
+		if (!isAutoScoredTemplate(nextUiTemplate)) {
+			if (parsed.data.isActive === true) {
+				return res.status(400).json({ error: OPEN_TYPE_UNAVAILABLE_MESSAGE })
+			}
+			const builtinRule = getBuiltinQuestionTypeByKey(existing.key)?.scoringRule
+			const builtinParsed = QuestionTypeScoringRuleSchema.safeParse(builtinRule)
+			if (!builtinParsed.success || !isDeepStrictEqual(parsedNextRule.data, builtinParsed.data)) {
+				return res.status(400).json({ error: OPEN_TYPE_SCORING_FIXED_MESSAGE })
+			}
 		}
 		const normalizedDefinition = QuestionTypeDefinitionSchema.safeParse({
 			key: existing.key,

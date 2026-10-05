@@ -1,5 +1,6 @@
 import {
 	QuestionTypeScoringRuleSchema,
+	isAutoScoredTemplate,
 	isMistakeMetricAllowedForTemplate,
 	type QuestionUiTemplate,
 } from '@bio-exam/exam-core'
@@ -17,6 +18,9 @@ export function validateScoringRuleTemplateCompatibility(params: {
 	uiTemplate: QuestionUiTemplate
 	scoringRule: z.infer<typeof QuestionTypeScoringRuleSchema>
 }): string | null {
+	if (!isAutoScoredTemplate(params.uiTemplate)) {
+		return 'Баллы за открытый вопрос выставляет учитель: от 0 до 3'
+	}
 	if (!isMistakeMetricAllowedForTemplate(params.uiTemplate, params.scoringRule.mistakeMetric)) {
 		return 'Способ подсчёта ошибок не подходит к формату ответа этого типа вопроса'
 	}
