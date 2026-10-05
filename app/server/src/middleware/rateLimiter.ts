@@ -6,6 +6,7 @@ import type { Request, Response, NextFunction } from 'express'
 
 import { ERROR_MESSAGES } from '../lib/constants.js'
 import { ApiError } from '../lib/errors.js'
+import { nameMiddleware } from '../lib/middleware-name.js'
 
 interface RateLimitEntry {
 	count: number
@@ -57,7 +58,7 @@ export interface RateLimiterOptions {
 export function rateLimiter(options: RateLimiterOptions = {}) {
 	const { maxAttempts = 5, windowMs = 60 * 1000, keyPrefix = '' } = options
 
-	return (req: Request, res: Response, next: NextFunction) => {
+	const limiter = (req: Request, res: Response, next: NextFunction) => {
 		const ip = req.ip || req.socket.remoteAddress || 'unknown'
 		const key = keyPrefix ? `${keyPrefix}:${ip}` : ip
 		const now = Date.now()
@@ -92,4 +93,5 @@ export function rateLimiter(options: RateLimiterOptions = {}) {
 
 		next()
 	}
+	return nameMiddleware(limiter, `rateLimiter(${keyPrefix || '-'},${maxAttempts}/${windowMs}ms)`)
 }

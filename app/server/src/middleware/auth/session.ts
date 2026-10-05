@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express'
 
+import { nameMiddleware } from '../../lib/middleware-name.js'
 import { ACCESS_COOKIE, loadSessionUser, readCookie, verifyAccessToken } from '../../services/session/index.js'
 
 export type SessionUser = {
@@ -16,7 +17,7 @@ declare module 'express-serve-static-core' {
 }
 
 export function sessionOptional() {
-	return async (req: Request, _res: Response, next: NextFunction) => {
+	return nameMiddleware(async (req: Request, _res: Response, next: NextFunction) => {
 		const token = readCookie(req, ACCESS_COOKIE)
 		const claims = token ? verifyAccessToken(token) : null
 		if (!claims) {
@@ -33,12 +34,12 @@ export function sessionOptional() {
 			return next(error)
 		}
 		next()
-	}
+	}, 'sessionOptional')
 }
 
 export function sessionRequired() {
 	const opt = sessionOptional()
-	return async (req: Request, res: Response, next: NextFunction) => {
+	return nameMiddleware(async (req: Request, res: Response, next: NextFunction) => {
 		const proceed = (error?: unknown) => {
 			if (error) return next(error)
 			if (!req.authUser) return res.status(401).json({ error: 'Unauthorized' })
@@ -46,5 +47,5 @@ export function sessionRequired() {
 		}
 		if (req.authUser !== undefined) return proceed()
 		await opt(req, res, proceed)
-	}
+	}, 'sessionRequired')
 }

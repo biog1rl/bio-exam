@@ -2,6 +2,7 @@ import type { PermissionKey, PermissionDomain, ActionOf } from '@bio-exam/rbac'
 
 import type { RequestHandler } from 'express'
 
+import { nameMiddleware } from '../../lib/middleware-name.js'
 import { requestAccess } from '../../services/access-policy/index.js'
 
 type AuthUserLike = { id: string }
@@ -23,9 +24,9 @@ function permissionGuard(key: PermissionKey): RequestHandler {
 }
 
 export function requirePerm<D extends PermissionDomain>(domain: D, action: ActionOf<D>): RequestHandler {
-	return permissionGuard(`${domain}.${action}` as PermissionKey)
+	return nameMiddleware(permissionGuard(`${domain}.${action}` as PermissionKey), `requirePerm(${domain}.${action})`)
 }
 
 export function requirePermKey(key: PermissionKey): RequestHandler {
-	return permissionGuard(key)
+	return nameMiddleware(permissionGuard(key), `requirePermKey(${key})`)
 }

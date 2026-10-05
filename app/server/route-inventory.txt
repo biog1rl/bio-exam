@@ -1,0 +1,119 @@
+USE / query
+USE / expressInit
+USE / helmetMiddleware
+USE / requestId
+USE / result
+USE / corsMiddleware
+USE / jsonParser
+USE / sessionOptional
+GET /healthz  <anonymous>
+GET /healthz/db  <anonymous>
+PATCH /api/users/profile  sessionRequired > <anonymous>
+POST /api/users/profile/password  rateLimiter(password-change,5/60000ms) > sessionRequired > <anonymous>
+POST /api/users/avatar  sessionRequired > multerMiddleware > <anonymous>
+DELETE /api/users/avatar  sessionRequired > <anonymous>
+POST /api/users/:id/sessions/revoke  validateUUID(id) > sessionRequired > <anonymous>
+DELETE /api/users/:id/login-throttle  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/users/directory  sessionRequired > <anonymous>
+GET /api/users  sessionRequired > requirePerm(users.read) > <anonymous>
+PATCH /api/users/:id  validateUUID(id) > sessionRequired > requirePerm(users.edit) > <anonymous>
+PATCH /api/users/:id/group  validateUUID(id) > sessionRequired > requirePerm(users.edit) > <anonymous>
+DELETE /api/users/:id  validateUUID(id) > sessionRequired > requirePerm(users.edit) > <anonymous>
+GET /api/users/:userId/test-attempts  validateUUID(userId) > sessionRequired > requirePerm(tests.read) > <anonymous>
+GET /api/users/:userId/test-assignments  validateUUID(userId) > sessionRequired > <anonymous>
+POST /api/users/:userId/test-assignments  validateUUID(userId) > sessionRequired > <anonymous>
+DELETE /api/users/:userId/test-assignments/:testId  validateUUID(userId) > validateUUID(testId) > sessionRequired > <anonymous>
+POST /api/auth/login  <anonymous>
+POST /api/auth/logout  <anonymous>
+POST /api/auth/invites  sessionRequired > requirePerm(users.invite) > <anonymous>
+GET /api/auth/invites/validate/:token  <anonymous>
+POST /api/auth/invites/accept  rateLimiter(invite-accept,5/60000ms) > <anonymous>
+GET /api/auth/me  <anonymous>
+POST /api/auth/refresh  <anonymous>
+GET /api/rbac/roles  sessionRequired > requirePerm(rbac.read) > <anonymous>
+POST /api/rbac/grant  sessionRequired > requirePerm(rbac.write) > <anonymous>
+DELETE /api/rbac/grant  sessionRequired > requirePerm(rbac.write) > <anonymous>
+GET /api/rbac/user/:id/grants  validateUUID(id) > sessionRequired > requirePerm(rbac.read) > <anonymous>
+POST /api/rbac/user/grant  sessionRequired > requirePerm(rbac.write) > <anonymous>
+DELETE /api/rbac/user/grant  sessionRequired > requirePerm(rbac.write) > <anonymous>
+GET /api/rbac/pages  sessionRequired > requirePerm(rbac.read) > <anonymous>
+POST /api/rbac/pages  sessionRequired > requirePerm(rbac.write) > <anonymous>
+PATCH /api/rbac/pages/:id  validateUUID(id) > sessionRequired > requirePerm(rbac.write) > <anonymous>
+DELETE /api/rbac/pages/:id  validateUUID(id) > sessionRequired > requirePerm(rbac.write) > <anonymous>
+GET /api/search  sessionRequired > <anonymous>
+GET /api/sidebar  <anonymous>
+GET /api/sidebar/all  sessionRequired > requirePerm(settings.manage) > <anonymous>
+POST /api/sidebar  sessionRequired > requirePerm(settings.manage) > <anonymous>
+PUT /api/sidebar/:id  sessionRequired > requirePerm(settings.manage) > <anonymous>
+PATCH /api/sidebar/reorder  sessionRequired > requirePerm(settings.manage) > <anonymous>
+DELETE /api/sidebar/:id  sessionRequired > requirePerm(settings.manage) > <anonymous>
+GET /api/tests/topics  sessionRequired > requirePerm(tests.read) > <anonymous>
+GET /api/tests/topics/teacher-options  sessionRequired > <anonymous>
+PUT /api/tests/topics/:id/teachers  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/topics  sessionRequired > <anonymous>
+PATCH /api/tests/topics/:id  validateUUID(id) > sessionRequired > <anonymous>
+DELETE /api/tests/topics/:id  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests  sessionRequired > requirePerm(tests.read) > <anonymous>
+GET /api/tests/question-types  sessionRequired > requirePerm(tests.read) > <anonymous>
+GET /api/tests/question-types/:key  sessionRequired > requirePerm(tests.read) > <anonymous>
+POST /api/tests/question-types  sessionRequired > <anonymous>
+PATCH /api/tests/question-types/:key  sessionRequired > <anonymous>
+DELETE /api/tests/question-types/:key  sessionRequired > <anonymous>
+GET /api/tests/question-types/tests/:id/overrides  validateUUID(id) > sessionRequired > <anonymous>
+PUT /api/tests/question-types/tests/:id/overrides/:key  validateUUID(id) > sessionRequired > <anonymous>
+DELETE /api/tests/question-types/tests/:id/overrides/:key  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests/scoring-rules/global  sessionRequired > requirePerm(tests.read) > <anonymous>
+PUT /api/tests/scoring-rules/global  sessionRequired > <anonymous>
+GET /api/tests/scoring-rules/tests/:id  validateUUID(id) > sessionRequired > <anonymous>
+PUT /api/tests/scoring-rules/tests/:id  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests/by-slug/:topicSlug/:testSlug  sessionRequired > <anonymous>
+POST /api/tests/:testId/question-drafts  validateUUID(testId) > sessionRequired > <anonymous>
+GET /api/tests/:testId/question-drafts  validateUUID(testId) > sessionRequired > <anonymous>
+GET /api/tests/:testId/question-drafts/:draftId  validateUUID(testId) > validateUUID(draftId) > sessionRequired > <anonymous>
+PATCH /api/tests/:testId/question-drafts/:draftId  validateUUID(testId) > validateUUID(draftId) > sessionRequired > <anonymous>
+DELETE /api/tests/:testId/question-drafts/:draftId  validateUUID(testId) > validateUUID(draftId) > sessionRequired > <anonymous>
+GET /api/tests/:id  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/save  sessionRequired > <anonymous>
+PATCH /api/tests/:id/settings  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/:id/questions  validateUUID(id) > sessionRequired > <anonymous>
+PATCH /api/tests/:id/questions/:questionId  validateUUID(id) > validateUUID(questionId) > sessionRequired > <anonymous>
+PUT /api/tests/:id/questions/reorder  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/:id/questions/:questionId/move  validateUUID(id) > validateUUID(questionId) > sessionRequired > <anonymous>
+DELETE /api/tests/:id/questions/:questionId  validateUUID(id) > validateUUID(questionId) > sessionRequired > <anonymous>
+DELETE /api/tests/:id  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/:id/assets  validateUUID(id) > sessionRequired > requireTestWrite > multerMiddleware > <anonymous>
+GET /api/tests/:id/export  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests/topics/:slug/export  sessionRequired > <anonymous>
+GET /api/tests/:testId/assignments  validateUUID(testId) > sessionRequired > <anonymous>
+POST /api/tests/:testId/assignments  validateUUID(testId) > sessionRequired > <anonymous>
+POST /api/tests/:testId/assignments/group/:groupId  validateUUID(testId) > validateUUID(groupId) > sessionRequired > <anonymous>
+DELETE /api/tests/:testId/assignments/:userId  validateUUID(testId) > validateUUID(userId) > sessionRequired > <anonymous>
+GET /api/tests/admin/dashboard  sessionRequired > requirePerm(tests.read) > <anonymous>
+GET /api/tests/admin/attempts  sessionRequired > requirePerm(tests.read) > <anonymous>
+GET /api/tests/admin/attempts/:attemptId  validateUUID(attemptId) > sessionRequired > <anonymous>
+GET /api/tests/public/topics  <anonymous>
+GET /api/tests/public/tests  sessionRequired > <anonymous>
+GET /api/tests/public/topics/:slug/tests  sessionRequired > <anonymous>
+GET /api/tests/public/topics/:topicSlug/tests/:testSlug  sessionRequired > <anonymous>
+GET /api/tests/public/tests/:id  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests/public/tests/:id/attempts/me  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests/public/tests/:id/chart-data  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/public/tests/:id/start  validateUUID(id) > sessionRequired > <anonymous>
+PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
+POST /api/tests/public/tests/:id/submit  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/settings/chart-default-range  sessionRequired > requirePerm(settings.manage) > <anonymous>
+PUT /api/settings/chart-default-range  sessionRequired > requirePerm(settings.manage) > <anonymous>
+GET /api/groups/my  sessionRequired > <anonymous>
+GET /api/groups/candidates  sessionRequired > requirePerm(groups.manage_groups) > <anonymous>
+GET /api/groups/owner-options  sessionRequired > requirePerm(groups.manage_groups) > <anonymous>
+GET /api/groups  sessionRequired > requirePerm(groups.manage_groups) > <anonymous>
+GET /api/groups/:groupId  validateUUID(groupId) > sessionRequired > <anonymous>
+POST /api/groups  sessionRequired > requirePerm(groups.manage_groups) > <anonymous>
+PATCH /api/groups/:groupId  validateUUID(groupId) > sessionRequired > <anonymous>
+DELETE /api/groups/:groupId  validateUUID(groupId) > sessionRequired > <anonymous>
+GET /api/docs/assets  sessionRequired > requirePerm(tests.write) > <anonymous>
+DELETE /api/docs/assets  sessionRequired > requirePerm(tests.write) > <anonymous>
+POST /api/docs/assets  sessionRequired > requirePerm(tests.write) > multerMiddleware > <anonymous>
+GET /api/docs/assets/proxy  sessionRequired > <anonymous>
+GET /api/docs/assets/signed  sessionRequired > <anonymous>
+USE / errorHandler

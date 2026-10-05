@@ -7,6 +7,7 @@ import type { Request, Response, NextFunction } from 'express'
 
 import { ERROR_MESSAGES } from '../lib/constants.js'
 import { ApiError } from '../lib/errors.js'
+import { nameMiddleware } from '../lib/middleware-name.js'
 
 /**
  * Регулярное выражение для UUID v4
@@ -24,7 +25,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
  * router.get('/:userId/posts/:postId', validateUUID('userId'), validateUUID('postId'), handler)
  */
 export function validateUUID(paramName = 'id') {
-	return (req: Request, res: Response, next: NextFunction) => {
+	return nameMiddleware((req: Request, res: Response, next: NextFunction) => {
 		const value = req.params[paramName]
 
 		if (!value) {
@@ -42,7 +43,7 @@ export function validateUUID(paramName = 'id') {
 		}
 
 		next()
-	}
+	}, `validateUUID(${paramName})`)
 }
 
 /**
