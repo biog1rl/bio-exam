@@ -8,7 +8,9 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TableRow, TableCell } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { highlightText } from '@/lib/search/highlight'
+import { groupsCell, groupsTitle } from '@/lib/users/invite-form'
 import type { UserRow } from '@/types/users'
 
 type Props = {
@@ -63,8 +65,10 @@ export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditCl
 			</TableCell>
 
 			<TableCell>
-				{user.groupName ? (
-					<span className="text-sm">{user.groupName}</span>
+				{user.groups.length > 0 ? (
+					<span className="text-sm" title={groupsTitle(user.groups)}>
+						{groupsCell(user.groups)}
+					</span>
 				) : (
 					<span className="text-sm text-muted-foreground">—</span>
 				)}
@@ -73,17 +77,29 @@ export function UserRowItem({ user, searchQuery, canEditRow, canInvite, onEditCl
 			<TableCell>{formatDateTime(user.createdAt)}</TableCell>
 			<TableCell>{user.createdByName ?? '—'}</TableCell>
 
-			{canEditRow && (
+			{(canEditRow || canInvite) && (
 				<TableCell className="space-x-2 text-right">
 					<div className="flex justify-end gap-2">
-						<Button size="icon" variant="outline" onClick={() => onEditClick(user)}>
-							<Pencil />
-						</Button>
+						{canEditRow && (
+							<Button size="icon" variant="outline" aria-label="Изменить профиль" onClick={() => onEditClick(user)}>
+								<Pencil aria-hidden />
+							</Button>
+						)}
 
 						{allowReinvite && (
-							<Button size="icon" variant="outline" onClick={() => onReinviteClick(user)}>
-								<LinkIcon />
-							</Button>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										size="icon"
+										variant="outline"
+										aria-label="Новая ссылка приглашения"
+										onClick={() => onReinviteClick(user)}
+									>
+										<LinkIcon aria-hidden />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>Новая ссылка приглашения</TooltipContent>
+							</Tooltip>
 						)}
 					</div>
 				</TableCell>

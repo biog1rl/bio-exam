@@ -14,6 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { groupsCell, groupsTitle, usersEmptyText } from '@/lib/users/invite-form'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import type { UserRow } from '@/types/users'
 
@@ -34,8 +36,10 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 
 	const effectiveCanEdit = typeof canEdit === 'boolean' ? canEdit : can('users', 'edit')
 	const canInvite = can('users', 'invite')
+	const showActions = effectiveCanEdit || canInvite
+	const teacherView = !can('zone', 'all')
 
-	const cols = 7 + (effectiveCanEdit ? 1 : 0)
+	const cols = 7 + (showActions ? 1 : 0)
 
 	const [searchQuery, setSearchQuery] = useState('')
 	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
@@ -72,6 +76,8 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 		})
 	}, [rows, searchQuery, statusFilter])
 
+	const emptyText = usersEmptyText({ searchQuery, teacher: teacherView, totalRows: rows.length })
+
 	const body = useMemo(() => {
 		if (isLoading) {
 			return Array.from({ length: 5 }).map((_, i) => (
@@ -98,7 +104,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 					<TableCell>
 						<Skeleton className="h-4 w-24" />
 					</TableCell>
-					{effectiveCanEdit && (
+					{showActions && (
 						<TableCell className="text-right">
 							<Skeleton className="h-8 w-28" />
 						</TableCell>
@@ -111,7 +117,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 			return (
 				<TableRow>
 					<TableCell colSpan={cols} className="h-24 text-center text-muted-foreground">
-						{searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
+						{emptyText}
 					</TableCell>
 				</TableRow>
 			)
@@ -128,7 +134,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				onReinviteClick={handleReinviteClick}
 			/>
 		))
-	}, [isLoading, filteredRows, searchQuery, cols, effectiveCanEdit, canInvite])
+	}, [isLoading, filteredRows, searchQuery, cols, effectiveCanEdit, canInvite, showActions, emptyText])
 
 	return (
 		<>
@@ -150,9 +156,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 				{isLoading ? (
 					Array.from({ length: 5 }).map((_, i) => <Skeleton key={`mobile-sk-${i}`} className="h-36 rounded-3xl" />)
 				) : filteredRows.length === 0 ? (
-					<div className="rounded-3xl border p-4 text-center text-sm text-muted-foreground">
-						{searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
-					</div>
+					<div className="rounded-3xl border p-4 text-center text-sm text-muted-foreground">{emptyText}</div>
 				) : (
 					filteredRows.map((user) => {
 						const active = Boolean(user.isActive)
@@ -187,20 +191,39 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 								</div>
 
 								<div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-									<p>Группа: {user.groupName ?? '—'}</p>
+									<p className="break-words" title={groupsTitle(user.groups) || undefined}>
+										Группа: {groupsCell(user.groups)}
+									</p>
 									<p>Создан: {formatDateTime(user.createdAt)}</p>
 									<p>Кем создан: {user.createdByName ?? '—'}</p>
 								</div>
 
-								{effectiveCanEdit ? (
+								{effectiveCanEdit || allowReinvite ? (
 									<div className="mt-4 flex justify-end gap-2">
-										<Button size="icon" variant="outline" onClick={() => handleEditClick(user)}>
-											<Pencil />
-										</Button>
-										{allowReinvite ? (
-											<Button size="icon" variant="outline" onClick={() => handleReinviteClick(user)}>
-												<LinkIcon />
+										{effectiveCanEdit ? (
+											<Button
+												size="icon"
+												variant="outline"
+												aria-label="Изменить профиль"
+												onClick={() => handleEditClick(user)}
+											>
+												<Pencil aria-hidden />
 											</Button>
+										) : null}
+										{allowReinvite ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														size="icon"
+														variant="outline"
+														aria-label="Новая ссылка приглашения"
+														onClick={() => handleReinviteClick(user)}
+													>
+														<LinkIcon aria-hidden />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>Новая ссылка приглашения</TooltipContent>
+											</Tooltip>
 										) : null}
 									</div>
 								) : null}
@@ -222,7 +245,7 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 								<TableHead>Группа</TableHead>
 								<TableHead>Создан</TableHead>
 								<TableHead>Кем создан</TableHead>
-								{effectiveCanEdit && <TableHead className="text-right">Действия</TableHead>}
+								{showActions && <TableHead className="text-right">Действия</TableHead>}
 							</TableRow>
 						</TableHeader>
 

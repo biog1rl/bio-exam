@@ -5,10 +5,12 @@ import { useMemo, useState } from 'react'
 import { UserPlusIcon } from 'lucide-react'
 import useSWR from 'swr'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { UsersTable } from '@/components/users/UsersTable'
 import { InviteUserDialog } from '@/components/users/dialogs/InviteUserDialog'
+import { matchesGroup } from '@/lib/users/invite-form'
 import { UserRow } from '@/types/users'
 
 type Group = { id: string; name: string }
@@ -22,6 +24,9 @@ const fetcher = (url: string) =>
 	})
 
 export default function UsersClient() {
+	const { can } = useAuth()
+	const zoneAll = can('zone', 'all')
+	const canInvite = can('users', 'invite')
 	const { data, mutate, isLoading } = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
 	const { data: groupsData } = useSWR<{ groups: Group[] }>('/api/groups', fetcher)
 	const [open, setOpen] = useState(false)
@@ -32,15 +37,23 @@ export default function UsersClient() {
 		if (groupFilter === 'all') return all
 		const selectedGroup = allGroups.find((g) => g.id === groupFilter)
 		if (!selectedGroup) return all
-		return all.filter((u) => u.groupName === selectedGroup.name)
+		return all.filter((u) => matchesGroup(u, selectedGroup.id))
 	}, [data, groupFilter, allGroups])
 	return (
 		<div className="space-y-4">
 			<div className="flex flex-wrap items-center justify-between gap-3">
-				<h1 className="text-xl font-semibold">Пользователи</h1>
-				<Button size="icon" variant="outline" onClick={() => setOpen(true)}>
-					<UserPlusIcon />
-				</Button>
+				<div className="min-w-0">
+					<h1 className="text-xl font-semibold">Пользователи</h1>
+					{!zoneAll && (
+						<p className="text-sm text-muted-foreground">Ученики ваших групп. Профиль меняет администратор.</p>
+					)}
+				</div>
+				{canInvite && (
+					<Button variant="outline" className="w-full mob:w-auto" onClick={() => setOpen(true)}>
+						<UserPlusIcon className="size-4" aria-hidden />
+						{zoneAll ? 'Пригласить пользователя' : 'Пригласить ученика'}
+					</Button>
+				)}
 			</div>
 			{allGroups.length > 0 && (
 				<div className="flex items-center gap-2">
@@ -60,7 +73,7 @@ export default function UsersClient() {
 				</div>
 			)}
 			<UsersTable rows={users} isLoading={isLoading} />
-			<InviteUserDialog open={open} onOpenChange={setOpen} onCreated={() => mutate()} />
+			{canInvite && <InviteUserDialog open={open} onOpenChange={setOpen} onCreated={() => mutate()} />}
 		</div>
 	)
 }

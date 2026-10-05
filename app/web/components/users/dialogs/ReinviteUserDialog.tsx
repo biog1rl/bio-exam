@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { apiFetch } from '@/lib/api-fetch'
+import { reinviteErrorText } from '@/lib/users/invite-form'
 import type { UserRow } from '@/types/users'
 
 type Props = {
@@ -48,8 +49,8 @@ export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props
 			})
 
 			if (!res.ok) {
-				const msg = await res.text().catch(() => '')
-				throw new Error(msg || `HTTP ${res.status}`)
+				const text = await res.text().catch(() => '')
+				throw new Error(reinviteErrorText({ status: res.status, text }))
 			}
 
 			const json = (await res.json()) as InviteResponse
