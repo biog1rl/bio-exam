@@ -3,7 +3,10 @@ import { STAFF_ROLE_KEYS, type PermissionKey } from '@bio-exam/rbac'
 import { pgPool } from '../../db/index.js'
 import { transliterate } from '../../lib/transliterate.js'
 import { studentOnlySql, type GroupScope, type TestScope, type UserScope } from '../access-policy/index.js'
+import { mapBounded } from '../question-content/index.js'
 import { highlightSnippet } from './highlight.js'
+
+export const SEARCH_DB_CONCURRENCY = 2
 
 export type SearchScope = 'all' | 'tests' | 'questions' | 'users' | 'groups' | 'attempts'
 export type SearchResultType = 'topic' | 'test' | 'question' | 'user' | 'group' | 'attempt'
@@ -446,8 +449,10 @@ export async function searchDatabase(params: SearchParams): Promise<SearchRespon
 	const scopes: Exclude<SearchScope, 'all'>[] =
 		params.scope === 'all' ? ['tests', 'questions', 'users', 'groups', 'attempts'] : [params.scope]
 
-	const categories: SearchCategory[] = await Promise.all(
-		scopes.map(async (scope): Promise<SearchCategory> => {
+	const categories: SearchCategory[] = await mapBounded(
+		scopes,
+		SEARCH_DB_CONCURRENCY,
+		async (scope): Promise<SearchCategory> => {
 			const available = canRunScope(scope, params.access)
 			let items: SearchResultItem[] = []
 			if (available && query.length >= 2) {
@@ -461,7 +466,7 @@ export async function searchDatabase(params: SearchParams): Promise<SearchRespon
 					items = await searchAttempts({ query, like, likeAlt, limit, access: params.access, executor })
 			}
 			return { scope, title: CATEGORY_TITLES[scope], available, items }
-		})
+		}
 	)
 
 	return {

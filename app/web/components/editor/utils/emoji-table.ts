@@ -5,7 +5,7 @@ export type EmojiTableLoader = {
 	loaded(): readonly EmojiEntry[] | null
 }
 
-export const EMOJI_ALIAS_PATTERN = /:[a-z0-9_]+:/
+export const EMOJI_ALIAS_PATTERN = /:[a-z0-9_]*[a-z][a-z0-9_]*:/
 
 export function createEmojiTableLoader(
 	importer: () => Promise<{ emojiList: readonly EmojiEntry[] }>

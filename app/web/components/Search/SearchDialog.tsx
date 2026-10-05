@@ -178,7 +178,11 @@ export default function SearchDialog() {
 		const outcome = await searchAll(q, 'all', 10, controller.signal)
 		if (controllerRef.current !== controller) return
 		if (!outcome.ok) {
-			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
+			if (outcome.kind === 'aborted') return
+			if (outcome.kind === 'auth') {
+				setLoading(false)
+				return
+			}
 			setResults(null)
 			setSearchError(new RequestError(outcome))
 			setTab('all')

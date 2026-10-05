@@ -65,13 +65,17 @@ export function groupSaveErrorText(status?: number): string {
 	return GENERIC_SAVE_ERROR
 }
 
-export function groupSaveDisabled(input: {
-	saving: boolean
-	editing: boolean
-	membersLoading: boolean
-	membersFailed: boolean
-}): boolean {
-	return input.saving || (input.editing && (input.membersLoading || input.membersFailed))
+export function groupSaveDisabled(input: { saving: boolean; editing: boolean; membersReady: boolean }): boolean {
+	return input.saving || (input.editing && !input.membersReady)
+}
+
+export function groupMembersSeed(input: {
+	groupId: string | null
+	seededFor: string | null
+	response: { id: string; memberIds: string[] }
+}): string[] | null {
+	if (!input.groupId || input.response.id !== input.groupId || input.seededFor === input.groupId) return null
+	return input.response.memberIds
 }
 
 export type GroupSavePayload = {

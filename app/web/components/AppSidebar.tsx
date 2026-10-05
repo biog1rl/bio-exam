@@ -1,49 +1,56 @@
 'use client'
 
-import { ComponentProps, useEffect, useState } from 'react'
+import { ComponentProps, useEffect, useMemo, useState } from 'react'
 
 import * as Icons from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from '@/components/ui/sidebar'
-import { getSidebarItems } from '@/lib/settings/api'
+import { getSidebarItems, type SidebarItem } from '@/lib/settings/api'
+import { sidebarNavItems } from '@/lib/settings/sidebar-items'
 import { cn } from '@/lib/utils/cn'
 
 import LogoSidebar from './LogoSidebar'
 import { NavUser } from './nav-user'
 
+type NavLink = {
+	key: string
+	name: string
+	url: string
+	icon: LucideIcon
+	target?: HTMLAnchorElement['target']
+	isActive: boolean
+}
+
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
-	const [links, setLinks] = useState<
-		{
-			name: string
-			url: string
-			icon: LucideIcon
-			target?: HTMLAnchorElement['target']
-			isActive: boolean
-		}[]
-	>([])
+	const [items, setItems] = useState<SidebarItem[]>([])
+	const { perms } = useAuth()
 	const pathname = usePathname()
 
 	useEffect(() => {
 		const controller = new AbortController()
 		void getSidebarItems(controller.signal).then((outcome) => {
 			if (!outcome.ok) return
-			const mappedLinks = outcome.data.map((item) => {
-				const IconComponent = (Icons as any)[item.icon] || Icons.CircleIcon
-				return {
-					name: item.title,
-					url: item.url,
-					icon: IconComponent,
-					target: item.target,
-					isActive: item.isActive,
-				}
-			})
-			setLinks(mappedLinks)
+			setItems(outcome.data)
 		})
 		return () => controller.abort()
 	}, [])
+
+	const links = useMemo<NavLink[]>(
+		() =>
+			sidebarNavItems(items, perms).map((item) => ({
+				key: item.id,
+				name: item.title,
+				url: item.url,
+				icon: (Icons as any)[item.icon] || Icons.CircleIcon,
+				target: item.target,
+				isActive: item.isActive,
+			})),
+		[items, perms]
+	)
 
 	return (
 		<Sidebar className="border-r border-[#ded6c7] bg-[#f8f5ee]" collapsible="none" suppressHydrationWarning {...props}>
@@ -61,7 +68,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 							const Icon = item.icon
 
 							return (
-								<li key={item.name}>
+								<li key={item.key}>
 									<Link
 										className={cn(
 											'flex min-h-16 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-center text-xs leading-tight font-medium transition-colors',

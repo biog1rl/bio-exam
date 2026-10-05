@@ -2,10 +2,18 @@ import { Router } from 'express'
 import { z } from 'zod'
 
 import { sessionRequired } from '../middleware/auth/session.js'
+import { rateLimiter } from '../middleware/rateLimiter.js'
 import { groupScope, requestAccess, testScope, userScope } from '../services/access-policy/index.js'
 import { searchDatabase, type SearchScope } from '../services/search/database-search.js'
 
 const router = Router()
+
+const searchRateLimiter = rateLimiter({
+	maxAttempts: 60,
+	windowMs: 60 * 1000,
+	keyPrefix: 'search',
+	clientKey: (req) => (req.authUser?.id ? `user:${req.authUser.id}` : undefined),
+})
 
 const SearchQuerySchema = z.object({
 	q: z.string().optional().default(''),
@@ -13,7 +21,7 @@ const SearchQuerySchema = z.object({
 	limit: z.coerce.number().int().min(1).max(25).optional().default(10),
 })
 
-router.get('/', sessionRequired(), async (req, res, next) => {
+router.get('/', sessionRequired(), searchRateLimiter, async (req, res, next) => {
 	try {
 		const parsed = SearchQuerySchema.safeParse(req.query)
 		if (!parsed.success) {

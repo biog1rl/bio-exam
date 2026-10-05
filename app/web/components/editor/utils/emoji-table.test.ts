@@ -54,3 +54,11 @@ test('шаблон :alias: совпадает с формой трансформ
 	assert.equal(EMOJI_ALIAS_PATTERN.test('Время 10:30, без кодов'), false)
 	assert.equal(EMOJI_ALIAS_PATTERN.test('Текст без эмодзи'), false)
 })
+
+test('шаблон :alias: требует букву: цифровые соотношения не считаются алиасом', () => {
+	assert.equal(EMOJI_ALIAS_PATTERN.test('Соотношение 1:100:1'), false)
+	assert.equal(EMOJI_ALIAS_PATTERN.test('Расщепление 9:3:3:1'), false)
+	assert.equal(EMOJI_ALIAS_PATTERN.test('Код :1234: без букв'), false)
+	assert.equal(EMOJI_ALIAS_PATTERN.test('Медаль :1st_place_medal:'), true)
+	assert.equal(EMOJI_ALIAS_PATTERN.test('Привет :smile:'), true)
+})

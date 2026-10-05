@@ -47,6 +47,8 @@ export interface RateLimiterOptions {
 	 * Опциональный префикс ключа для namespace
 	 */
 	keyPrefix?: string
+
+	clientKey?: (req: Request) => string | undefined
 }
 
 /**
@@ -56,11 +58,11 @@ export interface RateLimiterOptions {
  * router.post('/login', rateLimiter({ maxAttempts: 5, windowMs: 60000 }), handler)
  */
 export function rateLimiter(options: RateLimiterOptions = {}) {
-	const { maxAttempts = 5, windowMs = 60 * 1000, keyPrefix = '' } = options
+	const { maxAttempts = 5, windowMs = 60 * 1000, keyPrefix = '', clientKey } = options
 
 	const limiter = (req: Request, res: Response, next: NextFunction) => {
-		const ip = req.ip || req.socket.remoteAddress || 'unknown'
-		const key = keyPrefix ? `${keyPrefix}:${ip}` : ip
+		const client = clientKey?.(req) || req.ip || req.socket.remoteAddress || 'unknown'
+		const key = keyPrefix ? `${keyPrefix}:${client}` : client
 		const now = Date.now()
 		// Memory-only implementation (suitable for single-instance personal deployment)
 		const entry = store.get(key)

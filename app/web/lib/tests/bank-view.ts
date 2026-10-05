@@ -1,5 +1,8 @@
 import { can, type PermissionKey } from '@bio-exam/rbac'
 
+import { failureMessage } from '@/lib/http/errors'
+import type { RequestFailure } from '@/lib/http/request'
+
 export type TopicTeacher = {
 	id: string
 	name: string | null
@@ -33,6 +36,9 @@ export const TEACHERS_EMPTY =
 export const TEACHERS_HINT = 'Учитель видит тесты темы, создаёт и правит их. Можно выбрать нескольких.'
 export const TEACHERS_SAVE_FAILED =
 	'Тема сохранена, но учителей закрепить не удалось. Откройте тему и попробуйте ещё раз.'
+
+export const TOPIC_SLUG_TAKEN = 'Тема с таким адресом уже существует'
+export const TOPIC_SAVE_FAILED = 'Ошибка сохранения'
 
 export const DELETE_TEST_SUCCESS = 'Тест удален'
 export const DELETE_TEST_FORBIDDEN = 'Недостаточно прав для этого действия. Обратитесь к администратору.'
@@ -128,4 +134,9 @@ export function deleteTestToast(status: number, body?: unknown): ToastResult {
 	if (status === 409) return { kind: 'error', message: errorText(body) ?? DELETE_TEST_FAILED }
 	if (status === 403) return { kind: 'error', message: DELETE_TEST_FORBIDDEN }
 	return { kind: 'error', message: DELETE_TEST_FAILED }
+}
+
+export function topicSaveFailure(failure: RequestFailure): { slugError: string | null; toast: string } {
+	if (failure.kind === 'http' && failure.status === 409) return { slugError: TOPIC_SLUG_TAKEN, toast: '' }
+	return { slugError: null, toast: failureMessage(failure, TOPIC_SAVE_FAILED) }
 }

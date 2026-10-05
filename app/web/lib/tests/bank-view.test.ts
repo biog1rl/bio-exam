@@ -18,6 +18,7 @@ import {
 	testTopicPickerState,
 	topicHeroTeachersLine,
 	topicPageState,
+	topicSaveFailure,
 	topicSaveOutcome,
 } from './bank-view'
 
@@ -190,4 +191,32 @@ test.each<[{ topics: number; canManage: boolean }, string]>([
 	[{ topics: 3, canManage: true }, 'list'],
 ])('testTopicPickerState(%o) → %s', (input, expected) => {
 	assert.equal(testTopicPickerState(input), expected)
+})
+
+test('topicSaveFailure: 409 с английским текстом сервера — русская ошибка у поля адреса, без тоста', () => {
+	assert.deepEqual(
+		topicSaveFailure({
+			ok: false,
+			kind: 'http',
+			status: 409,
+			message: 'Topic with this slug already exists',
+			body: { error: 'Topic with this slug already exists' },
+		}),
+		{ slugError: 'Тема с таким адресом уже существует', toast: '' }
+	)
+})
+
+test('topicSaveFailure: прочие отказы — тост с запасным текстом, поле адреса не трогается', () => {
+	assert.deepEqual(topicSaveFailure({ ok: false, kind: 'http', status: 500, message: 'x' }), {
+		slugError: null,
+		toast: 'Ошибка сохранения',
+	})
+	assert.deepEqual(
+		topicSaveFailure({ ok: false, kind: 'http', status: 400, message: 'x', body: { error: 'Invalid body' } }),
+		{ slugError: null, toast: 'Ошибка сохранения' }
+	)
+	assert.deepEqual(topicSaveFailure({ ok: false, kind: 'auth', status: 401, message: 'x' }), {
+		slugError: null,
+		toast: '',
+	})
 })

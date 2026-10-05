@@ -98,3 +98,33 @@ test('устаревшая конвертация после загрузки т
 	await stale
 	assert.equal(mdxOf(editor), 'Новый текст')
 })
+
+const NUMERIC: readonly EmojiEntry[] = [
+	{ emoji: '💯', aliases: ['100'], tags: ['score'] },
+	{ emoji: '🔢', aliases: ['1234'], tags: ['numbers'] },
+	{ emoji: '😄', aliases: ['smile'], tags: ['happy'] },
+]
+
+for (const text of ['Соотношение 1:100:1', 'Расщепление 9:3:3:1', 'Код :1234: без букв']) {
+	test(`цифровое соотношение «${text}» не ждёт таблицу и не меняется`, async () => {
+		table.load.mockReturnValue(new Promise<readonly EmojiEntry[]>(() => {}))
+		const { editor } = newEditor()
+		await mdxToEditorState(editor, text)
+		assert.equal(table.load.mock.calls.length, 0)
+		assert.equal(mdxOf(editor), text)
+	})
+
+	test(`цифровое соотношение «${text}» не меняется и при загруженной таблице с цифровыми алиасами`, async () => {
+		table.loaded.mockReturnValue(NUMERIC)
+		const { editor } = newEditor()
+		await mdxToEditorState(editor, text)
+		assert.equal(mdxOf(editor), text)
+	})
+}
+
+test(':smile: рядом с цифровым соотношением превращается в символ', async () => {
+	table.loaded.mockReturnValue(NUMERIC)
+	const { editor } = newEditor()
+	await mdxToEditorState(editor, 'Соотношение 1:100:1 :smile:')
+	assert.equal(mdxOf(editor), 'Соотношение 1:100:1 😄')
+})

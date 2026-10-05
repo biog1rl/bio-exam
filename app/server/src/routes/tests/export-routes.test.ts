@@ -187,6 +187,43 @@ async function assertServerResponds(w: World): Promise<void> {
 	assert.equal(reply.status, 200)
 }
 
+type StalledExport = { reader: ReadableStreamDefaultReader<Uint8Array>; chunks: Uint8Array[] }
+
+async function openStalledExport(w: World, path: string): Promise<StalledExport> {
+	for (let attempt = 0; ; attempt += 1) {
+		const response = await fetch(`${w.ctx.baseUrl}${path}`, { headers: headersFor(w.adminJar) })
+		if (response.status === 429 && attempt < 40) {
+			await response.arrayBuffer()
+			await delay(50)
+			continue
+		}
+		assert.equal(response.status, 200)
+		assert.ok(response.body)
+		const reader = response.body.getReader()
+		const first = await reader.read()
+		assert.ok(first.value && first.value.length > 0)
+		return { reader, chunks: [first.value] }
+	}
+}
+
+async function drain(stalled: StalledExport): Promise<Buffer> {
+	for (;;) {
+		const chunk = await stalled.reader.read()
+		if (chunk.done) return Buffer.concat(stalled.chunks)
+		stalled.chunks.push(chunk.value)
+	}
+}
+
+async function downloadWhenFree(w: World, path: string): Promise<Download> {
+	for (let attempt = 0; ; attempt += 1) {
+		const reply = await download(w, path)
+		if (reply.status !== 429 || attempt >= 40) return reply
+		await delay(50)
+	}
+}
+
+const EXPORT_BUSY = 'Экспорт уже выполняется, повторите позже'
+
 describe('EXPORT_ZIP_MAX_BYTES=0: потоковый приёмник', () => {
 	const world = setupWorld('test_export_stream', 'exp_stream', { EXPORT_ZIP_MAX_BYTES: '0' })
 
@@ -276,6 +313,39 @@ describe('EXPORT_ZIP_MAX_BYTES=0: потоковый приёмник', () => {
 		const again = await download(w, `/api/tests/${testId}/export`)
 		assert.equal(again.status, 200)
 		assert.deepEqual(digest(again.body), digest(await bufferedTest(w, testId, false)))
+	})
+	test('третий одновременный экспорт — 429 до заголовков, после завершения первого — снова 200', async () => {
+		const w = world()
+		const { testId, topicSlug } = await seedTestWithImages(w, 'stream-slots', 48, 256 * 1024)
+		const testPath = `/api/tests/${testId}/export`
+		const first = await openStalledExport(w, testPath)
+		const second = await openStalledExport(w, `/api/tests/topics/${topicSlug}/export`)
+		assert.deepEqual(assertJsonRefusal(await download(w, testPath), 429), { error: EXPORT_BUSY })
+		assert.deepEqual(assertJsonRefusal(await download(w, `/api/tests/topics/${topicSlug}/export`), 429), {
+			error: EXPORT_BUSY,
+		})
+		const firstBody = await drain(first)
+		const again = await downloadWhenFree(w, testPath)
+		assert.equal(again.status, 200)
+		assert.equal(again.headers.get('content-type'), 'application/zip')
+		assert.deepEqual(digest(again.body), digest(firstBody))
+		await second.reader.cancel()
+		await assertServerResponds(w)
+	})
+
+	test('обрыв соединения клиентом освобождает место экспорта', async () => {
+		const w = world()
+		const { testId } = await seedTestWithImages(w, 'stream-slots-abort', 48, 256 * 1024)
+		const path = `/api/tests/${testId}/export`
+		const first = await openStalledExport(w, path)
+		const second = await openStalledExport(w, path)
+		assert.equal((await download(w, path)).status, 429)
+		await first.reader.cancel()
+		await second.reader.cancel()
+		const again = await downloadWhenFree(w, path)
+		assert.equal(again.status, 200)
+		assert.equal(again.headers.get('content-type'), 'application/zip')
+		assert.ok(readZipEntries(again.body).size > 0)
 	})
 })
 

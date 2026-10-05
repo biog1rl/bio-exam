@@ -22,7 +22,6 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { failureMessage } from '@/lib/http/errors'
 import { fetchTopicTeacherOptions, saveTopic, setTopicTeachers } from '@/lib/tests/admin-api'
 import {
 	TEACHERS_EMPTY,
@@ -33,6 +32,7 @@ import {
 	teacherDisplayName,
 	teacherTriggerLabel,
 	teachersSetChanged,
+	topicSaveFailure,
 	topicSaveOutcome,
 	type TopicTeacher,
 } from '@/lib/tests/bank-view'
@@ -169,8 +169,9 @@ export function TopicFormDialog({
 		try {
 			const saved = await saveTopic({ id: isEditing ? editingTopic!.id : undefined, body: form })
 			if (!saved.ok) {
-				const message = failureMessage(saved, 'Ошибка сохранения')
-				if (message) toast.error(message)
+				const failure = topicSaveFailure(saved)
+				if (failure.slugError) setSlugError(failure.slugError)
+				if (failure.toast) toast.error(failure.toast)
 				return
 			}
 

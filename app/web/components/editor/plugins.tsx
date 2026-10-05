@@ -348,24 +348,7 @@ export function Plugins({
 								{p('SpeechToText') && <SpeechToTextPlugin />}
 								{p('ShareContent') && <ShareContentPlugin />}
 								{p('ImportExport') && <ImportExportPlugin />}
-								{p('MarkdownToggle') && (
-									<MarkdownTogglePlugin
-										shouldPreserveNewLinesInMarkdown={true}
-										transformers={[
-											TABLE,
-											HR,
-											IMAGE_HTML,
-											IMAGE,
-											EMOJI,
-											TWEET,
-											CHECK_LIST,
-											...ELEMENT_TRANSFORMERS,
-											...MULTILINE_ELEMENT_TRANSFORMERS,
-											...TEXT_FORMAT_TRANSFORMERS,
-											...TEXT_MATCH_TRANSFORMERS,
-										]}
-									/>
-								)}
+								{p('MarkdownToggle') && <MarkdownTogglePlugin shouldPreserveNewLinesInMarkdown={true} />}
 								{p('EditModeToggle') && <EditModeTogglePlugin />}
 								{p('ClearEditor') && (
 									<>

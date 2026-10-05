@@ -3,7 +3,7 @@ import type { PermissionKey } from '@bio-exam/rbac'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 
-import { searchDatabase, type SearchExecutor, type SearchScope } from './database-search.js'
+import { SEARCH_DB_CONCURRENCY, searchDatabase, type SearchExecutor, type SearchScope } from './database-search.js'
 
 type Access = Parameters<typeof searchDatabase>[0]['access']
 
@@ -75,7 +75,11 @@ function probe(delayMs: (category: Category) => number, fail?: Category) {
 }
 
 describe('searchDatabase: шов исполнителя запроса', () => {
-	test('администратор: один запрос на категорию, все пять одновременно', async () => {
+	test('поиск занимает не больше двух соединений пула на вызов', () => {
+		assert.equal(SEARCH_DB_CONCURRENCY, 2)
+	})
+
+	test('администратор: один запрос на категорию, одновременно не больше двух', async () => {
 		const { stats, executor } = probe(() => 5)
 		const result = await searchDatabase({ query: 'клетка', scope: 'all', limit: 10, access: ADMIN_ACCESS, executor })
 		assert.deepEqual(
@@ -83,7 +87,7 @@ describe('searchDatabase: шов исполнителя запроса', () => {
 			SCOPES.map((scope) => [scope, true])
 		)
 		assert.equal(stats.calls, 5)
-		assert.equal(stats.maxConcurrent, 5)
+		assert.equal(stats.maxConcurrent, SEARCH_DB_CONCURRENCY)
 		assert.equal(result.total, 5)
 	})
 
@@ -105,11 +109,11 @@ describe('searchDatabase: шов исполнителя запроса', () => {
 				)
 			}
 			assert.equal(stats.calls, 5)
-			assert.equal(stats.maxConcurrent, 5)
+			assert.ok(stats.maxConcurrent <= SEARCH_DB_CONCURRENCY, `прогон ${run}: ${stats.maxConcurrent}`)
 		}
 	})
 
-	test('без users.read и groups.manage_groups: недоступные категории без запроса, одновременно три', async () => {
+	test('без users.read и groups.manage_groups: недоступные категории без запроса, одновременно не больше двух', async () => {
 		const { stats, executor } = probe(() => 5)
 		const result = await searchDatabase({
 			query: 'клетка',
@@ -130,7 +134,7 @@ describe('searchDatabase: шов исполнителя запроса', () => {
 		)
 		assert.deepEqual([...stats.categories].sort(), ['attempts', 'questions', 'tests'])
 		assert.equal(stats.calls, 3)
-		assert.equal(stats.maxConcurrent, 3)
+		assert.equal(stats.maxConcurrent, SEARCH_DB_CONCURRENCY)
 	})
 
 	test('ошибка категории users отклоняет весь вызов', async () => {

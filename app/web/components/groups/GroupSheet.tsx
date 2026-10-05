@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 
 import { Check, ChevronsUpDown, X } from 'lucide-react'
 import { toast } from 'sonner'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +34,7 @@ import {
 	MIN_CANDIDATE_QUERY,
 	OWNER_HINT,
 	candidatesState,
+	groupMembersSeed,
 	groupSaveDisabled,
 	groupSaveErrorText,
 	groupSavePayload,
@@ -70,6 +71,7 @@ const displayName = (u: UserRow) => {
 export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	const { can } = useAuth()
 	const zoneAll = can('zone', 'all')
+	const { mutate: mutateCache } = useSWRConfig()
 
 	const [name, setName] = useState('')
 	const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -80,6 +82,9 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	const [query, setQuery] = useState('')
 	const [debouncedQuery, setDebouncedQuery] = useState('')
 	const [ownerChoice, setOwnerChoice] = useState<string>(ADMINS_OWNER)
+	const [seededFor, setSeededFor] = useState<string | null>(null)
+	const [membersFailed, setMembersFailed] = useState(false)
+	const seededForRef = useRef<string | null>(null)
 
 	const { data: usersData, error: usersError } = useSWR<UsersList>(zoneAll ? usersKeys.list() : null, swrFetcher)
 	const usersFailed = zoneAll && usersError !== undefined && usersData === undefined
@@ -120,12 +125,9 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		return owners
 	}, [ownersData, group])
 
-	const {
-		data: groupData,
-		error: membersError,
-		isLoading: membersLoading,
-	} = useSWR(open && group ? groupsKeys.detail(group.id) : null, groupDetailFetcher, { revalidateOnFocus: false })
-	const membersFailed = Boolean(group) && membersError !== undefined && groupData === undefined
+	const openGroupId = open && group ? group.id : null
+	const membersReady = openGroupId !== null && seededFor === openGroupId
+	const membersLoading = openGroupId !== null && !membersReady && !membersFailed
 
 	useEffect(() => {
 		if (!open) {
@@ -138,6 +140,9 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 			setQuery('')
 			setDebouncedQuery('')
 			setOwnerChoice(ADMINS_OWNER)
+			setSeededFor(null)
+			setMembersFailed(false)
+			seededForRef.current = null
 			return
 		}
 		if (group) {
@@ -151,18 +156,39 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	}, [open, group])
 
 	useEffect(() => {
-		const members = groupData?.group.members
-		if (!members) return
-		setSelectedIds(members.map((m) => m.id))
-		setPeople((prev) => {
-			const next = { ...prev }
-			for (const m of members) {
-				const label = personLabel({ name: m.name })
-				next[m.id] = { label: zoneAll && label === '—' && m.login ? m.login : label, isActive: m.isActive }
+		if (!openGroupId) return
+		let cancelled = false
+		groupDetailFetcher(groupsKeys.detail(openGroupId)).then(
+			(fresh) => {
+				if (cancelled) return
+				const members = fresh.group.members
+				const seed = groupMembersSeed({
+					groupId: openGroupId,
+					seededFor: seededForRef.current,
+					response: { id: fresh.group.id, memberIds: members.map((m) => m.id) },
+				})
+				if (!seed) return
+				seededForRef.current = openGroupId
+				setSelectedIds(seed)
+				setPeople((prev) => {
+					const next = { ...prev }
+					for (const m of members) {
+						const label = personLabel({ name: m.name })
+						next[m.id] = { label: zoneAll && label === '—' && m.login ? m.login : label, isActive: m.isActive }
+					}
+					return next
+				})
+				setMembersFailed(false)
+				setSeededFor(openGroupId)
+			},
+			() => {
+				if (!cancelled) setMembersFailed(true)
 			}
-			return next
-		})
-	}, [groupData, zoneAll])
+		)
+		return () => {
+			cancelled = true
+		}
+	}, [openGroupId, zoneAll])
 
 	const chips = useMemo(
 		() =>
@@ -202,6 +228,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 			if (outcome.kind !== 'auth') toast.error(groupSaveErrorText(outcome.status))
 			return
 		}
+		if (group) void mutateCache(groupsKeys.detail(group.id))
 		onSaved()
 		onOpenChange(false)
 	}
@@ -362,7 +389,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 					<Button
 						className="w-full"
 						onClick={handleSave}
-						disabled={groupSaveDisabled({ saving, editing: Boolean(group), membersLoading, membersFailed })}
+						disabled={groupSaveDisabled({ saving, editing: Boolean(group), membersReady })}
 					>
 						{saving ? 'Сохранение...' : 'Сохранить группу'}
 					</Button>

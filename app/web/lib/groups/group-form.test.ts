@@ -5,6 +5,7 @@ import {
 	candidatesHint,
 	candidatesSource,
 	candidatesState,
+	groupMembersSeed,
 	groupSaveDisabled,
 	groupSaveErrorText,
 	groupSavePayload,
@@ -13,19 +14,25 @@ import {
 	personLabel,
 } from './group-form'
 
-test('groupSaveDisabled: правка группы ждёт загрузки состава, новая группа не ждёт', () => {
-	const idle = { saving: false, membersFailed: false }
-	assert.equal(groupSaveDisabled({ ...idle, editing: true, membersLoading: true }), true)
-	assert.equal(groupSaveDisabled({ ...idle, editing: true, membersLoading: false }), false)
-	assert.equal(groupSaveDisabled({ ...idle, editing: false, membersLoading: true }), false)
-	assert.equal(groupSaveDisabled({ ...idle, editing: false, membersLoading: false }), false)
-	assert.equal(groupSaveDisabled({ ...idle, saving: true, editing: false, membersLoading: false }), true)
-	assert.equal(groupSaveDisabled({ ...idle, saving: true, editing: true, membersLoading: false }), true)
+test('groupSaveDisabled: правка группы ждёт свежего состава в этом открытии, новая группа не ждёт', () => {
+	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersReady: false }), true)
+	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersReady: true }), false)
+	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersReady: false }), false)
+	assert.equal(groupSaveDisabled({ saving: true, editing: false, membersReady: false }), true)
+	assert.equal(groupSaveDisabled({ saving: true, editing: true, membersReady: true }), true)
 })
 
-test('groupSaveDisabled: ошибка загрузки состава выключает сохранение правки', () => {
-	assert.equal(groupSaveDisabled({ saving: false, editing: true, membersLoading: false, membersFailed: true }), true)
-	assert.equal(groupSaveDisabled({ saving: false, editing: false, membersLoading: false, membersFailed: true }), false)
+test('groupMembersSeed: состав засевается один раз на открытие из ответа для открытой группы', () => {
+	const response = { id: 'g1', memberIds: ['u1', 'u2'] }
+	assert.deepEqual(groupMembersSeed({ groupId: 'g1', seededFor: null, response }), ['u1', 'u2'])
+	assert.equal(groupMembersSeed({ groupId: 'g1', seededFor: 'g1', response }), null)
+	assert.deepEqual(groupMembersSeed({ groupId: 'g1', seededFor: 'g0', response }), ['u1', 'u2'])
+})
+
+test('groupMembersSeed: ответ для другой группы или без открытой группы не засевает', () => {
+	const response = { id: 'g1', memberIds: ['u1'] }
+	assert.equal(groupMembersSeed({ groupId: 'g2', seededFor: null, response }), null)
+	assert.equal(groupMembersSeed({ groupId: null, seededFor: null, response }), null)
 })
 
 test('candidatesSource: учитель ищет на сервере от двух символов', () => {

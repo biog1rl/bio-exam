@@ -9,7 +9,7 @@ import {
 	useSensors,
 	DragEndEvent,
 } from '@dnd-kit/core'
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
@@ -47,6 +47,7 @@ import {
 	setSidebarItemActive,
 	type SidebarItem,
 } from '@/lib/settings/api'
+import { SIDEBAR_RELOAD_ERROR, moveSidebarItem, sidebarReloadFailure } from '@/lib/settings/sidebar-items'
 
 const iconsMap = Icons as Record<string, unknown>
 
@@ -188,8 +189,10 @@ export function SidebarSettingsClient() {
 	const loadItems = useCallback(async () => {
 		const outcome = await getAllSidebarItems()
 		if (!outcome.ok) {
-			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
-			if (!loadedRef.current) setLoadError(new RequestError(outcome))
+			const failure = sidebarReloadFailure({ loaded: loadedRef.current, kind: outcome.kind })
+			if (failure === 'silent') return
+			if (failure === 'block') setLoadError(new RequestError(outcome))
+			else toast.error(SIDEBAR_RELOAD_ERROR)
 			setLoading(false)
 			return
 		}
@@ -210,17 +213,16 @@ export function SidebarSettingsClient() {
 
 	const handleDragEnd = async (event: DragEndEvent) => {
 		const { active, over } = event
-		if (!over || active.id === over.id) return
+		if (!over) return
 
-		const oldIndex = items.findIndex((item) => item.id === active.id)
-		const newIndex = items.findIndex((item) => item.id === over.id)
-
-		const newItems = arrayMove(items, oldIndex, newIndex)
-		const reorderedItems = newItems.map((item, index) => ({ ...item, order: index }))
+		const previousItems = items
+		const reorderedItems = moveSidebarItem(items, String(active.id), String(over.id))
+		if (!reorderedItems) return
 		setItems(reorderedItems)
 
 		const outcome = await reorderSidebarItems(reorderedItems.map((item) => ({ id: item.id, order: item.order })))
 		if (!outcome.ok) {
+			setItems(previousItems)
 			showActionError(outcome, 'Ошибка обновления порядка')
 			void loadItems()
 			return
