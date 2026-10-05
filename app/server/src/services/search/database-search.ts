@@ -228,7 +228,7 @@ async function searchQuestions(params: { query: string; like: string; limit: num
 				qsd.question_id::text as id,
 				('Вопрос #' || q.order::text) as title,
 				concat_ws(' · ', top.title, te.title, q.type) as subtitle,
-				concat_ws(' ', qsd.prompt_text, qsd.options_text, qsd.matching_text, q.type, 'Вопрос #' || q.order::text) as snippet_source,
+				concat_ws(' ', qsd.prompt_text, qsd.options_text, qsd.matching_text) as snippet_source,
 				('/admin/tests/' || top.slug || '/' || te.slug || '/questions/' || qsd.question_id::text) as href,
 				greatest(
 					extensions.similarity(coalesce(qsd.search_text, ''), $1),
