@@ -1,6 +1,7 @@
 import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
 import { fetcherWith } from '@/lib/http/swr'
 import type { ProgressAttempt } from '@/lib/progress/attempt-chart'
+import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
 import type { UserPatch } from '@/lib/users/edit-user-form'
 import type { UserRow } from '@/types/users'
 
@@ -14,7 +15,35 @@ export type UserTestAssignment = {
 
 export type UserAssignmentsResponse = { assignments: UserTestAssignment[] }
 
-export type UserAttemptsResponse = { attempts: ProgressAttempt[] }
+export type UserAttemptRow = AttemptResultFields & {
+	attemptId: string
+	testId: string
+	testTitle: string
+	testSlug: string
+	topicSlug: string
+	topicTitle: string | null
+	submittedAt: string
+}
+
+export type UserAttemptsResponse = { attempts: UserAttemptRow[] }
+
+export function userAttemptToProgress(row: UserAttemptRow): ProgressAttempt | null {
+	const view = attemptResultView(row)
+	if (view.kind === 'pending') return null
+	return {
+		attemptId: row.attemptId,
+		testId: row.testId,
+		testTitle: row.testTitle,
+		testSlug: row.testSlug,
+		topicSlug: row.topicSlug,
+		topicTitle: row.topicTitle,
+		submittedAt: row.submittedAt,
+		earnedPoints: view.points.earned,
+		totalPoints: view.points.total,
+		scorePercentage: view.percent,
+		passed: view.passed,
+	}
+}
 
 export type UsersList = { rows: UserRow[]; total: number }
 

@@ -27,6 +27,8 @@ import useSWR, { useSWRConfig } from 'swr'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { AttemptBarChart } from '@/components/progress/AttemptBarChart'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
+import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -68,6 +70,7 @@ import {
 	resolvePeriodBounds,
 } from '@/lib/progress/attempt-chart'
 import { adminTestsKeys, adminTestsListFetcher } from '@/lib/tests/admin-api'
+import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { attemptsUrl } from '@/lib/tests/attempts-url'
 import {
 	assignTest,
@@ -75,6 +78,7 @@ import {
 	revokeUserSessions,
 	unassignTest,
 	userAssignmentsFetcher,
+	userAttemptToProgress,
 	userAttemptsFetcher,
 	userByLoginFetcher,
 	usersKeys,
@@ -283,6 +287,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				resolvePeriodBounds({ period, from: customFrom, to: customTo, day: selectedDay }, now)
 			),
 		[filteredAttempts, period, customFrom, customTo, selectedDay, now]
+	)
+
+	const chartAttempts = useMemo(
+		() =>
+			periodAttempts.flatMap((attempt) => {
+				const progress = userAttemptToProgress(attempt)
+				return progress ? [progress] : []
+			}),
+		[periodAttempts]
 	)
 
 	const visibleAttempts = useMemo(() => filteredAttempts.slice(0, visibleCount), [filteredAttempts, visibleCount])
@@ -715,11 +728,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						</div>
 					)}
 
-					{!dayDate && periodAttempts.length > 0 && (
-						<AttemptBarChart attempts={periodAttempts} colors={topicColors} mode="range" />
+					{!dayDate && chartAttempts.length > 0 && (
+						<AttemptBarChart attempts={chartAttempts} colors={topicColors} mode="range" />
 					)}
 
-					{!dayDate && periodAttempts.length === 0 && filteredAttempts.length > 0 && (
+					{!dayDate && chartAttempts.length === 0 && filteredAttempts.length > 0 && (
 						<div className="flex h-32 items-center justify-center rounded-3xl border border-border/80 bg-secondary/60 text-sm text-muted-foreground">
 							Нет данных за выбранный период
 						</div>
@@ -730,12 +743,12 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<p className="text-xs text-muted-foreground">
 								Попытки за {format(dayDate, 'd MMMM yyyy', { locale: ru })}
 							</p>
-							{periodAttempts.length === 0 ? (
+							{chartAttempts.length === 0 ? (
 								<div className="flex h-32 items-center justify-center rounded-3xl border border-border/80 bg-secondary/60 text-sm text-muted-foreground">
 									Нет попыток за выбранный день
 								</div>
 							) : (
-								<AttemptBarChart attempts={periodAttempts} colors={topicColors} mode="day" />
+								<AttemptBarChart attempts={chartAttempts} colors={topicColors} mode="day" />
 							)}
 						</div>
 					)}
@@ -749,6 +762,8 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						<div className="space-y-2">
 							{visibleAttempts.map((attempt) => {
 								const dotColor = topicColorBySlug.get(attempt.topicSlug)
+								const view = attemptResultView(attempt)
+								const submitted = new Date(attempt.submittedAt).toLocaleString('ru-RU')
 								return (
 									<Link
 										href={`/admin/attempts/${attempt.attemptId}`}
@@ -766,14 +781,24 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 												<p className="truncate text-sm font-medium">{attempt.testTitle}</p>
 											</div>
 											<p className="text-xs text-muted-foreground">
-												{new Date(attempt.submittedAt).toLocaleString('ru-RU')} · {attempt.earnedPoints}/
-												{attempt.totalPoints} · {Math.round(attempt.scorePercentage)}%
+												{view.kind === 'pending'
+													? view.auto
+														? `${submitted} · авто ${view.auto.earned} из ${view.auto.total}`
+														: submitted
+													: `${submitted} · ${view.points.earned}/${view.points.total} · ${Math.round(view.percent)}%`}
 											</p>
 										</div>
 										<div className="flex items-center gap-2">
-											<Badge variant={attempt.passed ? 'default' : 'secondary'}>
-												{attempt.passed ? 'Пройден' : 'Не пройден'}
-											</Badge>
+											{view.kind === 'pending' ? (
+												<ReviewStatusChip />
+											) : (
+												<>
+													<Badge variant={view.passed ? 'default' : 'secondary'}>
+														{view.passed ? 'Пройден' : 'Не пройден'}
+													</Badge>
+													{view.teacherChecked && <TeacherCheckedMark />}
+												</>
+											)}
 										</div>
 									</Link>
 								)
