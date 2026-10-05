@@ -9,7 +9,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export type ProjectKey = 'desktop' | 'mobile'
-export type RoleKey = 'user' | 'admin'
+export type RoleKey = 'user' | 'admin' | 'teacher'
 
 export type SeedAccount = {
 	login: string
@@ -32,19 +32,35 @@ export type SeedQuestion = {
 export type SeedTest = {
 	slug: string
 	title: string
+	topic?: string
 	published: boolean
 	assignedTo: string[]
 	questions: SeedQuestion[]
 }
 
+export type SeedGroup = {
+	name: string
+	owner: string
+	members: string[]
+}
+
 export type SeedProject = {
 	accounts: SeedAccount[]
 	tests: SeedTest[]
+	groups?: SeedGroup[]
+}
+
+export type SeedTopic = {
+	slug: string
+	title: string
+	description: string
+	teachers?: string[]
 }
 
 export type SeedFile = {
 	password: string
-	topic: { slug: string; title: string; description: string }
+	topic: SeedTopic
+	topics?: SeedTopic[]
 	projects: Record<ProjectKey, SeedProject>
 }
 
@@ -82,6 +98,19 @@ export function sessionAccount(projectKey: ProjectKey, role: RoleKey): SeedAccou
 	const account = seed.projects[projectKey].accounts.find((item) => item.storageState && item.role === role)
 	if (!account) throw new Error(`no ${role} session account for ${projectKey}`)
 	return account
+}
+
+export function sessionAccountByPrefix(projectKey: ProjectKey, prefix: string): SeedAccount {
+	const login = `${prefix}-${projectKey}`
+	const account = seed.projects[projectKey].accounts.find((item) => item.storageState && item.login === login)
+	if (!account) throw new Error(`no session account ${login}`)
+	return account
+}
+
+export function seedTopic(slug: string): SeedTopic {
+	const topic = [seed.topic, ...(seed.topics ?? [])].find((item) => item.slug === slug)
+	if (!topic) throw new Error(`no seed topic ${slug}`)
+	return topic
 }
 
 /** Аккаунт только для явных тестов входа и выхода (login-student-<p> или login-admin-<p>) */

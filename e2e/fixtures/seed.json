@@ -6,6 +6,30 @@
 		"title": "E2E: клетка",
 		"description": "Тема для сквозных тестов"
 	},
+	"topics": [
+		{
+			"slug": "e2e-teacher-desktop",
+			"title": "E2E: тема учителя desktop",
+			"description": "Тема, закреплённая за учителем desktop",
+			"teachers": ["teacher-desktop"]
+		},
+		{
+			"slug": "e2e-assign-desktop",
+			"title": "E2E: тема без учителя desktop",
+			"description": "Тему закрепляет администратор в сценарии учителя desktop"
+		},
+		{
+			"slug": "e2e-teacher-mobile",
+			"title": "E2E: тема учителя mobile",
+			"description": "Тема, закреплённая за учителем mobile",
+			"teachers": ["teacher-mobile"]
+		},
+		{
+			"slug": "e2e-assign-mobile",
+			"title": "E2E: тема без учителя mobile",
+			"description": "Тему закрепляет администратор в сценарии учителя mobile"
+		}
+	],
 	"projects": {
 		"desktop": {
 			"accounts": [
@@ -32,6 +56,18 @@
 					"role": "admin",
 					"name": "Администратор для входа desktop",
 					"storageState": false
+				},
+				{
+					"login": "teacher-desktop",
+					"role": "teacher",
+					"name": "Учитель desktop",
+					"storageState": true
+				},
+				{
+					"login": "zone-student-desktop",
+					"role": "user",
+					"name": "Ученик учителя desktop",
+					"storageState": true
 				}
 			],
 			"tests": [
@@ -234,6 +270,68 @@
 							"correct": "1"
 						}
 					]
+				},
+				{
+					"slug": "teacher-test-desktop",
+					"title": "Тест учителя (desktop)",
+					"topic": "e2e-teacher-desktop",
+					"published": true,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "teacher-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Где у эукариот хранится основная часть ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "В ядре"
+								},
+								{
+									"id": "2",
+									"text": "В рибосоме"
+								},
+								{
+									"id": "3",
+									"text": "В клеточной стенке"
+								}
+							],
+							"correct": "1"
+						}
+					]
+				},
+				{
+					"slug": "foreign-desktop",
+					"title": "Чужой тест (desktop)",
+					"published": true,
+					"assignedTo": ["student-desktop"],
+					"questions": [
+						{
+							"key": "foreign-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой органоид отвечает за фотосинтез?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Лизосома"
+								}
+							],
+							"correct": "1"
+						}
+					]
+				}
+			],
+			"groups": [
+				{
+					"name": "E2E группа desktop",
+					"owner": "teacher-desktop",
+					"members": ["zone-student-desktop"]
 				}
 			]
 		},
@@ -262,6 +360,18 @@
 					"role": "admin",
 					"name": "Администратор для входа mobile",
 					"storageState": false
+				},
+				{
+					"login": "teacher-mobile",
+					"role": "teacher",
+					"name": "Учитель mobile",
+					"storageState": true
+				},
+				{
+					"login": "zone-student-mobile",
+					"role": "user",
+					"name": "Ученик учителя mobile",
+					"storageState": true
 				}
 			],
 			"tests": [
@@ -464,6 +574,68 @@
 							"correct": "1"
 						}
 					]
+				},
+				{
+					"slug": "teacher-test-mobile",
+					"title": "Тест учителя (mobile)",
+					"topic": "e2e-teacher-mobile",
+					"published": true,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "teacher-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Где у эукариот хранится основная часть ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "В ядре"
+								},
+								{
+									"id": "2",
+									"text": "В рибосоме"
+								},
+								{
+									"id": "3",
+									"text": "В клеточной стенке"
+								}
+							],
+							"correct": "1"
+						}
+					]
+				},
+				{
+					"slug": "foreign-mobile",
+					"title": "Чужой тест (mobile)",
+					"published": true,
+					"assignedTo": ["student-mobile"],
+					"questions": [
+						{
+							"key": "foreign-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой органоид отвечает за фотосинтез?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Лизосома"
+								}
+							],
+							"correct": "1"
+						}
+					]
+				}
+			],
+			"groups": [
+				{
+					"name": "E2E группа mobile",
+					"owner": "teacher-mobile",
+					"members": ["zone-student-mobile"]
 				}
 			]
 		}

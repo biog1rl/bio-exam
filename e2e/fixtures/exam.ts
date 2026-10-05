@@ -61,7 +61,10 @@ export function projectKey(testInfo: TestInfo): ProjectKey {
 
 /** Контекст браузера с сохранённой сессией роли и параметрами устройства проекта */
 export async function newSessionContext(browser: Browser, testInfo: TestInfo, role: RoleKey): Promise<BrowserContext> {
-	const { login } = sessionAccount(projectKey(testInfo), role)
+	return newAccountContext(browser, testInfo, sessionAccount(projectKey(testInfo), role).login)
+}
+
+export async function newAccountContext(browser: Browser, testInfo: TestInfo, login: string): Promise<BrowserContext> {
 	const use = testInfo.project.use
 	return browser.newContext({
 		storageState: storageStatePath(login),
@@ -75,7 +78,7 @@ export async function newSessionContext(browser: Browser, testInfo: TestInfo, ro
 }
 
 /** Тест со страницами студента и администратора своего проекта */
-export const test = base.extend<{ studentPage: Page; adminPage: Page }>({
+export const test = base.extend<{ studentPage: Page; adminPage: Page; teacherPage: Page }>({
 	studentPage: async ({ browser }, use, testInfo) => {
 		const context = await newSessionContext(browser, testInfo, 'user')
 		await use(await context.newPage())
@@ -83,6 +86,11 @@ export const test = base.extend<{ studentPage: Page; adminPage: Page }>({
 	},
 	adminPage: async ({ browser }, use, testInfo) => {
 		const context = await newSessionContext(browser, testInfo, 'admin')
+		await use(await context.newPage())
+		await context.close()
+	},
+	teacherPage: async ({ browser }, use, testInfo) => {
+		const context = await newSessionContext(browser, testInfo, 'teacher')
 		await use(await context.newPage())
 		await context.close()
 	},
@@ -157,10 +165,11 @@ export async function takeTest(
 	seedTest: SeedTest,
 	answers: Record<string, AnswerValue>
 ): Promise<SubmitPayload> {
-	await page.goto(`/tests/${TOPIC_SLUG}/${seedTest.slug}`)
+	const topicSlug = seedTest.topic ?? TOPIC_SLUG
+	await page.goto(`/tests/${topicSlug}/${seedTest.slug}`)
 	await expect(page.getByRole('heading', { level: 1, name: seedTest.title })).toBeVisible()
 	await page.getByRole('link', { name: 'Начать тест' }).click()
-	await expect(page).toHaveURL(new RegExp(`/tests/${TOPIC_SLUG}/${seedTest.slug}/start/?$`))
+	await expect(page).toHaveURL(new RegExp(`/tests/${topicSlug}/${seedTest.slug}/start/?$`))
 
 	const count = seedTest.questions.length
 	await expect(page.getByText(`Отвечено: 0 / ${count}`)).toBeVisible()

@@ -16,7 +16,7 @@ import fs from 'node:fs'
 
 import { isIsolatedEnv } from '../config/test-database-url.js'
 
-type SeedAccount = { login: string; role: string; name: string }
+type SeedAccount = { login: string; role: string; name: string; storageState: boolean }
 
 type SeedQuestion = {
 	key: string
@@ -31,15 +31,21 @@ type SeedQuestion = {
 type SeedTest = {
 	slug: string
 	title: string
+	topic?: string
 	published: boolean
 	assignedTo: string[]
 	questions: SeedQuestion[]
 }
 
+type SeedTopic = { slug: string; title: string; description: string; teachers?: string[] }
+
+type SeedGroup = { name: string; owner: string; members: string[] }
+
 type SeedFile = {
 	password: string
-	topic: { slug: string; title: string; description: string }
-	projects: Record<string, { accounts: SeedAccount[]; tests: SeedTest[] }>
+	topic: SeedTopic
+	topics?: SeedTopic[]
+	projects: Record<string, { accounts: SeedAccount[]; tests: SeedTest[]; groups?: SeedGroup[] }>
 }
 
 /** Отказ до любого подключения: сид работает только в изолированном e2e-окружении */
@@ -66,14 +72,17 @@ async function main(): Promise<void> {
 	const { ROLE_KEYS } = await import('@bio-exam/rbac')
 	const bcrypt = (await import('bcryptjs')).default
 	const { db, pgPool } = await import('../db/index.js')
-	const { answerKeys, questions, roles, testAssignments, tests, topics, userRoles, users } =
+	const { answerKeys, questions, roles, studentGroups, testAssignments, tests, topics, userGroups, userRoles, users } =
 		await import('../db/schema.js')
 	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
 	const { syncQuestionDerived, writeContentFiles } = await import('../services/question-content/index.js')
+	const { setGroupOwner, setTopicTeachers } = await import('../services/access-policy/index.js')
 
 	try {
 		const passwordHash = await bcrypt.hash(seed.password, 10)
 		const projects = Object.values(seed.projects)
+		const seedTopics = [seed.topic, ...(seed.topics ?? [])]
+		const topicSlugOf = (seedTestItem: SeedTest): string => seedTestItem.topic ?? seed.topic.slug
 
 		const planned = new Map<SeedQuestion, { id: string; promptPath: string; explanationPath: string | null }>()
 		for (const project of projects) {
@@ -85,7 +94,7 @@ async function main(): Promise<void> {
 					}
 					const id = crypto.randomUUID()
 					const files = await writeContentFiles({
-						topicSlug: seed.topic.slug,
+						topicSlug: topicSlugOf(seedTestItem),
 						testSlug: seedTestItem.slug,
 						questionId: id,
 						promptText: item.prompt,
@@ -121,10 +130,31 @@ async function main(): Promise<void> {
 				}
 			}
 
-			const [topic] = await tx
-				.insert(topics)
-				.values({ slug: seed.topic.slug, title: seed.topic.title, description: seed.topic.description })
-				.returning()
+			const adminLogin = projects
+				.flatMap((project) => project.accounts)
+				.find((account) => account.role === 'admin')?.login
+			const adminId = adminLogin ? (userIds.get(adminLogin) ?? null) : null
+			const userIdOf = (login: string, owner: string): string => {
+				const userId = userIds.get(login)
+				if (!userId) throw new Error(`${owner}: unknown account ${login}`)
+				return userId
+			}
+
+			const topicIds = new Map<string, string>()
+			for (const [index, seedTopic] of seedTopics.entries()) {
+				const [topic] = await tx
+					.insert(topics)
+					.values({ slug: seedTopic.slug, title: seedTopic.title, description: seedTopic.description, order: index })
+					.returning({ id: topics.id })
+				topicIds.set(seedTopic.slug, topic.id)
+				if (seedTopic.teachers && seedTopic.teachers.length > 0) {
+					await setTopicTeachers(tx, {
+						topicId: topic.id,
+						teacherIds: seedTopic.teachers.map((login) => userIdOf(login, `seed topic ${seedTopic.slug}`)),
+						assignedBy: adminId,
+					})
+				}
+			}
 
 			let questionCount = 0
 			let testCount = 0
@@ -134,10 +164,12 @@ async function main(): Promise<void> {
 				const authorId = authorLogin ? (userIds.get(authorLogin) ?? null) : null
 
 				for (const seedTestItem of project.tests) {
+					const topicId = topicIds.get(topicSlugOf(seedTestItem))
+					if (!topicId) throw new Error(`seed test ${seedTestItem.slug}: unknown topic ${topicSlugOf(seedTestItem)}`)
 					const [test] = await tx
 						.insert(tests)
 						.values({
-							topicId: topic.id,
+							topicId,
 							slug: seedTestItem.slug,
 							title: seedTestItem.title,
 							isPublished: seedTestItem.published,
@@ -177,7 +209,7 @@ async function main(): Promise<void> {
 						await syncQuestionDerived(tx, {
 							questionId: content.id,
 							testId: test.id,
-							topicId: topic.id,
+							topicId,
 							type: item.type,
 							promptText: item.prompt,
 							explanationText: null,
@@ -191,6 +223,22 @@ async function main(): Promise<void> {
 						const userId = userIds.get(login)
 						if (!userId) throw new Error(`seed test ${seedTestItem.slug}: unknown assignee ${login}`)
 						await tx.insert(testAssignments).values({ testId: test.id, userId, assignedBy: authorId })
+					}
+				}
+
+				for (const seedGroup of project.groups ?? []) {
+					const [group] = await tx
+						.insert(studentGroups)
+						.values({ name: seedGroup.name, createdBy: authorId })
+						.returning({ id: studentGroups.id })
+					await setGroupOwner(tx, {
+						groupId: group.id,
+						ownerId: userIdOf(seedGroup.owner, `seed group ${seedGroup.name}`),
+					})
+					for (const login of seedGroup.members) {
+						await tx
+							.insert(userGroups)
+							.values({ groupId: group.id, userId: userIdOf(login, `seed group ${seedGroup.name}`) })
 					}
 				}
 			}
