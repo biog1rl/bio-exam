@@ -5,6 +5,7 @@ import { Loader2, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { UserStatusFilter } from '@/components/users/UserStatusFilter'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
+import { assignmentAction, studentRowSubtitle } from '@/lib/users/student-card'
 
 import { AdminTestsSectionCard } from '../AdminTestsSectionCard'
 import type { StudentAssignment, UserItem } from './test-editor-types'
@@ -63,6 +64,7 @@ export function StudentAccessPanel({
 					<div className="space-y-2">
 						{filteredAssignments.map((assignment) => {
 							const displayName = assignment.name || assignment.login || assignment.userId
+							const subtitle = studentRowSubtitle(assignment)
 							return (
 								<div
 									key={assignment.userId}
@@ -70,23 +72,23 @@ export function StudentAccessPanel({
 								>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium">{displayName}</p>
-										{assignment.login && assignment.name && (
-											<p className="text-xs text-muted-foreground">{assignment.login}</p>
-										)}
+										{subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
 									</div>
-									<Button
-										size="icon"
-										variant="ghost"
-										aria-label="Удалить доступ"
-										onClick={() => onRemoveStudent(assignment.userId)}
-										disabled={removingUserId === assignment.userId}
-									>
-										{removingUserId === assignment.userId ? (
-											<Loader2 className="size-4 animate-spin" />
-										) : (
-											<Trash2 className="size-4" />
-										)}
-									</Button>
+									{assignmentAction(assignment) === 'remove' && (
+										<Button
+											size="icon"
+											variant="ghost"
+											aria-label="Удалить доступ"
+											onClick={() => onRemoveStudent(assignment.userId)}
+											disabled={removingUserId === assignment.userId}
+										>
+											{removingUserId === assignment.userId ? (
+												<Loader2 className="size-4 animate-spin" />
+											) : (
+												<Trash2 className="size-4" />
+											)}
+										</Button>
+									)}
 								</div>
 							)
 						})}

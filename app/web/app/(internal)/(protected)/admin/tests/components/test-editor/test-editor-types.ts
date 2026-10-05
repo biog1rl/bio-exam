@@ -9,7 +9,8 @@ export type StudentAssignment = {
 	isActive: boolean
 	assignedAt: string
 	name: string | null
-	login: string | null
+	login?: string | null
+	canUnassign: boolean
 }
 
 export type UserItem = {

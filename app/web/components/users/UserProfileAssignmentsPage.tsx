@@ -1,17 +1,40 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DateRange } from 'react-day-picker'
 
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { CalendarIcon, Check, ChevronDown, Loader2, Pencil, Search, Trash2, UserPlus, X } from 'lucide-react'
+import {
+	CalendarIcon,
+	Check,
+	ChevronDown,
+	Loader2,
+	LockKeyholeOpen,
+	LogOut,
+	Pencil,
+	Search,
+	Trash2,
+	UserPlus,
+	X,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { AttemptBarChart } from '@/components/progress/AttemptBarChart'
+import { useAuth } from '@/components/providers/AuthProvider'
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -22,7 +45,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { EditUserDialog } from '@/components/users/dialogs/EditUserDialog'
-import { apiFetch } from '@/lib/api-fetch'
+import {
+	actionErrorText,
+	clearConfirmText,
+	clearSuccessText,
+	revokeConfirmText,
+	revokeSuccessText,
+	sessionActionsState,
+	type SessionActionKind,
+} from '@/components/users/session-actions'
+import { AuthExpiredError, apiFetch } from '@/lib/api-fetch'
 import {
 	assignTopicColors,
 	DEFAULT_PERIOD,
@@ -34,6 +66,7 @@ import {
 	resolvePeriodBounds,
 	type ProgressAttempt,
 } from '@/lib/progress/attempt-chart'
+import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
 import type { UserRow } from '@/types/users'
 
 const fetcher = async (url: string) => {
@@ -47,6 +80,7 @@ type TestAssignment = {
 	testTitle: string
 	testSlug: string
 	assignedAt: string
+	canUnassign: boolean
 }
 
 type TestItem = {
@@ -95,8 +129,24 @@ function EmptyProfileState({ children }: { children: ReactNode }) {
 	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
 }
 
+function withLoginBreak(text: string, login: string) {
+	const quoted = `«${login}»`
+	const index = text.indexOf(quoted)
+	if (!login || index < 0) return text
+	return (
+		<>
+			{text.slice(0, index)}
+			<span className="break-all">{quoted}</span>
+			{text.slice(index + quoted.length)}
+		</>
+	)
+}
+
 export default function UserProfileAssignmentsPage({ login }: Props) {
 	const normalizedLogin = login.trim().toLowerCase()
+	const { me, can } = useAuth()
+	const canEditUser = can('users', 'edit')
+	const canViewUsers = can('users', 'read')
 
 	const {
 		data: usersData,
@@ -132,6 +182,10 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	} = useSWR<{ tests: TestItem[] }>('/api/tests', fetcher)
 
 	const [editOpen, setEditOpen] = useState(false)
+	const [confirmAction, setConfirmAction] = useState<SessionActionKind | null>(null)
+	const [pendingAction, setPendingAction] = useState<SessionActionKind | null>(null)
+	const revokeButtonRef = useRef<HTMLButtonElement>(null)
+	const clearButtonRef = useRef<HTMLButtonElement>(null)
 	const [assigningTestId, setAssigningTestId] = useState<string | null>(null)
 	const [removingTestId, setRemovingTestId] = useState<string | null>(null)
 	const [search, setSearch] = useQueryState('q', { defaultValue: '' })
@@ -230,7 +284,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			})
 			if (!res.ok) {
 				const data = (await res.json().catch(() => null)) as { error?: string } | null
-				throw new Error(data?.error || 'Ошибка назначения теста')
+				throw new Error(assignmentErrorText(res.status, data?.error || 'Ошибка назначения теста'))
 			}
 			await mutateAssignments()
 			toast.success('Тест назначен')
@@ -250,7 +304,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			})
 			if (!res.ok) {
 				const data = (await res.json().catch(() => null)) as { error?: string } | null
-				throw new Error(data?.error || 'Ошибка удаления назначения')
+				throw new Error(assignmentErrorText(res.status, data?.error || 'Ошибка удаления назначения'))
 			}
 			await mutateAssignments()
 			toast.success('Назначение удалено')
@@ -298,6 +352,50 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		void setSelectedDay(null)
 	}
 
+	const sessionActions = sessionActionsState({
+		meId: me?.id ?? null,
+		user: user ? { id: user.id, login: user.login } : null,
+		canEdit: canEditUser || canViewUsers,
+		pending: pendingAction !== null,
+	})
+	const showSessionCard = sessionActions.visible && !canEditUser
+	const actionPending = pendingAction !== null
+	const savedLogin = user?.login ?? ''
+
+	async function runSessionAction(kind: SessionActionKind) {
+		if (!user) return
+		const actionLogin = user.login ?? ''
+		setPendingAction(kind)
+		try {
+			const res = await apiFetch(
+				kind === 'revoke' ? `/api/users/${user.id}/sessions/revoke` : `/api/users/${user.id}/login-throttle`,
+				{ method: kind === 'revoke' ? 'POST' : 'DELETE' }
+			)
+			if (res.ok) {
+				toast.success(kind === 'revoke' ? revokeSuccessText(actionLogin) : clearSuccessText(actionLogin))
+			} else {
+				toast.error(actionErrorText(kind, res.status))
+			}
+		} catch (e) {
+			if (!(e instanceof AuthExpiredError)) toast.error(actionErrorText(kind, 0))
+		} finally {
+			setPendingAction(null)
+			setConfirmAction(null)
+		}
+	}
+
+	function onConfirmOpenChange(next: boolean) {
+		if (!next && !actionPending) setConfirmAction(null)
+	}
+
+	function returnFocus(kind: SessionActionKind) {
+		return (event: Event) => {
+			event.preventDefault()
+			const target = kind === 'revoke' ? revokeButtonRef.current : clearButtonRef.current
+			target?.focus()
+		}
+	}
+
 	if (usersLoading) {
 		return (
 			<div className="rounded-4xl border border-border/80 bg-card/90 p-12">
@@ -317,6 +415,8 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}
 
 	const displayName = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.login
+	const userGroups = user.groups ?? []
+	const contacts = contactRows(user)
 
 	const testPickerLabel =
 		selectedTestIds.size === 0
@@ -337,24 +437,89 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						</p>
 						<div className="mt-2 flex flex-wrap items-center gap-2">
 							<h1 className="font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">{displayName}</h1>
-							{user.groupName && (
-								<Badge variant="secondary" className="rounded-full">
-									{user.groupName}
+							{userGroups.map((group) => (
+								<Badge key={group.id} variant="secondary" className="rounded-full">
+									{group.name}
 								</Badge>
-							)}
+							))}
 						</div>
 						<p className="mt-4 font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">{user.login}</p>
 					</div>
-					<Button
-						variant="outline"
-						size="icon"
-						onClick={() => setEditOpen(true)}
-						className="rounded-2xl border-border/80 transition-colors hover:border-primary hover:bg-secondary/70"
-					>
-						<Pencil className="h-4 w-4" />
-					</Button>
+					{canEditUser && (
+						<Button
+							variant="outline"
+							size="icon"
+							aria-label="Изменить профиль"
+							onClick={() => setEditOpen(true)}
+							className="rounded-2xl border-border/80 transition-colors hover:border-primary hover:bg-secondary/70"
+						>
+							<Pencil className="h-4 w-4" />
+						</Button>
+					)}
 				</div>
 			</section>
+
+			<div className="grid gap-6 tab:grid-cols-2">
+				<ProfileSectionCard kicker="контакты" title="Контакты">
+					{contacts.length === 0 ? (
+						<EmptyProfileState>Контакты не указаны</EmptyProfileState>
+					) : (
+						<dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+							{contacts.map((row) => (
+								<div key={row.label} className="contents">
+									<dt className="text-muted-foreground">{row.label}</dt>
+									<dd className="min-w-0 font-medium">
+										{row.href ? (
+											<a
+												href={row.href}
+												className={
+													row.href.startsWith('mailto:')
+														? 'break-all underline-offset-4 hover:underline'
+														: 'underline-offset-4 hover:underline'
+												}
+											>
+												{row.value}
+											</a>
+										) : (
+											row.value
+										)}
+									</dd>
+								</div>
+							))}
+						</dl>
+					)}
+				</ProfileSectionCard>
+
+				{showSessionCard && (
+					<ProfileSectionCard kicker="помощь со входом" title="Сеансы и вход">
+						<p className="text-sm text-muted-foreground">
+							Пригодится, если ученик не может войти или остался в аккаунте на чужом устройстве.
+						</p>
+						<div className="mt-4 flex flex-wrap gap-2">
+							<Button
+								ref={clearButtonRef}
+								variant="outline"
+								className="w-full mob:w-auto"
+								onClick={() => setConfirmAction('clear')}
+								disabled={sessionActions.clearDisabled}
+							>
+								<LockKeyholeOpen aria-hidden="true" />
+								Снять ограничение входа
+							</Button>
+							<Button
+								ref={revokeButtonRef}
+								variant="outline"
+								className="w-full mob:w-auto"
+								onClick={() => setConfirmAction('revoke')}
+								disabled={sessionActions.revokeDisabled}
+							>
+								<LogOut aria-hidden="true" />
+								Завершить все сеансы
+							</Button>
+						</div>
+					</ProfileSectionCard>
+				)}
+			</div>
 
 			<ProfileSectionCard
 				kicker="динамика"
@@ -618,20 +783,24 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											{new Date(a.assignedAt).toLocaleDateString('ru-RU')}
 										</p>
 									</div>
-									<Button
-										size="icon"
-										variant="ghost"
-										className="rounded-2xl transition-colors hover:bg-secondary/70 hover:text-destructive"
-										aria-label="Удалить назначение"
-										onClick={() => handleRemove(a.testId)}
-										disabled={removingTestId === a.testId}
-									>
-										{removingTestId === a.testId ? (
-											<Loader2 className="h-4 w-4 animate-spin" />
-										) : (
-											<Trash2 className="h-4 w-4" />
-										)}
-									</Button>
+									{assignmentAction(a) === 'remove' ? (
+										<Button
+											size="icon"
+											variant="ghost"
+											className="rounded-2xl transition-colors hover:bg-secondary/70 hover:text-destructive"
+											aria-label="Удалить назначение"
+											onClick={() => handleRemove(a.testId)}
+											disabled={removingTestId === a.testId}
+										>
+											{removingTestId === a.testId ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Trash2 className="h-4 w-4" />
+											)}
+										</Button>
+									) : (
+										<p className="shrink-0 text-xs text-muted-foreground">Назначил администратор</p>
+									)}
 								</div>
 							))}
 						</div>
@@ -644,7 +813,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					loading={testsLoading || assignmentsLoading}
 					error={Boolean(testsError || assignmentsError)}
 				>
-					{availableTests.length === 0 ? (
+					{(testsData?.tests ?? []).length === 0 ? (
+						<EmptyProfileState>Нет доступных тестов</EmptyProfileState>
+					) : availableTests.length === 0 ? (
 						<EmptyProfileState>Все тесты уже назначены</EmptyProfileState>
 					) : (
 						<div className="max-h-80 space-y-2 overflow-y-auto">
@@ -682,7 +853,60 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				</ProfileSectionCard>
 			</div>
 
-			<EditUserDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={() => void mutateUsers()} />
+			{canEditUser && (
+				<EditUserDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={() => void mutateUsers()} />
+			)}
+
+			{showSessionCard && (
+				<>
+					<AlertDialog open={confirmAction === 'revoke'} onOpenChange={onConfirmOpenChange}>
+						<AlertDialogContent onCloseAutoFocus={returnFocus('revoke')}>
+							<AlertDialogHeader>
+								<AlertDialogTitle className="font-medium">Завершить все сеансы пользователя?</AlertDialogTitle>
+								<AlertDialogDescription>
+									{withLoginBreak(revokeConfirmText(savedLogin), savedLogin)}
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel disabled={actionPending}>Отмена</AlertDialogCancel>
+								<AlertDialogAction
+									onClick={(event) => {
+										event.preventDefault()
+										void runSessionAction('revoke')
+									}}
+									disabled={actionPending}
+									className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+								>
+									{pendingAction === 'revoke' ? 'Завершаем…' : 'Завершить сеансы'}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+
+					<AlertDialog open={confirmAction === 'clear'} onOpenChange={onConfirmOpenChange}>
+						<AlertDialogContent onCloseAutoFocus={returnFocus('clear')}>
+							<AlertDialogHeader>
+								<AlertDialogTitle className="font-medium">Снять ограничение входа?</AlertDialogTitle>
+								<AlertDialogDescription>
+									{withLoginBreak(clearConfirmText(savedLogin), savedLogin)}
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel disabled={actionPending}>Отмена</AlertDialogCancel>
+								<AlertDialogAction
+									onClick={(event) => {
+										event.preventDefault()
+										void runSessionAction('clear')
+									}}
+									disabled={actionPending}
+								>
+									{pendingAction === 'clear' ? 'Снимаем…' : 'Снять ограничение'}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+				</>
+			)}
 		</div>
 	)
 }
