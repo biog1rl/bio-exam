@@ -88,6 +88,7 @@ export {
 	createQuestion,
 	createTestWithQuestions,
 	resolveQuestionPoints,
+	rewriteQuestionTexts,
 	syncQuestionDerived,
 	updateQuestion,
 	writeContentFiles,
@@ -97,3 +98,4 @@ export {
 	type QuestionTypeMap,
 	type TestWithQuestionsInput,
 } from './write.js'
+export { moveInlineImages, type InlineImagesReport } from './inline-images.js'

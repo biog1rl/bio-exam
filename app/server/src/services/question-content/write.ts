@@ -8,6 +8,7 @@ import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { ApiError, isUniqueViolation } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest, validateQuestionWithType } from '../../lib/tests/question-type-resolver.js'
 import type { SaveQuestionSchema, SaveTestSchema } from '../../schemas/tests.js'
+import { withStoredInlineImages } from '../assets/inline-images.js'
 import { upsertQuestionSearchDocument } from '../search/question-documents.js'
 import { storage } from '../storage/index.js'
 import { indexQuestionAssets } from './asset-index.js'
@@ -177,20 +178,76 @@ async function validateForTest(testId: string, data: QuestionInput): Promise<Que
 	return typeMap
 }
 
+type RewriteRow = PointerRow & { test_id: string; type: string; options: unknown; matching_pairs: unknown }
+
+export async function rewriteQuestionTexts(params: {
+	questionId: string
+	expected: { promptPath: string | null; explanationPath: string | null }
+	promptText: string
+	explanationText: string | null
+}): Promise<void> {
+	const { questionId, expected, promptText, explanationText } = params
+	const existing = await db.query.questions.findFirst({
+		where: eq(questions.id, questionId),
+		columns: { testId: true },
+	})
+	if (!existing) throw new ApiError(404, QUESTION_NOT_IN_TEST_MESSAGE)
+	const { test, topic } = await loadTestAndTopic(existing.testId)
+	const location = { topicSlug: topic.slug, testSlug: test.slug }
+	const files = await writeContentFiles({ ...location, questionId, promptText, explanationText })
+
+	await withCompensation(files.keys, () =>
+		db.transaction(async (tx) => {
+			const locked = await lockTestAt(tx, existing.testId, location)
+			const current = await tx.execute<RewriteRow>(sql`
+				SELECT test_id, prompt_path, explanation_path, type, options, matching_pairs FROM questions
+				WHERE id = ${questionId}
+				FOR UPDATE
+			`)
+			const row = current.rows[0]
+			if (
+				!row ||
+				row.test_id !== existing.testId ||
+				row.prompt_path !== expected.promptPath ||
+				row.explanation_path !== expected.explanationPath
+			) {
+				throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
+			}
+
+			await tx
+				.update(questions)
+				.set({ promptPath: files.promptPath, explanationPath: files.explanationPath })
+				.where(eq(questions.id, questionId))
+
+			await syncQuestionDerived(tx, {
+				questionId,
+				testId: existing.testId,
+				topicId: locked.topicId,
+				type: row.type,
+				promptText,
+				explanationText,
+				options: row.options,
+				matchingPairs: row.matching_pairs,
+			})
+		})
+	)
+}
+
 export async function updateQuestion(params: {
 	testId: string
 	questionId: string
 	data: QuestionInput
 	userId: string | null
 }): Promise<{ questionId: string }> {
-	const { testId, questionId, data, userId } = params
+	const { testId, questionId, userId } = params
 	const { test, topic } = await loadTestAndTopic(testId)
 	const existing = await db.query.questions.findFirst({
 		where: and(eq(questions.id, questionId), eq(questions.testId, testId)),
 		columns: { id: true },
 	})
 	if (!existing) throw new ApiError(404, QUESTION_NOT_IN_TEST_MESSAGE)
-	const typeMap = await validateForTest(testId, data)
+	const typeMap = await validateForTest(testId, params.data)
+	const data = await withStoredInlineImages(params.data)
 
 	const location = { topicSlug: topic.slug, testSlug: test.slug }
 	const files = await writeContentFiles({
@@ -273,9 +330,10 @@ export async function createQuestion(params: {
 	data: QuestionInput
 	userId: string | null
 }): Promise<{ questionId: string; order: number }> {
-	const { testId, data, userId } = params
+	const { testId, userId } = params
 	const { test, topic } = await loadTestAndTopic(testId)
-	const typeMap = await validateForTest(testId, data)
+	const typeMap = await validateForTest(testId, params.data)
+	const data = await withStoredInlineImages(params.data)
 
 	const questionId = crypto.randomUUID()
 	const location = { topicSlug: topic.slug, testSlug: test.slug }
@@ -354,7 +412,10 @@ export async function createTestWithQuestions(params: {
 	})
 	if (existingTest) throw new ApiError(409, ERROR_MESSAGES.TEST_SLUG_EXISTS)
 
-	const planned = data.questions.map((question) => ({ question, id: crypto.randomUUID() }))
+	const planned: Array<{ question: TestWithQuestionsInput['questions'][number]; id: string }> = []
+	for (const question of data.questions) {
+		planned.push({ question: await withStoredInlineImages(question), id: crypto.randomUUID() })
+	}
 	const written: string[] = []
 	const files = await withCompensation(written, async () => {
 		const result: ContentFiles[] = []

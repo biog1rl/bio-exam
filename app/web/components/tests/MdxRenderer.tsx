@@ -9,6 +9,7 @@ import { serialize } from 'next-mdx-remote/serialize'
 import { getSignedUrl, resolvesViaApi } from '@/lib/image-signed-url-cache'
 import { normalizeMdxSource } from '@/lib/mdx/normalizeSource'
 import { buildMdxOptions } from '@/lib/mdx/options'
+import { withoutInlineImages } from '@/lib/mdx/withoutInlineImages'
 
 type Props = {
 	source?: string | null
@@ -132,6 +133,7 @@ class MdxErrorBoundary extends Component<MdxErrorBoundaryProps, { failed: boolea
 
 export default function MdxRenderer({ source, className }: Props) {
 	const normalized = useMemo(() => normalizeMdxSource((source ?? '').trim()), [source])
+	const fallbackText = useMemo(() => withoutInlineImages(normalized), [normalized])
 	const [compiled, setCompiled] = useState<MDXRemoteSerializeResult | null>(null)
 	const [hasError, setHasError] = useState(false)
 	const components = useMemo(() => ({ img: MdxImage }), [])
@@ -178,7 +180,7 @@ export default function MdxRenderer({ source, className }: Props) {
 		return null
 	}
 
-	const fallback = <div className={className ?? ''}>{normalized}</div>
+	const fallback = <div className={className ?? ''}>{fallbackText}</div>
 
 	if (hasError || !compiled) {
 		return fallback
