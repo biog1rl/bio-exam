@@ -3,11 +3,12 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-import { CheckSquare, Edit, Eye, GripVertical, List, ListOrdered, Radio, Trash2, Type } from 'lucide-react'
+import { CheckSquare, Edit, Eye, GripVertical, ImageIcon, List, ListOrdered, Radio, Trash2, Type } from 'lucide-react'
 import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { questionPreview } from '@/lib/tests/question-preview'
 
 import type { Question } from '../types'
 
@@ -60,11 +61,12 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 	}
 	const TypeIcon = getIconByTemplate(template ?? 'single_choice')
 
-	// Get preview text (first 100 chars of prompt)
-	const previewText = question.promptText
-		.replace(/[#*_`\[\]]/g, '')
-		.trim()
-		.slice(0, 50)
+	const preview = questionPreview(question.promptText)
+	const previewText = preview.text
+		? `${preview.text}${preview.truncated ? '…' : ''}`
+		: preview.hasImage
+			? 'Изображение'
+			: 'Пустой вопрос'
 
 	// Count options/pairs
 	const optionsCount =
@@ -104,9 +106,14 @@ export default function QuestionCard({ question, index, editHref, viewHref, onEd
 						{optionsCount} • {question.points} б.
 					</span>
 				</div>
-				<p className="mt-1 truncate text-sm text-muted-foreground">
-					{previewText || 'Пустой вопрос'}
-					{question.promptText.length > 100 && '...'}
+				<p className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+					{preview.hasImage && preview.text ? (
+						<>
+							<ImageIcon className="size-3.5 shrink-0" aria-hidden="true" />
+							<span className="sr-only">С изображением.</span>
+						</>
+					) : null}
+					<span className="truncate">{previewText}</span>
 				</p>
 			</div>
 
