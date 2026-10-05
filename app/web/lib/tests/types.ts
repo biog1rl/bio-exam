@@ -61,10 +61,10 @@ export type {
 
 export type TestAttemptSummary = {
 	id: string
-	earnedPoints: number
+	earnedPoints: number | null
 	totalPoints: number
-	scorePercentage: number
-	passed: boolean
+	scorePercentage: number | null
+	passed: boolean | null
 	reviewStatus: ReviewStatus
 	autoEarnedPoints: number
 	autoTotalPoints: number

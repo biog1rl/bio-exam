@@ -151,25 +151,42 @@ export const AttemptQuestionViewSchema = z.object({
 	verdicts: QuestionVerdictsSchema.nullable(),
 })
 
-export const AttemptViewSchema = z.object({
+const AttemptViewObjectSchema = z.object({
 	attemptId: z.string().uuid(),
 	submittedAt: z.string(),
-	earnedPoints: z.number(),
+	earnedPoints: z.number().nullable(),
 	totalPoints: z.number(),
-	scorePercentage: z.number(),
-	passed: z.boolean(),
+	scorePercentage: z.number().nullable(),
+	passed: z.boolean().nullable(),
 	reviewStatus: z.enum(REVIEW_STATUSES),
 	autoEarnedPoints: z.number(),
 	autoTotalPoints: z.number(),
 	results: z.array(AttemptQuestionViewSchema),
 })
 
-export const AdminAttemptViewSchema = AttemptViewSchema.extend({
+const ATTEMPT_VIEW_NULL_MISMATCH =
+	'earnedPoints, scorePercentage and passed are null exactly when reviewStatus is pending'
+
+function requireResultNullsOnlyWhenPending(
+	view: Pick<z.infer<typeof AttemptViewObjectSchema>, 'reviewStatus' | 'earnedPoints' | 'scorePercentage' | 'passed'>,
+	ctx: z.RefinementCtx
+): void {
+	const pending = view.reviewStatus === 'pending'
+	for (const field of ['earnedPoints', 'scorePercentage', 'passed'] as const) {
+		if ((view[field] === null) !== pending) {
+			ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: ATTEMPT_VIEW_NULL_MISMATCH })
+		}
+	}
+}
+
+export const AttemptViewSchema = AttemptViewObjectSchema.superRefine(requireResultNullsOnlyWhenPending)
+
+export const AdminAttemptViewSchema = AttemptViewObjectSchema.extend({
 	testId: z.string().uuid(),
 	userId: z.string().uuid(),
 	answers: z.record(z.string(), z.unknown()),
 	telemetry: TelemetryMapSchema.nullable(),
-})
+}).superRefine(requireResultNullsOnlyWhenPending)
 
 export type AnswerValue = z.infer<typeof AnswerValueSchema>
 export type ScoredQuestionFact = z.infer<typeof ScoredQuestionFactSchema>

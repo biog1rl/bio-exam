@@ -346,6 +346,39 @@ test('AttemptViewSchema: прежние поля submit плюс поля вид
 	assert.equal(AttemptViewSchema.safeParse({ ...view, results: [validItem] }).success, false)
 })
 
+const NULL_RESULT = { earnedPoints: null, scorePercentage: null, passed: null }
+const PENDING_REVIEW = { reviewStatus: 'pending', autoEarnedPoints: 1, autoTotalPoints: 1 }
+
+test.each([
+	{ name: 'pending с null принят', patch: { ...PENDING_REVIEW, ...NULL_RESULT }, accepted: true },
+	{
+		name: 'pending с процентом отвергнут',
+		patch: { ...PENDING_REVIEW, ...NULL_RESULT, scorePercentage: 25 },
+		accepted: false,
+	},
+	{
+		name: 'pending с баллами отвергнут',
+		patch: { ...PENDING_REVIEW, ...NULL_RESULT, earnedPoints: 1 },
+		accepted: false,
+	},
+	{
+		name: 'pending с вердиктом отвергнут',
+		patch: { ...PENDING_REVIEW, ...NULL_RESULT, passed: false },
+		accepted: false,
+	},
+	{ name: 'none с null отвергнут', patch: { ...validReview, ...NULL_RESULT }, accepted: false },
+	{
+		name: 'graded с null процентом отвергнут',
+		patch: { reviewStatus: 'graded', scorePercentage: null },
+		accepted: false,
+	},
+])('AttemptViewSchema и AdminAttemptViewSchema: $name', ({ patch, accepted }) => {
+	const view = { ...validResult, ...validReview, results: [validQuestionView], ...patch }
+	const admin = { ...view, testId: ATTEMPT, userId: Q1, answers: {}, telemetry: null }
+	assert.equal(AttemptViewSchema.safeParse(view).success, accepted)
+	assert.equal(AdminAttemptViewSchema.safeParse(admin).success, accepted)
+})
+
 test('AdminAttemptViewSchema: вид попытки плюс testId, userId, answers и telemetry', () => {
 	const view = {
 		...validResult,

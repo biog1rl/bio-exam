@@ -251,6 +251,27 @@ describe('buildAttemptView: открытый вопрос и состояние 
 		assert.equal(view.autoEarnedPoints, 1)
 		assert.equal(view.autoTotalPoints, 1)
 	})
+
+	test('вид попытки на проверке: итог null, автобаллы и статус pending у открытого вопроса', () => {
+		const view = buildAttemptView({
+			attempt: {
+				...ATTEMPT,
+				reviewStatus: 'pending',
+				earnedPoints: null,
+				scorePercentage: null,
+				passed: null,
+				autoEarnedPoints: 1,
+				autoTotalPoints: 1,
+			},
+			facts: [open],
+			viewer: VIEWERS.admin,
+		})
+		assert.equal(view.reviewStatus, 'pending')
+		assert.equal(view.earnedPoints, null)
+		assert.equal(view.scorePercentage, null)
+		assert.equal(view.passed, null)
+		assert.equal(view.results[0]?.status, 'pending')
+	})
 })
 
 function sequenceCandidate(): Record<string, unknown> {

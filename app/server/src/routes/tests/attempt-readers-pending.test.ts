@@ -1,3 +1,5 @@
+import { computeAttemptOutcome, projectionOf } from '@bio-exam/exam-core'
+
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import { afterAll, beforeAll, describe, test } from 'vitest'
@@ -29,6 +31,13 @@ let titleTwo = ''
 let none = ''
 let pending = ''
 let graded = ''
+let secondStudent: { id: string; cookie: string }
+let submittedNone: Reply
+let submittedReal: Reply
+let realAttemptId = ''
+let realClientAttemptId = ''
+let realSessionId = ''
+let realAnswers: Json = {}
 
 function ok(reply: Reply): Reply {
 	assert.equal(reply.status, 200, `ожидался 200, пришёл ${reply.status}: ${JSON.stringify(reply.body)}`)
@@ -70,6 +79,11 @@ function expectNone(row: Json, label: string): void {
 	assert.equal(row.passed, true, `${label}: passed`)
 }
 
+async function reviewOf(attemptId: string): Promise<Json> {
+	const reply = ok(await call(ctx, 'GET', `/api/tests/admin/attempts/${attemptId}`, { cookies: world.adminCookie }))
+	return reply.body.attempt as Json
+}
+
 function attemptItems(reply: Reply): Json[] {
 	const categories = reply.body.categories as Array<{ scope: string; items: Json[] }>
 	const items = categories.find((category) => category.scope === 'attempts')?.items
@@ -100,14 +114,14 @@ beforeAll(async () => {
 	await assignTest(world, testTwo, student.id)
 
 	const started = ok(await startSession(world, student.cookie, testOne))
-	const submitted = ok(
+	submittedNone = ok(
 		await submitAttempt(world, student.cookie, testOne, {
 			sessionId: started.body.sessionId as string,
 			clientAttemptId: crypto.randomUUID(),
 			answers: { [radioOne]: 'b' },
 		})
 	)
-	none = submitted.body.attemptId as string
+	none = submittedNone.body.attemptId as string
 
 	const openQuestionId = crypto.randomUUID()
 	const facts = [
@@ -129,6 +143,27 @@ beforeAll(async () => {
 		finalScores: new Map([[openQuestionId, 2]]),
 		passingScore: PASSING_SCORE,
 	})
+
+	const openTwo = await ctx.pgPool.query<{ id: string }>(
+		`INSERT INTO questions (test_id, type, "order", points) VALUES ($1, 'open', 1, 3) RETURNING id`,
+		[testTwo]
+	)
+	const openTwoId = openTwo.rows[0]?.id
+	assert.ok(openTwoId, 'открытый вопрос не засеян')
+	secondStudent = await seedStudent(world, 'rdp_student_two')
+	await assignTest(world, testTwo, secondStudent.id)
+	const startedReal = ok(await startSession(world, secondStudent.cookie, testTwo))
+	realSessionId = startedReal.body.sessionId as string
+	realClientAttemptId = crypto.randomUUID()
+	realAnswers = { [radioTwo]: 'b', [openTwoId]: 'ответ' }
+	submittedReal = ok(
+		await submitAttempt(world, secondStudent.cookie, testTwo, {
+			sessionId: realSessionId,
+			clientAttemptId: realClientAttemptId,
+			answers: realAnswers,
+		})
+	)
+	realAttemptId = submittedReal.body.attemptId as string
 }, 120_000)
 
 afterAll(async () => {
@@ -209,8 +244,9 @@ describe('читатели результата: none, pending и graded', () =>
 		expectNone(byKey(rows, 'attemptId', none, 'список N'), 'список N')
 		expectPending(byKey(rows, 'attemptId', pending, 'список P'), 'список P')
 		expectGraded(byKey(rows, 'attemptId', graded, 'список G'), 'список G')
+		expectPending(byKey(rows, 'attemptId', realAttemptId, 'список R'), 'список R')
 		const summary = reply.body.summary as Json
-		assert.equal(summary.pendingTotal, 1)
+		assert.equal(summary.pendingTotal, 2)
 		assert.equal(summary.averageScore, 87.5)
 		assert.equal(summary.passed, 2)
 
@@ -218,22 +254,127 @@ describe('читатели результата: none, pending и graded', () =>
 			await call(ctx, 'GET', '/api/tests/admin/attempts?review=pending', { cookies: world.adminCookie })
 		)
 		assert.deepEqual(
-			(onlyPending.body.rows as Json[]).map((row) => row.attemptId),
-			[pending]
+			(onlyPending.body.rows as Json[]).map((row) => row.attemptId).sort(),
+			[pending, realAttemptId].sort()
 		)
 	})
 
 	test('дашборд админа: pending считается в попытках, но не в среднем и «пройдено»', async () => {
 		const reply = ok(await call(ctx, 'GET', '/api/tests/admin/dashboard', { cookies: world.adminCookie }))
 		const summary = reply.body.summary as Json
-		assert.equal(summary.totalAttempts, 3)
+		assert.equal(summary.totalAttempts, 4)
 		assert.equal(summary.passedAttempts, 2)
 		assert.equal(summary.averageScore, 87.5)
 		const latest = reply.body.latestAttempts
 		assert.ok(Array.isArray(latest))
-		assert.equal(latest.length, 3)
+		assert.equal(latest.length, 4)
 		const row = byKey(latest, 'attemptId', pending, 'дашборд P')
 		assert.equal(row.scorePercentage, null)
 		assert.equal(row.reviewStatus, 'pending')
+	})
+
+	test('разбор проверяющего: none, pending и graded', async () => {
+		const reviewNone = await reviewOf(none)
+		expectNone(reviewNone, 'разбор N')
+
+		const reviewPending = await reviewOf(pending)
+		expectPending(reviewPending, 'разбор P')
+		const pendingQuestion = byKey(reviewPending.results, 'status', 'pending', 'разбор P: открытый вопрос')
+		assert.equal(pendingQuestion.points, 3)
+		assert.equal(pendingQuestion.earnedPoints, 0)
+
+		const reviewGraded = await reviewOf(graded)
+		expectGraded(reviewGraded, 'разбор G')
+		assert.equal(reviewGraded.autoEarnedPoints, 1)
+		assert.equal(reviewGraded.autoTotalPoints, 1)
+	})
+
+	test('ответ сдачи: none, а сдача с открытым вопросом даёт pending без процента', async () => {
+		expectNone(submittedNone.body, 'сдача N')
+
+		const body = submittedReal.body
+		expectPending(body, 'сдача R')
+		assert.equal(body.attemptId, realAttemptId)
+		const results = body.results as Json[]
+		assert.equal(results.length, 2)
+		assert.equal(results.find((item) => item.status === 'pending')?.points, 3)
+		assert.equal(results.find((item) => item.status === 'correct')?.earnedPoints, 1)
+
+		const { readAttemptView } = await import('../../services/scored-attempt/read.js')
+		const stored = await readAttemptView(realAttemptId, { kind: 'student', showCorrectAnswer: true })
+		assert.deepEqual(body, JSON.parse(JSON.stringify(stored)))
+	})
+})
+
+describe('настоящая сдача с открытым вопросом', () => {
+	type StoredAttempt = {
+		review_status: string
+		final_earned_points: number | null
+		final_score_percentage: number | null
+		final_passed: boolean | null
+		auto_total_points: number
+		passing_score: number | null
+		earned_points: number
+		total_points: number
+		score_percentage: number
+		passed: boolean
+		results: unknown
+		results_version: number
+		answers: unknown
+	}
+
+	async function storedAttempt(attemptId: string): Promise<StoredAttempt> {
+		const result = await ctx.pgPool.query<StoredAttempt>('SELECT * FROM test_attempts WHERE id = $1', [attemptId])
+		const row = result.rows[0]
+		assert.ok(row, `попытка ${attemptId} не найдена`)
+		return row
+	}
+
+	function sameNumber(actual: number | null, expected: number | null, label: string): void {
+		if (actual === null || expected === null) return assert.equal(actual, expected, label)
+		assert.equal(Math.fround(actual), Math.fround(expected), label)
+	}
+
+	test('повтор той же сдачи возвращает ту же попытку и не меняет факты', async () => {
+		const rowsBefore = await ctx.pgPool.query('SELECT id FROM test_attempts WHERE user_id = $1', [secondStudent.id])
+		const before = await storedAttempt(realAttemptId)
+
+		const repeated = ok(
+			await submitAttempt(world, secondStudent.cookie, testTwo, {
+				sessionId: realSessionId,
+				clientAttemptId: realClientAttemptId,
+				answers: realAnswers,
+			})
+		)
+		assert.equal(repeated.body.attemptId, realAttemptId)
+		expectPending(repeated.body, 'повтор сдачи')
+
+		const rowsAfter = await ctx.pgPool.query('SELECT id FROM test_attempts WHERE user_id = $1', [secondStudent.id])
+		assert.equal(rowsBefore.rowCount, 1)
+		assert.equal(rowsAfter.rowCount, 1)
+		assert.deepEqual(await storedAttempt(realAttemptId), before)
+	})
+
+	test('сохранённая проекция равна пересчёту по фактам попытки', async () => {
+		const { readFacts } = await import('../../services/scored-attempt/read.js')
+		const row = await storedAttempt(realAttemptId)
+		assert.equal(row.review_status, 'pending')
+		const facts = await readFacts({
+			attemptId: realAttemptId,
+			testId: testTwo,
+			results: row.results,
+			resultsVersion: row.results_version,
+		})
+		const expected = projectionOf(
+			computeAttemptOutcome({ facts, finalScores: new Map(), passingScore: row.passing_score })
+		)
+		assert.equal(row.passing_score, PASSING_SCORE)
+		assert.equal(row.review_status, expected.reviewStatus)
+		sameNumber(row.final_earned_points, expected.finalEarnedPoints, 'final_earned_points')
+		sameNumber(row.final_score_percentage, expected.finalScorePercentage, 'final_score_percentage')
+		assert.equal(row.final_passed, expected.finalPassed)
+		sameNumber(row.auto_total_points, expected.autoTotalPoints, 'auto_total_points')
+		assert.equal(row.final_score_percentage, null)
+		assert.equal(row.auto_total_points, 1)
 	})
 })
