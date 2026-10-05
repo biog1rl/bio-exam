@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { GitCommitHorizontalIcon, Loader2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { CAN_USE_DOM } from '@/components/editor/shared/can-use-dom'
 import { Button } from '@/components/ui/button'
 import {
 	Dialog,
@@ -88,6 +89,7 @@ export function GitCommitModal({ open, onOpenChange, documentPath, documentTitle
 	}
 
 	const getHistory = (): string[] => {
+		if (!CAN_USE_DOM) return []
 		try {
 			return JSON.parse(localStorage.getItem('git-commit-history') || '[]')
 		} catch {

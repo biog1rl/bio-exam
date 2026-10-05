@@ -134,7 +134,6 @@ test.describe('редактор формулировки: пресет full', ()
 	})
 
 	test('promptText сохранённого вопроса', async ({ adminPage: page }, testInfo) => {
-		test.fail()
 		const slug = seedTest(projectKey(testInfo), 'editor').slug
 		const { questionId } = await openEditPage(page, slug)
 		await promptEditor(page).click()
@@ -151,7 +150,6 @@ test.describe('редактор формулировки: пресет full', ()
 	})
 
 	test('promptText черновика', async ({ adminPage: page }, testInfo) => {
-		test.fail()
 		const slug = seedTest(projectKey(testInfo), 'editor').slug
 		const testId = (await bySlug(page, slug)).test.id
 		await page.goto(`${testPageUrl(slug)}/questions/new`)

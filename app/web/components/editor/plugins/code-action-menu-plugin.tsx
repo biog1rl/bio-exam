@@ -153,11 +153,7 @@ function getMouseInfo(event: MouseEvent): {
 	}
 }
 
-export function CodeActionMenuPlugin({
-	anchorElem = document.body,
-}: {
-	anchorElem: HTMLElement | null
-}): React.ReactPortal | null {
+export function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }): React.ReactPortal | null {
 	if (!anchorElem) {
 		return null
 	}

@@ -11,6 +11,7 @@ import {
 
 import { LexicalEditor } from 'lexical'
 
+import { AUTOCOMPLETE } from '@/components/editor/transformers/markdown-autocomplete-transformer'
 import { EMOJI } from '@/components/editor/transformers/markdown-emoji-transformer'
 import { HR } from '@/components/editor/transformers/markdown-hr-transformer'
 import { IMAGE, IMAGE_HTML } from '@/components/editor/transformers/markdown-image-transformer'
@@ -23,6 +24,7 @@ export const MDX_TRANSFORMERS: Array<Transformer> = [
 	HR,
 	IMAGE_HTML, // HTML теги с размерами (должен быть перед IMAGE)
 	IMAGE,
+	AUTOCOMPLETE,
 	EMOJI,
 	TWEET,
 	CHECK_LIST,
