@@ -575,6 +575,18 @@ describe('список попыток: ключ и запрос', () => {
 		}
 	})
 
+	test.each([
+		{ name: 'averageScore: null принимается', averageScore: null, accepted: true },
+		{ name: 'averageScore: число принимается', averageScore: 0, accepted: true },
+		{ name: 'averageScore: строка отвергается', averageScore: '50', accepted: false },
+		{ name: 'averageScore: undefined отвергается', averageScore: undefined, accepted: false },
+	])('parseAdminAttempts: $name', ({ averageScore, accepted }) => {
+		const page = attemptsPage(['a'], 1)
+		const body = { ...page, summary: { ...page.summary, averageScore } }
+		if (accepted) assert.equal(parseAdminAttempts(body), body)
+		else assert.throws(() => parseAdminAttempts(body), MalformedBodyError)
+	})
+
 	test('adminAttemptsFetcher и fetchAdminAttemptsPage идут по ключу', async () => {
 		const body = attemptsPage(['a'], 1)
 		apiFetchMock.mockResolvedValueOnce(json(200, body))

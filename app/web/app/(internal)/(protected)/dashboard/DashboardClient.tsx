@@ -83,14 +83,14 @@ type AdminDashboardData = {
 	summary: {
 		totalAttempts: number
 		activeStudents: number
-		averageScore: number
+		averageScore: number | null
 		passedAttempts: number
 	}
 	latestAttempts: AdminDashboardAttempt[]
 	dailyActivity: Array<{
 		date: string
 		attempts: number
-		averageScore: number
+		averageScore: number | null
 	}>
 }
 
@@ -322,7 +322,11 @@ export default function DashboardClient() {
 								[
 									['попыток студентов', adminSummary?.totalAttempts ?? 0, BookOpenCheck],
 									['активных студентов', adminSummary?.activeStudents ?? 0, UsersRound],
-									['средний балл', adminSummary ? `${Math.round(adminSummary.averageScore)}%` : '—', LineChart],
+									[
+										'средний балл',
+										adminSummary?.averageScore != null ? `${Math.round(adminSummary.averageScore)}%` : '—',
+										LineChart,
+									],
 								].map(([label, value, Icon]) => {
 									const TypedIcon = Icon as typeof BookOpenCheck
 									return (

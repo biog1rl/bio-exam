@@ -178,7 +178,8 @@ export function parseAdminAttempts(body: unknown): AdminAttemptsResponse {
 		throw new MalformedBodyError()
 	}
 	const summary = asRecord(record.summary)
-	if (typeof summary.passed !== 'number' || typeof summary.averageScore !== 'number') throw new MalformedBodyError()
+	if (typeof summary.passed !== 'number') throw new MalformedBodyError()
+	if (summary.averageScore !== null && typeof summary.averageScore !== 'number') throw new MalformedBodyError()
 	const facets = asRecord(record.facets)
 	if (!Array.isArray(facets.topics) || !Array.isArray(facets.students)) throw new MalformedBodyError()
 	return body as AdminAttemptsResponse

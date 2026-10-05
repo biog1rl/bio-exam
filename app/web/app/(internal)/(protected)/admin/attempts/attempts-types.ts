@@ -24,7 +24,7 @@ export type AdminAttemptsResponse = {
 	total: number
 	limit: number
 	offset: number
-	summary: { passed: number; averageScore: number }
+	summary: { passed: number; averageScore: number | null }
 	scopeTotal: number
 	facets: { topics: AdminAttemptsTopicFacet[]; students: AdminAttemptsStudentFacet[] }
 }

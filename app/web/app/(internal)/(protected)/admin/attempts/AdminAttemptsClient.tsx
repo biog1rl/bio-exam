@@ -188,7 +188,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	const hasFilters = Boolean(
 		query || dateRange?.from || studentId !== 'all' || topicSlug !== 'all' || statusFilter !== 'active'
 	)
-	const averageScore = data ? `${Math.round(data.summary.averageScore)}%` : '—'
+	const averageScore = data?.summary.averageScore != null ? `${Math.round(data.summary.averageScore)}%` : '—'
 	const shown = merged
 		? merged.rows.length < merged.total
 			? `${merged.rows.length} из ${merged.total}`

@@ -12,7 +12,7 @@ import { sessionRequired } from '../../../middleware/auth/session.js'
 import { validateUUID } from '../../../middleware/validateParams.js'
 import { canReviewAttempt, testScope, type TestScope } from '../../../services/access-policy/index.js'
 import { questionMarkdownCandidates, readQuestionTexts } from '../../../services/question-content/index.js'
-import { readAdminAttemptView } from '../../../services/scored-attempt/index.js'
+import { attemptResultColumns, readAdminAttemptView } from '../../../services/scored-attempt/index.js'
 import { escapeLike } from '../../../services/search/index.js'
 
 const router = Router()
@@ -28,6 +28,10 @@ function studentNameIn(scope: TestScope): SQL<string> {
 		: sql<string>`coalesce(${users.name}, ${users.firstName}, 'Пользователь')`
 }
 
+function nullableNumber(value: number | string | null | undefined): number | null {
+	return value == null ? null : Number(value)
+}
+
 function isEmptyScope(scope: TestScope): boolean {
 	return !scope.all && scope.topicIds.length === 0
 }
@@ -41,6 +45,7 @@ const AttemptsQuerySchema = z.object({
 	from: z.string().datetime({ offset: true }).optional(),
 	to: z.string().datetime({ offset: true }).optional(),
 	status: z.enum(['active', 'inactive', 'all']).default('all'),
+	review: z.enum(['all', 'pending', 'graded']).default('all'),
 })
 
 type AttemptsQuery = z.infer<typeof AttemptsQuerySchema>
@@ -52,6 +57,7 @@ function attemptFilters(scope: TestScope, query: AttemptsQuery): Array<SQL | und
 	if (query.from) filters.push(gte(testAttempts.submittedAt, new Date(query.from)))
 	if (query.to) filters.push(lte(testAttempts.submittedAt, new Date(query.to)))
 	if (query.status !== 'all') filters.push(eq(users.isActive, query.status === 'active'))
+	if (query.review !== 'all') filters.push(eq(testAttempts.reviewStatus, query.review))
 	if (query.q) {
 		const pattern = `%${escapeLike(query.q)}%`
 		filters.push(
@@ -71,7 +77,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 		const scope = await testScope(req)
 		if (isEmptyScope(scope)) {
 			return res.json({
-				summary: { totalAttempts: 0, activeStudents: 0, averageScore: 0, passedAttempts: 0 },
+				summary: { totalAttempts: 0, activeStudents: 0, averageScore: null, passedAttempts: 0 },
 				latestAttempts: [],
 				dailyActivity: [],
 			})
@@ -82,8 +88,10 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			.select({
 				totalAttempts: sql<number>`count(*)::int`,
 				activeStudents: sql<number>`count(distinct ${testAttempts.userId})::int`,
-				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
-				passedAttempts: sql<number>`count(*) filter (where ${testAttempts.passed})::int`,
+				averageScore: sql<
+					number | null
+				>`round(avg(${testAttempts.finalScorePercentage}) filter (where ${testAttempts.reviewStatus} <> 'pending')::numeric, 1)::float`,
+				passedAttempts: sql<number>`count(*) filter (where ${testAttempts.finalPassed} and ${testAttempts.reviewStatus} <> 'pending')::int`,
 			})
 			.from(testAttempts)
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
@@ -100,10 +108,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 				studentId: users.id,
 				studentName: studentNameIn(scope),
 				submittedAt: testAttempts.submittedAt,
-				earnedPoints: testAttempts.earnedPoints,
-				totalPoints: testAttempts.totalPoints,
-				scorePercentage: testAttempts.scorePercentage,
-				passed: testAttempts.passed,
+				...attemptResultColumns,
 			})
 			.from(testAttempts)
 			.innerJoin(users, eq(users.id, testAttempts.userId))
@@ -117,7 +122,9 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			.select({
 				date: sql<string>`to_char(date_trunc('day', ${testAttempts.submittedAt}), 'YYYY-MM-DD')`,
 				attempts: sql<number>`count(*)::int`,
-				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
+				averageScore: sql<
+					number | null
+				>`round(avg(${testAttempts.finalScorePercentage}) filter (where ${testAttempts.reviewStatus} <> 'pending')::numeric, 1)::float`,
 			})
 			.from(testAttempts)
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
@@ -129,7 +136,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			summary: {
 				totalAttempts: Number(summary?.totalAttempts ?? 0),
 				activeStudents: Number(summary?.activeStudents ?? 0),
-				averageScore: Number(summary?.averageScore ?? 0),
+				averageScore: nullableNumber(summary?.averageScore),
 				passedAttempts: Number(summary?.passedAttempts ?? 0),
 			},
 			latestAttempts: latestAttempts.map((attempt) => ({
@@ -139,7 +146,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			dailyActivity: dailyActivity.map((item) => ({
 				date: item.date,
 				attempts: Number(item.attempts ?? 0),
-				averageScore: Number(item.averageScore ?? 0),
+				averageScore: nullableNumber(item.averageScore),
 			})),
 		})
 	} catch (e) {
@@ -162,7 +169,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 				total: 0,
 				limit,
 				offset,
-				summary: { passed: 0, averageScore: 0 },
+				summary: { passed: 0, averageScore: null, pendingTotal: 0 },
 				scopeTotal: 0,
 				facets: { topics: [], students: [] },
 			})
@@ -173,8 +180,10 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 		const [counts] = await db
 			.select({
 				total: sql<number>`count(*)::int`,
-				passed: sql<number>`count(*) filter (where ${testAttempts.passed})::int`,
-				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
+				passed: sql<number>`count(*) filter (where ${testAttempts.finalPassed} and ${testAttempts.reviewStatus} <> 'pending')::int`,
+				averageScore: sql<
+					number | null
+				>`round(avg(${testAttempts.finalScorePercentage}) filter (where ${testAttempts.reviewStatus} <> 'pending')::numeric, 1)::float`,
 			})
 			.from(testAttempts)
 			.innerJoin(users, eq(users.id, testAttempts.userId))
@@ -183,7 +192,10 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 			.where(filtered)
 
 		const [scopeCounts] = await db
-			.select({ total: sql<number>`count(*)::int` })
+			.select({
+				total: sql<number>`count(*)::int`,
+				pendingTotal: sql<number>`count(*) filter (where ${testAttempts.reviewStatus} = 'pending')::int`,
+			})
 			.from(testAttempts)
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
 			.where(visible)
@@ -200,10 +212,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 				studentIsActive: users.isActive,
 				studentName: studentNameIn(scope),
 				submittedAt: testAttempts.submittedAt,
-				earnedPoints: testAttempts.earnedPoints,
-				totalPoints: testAttempts.totalPoints,
-				scorePercentage: testAttempts.scorePercentage,
-				passed: testAttempts.passed,
+				...attemptResultColumns,
 			})
 			.from(testAttempts)
 			.innerJoin(users, eq(users.id, testAttempts.userId))
@@ -241,7 +250,8 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 			offset,
 			summary: {
 				passed: Number(counts?.passed ?? 0),
-				averageScore: Number(counts?.averageScore ?? 0),
+				averageScore: nullableNumber(counts?.averageScore),
+				pendingTotal: Number(scopeCounts?.pendingTotal ?? 0),
 			},
 			scopeTotal: Number(scopeCounts?.total ?? 0),
 			facets: { topics: topicFacets, students: studentFacets },
