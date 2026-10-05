@@ -243,6 +243,31 @@
 					"questions": []
 				},
 				{
+					"slug": "editor-desktop",
+					"title": "Редактор формулировки (desktop)",
+					"published": false,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "editor-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой органоид содержит ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Ядро"
+								},
+								{
+									"id": "2",
+									"text": "Рибосома"
+								}
+							],
+							"correct": "1"
+						}
+					]
+				},
+				{
 					"slug": "assets-desktop",
 					"title": "Картинки в вопросах (desktop)",
 					"published": true,
@@ -545,6 +570,31 @@
 					"published": false,
 					"assignedTo": [],
 					"questions": []
+				},
+				{
+					"slug": "editor-mobile",
+					"title": "Редактор формулировки (mobile)",
+					"published": false,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "editor-single-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какой органоид содержит ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Ядро"
+								},
+								{
+									"id": "2",
+									"text": "Рибосома"
+								}
+							],
+							"correct": "1"
+						}
+					]
 				},
 				{
 					"slug": "assets-mobile",
