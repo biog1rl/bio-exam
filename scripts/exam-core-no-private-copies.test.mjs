@@ -140,6 +140,16 @@ const PRIVATE_COPY_NAMES = [
 		],
 	},
 	{
+		positions: 'Phase 9 D-06, D-15',
+		names: [
+			'computeAttemptOutcome',
+			'projectionOf',
+			'findAnswerViolation',
+			'SHORT_TEXT_MAX_LENGTH',
+			'OPEN_TEXT_MAX_LENGTH',
+		],
+	},
+	{
 		positions: 'Phase 6 D-14',
 		names: ['SaveAttemptDraftRequestSchema', 'AttemptSessionSchema', 'SaveDraftAnswerSchema'],
 	},

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
 import type { QuestionVerdicts } from './adapters/types'
-import { MISTAKE_METRICS, QUESTION_UI_TEMPLATES } from './registry'
+import { ANSWER_VIOLATION_REASONS } from './answer-limits'
+import { MISTAKE_METRICS, QUESTION_UI_TEMPLATES, type QuestionUiTemplate } from './registry'
 import { TelemetryMapSchema } from './telemetry'
 
 export const AnswerValueSchema = z.union([z.string(), z.array(z.string()), z.record(z.string(), z.string())])
@@ -11,6 +12,7 @@ export const ATTEMPT_GRACE_PERIOD_MINUTES = 2
 export const SUBMIT_ERROR_CODES = {
 	alreadySubmitted: 'ATTEMPT_ALREADY_SUBMITTED',
 	timeExpired: 'TIME_EXPIRED',
+	answersInvalid: 'ANSWERS_INVALID',
 } as const
 
 export const SubmitAttemptRequestSchema = z.object({
@@ -21,8 +23,14 @@ export const SubmitAttemptRequestSchema = z.object({
 })
 
 export const SubmitAttemptErrorSchema = z.object({
-	error: z.enum([SUBMIT_ERROR_CODES.alreadySubmitted, SUBMIT_ERROR_CODES.timeExpired]),
+	error: z.enum([
+		SUBMIT_ERROR_CODES.alreadySubmitted,
+		SUBMIT_ERROR_CODES.timeExpired,
+		SUBMIT_ERROR_CODES.answersInvalid,
+	]),
 	attemptId: z.string().uuid().nullable().optional(),
+	reason: z.enum(ANSWER_VIOLATION_REASONS).optional(),
+	limit: z.number().int().positive().optional(),
 })
 
 const VerdictMistakesSchema = z.number().int().nonnegative()
@@ -80,11 +88,17 @@ const QuestionVerdictsUnionSchema = z.discriminatedUnion('template', [
 
 export const QuestionVerdictsSchema: z.ZodType<QuestionVerdicts> = QuestionVerdictsUnionSchema
 
-export const QuestionStatusSchema = z.enum(['ungraded', 'correct', 'partial', 'wrong'])
+export const QuestionStatusSchema = z.enum(['ungraded', 'correct', 'partial', 'wrong', 'pending'])
 
 export type QuestionStatus = z.infer<typeof QuestionStatusSchema>
 
-export function questionStatus(input: { points: number; isCorrect: boolean; earnedPoints: number }): QuestionStatus {
+export function questionStatus(input: {
+	points: number
+	isCorrect: boolean
+	earnedPoints: number
+	template?: QuestionUiTemplate
+}): QuestionStatus {
+	if (input.template === 'open') return 'pending'
 	if (input.points === 0) return 'ungraded'
 	if (input.isCorrect) return 'correct'
 	if (input.earnedPoints > 0) return 'partial'

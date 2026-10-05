@@ -33,6 +33,13 @@ export {
 } from './authoring'
 export type { ValidateQuestionForSaveInput } from './authoring'
 export {
+	ANSWER_VIOLATION_REASONS,
+	findAnswerViolation,
+	OPEN_TEXT_MAX_LENGTH,
+	SHORT_TEXT_MAX_LENGTH,
+} from './answer-limits'
+export type { AnswerViolation, AnswerViolationReason } from './answer-limits'
+export {
 	AdminAttemptViewSchema,
 	AnswerValueSchema,
 	ATTEMPT_GRACE_PERIOD_MINUTES,
@@ -111,6 +118,15 @@ export {
 	readKey,
 } from './review'
 export type { ComputeVerdictsInput } from './review'
+export { computeAttemptOutcome, projectionOf, REVIEW_STATUSES } from './outcome'
+export type {
+	AttemptOutcome,
+	AttemptScore,
+	ComputeAttemptOutcomeInput,
+	OutcomeFact,
+	OutcomeProjection,
+	ReviewStatus,
+} from './outcome'
 export { pluralRu } from './plural'
 export {
 	countMistakes,

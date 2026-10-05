@@ -6,6 +6,10 @@ const CARDS: Record<QuestionStatus, RunnerResultCard> = {
 	correct: { label: 'Верно', className: 'rounded border border-emerald-200 bg-emerald-50 p-3 text-sm' },
 	partial: { label: 'Частично верно', className: 'rounded border border-amber-200 bg-amber-50 p-3 text-sm' },
 	wrong: { label: 'Неверно', className: 'rounded border border-rose-200 bg-rose-50 p-3 text-sm' },
+	pending: {
+		label: 'На проверке',
+		className: 'rounded border border-border/70 bg-secondary p-3 text-sm text-secondary-foreground',
+	},
 	ungraded: { label: 'Без оценки', className: 'rounded border bg-muted/30 p-3 text-sm' },
 }
 

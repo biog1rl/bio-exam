@@ -19,8 +19,18 @@ test('runnerResultCard: статус отсутствует, карточка «
 })
 
 test('runnerResultCard: неизвестный статус даёт «Без оценки»', () => {
-	assert.deepEqual(runnerResultCard('pending' as unknown as QuestionStatus), {
+	assert.deepEqual(runnerResultCard('skipped' as unknown as QuestionStatus), {
 		label: 'Без оценки',
 		className: 'rounded border bg-muted/30 p-3 text-sm',
 	})
+})
+
+test('runnerResultCard: открытый вопрос подписан «На проверке» нейтральными классами', () => {
+	assert.deepEqual(
+		runnerResultCard(questionStatus({ points: 3, isCorrect: false, earnedPoints: 0, template: 'open' })),
+		{
+			label: 'На проверке',
+			className: 'rounded border border-border/70 bg-secondary p-3 text-sm text-secondary-foreground',
+		}
+	)
 })

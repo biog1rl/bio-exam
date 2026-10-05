@@ -18,6 +18,7 @@ import {
 	SubmitAttemptErrorSchema,
 	SubmitAttemptRequestSchema,
 } from './attempt-result'
+import type { QuestionUiTemplate } from './registry'
 
 const ATTEMPT = '11111111-1111-4111-8111-111111111111'
 const Q1 = '22222222-2222-4222-8222-222222222222'
@@ -121,13 +122,29 @@ test('SubmitAttemptErrorSchema: принимает оба кода и attemptId 
 	assert.deepEqual(SubmitAttemptErrorSchema.parse(expired), expired)
 })
 
+test.each([
+	{ name: 'причина и предел', body: { error: 'ANSWERS_INVALID', reason: 'short_text_too_long', limit: 200 }, ok: true },
+	{ name: 'причина без предела', body: { error: 'ANSWERS_INVALID', reason: 'foreign_question' }, ok: true },
+	{ name: 'неизвестная причина', body: { error: 'ANSWERS_INVALID', reason: 'too_many' }, ok: false },
+	{ name: 'нулевой предел', body: { error: 'ANSWERS_INVALID', reason: 'open_text_too_long', limit: 0 }, ok: false },
+	{ name: 'дробный предел', body: { error: 'ANSWERS_INVALID', reason: 'open_text_too_long', limit: 1.5 }, ok: false },
+])('SubmitAttemptErrorSchema: ANSWERS_INVALID, $name', ({ body, ok }) => {
+	const result = SubmitAttemptErrorSchema.safeParse(body)
+	assert.equal(result.success, ok)
+	if (result.success) assert.deepEqual(result.data, body)
+})
+
 test('SubmitAttemptErrorSchema: отклоняет прежний код конфликта и чужие коды', () => {
 	assert.equal(SubmitAttemptErrorSchema.safeParse({ error: 'TIME_EXPIRED_ALREADY_SUBMITTED' }).success, false)
 	assert.equal(SubmitAttemptErrorSchema.safeParse({ error: 'Session not found' }).success, false)
 })
 
 test('коды ошибок submit и льгота лимита', () => {
-	assert.deepEqual(SUBMIT_ERROR_CODES, { alreadySubmitted: 'ATTEMPT_ALREADY_SUBMITTED', timeExpired: 'TIME_EXPIRED' })
+	assert.deepEqual(SUBMIT_ERROR_CODES, {
+		alreadySubmitted: 'ATTEMPT_ALREADY_SUBMITTED',
+		timeExpired: 'TIME_EXPIRED',
+		answersInvalid: 'ANSWERS_INVALID',
+	})
 	assert.equal(ATTEMPT_GRACE_PERIOD_MINUTES, 2)
 })
 
@@ -197,17 +214,24 @@ for (const row of rejectedVerdicts) {
 	})
 }
 
-test('QuestionStatusSchema: четыре статуса', () => {
-	assert.deepEqual(QuestionStatusSchema.options, ['ungraded', 'correct', 'partial', 'wrong'])
+test('QuestionStatusSchema: пять статусов', () => {
+	assert.deepEqual(QuestionStatusSchema.options, ['ungraded', 'correct', 'partial', 'wrong', 'pending'])
 	assert.equal(QuestionStatusSchema.safeParse('skipped').success, false)
 })
 
-const statusRows: Array<{ input: { points: number; isCorrect: boolean; earnedPoints: number }; expected: string }> = [
+const statusRows: Array<{
+	input: { points: number; isCorrect: boolean; earnedPoints: number; template?: QuestionUiTemplate }
+	expected: string
+}> = [
 	{ input: { points: 0, isCorrect: true, earnedPoints: 0 }, expected: 'ungraded' },
 	{ input: { points: 0, isCorrect: false, earnedPoints: 0 }, expected: 'ungraded' },
 	{ input: { points: 2, isCorrect: true, earnedPoints: 2 }, expected: 'correct' },
 	{ input: { points: 2, isCorrect: false, earnedPoints: 1 }, expected: 'partial' },
 	{ input: { points: 2, isCorrect: false, earnedPoints: 0 }, expected: 'wrong' },
+	{ input: { points: 3, isCorrect: false, earnedPoints: 0, template: 'open' }, expected: 'pending' },
+	{ input: { points: 0, isCorrect: false, earnedPoints: 0, template: 'open' }, expected: 'pending' },
+	{ input: { points: 2, isCorrect: true, earnedPoints: 2, template: 'single_choice' }, expected: 'correct' },
+	{ input: { points: 0, isCorrect: true, earnedPoints: 0, template: 'short_text' }, expected: 'ungraded' },
 ]
 
 for (const row of statusRows) {
