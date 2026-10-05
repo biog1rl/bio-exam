@@ -4,6 +4,7 @@ import { isAnswered } from '@bio-exam/exam-core'
 
 import { useEffect, useMemo, useState } from 'react'
 
+import Link from 'next/link'
 import { toast } from 'sonner'
 
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -271,9 +272,17 @@ function AttemptRunner({
 						</p>
 						<p>Процент: {formatPercent(submitResult.scorePercentage)}</p>
 						<p>{submitResult.passed ? 'Статус: пройден' : 'Статус: не пройден'}</p>
-						<Button type="button" variant="outline" className="mt-3" onClick={handleRetake}>
-							Пройти ещё раз
-						</Button>
+						<div className="mt-3 flex flex-wrap gap-2">
+							<Button type="button" variant="outline" onClick={handleRetake}>
+								Пройти ещё раз
+							</Button>
+							<Button variant="outline" asChild>
+								<Link href={`/tests/${test.topicSlug}/${test.slug}`}>К тесту</Link>
+							</Button>
+							<Button variant="outline" asChild>
+								<Link href="/tests">Ко всем тестам</Link>
+							</Button>
+						</div>
 					</section>
 				) : null}
 

@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ArrowRight, CalendarIcon, CheckCircle2, Clock3, FileText, Loader2, Search, XCircle } from 'lucide-react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
@@ -28,7 +29,8 @@ import {
 	mergeAttemptPages,
 	type AttemptsFilters,
 } from '@/lib/tests/admin-api'
-import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
+import { attemptsUrl, parseAttemptsUrl, type AttemptsUrlFilters } from '@/lib/tests/attempts-url'
+import { matchesUserStatus } from '@/lib/users/status-filter'
 
 import type { AdminAttemptListItem, AdminAttemptsResponse } from './attempts-types'
 
@@ -133,9 +135,16 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	const titleRef = useRef<HTMLHeadingElement>(null)
 	const [query, setQuery] = useState('')
 	const [debouncedQuery, setDebouncedQuery] = useState('')
-	const [topicSlug, setTopicSlug] = useState('all')
-	const [studentId, setStudentId] = useState('all')
-	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
+	const searchParams = useSearchParams()
+	const urlFilters = useMemo(() => parseAttemptsUrl(searchParams ?? new URLSearchParams()), [searchParams])
+	const topicSlug = urlFilters.topic ?? 'all'
+	const studentId = urlFilters.student ?? 'all'
+	const statusFilter = urlFilters.status
+	const updateUrlFilters = (next: Partial<AttemptsUrlFilters>) => {
+		window.history.replaceState(null, '', attemptsUrl({ ...urlFilters, ...next }))
+	}
+	const setTopicSlug = (value: string) => updateUrlFilters({ topic: value === 'all' ? null : value })
+	const setStudentId = (value: string) => updateUrlFilters({ student: value === 'all' ? null : value })
 	const [dateRange, setDateRange] = useState<DateRange | undefined>()
 	const [calendarOpen, setCalendarOpen] = useState(false)
 	const [more, setMore] = useState<MorePages | null>(null)
@@ -200,9 +209,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 		pushQuery.cancel()
 		setQuery('')
 		setDebouncedQuery('')
-		setTopicSlug('all')
-		setStudentId('all')
-		setStatusFilter('active')
+		updateUrlFilters({ topic: null, student: null, status: 'active' })
 		setDateRange(undefined)
 	}
 
@@ -238,7 +245,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 							tabIndex={-1}
 							className="mt-2 max-w-3xl font-serif text-3xl leading-none text-foreground outline-none mob:text-4xl tab-sm:text-5xl"
 						>
-							Попытки студентов
+							Попытки
 						</h1>
 						<p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
 							Компактный журнал прохождений с фильтрами по теме, студенту, дате и быстрым поиском.
@@ -265,13 +272,10 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 					<UserStatusFilter
 						align="start"
 						value={statusFilter}
-						onChange={(status) => {
-							setStatusFilter(status)
-							setStudentId('all')
-						}}
+						onChange={(status) => updateUrlFilters({ status, student: null })}
 					/>
 				</div>
-				<div className="grid gap-3 tab:grid-cols-[minmax(13.75rem,1fr)_13.125rem_13.125rem_13.125rem_auto]">
+				<div className="grid gap-3 tab:grid-cols-[minmax(12rem,1fr)_repeat(3,minmax(0,13.125rem))_auto]">
 					<label className="relative block">
 						<Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" />
 						<Input

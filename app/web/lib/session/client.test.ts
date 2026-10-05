@@ -451,8 +451,11 @@ describe('модуль по умолчанию', () => {
 					name
 				)
 				assert.deepEqual(
-					[...source.matchAll(/^import .*$/gm)].map((match) => match[0]),
-					["import { can, type PermissionKey } from '@bio-exam/rbac'"],
+					source
+						.split('\n')
+						.filter((line) => line.trim() !== '')
+						.filter((line) => !/^export (type )?\{[^}]+\} from '@bio-exam\/rbac'$/.test(line)),
+					[],
 					name
 				)
 				continue

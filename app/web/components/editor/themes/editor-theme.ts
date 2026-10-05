@@ -54,8 +54,10 @@ export const editorTheme: EditorThemeClasses = {
 		underline: 'underline',
 		underlineStrikethrough: 'underline line-through',
 	},
-	image: 'relative inline-block user-select-none cursor-default editor-image',
-	inlineImage: 'relative inline-block user-select-none cursor-default inline-editor-image',
+	image:
+		'relative inline-block max-w-full user-select-none cursor-default editor-image [&_img]:h-auto! [&_img]:max-w-full!',
+	inlineImage:
+		'relative inline-block max-w-full user-select-none cursor-default inline-editor-image [&_img]:h-auto! [&_img]:max-w-full!',
 	keyword: 'text-purple-900 font-bold',
 	code: 'EditorTheme__code',
 	codeHighlight: {

@@ -208,9 +208,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 		<div className="space-y-6">
 			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
 				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">профиль</p>
-				<h1 className="mt-2 font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">
-					Личный кабинет
-				</h1>
+				<h1 className="mt-2 font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">Профиль</h1>
 				<p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
 					Настройте публичные данные, аватар и параметры доступа к аккаунту.
 				</p>

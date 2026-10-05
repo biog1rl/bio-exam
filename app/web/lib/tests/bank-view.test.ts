@@ -13,7 +13,6 @@ import {
 	teachersLine,
 	teachersSetChanged,
 	testTopicPickerState,
-	topicHeroTeachersLine,
 	topicPageState,
 	topicSaveFailure,
 	topicSaveOutcome,
@@ -78,12 +77,6 @@ test.each<[number, string]>([
 	[111, '111 учителей'],
 ])('teachersCountLabel(%i) → %s', (count, label) => {
 	assert.equal(teachersCountLabel(count), label)
-})
-
-test('topicHeroTeachersLine: пусто, один, несколько', () => {
-	assert.equal(topicHeroTeachersLine([]), 'Учитель не закреплён')
-	assert.equal(topicHeroTeachersLine([anna]), 'Учитель: Анна Иванова')
-	assert.equal(topicHeroTeachersLine([anna, boris]), 'Учителя: Анна Иванова, Борис Петров')
 })
 
 test('teacherTriggerLabel: пусто, один, несколько', () => {

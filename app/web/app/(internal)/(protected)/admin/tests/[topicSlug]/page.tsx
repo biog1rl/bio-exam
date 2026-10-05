@@ -1,6 +1,6 @@
 import { Metadata } from 'next'
 
-import TopicTestsClient from './TopicTestsClient'
+import { BankExplorer } from '../components/bank/BankExplorer'
 
 export const metadata: Metadata = { title: 'Тема тестов' }
 
@@ -10,5 +10,5 @@ interface Props {
 
 export default async function TopicTestsPage({ params }: Props) {
 	const { topicSlug } = await params
-	return <TopicTestsClient topicSlug={topicSlug} />
+	return <BankExplorer topicSlug={topicSlug} />
 }

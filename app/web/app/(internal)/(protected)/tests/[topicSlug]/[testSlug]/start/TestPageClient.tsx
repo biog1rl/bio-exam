@@ -3,6 +3,7 @@
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { TestMissingState } from '@/components/tests/TestMissingState'
 import TestRunner from '@/components/tests/TestRunner'
 import { fetchMyTestAttempts, fetchPublicTestBySlug } from '@/lib/tests/api'
 
@@ -29,7 +30,11 @@ export default function TestPageClient({ topicSlug, testSlug }: Props) {
 	}
 
 	if (testError || !testData?.test) {
-		return <div className="p-6">Тест не найден</div>
+		return (
+			<div className="p-6">
+				<TestMissingState />
+			</div>
+		)
 	}
 
 	const labels = {

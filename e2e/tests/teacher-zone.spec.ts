@@ -3,6 +3,7 @@ import { type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 
 import { seedTest, seedTopic, sessionAccount, sessionAccountByPrefix, type ProjectKey } from '../fixtures/accounts'
+import { bankTopicTitles } from '../fixtures/bank'
 import {
 	adminReviewSections,
 	correctAnswers,
@@ -65,7 +66,7 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 
 		await expectDenied(page, `/admin/tests/${TOPIC_SLUG}`, 'Нет доступа к теме', 'К темам')
 		await expect(page.getByRole('link', { name: 'Новый тест' })).toHaveCount(0)
-		await expect(page.getByRole('button', { name: 'Тема', exact: true })).toHaveCount(0)
+		await expect(page.getByRole('button', { name: 'Действия с темой', exact: true })).toHaveCount(0)
 	})
 
 	test('step 1: admin pins the teacher to a topic in the topic form @teacher-zone', async ({
@@ -77,7 +78,8 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 
 		await page.goto(`/admin/tests/${topic.slug}`)
 		await expect(page.getByRole('heading', { level: 1, name: topic.title })).toBeVisible()
-		await page.getByRole('button', { name: 'Тема', exact: true }).click()
+		await page.getByRole('button', { name: 'Действия с темой', exact: true }).click()
+		await page.getByRole('menuitem', { name: 'Изменить тему', exact: true }).click()
 
 		const dialog = page.getByRole('dialog', { name: 'Редактировать тему' })
 		await expect(dialog).toBeVisible()
@@ -93,7 +95,12 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 		await dialog.getByRole('button', { name: 'Сохранить тему', exact: true }).click()
 		await expect(page.getByText('Тема обновлена').first()).toBeVisible()
 		await expect(dialog).toHaveCount(0)
-		await expect(page.getByText(`Учитель: ${name}`).first()).toBeVisible()
+
+		await page.reload()
+		await page.getByRole('button', { name: 'Действия с темой', exact: true }).click()
+		await page.getByRole('menuitem', { name: 'Изменить тему', exact: true }).click()
+		await expect(dialog.getByRole('button', { name: `Убрать ${name}` })).toBeVisible()
+		await page.keyboard.press('Escape')
 	})
 
 	test('step 2: the teacher sees only his topics and no catalog actions @teacher-zone', async ({
@@ -102,12 +109,14 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 		const key = projectKey(testInfo)
 
 		await page.goto('/admin/tests')
-		await expect(page.getByText(teacherTopic(key).title, { exact: true }).first()).toBeVisible()
-		await expect(page.getByText(assignTopic(key).title, { exact: true }).first()).toBeVisible()
 		await expect(page.getByText(seedTest(key, 'teacher-test').title, { exact: true }).first()).toBeVisible()
-		await expect(page.getByText(seedTopic(TOPIC_SLUG).title, { exact: true })).toHaveCount(0)
+		const topics = await bankTopicTitles(page)
+		expect(topics).toContain(teacherTopic(key).title)
+		expect(topics).toContain(assignTopic(key).title)
+		expect(topics).not.toContain(seedTopic(TOPIC_SLUG).title)
 		await expect(page.getByText(seedTest(key, 'foreign').title, { exact: true })).toHaveCount(0)
-		await expect(page.getByText('Новая тема', { exact: true })).toHaveCount(0)
+		await expect(page.getByRole('button', { name: 'Создать тему' })).toHaveCount(0)
+		await expect(page.getByRole('button', { name: 'Настройки банка' })).toHaveCount(0)
 		await expect(page.getByText('Баллы', { exact: true })).toHaveCount(0)
 		await expect(page.getByText('Типы вопросов', { exact: true })).toHaveCount(0)
 	})

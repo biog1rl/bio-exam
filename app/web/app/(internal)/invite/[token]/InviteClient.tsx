@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
+import Link from 'next/link'
+
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -18,6 +20,7 @@ export default function InviteClient({ token }: { token: string }) {
 	const [pass, setPass] = useState('')
 	const [pass2, setPass2] = useState('')
 	const [msg, setMsg] = useState<string | null>(null)
+	const [needsManualLogin, setNeedsManualLogin] = useState(false)
 
 	useEffect(() => {
 		;(async () => {
@@ -74,11 +77,31 @@ export default function InviteClient({ token }: { token: string }) {
 			window.location.href = '/dashboard'
 		} else {
 			setMsg(loginText)
+			setNeedsManualLogin(true)
 		}
 	}
 
 	if (loading) return <div className="p-6">Загрузка…</div>
-	if (!valid) return <div className="p-6">Ссылка недействительна (404).</div>
+	if (!valid) {
+		return (
+			<div className="flex justify-center p-6">
+				<Card className="w-full max-w-md">
+					<CardHeader>
+						<CardTitle>Ссылка недействительна</CardTitle>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<p className="text-sm text-muted-foreground">
+							Приглашение уже использовано или устарело. Если учётная запись уже активирована, войдите по логину; иначе
+							попросите новое приглашение у преподавателя.
+						</p>
+						<Button asChild>
+							<Link href="/login">Ко входу</Link>
+						</Button>
+					</CardContent>
+				</Card>
+			</div>
+		)
+	}
 
 	return (
 		<div className="flex justify-center p-6">
@@ -122,7 +145,13 @@ export default function InviteClient({ token }: { token: string }) {
 					</div>
 
 					{msg && <div className="text-sm text-muted-foreground">{msg}</div>}
-					<Button onClick={accept}>Сохранить</Button>
+					{needsManualLogin ? (
+						<Button asChild>
+							<Link href="/login">Ко входу</Link>
+						</Button>
+					) : (
+						<Button onClick={accept}>Сохранить</Button>
+					)}
 				</CardContent>
 			</Card>
 		</div>

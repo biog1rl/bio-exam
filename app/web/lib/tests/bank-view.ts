@@ -88,12 +88,6 @@ export function teachersLine(teachers: readonly TopicTeacher[]): string {
 	return `Учителя: ${teachers.length}`
 }
 
-export function topicHeroTeachersLine(teachers: readonly TopicTeacher[]): string {
-	if (teachers.length === 0) return 'Учитель не закреплён'
-	if (teachers.length === 1) return `Учитель: ${teacherDisplayName(teachers[0])}`
-	return `Учителя: ${teachers.map(teacherDisplayName).join(', ')}`
-}
-
 export function teacherTriggerLabel(selected: readonly TopicTeacher[]): string {
 	if (selected.length === 0) return 'Выберите учителей'
 	if (selected.length === 1) return teacherDisplayName(selected[0])

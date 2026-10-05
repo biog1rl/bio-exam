@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { request } from '@/lib/http/request'
+import { quickLinkSections } from '@/lib/navigation/sections'
 import { optionalAdminData } from '@/lib/tests/admin-optional'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
@@ -174,7 +175,8 @@ function EmptyPanel({ children }: { children: ReactNode }) {
 }
 
 export default function DashboardClient() {
-	const { me, can } = useAuth()
+	const { me, can, perms } = useAuth()
+	const quickLinks = useMemo(() => quickLinkSections(perms), [perms])
 	const canReadTests = can('tests', 'read')
 
 	const testsQuery = useSWR(canReadTests ? null : 'dashboard-public-tests', fetchPublicTestsList)
@@ -284,7 +286,7 @@ export default function DashboardClient() {
 
 	return (
 		<main className="space-y-5">
-			<section className="grid gap-5 xl:grid-cols-[1.08fr_.92fr]">
+			<section className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,.92fr)]">
 				<SoftPanel className="overflow-hidden p-unit-mob tab-sm:p-unit">
 					<div className="mb-6 flex flex-wrap gap-2">
 						<span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-2 text-sm text-secondary-foreground">
@@ -420,7 +422,7 @@ export default function DashboardClient() {
 			</section>
 
 			{canReadTests ? null : (
-				<section className="grid gap-5 xl:grid-cols-[1fr_23.75rem]">
+				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_23.75rem]">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<div className="flex flex-wrap items-start justify-between gap-4">
 							<SectionTitle kicker="студент" title="Доступные тесты" />
@@ -497,7 +499,7 @@ export default function DashboardClient() {
 			)}
 
 			{canReadTests ? (
-				<section className="grid gap-5 xl:grid-cols-[1fr_23.75rem]">
+				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_23.75rem]">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<SectionTitle kicker="история" title="Последние попытки студентов" />
 						<div className="mt-6 space-y-3">
@@ -530,36 +532,18 @@ export default function DashboardClient() {
 					</SoftPanel>
 
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<SectionTitle kicker="быстрый вход" title="Администрирование" />
+						<SectionTitle kicker="быстрый вход" title="Управление" />
 						<div className="mt-6 grid gap-3">
-							<Link
-								href="/tests"
-								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-							>
-								<span>Все тесты</span>
-								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-							</Link>
-							<Link
-								href="/admin/tests"
-								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-							>
-								<span>Настройка тестов и тем</span>
-								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-							</Link>
-							<Link
-								href="/admin/users"
-								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-							>
-								<span>Пользователи</span>
-								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-							</Link>
-							<Link
-								href="/admin/attempts"
-								className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-							>
-								<span>Попытки</span>
-								<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-							</Link>
+							{quickLinks.map((section) => (
+								<Link
+									key={section.href}
+									href={section.href}
+									className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
+								>
+									<span>{section.title}</span>
+									<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+								</Link>
+							))}
 						</div>
 					</SoftPanel>
 				</section>
@@ -663,7 +647,7 @@ export default function DashboardClient() {
       </section> */}
 
 			{canReadTests ? (
-				<section className="grid gap-5 tab:grid-cols-[23.75rem_1fr]">
+				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 tab:grid-cols-[23.75rem_minmax(0,1fr)]">
 					<SoftPanel className="p-unit-mob tab-sm:p-unit">
 						<SectionTitle kicker="учитель / админ" title="Состояние базы" />
 

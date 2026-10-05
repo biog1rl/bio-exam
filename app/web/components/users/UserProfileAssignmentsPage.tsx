@@ -6,6 +6,7 @@ import type { DateRange } from 'react-day-picker'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import {
+	ArrowRight,
 	CalendarIcon,
 	Check,
 	ChevronDown,
@@ -67,6 +68,7 @@ import {
 	resolvePeriodBounds,
 } from '@/lib/progress/attempt-chart'
 import { adminTestsKeys, adminTestsListFetcher } from '@/lib/tests/admin-api'
+import { attemptsUrl } from '@/lib/tests/attempts-url'
 import {
 	assignTest,
 	clearLoginThrottle,
@@ -78,6 +80,7 @@ import {
 	usersKeys,
 } from '@/lib/users/api'
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
+import { usersUrl } from '@/lib/users/users-url'
 
 type Props = {
 	login: string
@@ -99,23 +102,28 @@ function ProfileSectionCard({
 	children,
 	loading,
 	sources = [],
+	action,
 }: {
 	kicker: string
 	title: string
 	children: ReactNode
 	loading?: boolean
 	sources?: LoadSource[]
+	action?: ReactNode
 }) {
 	const titleRef = useRef<HTMLDivElement>(null)
 	const failed = failedSources(sources)
 
 	return (
 		<Card className="rounded-4xl border-border/80 bg-card/90">
-			<CardHeader>
-				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
-				<CardTitle ref={titleRef} tabIndex={-1} className="font-serif text-2xl leading-tight">
-					{title}
-				</CardTitle>
+			<CardHeader className="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
+					<CardTitle ref={titleRef} tabIndex={-1} className="font-serif text-2xl leading-tight">
+						{title}
+					</CardTitle>
+				</div>
+				{action}
 			</CardHeader>
 			<CardContent>
 				{failed.length > 0 ? (
@@ -446,9 +454,16 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						<div className="mt-2 flex flex-wrap items-center gap-2">
 							<h1 className="font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">{displayName}</h1>
 							{userGroups.map((group) => (
-								<Badge key={group.id} variant="secondary" className="rounded-full">
-									{group.name}
-								</Badge>
+								<Link
+									key={group.id}
+									href={usersUrl(group.id)}
+									title="Ученики группы"
+									className="rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+								>
+									<Badge variant="secondary" className="rounded-full hover:bg-secondary/70">
+										{group.name}
+									</Badge>
+								</Link>
 							))}
 						</div>
 						<p className="mt-4 font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">{user.login}</p>
@@ -534,6 +549,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				title="Пройденные тесты"
 				loading={attemptsLoading || assignmentsLoading}
 				sources={[attemptsSource, assignmentsSource]}
+				action={
+					<Link
+						href={attemptsUrl({ student: user.id, status: 'all' })}
+						className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+					>
+						Все попытки в журнале
+						<ArrowRight className="size-4" aria-hidden="true" />
+					</Link>
+				}
 			>
 				<div className="space-y-4">
 					{/* Filters */}

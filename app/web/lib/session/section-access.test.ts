@@ -6,18 +6,12 @@ import { beforeEach, describe, test, vi } from 'vitest'
 
 import { sectionForPath, type Section } from './route-permissions'
 
-const holders = vi.hoisted(() => ({ me: null as Record<string, unknown> | null, notFoundCalls: 0 }))
+const holders = vi.hoisted(() => ({ me: null as Record<string, unknown> | null }))
 
 vi.mock('server-only', () => ({}))
-vi.mock('next/navigation', () => ({
-	notFound: () => {
-		holders.notFoundCalls += 1
-		throw new Error('not-found')
-	},
-}))
 vi.mock('./server', () => ({ getServerMe: async () => holders.me }))
 
-const { requireSectionAccess } = await import('./section-access')
+const { sectionAccess } = await import('./section-access')
 
 function meWith(roles: string[], perms: string[]) {
 	return { id: 'u1', login: 'u1', roles, perms }
@@ -25,29 +19,26 @@ function meWith(roles: string[], perms: string[]) {
 
 beforeEach(() => {
 	holders.me = null
-	holders.notFoundCalls = 0
 })
 
-describe('requireSectionAccess', () => {
-	test('без сессии возвращает null и не вызывает notFound', async () => {
-		assert.equal(await requireSectionAccess('admin'), null)
-		assert.equal(holders.notFoundCalls, 0)
+describe('sectionAccess', () => {
+	test('без сессии — anonymous', async () => {
+		assert.deepEqual(await sectionAccess('admin'), { kind: 'anonymous' })
 	})
 
-	test('роль admin без нужного права не проходит: notFound, обхода по роли нет', async () => {
+	test('роль admin без нужного права не проходит, обхода по роли нет', async () => {
 		holders.me = meWith(['admin'], ['tests.read'])
-		await assert.rejects(requireSectionAccess('rbac'), /not-found/)
-		await assert.rejects(requireSectionAccess('settings'), /not-found/)
-		assert.equal(holders.notFoundCalls, 2)
+		assert.equal((await sectionAccess('rbac')).kind, 'denied')
+		assert.equal((await sectionAccess('settings')).kind, 'denied')
 	})
 
 	test('роль user с одним tests.read проходит в tests и attempts, но не в users и groups', async () => {
 		holders.me = meWith(['user'], ['tests.read'])
-		assert.equal(await requireSectionAccess('tests'), holders.me)
-		assert.equal(await requireSectionAccess('attempts'), holders.me)
-		assert.equal(await requireSectionAccess('admin'), holders.me)
-		await assert.rejects(requireSectionAccess('users'), /not-found/)
-		await assert.rejects(requireSectionAccess('groups'), /not-found/)
+		assert.deepEqual(await sectionAccess('tests'), { kind: 'allowed', me: holders.me })
+		assert.equal((await sectionAccess('attempts')).kind, 'allowed')
+		assert.equal((await sectionAccess('admin')).kind, 'allowed')
+		assert.equal((await sectionAccess('users')).kind, 'denied')
+		assert.equal((await sectionAccess('groups')).kind, 'denied')
 	})
 })
 
@@ -64,11 +55,11 @@ function layoutsUnder(dir: string): string[] {
 }
 
 describe('admin layouts запрашивают раздел своего пути', () => {
-	test('каждый layout с requireSectionAccess передаёт раздел, который даёт sectionForPath', () => {
+	test('каждый layout с SectionGate передаёт раздел, который даёт sectionForPath', () => {
 		const checked: string[] = []
 		for (const file of layoutsUnder(ADMIN_ROOT)) {
 			const source = readFileSync(file, 'utf8')
-			const match = source.match(/requireSectionAccess\('([a-z]+)'\)/)
+			const match = source.match(/SectionGate section="([a-z]+)"/)
 			if (!match) continue
 			const route = `/admin${path
 				.dirname(path.relative(ADMIN_ROOT, file))

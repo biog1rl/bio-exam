@@ -1,3 +1,5 @@
+import { isReservedTopicSlug } from '@bio-exam/rbac'
+
 import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -109,6 +111,9 @@ router.post('/topics', sessionRequired(), async (req, res, next) => {
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		}
+		if (isReservedTopicSlug(parsed.data.slug)) {
+			return res.status(400).json({ error: ERROR_MESSAGES.TOPIC_SLUG_RESERVED })
+		}
 
 		const userId = req.authUser?.id
 		const { slug, title, description, order, isActive } = parsed.data
@@ -146,6 +151,9 @@ router.patch('/topics/:id', validateUUID('id'), sessionRequired(), async (req, r
 		const parsed = TopicSchema.partial().safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
+		}
+		if (parsed.data.slug !== undefined && isReservedTopicSlug(parsed.data.slug)) {
+			return res.status(400).json({ error: ERROR_MESSAGES.TOPIC_SLUG_RESERVED })
 		}
 
 		const topic = await updateTopic({ topicId: id, data: parsed.data })

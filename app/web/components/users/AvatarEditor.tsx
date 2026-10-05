@@ -8,6 +8,7 @@ import { ImageUpload } from '@/components/ui/image-upload'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { DEFAULT_AVATAR_COLOR, readableTextOn } from '@/lib/utils/readable-text'
 
 interface AvatarEditorProps {
 	firstName?: string | null
@@ -66,7 +67,7 @@ export function AvatarEditor({
 	disabled = false,
 }: AvatarEditorProps) {
 	const [initials, setInitials] = useState(propInitials || '')
-	const [customColor, setCustomColor] = useState(avatarColor || '#3B82F6')
+	const [customColor, setCustomColor] = useState(avatarColor || DEFAULT_AVATAR_COLOR)
 	const [isOpen, setIsOpen] = useState(false)
 
 	// Обновляем инициалы только при изменении prop (из БД)
@@ -130,7 +131,10 @@ export function AvatarEditor({
 				<div className="relative">
 					<Avatar className={`${sizeClasses[size]} border-2 border-gray-200`}>
 						{avatarCropped || avatar ? <AvatarImage src={avatarCropped || avatar || undefined} alt="Avatar" /> : null}
-						<AvatarFallback className="font-semibold text-white" style={{ backgroundColor }}>
+						<AvatarFallback
+							className="font-semibold"
+							style={{ backgroundColor, color: readableTextOn(backgroundColor) }}
+						>
 							{getDisplayInitials()}
 						</AvatarFallback>
 					</Avatar>
@@ -201,7 +205,7 @@ export function AvatarEditor({
 									</div>
 								</PopoverContent>
 							</Popover>
-							<span className="text-sm text-gray-500">{backgroundColor}</span>
+							<span className="text-sm text-muted-foreground">{backgroundColor}</span>
 						</div>
 					</div>
 				</>

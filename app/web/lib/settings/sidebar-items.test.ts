@@ -1,62 +1,14 @@
-import { PERMISSION_DOMAINS, ROLE_REGISTRY, type PermissionDomain, type PermissionKey } from '@bio-exam/rbac'
-
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
 import type { SidebarItem } from './api'
-import {
-	ADMIN_LINK,
-	SIDEBAR_RELOAD_ERROR,
-	activeSidebarUrl,
-	moveSidebarItem,
-	sidebarNavItems,
-	sidebarReloadFailure,
-} from './sidebar-items'
-
-function rolePerms(role: keyof typeof ROLE_REGISTRY): Set<PermissionKey> {
-	const keys = new Set<PermissionKey>()
-	const grants = ROLE_REGISTRY[role].grants as Partial<Record<PermissionDomain, readonly string[]>>
-	for (const domain of Object.keys(grants) as PermissionDomain[]) {
-		const granted = grants[domain] ?? []
-		const actions: readonly string[] = granted.includes('*') ? PERMISSION_DOMAINS[domain].actions : granted
-		for (const action of actions) keys.add(`${domain}.${action}` as PermissionKey)
-	}
-	return keys
-}
+import { SIDEBAR_RELOAD_ERROR, activeSidebarUrl, moveSidebarItem, sidebarReloadFailure } from './sidebar-items'
 
 function item(id: string, url: string, order: number): SidebarItem {
 	return { id, title: `Пункт ${id}`, url, icon: 'CircleIcon', target: '_self', order, isActive: true }
 }
 
 const DB_ITEMS: readonly SidebarItem[] = [item('a', '/dashboard', 0), item('b', '/tests', 1)]
-
-test('администратор и учитель видят «Админку» после пунктов из базы', () => {
-	for (const role of ['admin', 'teacher'] as const) {
-		const nav = sidebarNavItems(DB_ITEMS, rolePerms(role))
-		assert.deepEqual(
-			nav.map((entry) => entry.url),
-			['/dashboard', '/tests', '/admin'],
-			role
-		)
-		assert.equal(nav.at(-1), ADMIN_LINK)
-	}
-})
-
-test('ученик и пользователь без прав «Админку» не видят', () => {
-	assert.deepEqual(sidebarNavItems(DB_ITEMS, rolePerms('user')), DB_ITEMS)
-	assert.deepEqual(sidebarNavItems(DB_ITEMS, new Set()), DB_ITEMS)
-})
-
-test('пункт /admin из базы не дублируется встроенным', () => {
-	const withAdmin = [...DB_ITEMS, item('c', '/admin', 2)]
-	const nav = sidebarNavItems(withAdmin, rolePerms('admin'))
-	assert.deepEqual(nav, withAdmin)
-	assert.equal(nav.filter((entry) => entry.url === '/admin').length, 1)
-})
-
-test('без пунктов из базы «Админка» остаётся единственным пунктом', () => {
-	assert.deepEqual(sidebarNavItems([], rolePerms('teacher')), [ADMIN_LINK])
-})
 
 test('sidebarReloadFailure: первая загрузка — блок, повторная — тост, auth и aborted — молча', () => {
 	assert.equal(SIDEBAR_RELOAD_ERROR, 'Ошибка загрузки пунктов меню')
@@ -93,7 +45,7 @@ test('moveSidebarItem: перенос на себя или неизвестны�
 })
 
 test('activeSidebarUrl: флаг isActive из базы не делает пункт активным, активен только пункт текущего адреса', () => {
-	const urls = sidebarNavItems(DB_ITEMS, rolePerms('admin')).map((entry) => entry.url)
+	const urls = [...DB_ITEMS.map((entry) => entry.url), '/admin']
 	assert.ok(DB_ITEMS.every((entry) => entry.isActive))
 	assert.equal(activeSidebarUrl(urls, '/dashboard'), '/dashboard')
 	assert.equal(activeSidebarUrl(urls, '/tests'), '/tests')
@@ -102,8 +54,8 @@ test('activeSidebarUrl: флаг isActive из базы не делает пун
 	assert.equal(activeSidebarUrl(urls, '/testsuite'), null)
 })
 
-test('activeSidebarUrl: «Админка» активна на /admin и вложенных', () => {
-	const urls = sidebarNavItems(DB_ITEMS, rolePerms('teacher')).map((entry) => entry.url)
+test('activeSidebarUrl: /admin активен на /admin и вложенных', () => {
+	const urls = [...DB_ITEMS.map((entry) => entry.url), '/admin']
 	assert.equal(activeSidebarUrl(urls, '/admin'), '/admin')
 	assert.equal(activeSidebarUrl(urls, '/admin/attempts'), '/admin')
 	assert.equal(activeSidebarUrl(urls, '/admin/attempts/1'), '/admin')

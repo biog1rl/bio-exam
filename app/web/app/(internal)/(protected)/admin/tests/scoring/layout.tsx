@@ -1,7 +1,5 @@
-import { requireSectionAccess } from '@/lib/session/section-access'
+import { SectionGate } from '@/components/auth/SectionGate'
 
-export default async function AdminScoringLayout({ children }: { children: React.ReactNode }) {
-	const me = await requireSectionAccess('catalog')
-	if (!me) return null
-	return <>{children}</>
+export default function AdminScoringLayout({ children }: { children: React.ReactNode }) {
+	return <SectionGate section="catalog">{children}</SectionGate>
 }

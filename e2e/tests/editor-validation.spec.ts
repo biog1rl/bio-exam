@@ -31,7 +31,7 @@ test('ошибка валидации в редакторе вопроса: од
 		const [questionRow] = ((await stored.json()) as { questions: { id: string }[] }).questions
 		const editUrl = `/admin/tests/${TOPIC_SLUG}/${own.slug}/questions/${questionRow.id}`
 		await page.goto(editUrl)
-		await expect(page.getByRole('heading', { level: 1, name: 'Редактирование' })).toBeVisible()
+		await expect(page.getByRole('heading', { level: 1, name: /^Вопрос \d+$/ })).toBeVisible()
 		await expect(page.getByRole('textbox').first()).toContainText(prompt)
 
 		const saves: string[] = []

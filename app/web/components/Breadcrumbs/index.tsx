@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -13,148 +13,66 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { breadcrumbConfig, matchPath } from '@/config/breadcrumbs'
+import { ASYNC_LABEL_WAIT_MS, breadcrumbConfig, matchPath } from '@/config/breadcrumbs'
+import { crumbTrail, fallbackCrumbLabel, staticCrumbLabel } from '@/lib/navigation/crumbs'
+import { HOME_PATH } from '@/lib/navigation/paths'
 
 import LoaderComponent from '../LoaderComponent'
 import { useBreadcrumbs } from './BreadcrumbsContext'
 
-type DocsNode = {
-	segmentSlug: string
-	name: string
-	title?: string
-	children?: DocsNode[]
-}
+const LABEL_CLASS = 'block max-w-40 truncate tab-sm:max-w-64'
 
-function getChildren(nodeOrArray: DocsNode | DocsNode[] | null | undefined): DocsNode[] {
-	if (!nodeOrArray) return []
-	return Array.isArray(nodeOrArray) ? nodeOrArray : (nodeOrArray.children ?? [])
-}
-
-function humanize(segment: string) {
-	try {
-		segment = decodeURIComponent(segment)
-	} catch {}
-	segment = segment.replace(/[-_]+/g, ' ').trim()
-	return segment.charAt(0).toUpperCase() + segment.slice(1)
-}
-
-function safeDecode(s: string) {
-	try {
-		return decodeURIComponent(s)
-	} catch {
-		return s
-	}
-}
-
-export default function Breadcrumbs({ initialLabels }: { initialLabels?: Record<string, string> }) {
-	const tree = null
-	const { labels: contextLabels } = useBreadcrumbs()
-
+export default function Breadcrumbs() {
+	const { labels } = useBreadcrumbs()
 	const pathname = usePathname() || '/'
-	const parts = pathname.split('?')[0].split('#')[0].split('/').filter(Boolean)
-	const root = parts[0]
-	const { hideOn, treeRoots, labelOverrides, asyncLabelOn, hideSegmentsOn } = breadcrumbConfig
+	const [waitedFor, setWaitedFor] = useState<string | null>(null)
 
-	const hiddenSegments = useMemo(() => {
-		const acc = new Set<string>()
-		for (const rule of hideSegmentsOn ?? []) {
-			if (matchPath([rule.pattern], pathname, parts)) {
-				for (const segment of rule.segments) {
-					acc.add(segment)
-				}
-			}
-		}
-		return acc
-	}, [hideSegmentsOn, pathname, parts])
+	useEffect(() => {
+		const timer = setTimeout(() => setWaitedFor(pathname), ASYNC_LABEL_WAIT_MS)
+		return () => clearTimeout(timer)
+	}, [pathname])
 
-	const items = parts.map((seg, idx) => {
-		const href = '/' + parts.slice(0, idx + 1).join('/')
-		return { label: seg, href, last: idx === parts.length - 1 }
+	if (matchPath(breadcrumbConfig.hideOn, pathname)) return null
+
+	const trail = crumbTrail(pathname)
+	const items = trail.map((href, index) => {
+		const known = labels[href] ?? staticCrumbLabel(href)
+		const waiting = !known && waitedFor !== pathname && matchPath(breadcrumbConfig.asyncLabelOn, href)
+		return { href, label: known ?? fallbackCrumbLabel(href), waiting, last: index === trail.length - 1 }
 	})
-	const filteredItems = items
-		.filter((item) => !hiddenSegments.has(item.label))
-		.map((item, idx, arr) => ({ ...item, last: idx === arr.length - 1 }))
-
-	const shouldHide = matchPath(hideOn, pathname, parts)
-
-	type StoreTree = DocsNode | DocsNode[] | null | undefined
-	const treeHrefToLabel = useMemo(() => {
-		const map = new Map<string, string>()
-
-		if (!root || !treeRoots.includes(root as (typeof treeRoots)[number])) return map
-
-		let level: DocsNode[] = getChildren(tree as StoreTree)
-
-		for (let i = 1; i < parts.length; i++) {
-			const seg = safeDecode(parts[i])
-			const href = '/' + parts.slice(0, i + 1).join('/')
-
-			const node = level.find((n) => safeDecode(n.segmentSlug) === seg)
-			if (!node) break
-
-			const displayName = node.title ?? node.name
-			map.set(href, displayName)
-			level = getChildren(node)
-		}
-
-		return map
-	}, [parts, root, tree, treeRoots])
-
-	const displayItems = useMemo(() => {
-		const allLabels = { ...initialLabels, ...contextLabels }
-
-		return filteredItems.map((item) => {
-			const raw = item.label
-			const prettyFromTree =
-				root && treeRoots.includes(root as (typeof treeRoots)[number]) ? treeHrefToLabel.get(item.href) : undefined
-			const prettyFromLabels = allLabels?.[item.href]
-			const prettyFromOverrides = labelOverrides[raw]
-			const resolvedLabel = prettyFromLabels ?? prettyFromTree ?? prettyFromOverrides
-			const itemParts = item.href.split('?')[0].split('#')[0].split('/').filter(Boolean)
-			const shouldWaitForAsyncLabel = !resolvedLabel && matchPath(asyncLabelOn, item.href, itemParts)
-
-			return {
-				...item,
-				pretty: resolvedLabel ?? humanize(raw),
-				shouldShowLoader: shouldWaitForAsyncLabel,
-			}
-		})
-	}, [contextLabels, initialLabels, asyncLabelOn, filteredItems, labelOverrides, root, treeHrefToLabel, treeRoots])
-
-	if (shouldHide) {
-		return null
-	}
 
 	return (
 		<Breadcrumb>
 			<BreadcrumbList>
 				<BreadcrumbItem>
-					{filteredItems.length === 0 ? (
+					{items.length === 0 ? (
 						<BreadcrumbPage>Главная</BreadcrumbPage>
 					) : (
 						<BreadcrumbLink asChild>
-							<Link href="/">Главная</Link>
+							<Link href={HOME_PATH}>Главная</Link>
 						</BreadcrumbLink>
 					)}
 				</BreadcrumbItem>
 
-				{displayItems.map((item) => (
-					<span key={item.href} className="flex items-center gap-x-2">
+				{items.map((item) => (
+					<Fragment key={item.href}>
 						<BreadcrumbSeparator />
 						<BreadcrumbItem>
-							{item.shouldShowLoader ? (
+							{item.waiting ? (
 								<BreadcrumbPage aria-label="Загрузка названия">
 									<LoaderComponent />
 								</BreadcrumbPage>
 							) : item.last ? (
-								<BreadcrumbPage>{item.pretty}</BreadcrumbPage>
+								<BreadcrumbPage className={LABEL_CLASS}>{item.label}</BreadcrumbPage>
 							) : (
 								<BreadcrumbLink asChild>
-									<Link href={item.href}>{item.pretty}</Link>
+									<Link href={item.href} className={LABEL_CLASS}>
+										{item.label}
+									</Link>
 								</BreadcrumbLink>
 							)}
 						</BreadcrumbItem>
-					</span>
+					</Fragment>
 				))}
 			</BreadcrumbList>
 		</Breadcrumb>

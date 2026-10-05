@@ -1,7 +1,5 @@
-import { requireSectionAccess } from '@/lib/session/section-access'
+import { SectionGate } from '@/components/auth/SectionGate'
 
-export default async function AdminUsersLayout({ children }: { children: React.ReactNode }) {
-	const me = await requireSectionAccess('users')
-	if (!me) return null
-	return <>{children}</>
+export default function AdminUsersLayout({ children }: { children: React.ReactNode }) {
+	return <SectionGate section="users">{children}</SectionGate>
 }

@@ -5,6 +5,7 @@ import { keyShapeFor } from '@bio-exam/exam-core'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 
 import { Check, CircleAlert, Loader2, Plus, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 
 import { Editor } from '@/components/editor/editor'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,15 @@ interface Props {
 	isSaving?: boolean
 	autosaveStatus?: { view: AutosaveStatusView; onRetry: () => void } | null
 	leaving?: boolean
+	context?: QuestionEditorContext
+}
+
+export type QuestionEditorContext = {
+	number: number | null
+	total: number
+	testTitle: string
+	topicTitle?: string
+	testHref: string
 }
 
 const AUTOSAVE_ICON = { check: Check, loader: Loader2, alert: CircleAlert } as const
@@ -54,6 +64,7 @@ export default function QuestionEditor({
 	isSaving,
 	autosaveStatus,
 	leaving,
+	context,
 }: Props) {
 	const [form, setForm] = useState<Question>({ ...question })
 	const availableQuestionTypes = questionTypes.filter((item) => item.isActive || item.key === form.type)
@@ -133,14 +144,23 @@ export default function QuestionEditor({
 			{/* Header */}
 			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
 				<div className="flex flex-col gap-5 tab:flex-row tab:items-end tab:justify-between">
-					<div>
+					<div className="min-w-0">
 						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">вопрос</p>
 						<h1 className="mt-2 font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">
-							{question.id ? 'Редактирование' : 'Новый вопрос'}
+							{question.id ? (context?.number ? `Вопрос ${context.number}` : 'Вопрос') : 'Новый вопрос'}
 						</h1>
-						<p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-							Настройте формулировку, варианты ответа и правила проверки.
-						</p>
+						{context ? (
+							<p className="mt-3 max-w-2xl text-sm break-words text-muted-foreground">
+								{question.id && context.number ? `из ${context.total} · ` : `будет ${context.total + 1}-м · `}
+								<Link
+									href={context.testHref}
+									className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+								>
+									{context.testTitle}
+								</Link>
+								{context.topicTitle ? ` · ${context.topicTitle}` : null}
+							</p>
+						) : null}
 					</div>
 					<div className={cn('flex flex-wrap gap-2', autosaveStatus !== undefined && 'items-center tab:justify-end')}>
 						{autosaveStatus ? <AutosaveStatusLine status={autosaveStatus} /> : null}

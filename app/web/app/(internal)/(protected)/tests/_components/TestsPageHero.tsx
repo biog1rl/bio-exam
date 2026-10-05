@@ -20,7 +20,7 @@ export function TestsPageHero({ stats }: { stats: PublicTestsStats }) {
 				<div>
 					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">практика</p>
 					<h1 className="mt-2 max-w-3xl font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">
-						Каталог тестов
+						Тесты
 					</h1>
 					<p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
 						Выберите тему, пройдите доступный тест и возвращайтесь к результатам, когда нужно закрепить материал.

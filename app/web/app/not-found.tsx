@@ -1,53 +1,47 @@
 'use client'
 
+import { ArrowLeft, Home } from 'lucide-react'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 
-import { MorphBlob } from '@/components/MorphBlob'
 import { Button } from '@/components/ui/button'
+import { HOME_PATH, backAction } from '@/lib/navigation/paths'
 
 export default function NotFound() {
 	const router = useRouter()
+	const pathname = usePathname() || '/'
 
 	const handleBack = () => {
-		if (window.history.length > 1) {
-			router.back()
-		} else {
-			router.push('/')
-		}
+		const navigation = (window as { navigation?: { canGoBack?: boolean } }).navigation
+		const action = backAction(pathname, navigation?.canGoBack ?? window.history.length > 1)
+		if (action.kind === 'history') router.back()
+		else router.push(action.href)
 	}
 
 	return (
-		<div className="fixed top-0 left-0 flex h-screen w-full items-center justify-center bg-background">
-			<div className="pointer-events-none absolute top-0 left-0 z-0 h-screen w-screen bg-[url('/img/noise.png')]" />
-
-			<div className="flex flex-col items-center gap-y-4 text-center">
-				<h1 className="animate-delay-1000 animate-[levitate_15s_ease_infinite] text-8xl font-bold">404-error</h1>
-				<p className="animate-delay-700 animate-[levitate_15s_ease_infinite] text-3xl font-semibold uppercase">
-					PAGE NOT FOUND
+		<div className="flex min-h-[70dvh] flex-col items-center justify-center gap-unit-mob px-4 text-center tab-sm:gap-unit">
+			<Image src="/img/not-found.png" alt="" width={220} height={220} className="h-auto w-40 tab-sm:w-56" priority />
+			<div className="max-w-xl">
+				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">ошибка 404</p>
+				<h1 className="mt-2 font-serif text-4xl leading-tight text-balance text-foreground tab-sm:text-5xl">
+					Страница не найдена
+				</h1>
+				<p className="mt-4 text-base leading-7 text-pretty text-muted-foreground">
+					Адрес набран с ошибкой, страницу удалили или она вам недоступна.
 				</p>
-				<p className="animate-delay-500 animate-[levitate_15s_ease_infinite] text-xl text-gray-600">
-					Ну такой страницы нет вообще, либо кто-то что-то сломал
-				</p>
-				<Button onClick={handleBack} variant="outline" className="w-fit animate-[levitate_15s_ease_infinite]">
-					Вернуться назад
-				</Button>
 			</div>
-
-			<div className="pointer-events-none relative">
-				<Image
-					src="/img/not-found.png"
-					alt="Not Found"
-					width={300}
-					height={300}
-					className="animate-delay-1000 relative z-10 animate-[levitate_16s_ease_infinite]"
-				/>
-
-				<MorphBlob
-					className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45"
-					height={700}
-					width={1000}
-				/>
+			<div className="flex w-full flex-col justify-center gap-2 mob:w-auto mob:flex-row">
+				<Button asChild className="rounded-full">
+					<Link href={HOME_PATH}>
+						<Home className="size-4" aria-hidden="true" />
+						На главную
+					</Link>
+				</Button>
+				<Button variant="outline" className="rounded-full bg-card" onClick={handleBack}>
+					<ArrowLeft className="size-4" aria-hidden="true" />
+					Назад
+				</Button>
 			</div>
 		</div>
 	)

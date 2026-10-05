@@ -37,6 +37,7 @@ export const ERROR_MESSAGES = {
 	// Conflicts
 	SLUG_EXISTS: 'Resource with this slug already exists',
 	TOPIC_SLUG_EXISTS: 'Topic with this slug already exists',
+	TOPIC_SLUG_RESERVED: 'Этот адрес темы занят разделом сайта, выберите другой',
 	TEST_SLUG_EXISTS: 'Test with this slug already exists in this topic',
 
 	// RBAC

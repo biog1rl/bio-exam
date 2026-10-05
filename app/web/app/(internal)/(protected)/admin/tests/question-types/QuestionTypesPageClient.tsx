@@ -1,23 +1,29 @@
 'use client'
 
+import { QUESTION_UI_TEMPLATES } from '@bio-exam/exam-core'
+
 import { useMemo, useRef, useState } from 'react'
 
-import { ArrowLeft, Plus, Settings } from 'lucide-react'
+import { Plus, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { useRowLink } from '@/components/table/use-row-link'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { failureMessage } from '@/lib/http/errors'
 import { adminTestsKeys, questionTypesFetcher, saveQuestionType } from '@/lib/tests/admin-api'
+import { cn } from '@/lib/utils/cn'
 
 import QuestionTypeScoringRuleEditor from '../components/QuestionTypeScoringRuleEditor'
 import {
@@ -65,11 +71,12 @@ export default function QuestionTypesPageClient() {
 		questionTypesFetcher
 	)
 	const types = useMemo(() => data?.questionTypes ?? [], [data])
+	const rowLink = useRowLink()
 	const loadFailed = error !== undefined && data === undefined
 
 	const handleCreate = async () => {
 		if (!form.key.trim() || !form.title.trim()) {
-			toast.error('Заполните key и название')
+			toast.error('Заполните код типа и название')
 			return
 		}
 		setSaving(true)
@@ -105,31 +112,30 @@ export default function QuestionTypesPageClient() {
 	}
 
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<h1 ref={titleRef} tabIndex={-1} className="text-2xl font-semibold">
+		<div className="space-y-5">
+			<section className="flex flex-col gap-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:flex-row tab-sm:items-start tab-sm:justify-between tab-sm:p-unit">
+				<div className="min-w-0">
+					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">банк заданий</p>
+					<h1
+						ref={titleRef}
+						tabIndex={-1}
+						className="mt-2 font-serif text-3xl leading-tight text-foreground tab-sm:text-4xl"
+					>
 						Типы вопросов
 					</h1>
-					<p className="text-sm text-muted-foreground">Настройка шаблонов, названий и формул начисления баллов</p>
-				</div>
-				<div className="flex gap-2">
-					<Button variant="outline" asChild>
-						<Link href="/admin/tests">
-							<ArrowLeft className="mr-2 h-4 w-4" />К тестам
+					<p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+						Шаблон ответа, проверка вариантов и формула баллов для каждого типа. Баллы для отдельного теста — в{' '}
+						<Link href="/admin/tests/scoring" className="font-medium text-primary underline-offset-4 hover:underline">
+							настройке баллов
 						</Link>
-					</Button>
-					<Button variant="outline" asChild>
-						<Link href="/admin/tests/scoring">
-							<Settings className="mr-2 h-4 w-4" />К настройке баллов
-						</Link>
-					</Button>
-					<Button onClick={() => setDialogOpen(true)}>
-						<Plus className="mr-2 h-4 w-4" />
-						Новый тип
-					</Button>
+						.
+					</p>
 				</div>
-			</div>
+				<Button className="shrink-0 rounded-full" onClick={() => setDialogOpen(true)}>
+					<Plus className="size-4" aria-hidden="true" />
+					Новый тип
+				</Button>
+			</section>
 
 			{loadFailed ? (
 				<LoadErrorAlert
@@ -139,32 +145,79 @@ export default function QuestionTypesPageClient() {
 					focusTarget={titleRef}
 				/>
 			) : isLoading ? (
-				<Card>
-					<CardContent className="py-8 text-sm">Загрузка...</CardContent>
-				</Card>
+				<Skeleton className="h-72 rounded-3xl" aria-label="Загрузка типов вопросов" />
 			) : (
-				<div className="grid gap-3">
-					{types.map((item) => (
-						<Card key={item.key}>
-							<CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-								<div className="space-y-1">
-									<p className="font-medium">{item.title}</p>
-									<p className="text-xs text-muted-foreground">
-										`{item.key}` • {item.uiTemplate}
-										{item.isSystem ? ' • system' : ''}
-										{item.isActive ? '' : ' • disabled'}
-									</p>
-									{item.description ? <p className="text-sm text-muted-foreground">{item.description}</p> : null}
-								</div>
-								<Button variant="outline" asChild>
-									<Link href={`/admin/tests/question-types/${item.key}`}>
-										<Settings className="mr-2 h-4 w-4" />
-										Настроить
-									</Link>
-								</Button>
-							</CardContent>
-						</Card>
-					))}
+				<div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-sm">
+					<Table className="table-fixed">
+						<TableHeader>
+							<TableRow className="hover:bg-transparent">
+								<TableHead className="pl-4">Тип</TableHead>
+								<TableHead className="hidden w-48 tab-sm:table-cell">Шаблон ответа</TableHead>
+								<TableHead className="hidden w-44 tab:table-cell">Код</TableHead>
+								<TableHead className="hidden w-52 mob:table-cell">Статус</TableHead>
+								<TableHead className="w-14 pr-3">
+									<span className="sr-only">Настроить</span>
+								</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{types.map((item) => {
+								const href = `/admin/tests/question-types/${item.key}`
+								const template = TEMPLATE_META[item.uiTemplate]?.label ?? item.uiTemplate
+								return (
+									<TableRow key={item.key} className="cursor-pointer" {...rowLink(href)}>
+										<TableCell className="py-3 pl-4">
+											<Link
+												href={href}
+												className={cn(
+													'font-medium [overflow-wrap:anywhere] transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none',
+													item.isActive ? 'text-foreground' : 'text-muted-foreground'
+												)}
+											>
+												{item.title}
+											</Link>
+											{item.description ? (
+												<p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
+											) : null}
+											<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
+												{template}
+												<span className="mob:hidden"> · {item.isActive ? 'активен' : 'отключён'}</span>
+											</p>
+										</TableCell>
+										<TableCell className="hidden text-muted-foreground tab-sm:table-cell">{template}</TableCell>
+										<TableCell className="hidden truncate font-mono text-xs text-muted-foreground tab:table-cell">
+											{item.key}
+										</TableCell>
+										<TableCell className="hidden mob:table-cell">
+											<span className="flex flex-wrap gap-1">
+												<Badge variant={item.isActive ? 'default' : 'secondary'} className="rounded-full">
+													{item.isActive ? 'Активен' : 'Отключён'}
+												</Badge>
+												{item.isSystem ? (
+													<Badge variant="outline" className="rounded-full">
+														Системный
+													</Badge>
+												) : null}
+											</span>
+										</TableCell>
+										<TableCell className="pr-3">
+											<Button
+												asChild
+												size="icon"
+												variant="ghost"
+												className="size-8 rounded-full"
+												aria-label={`Настроить тип ${item.title}`}
+											>
+												<Link href={href}>
+													<Settings className="size-4" aria-hidden="true" />
+												</Link>
+											</Button>
+										</TableCell>
+									</TableRow>
+								)
+							})}
+						</TableBody>
+					</Table>
 				</div>
 			)}
 
@@ -174,10 +227,11 @@ export default function QuestionTypesPageClient() {
 						<DialogTitle>Новый тип вопроса</DialogTitle>
 					</DialogHeader>
 					<div className="space-y-4">
-						<div className="grid gap-3 md:grid-cols-2">
+						<div className="grid gap-3 tab-sm:grid-cols-2">
 							<div className="space-y-1">
-								<Label>Ключ</Label>
+								<Label htmlFor="new-type-key">Код типа</Label>
 								<Input
+									id="new-type-key"
 									value={form.key}
 									onChange={(e) =>
 										setForm((prev) => ({
@@ -188,34 +242,35 @@ export default function QuestionTypesPageClient() {
 												.replace(/[^a-z0-9_]/g, ''),
 										}))
 									}
-									placeholder="my_custom_type"
+									placeholder="kratkiy_otvet_3"
 								/>
 								<p className="text-xs text-muted-foreground">
-									Технический id типа. Используются только `a-z`, `0-9`, `_`. После создания лучше не менять.
+									Латинские буквы, цифры и подчёркивание. После создания не меняется.
 								</p>
 							</div>
 							<div className="space-y-1">
-								<Label>Название</Label>
-								<Input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
-								<p className="text-xs text-muted-foreground">
-									Отображаемое название в редакторе и на страницах настройки.
-								</p>
+								<Label htmlFor="new-type-title">Название</Label>
+								<Input
+									id="new-type-title"
+									value={form.title}
+									onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+								/>
+								<p className="text-xs text-muted-foreground">Так тип называется при выборе в вопросе.</p>
 							</div>
 						</div>
 						<div className="space-y-1">
-							<Label>Описание</Label>
+							<Label htmlFor="new-type-description">Описание</Label>
 							<Textarea
+								id="new-type-description"
 								value={form.description}
 								onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
 								rows={2}
 							/>
-							<p className="text-xs text-muted-foreground">
-								Кратко опишите, как должен отвечать пользователь в этом типе.
-							</p>
+							<p className="text-xs text-muted-foreground">Подсказка для того, кто составляет вопросы.</p>
 						</div>
-						<div className="grid gap-3 md:grid-cols-2">
+						<div className="grid gap-3 tab-sm:grid-cols-2">
 							<div className="space-y-1">
-								<Label>UI шаблон</Label>
+								<Label htmlFor="new-type-template">Формат ответа</Label>
 								<Select
 									value={form.uiTemplate}
 									onValueChange={(value) =>
@@ -226,90 +281,77 @@ export default function QuestionTypesPageClient() {
 										}))
 									}
 								>
-									<SelectTrigger>
+									<SelectTrigger id="new-type-template" className="w-full">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="short_text">short_text</SelectItem>
-										<SelectItem value="sequence_digits">sequence_digits</SelectItem>
-										<SelectItem value="single_choice">single_choice</SelectItem>
-										<SelectItem value="multi_choice">multi_choice</SelectItem>
-										<SelectItem value="matching">matching</SelectItem>
+										{QUESTION_UI_TEMPLATES.map((template) => (
+											<SelectItem key={template} value={template}>
+												{TEMPLATE_META[template].label}
+											</SelectItem>
+										))}
 									</SelectContent>
 								</Select>
-								<p className="text-xs text-muted-foreground">
-									Шаблон определяет формат ответа и доступные метрики ошибок для этого типа.
-								</p>
+								<p className="text-xs text-muted-foreground">{TEMPLATE_META[form.uiTemplate].description}</p>
 							</div>
-							<div className="flex items-center justify-between rounded border p-3">
-								<div>
-									<p className="text-sm font-medium">Активен</p>
-									<p className="text-xs text-muted-foreground">
-										Если выключено, тип скрывается в выборе для новых вопросов
-									</p>
-								</div>
+							<div className="flex items-center justify-between gap-4 rounded-2xl bg-secondary/50 px-3 py-2">
+								<Label htmlFor="new-type-active" className="block cursor-pointer">
+									<span className="block text-sm font-medium text-foreground">Тип доступен</span>
+									<span className="block text-xs font-normal text-muted-foreground">
+										Если выключить, тип нельзя выбрать в новых вопросах.
+									</span>
+								</Label>
 								<Switch
+									id="new-type-active"
 									checked={form.isActive}
 									onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isActive: checked }))}
 								/>
 							</div>
 						</div>
-						<Card>
-							<CardHeader>
-								<CardTitle className="text-base">Памятка по шаблону</CardTitle>
-							</CardHeader>
-							<CardContent className="space-y-1 text-sm">
-								<p className="font-medium">{TEMPLATE_META[form.uiTemplate].label}</p>
-								<p className="text-muted-foreground">{TEMPLATE_META[form.uiTemplate].description}</p>
-								<p className="text-muted-foreground">Формат ответа: {TEMPLATE_META[form.uiTemplate].answerFormat}</p>
-								<p className="text-muted-foreground">Пример: {TEMPLATE_META[form.uiTemplate].example}</p>
-							</CardContent>
-						</Card>
-						<Card>
-							<CardHeader>
-								<CardTitle className="text-base">Валидация (опционально)</CardTitle>
-								<CardDescription>Дополнительные ограничения для данного типа</CardDescription>
-							</CardHeader>
-							<CardContent className="grid gap-3 md:grid-cols-3">
+						<div className="space-y-2">
+							<p className="text-sm font-medium text-foreground">Ограничения вариантов (необязательно)</p>
+							<div className="grid gap-3 tab-sm:grid-cols-3">
 								<div className="space-y-1">
-									<Label>minOptions</Label>
+									<Label htmlFor="new-type-min">Вариантов не меньше</Label>
 									<Input
+										id="new-type-min"
 										type="number"
 										min={0}
 										value={form.validationMinOptions}
 										onChange={(e) => setForm((prev) => ({ ...prev, validationMinOptions: e.target.value }))}
 									/>
-									<p className="text-xs text-muted-foreground">Минимум вариантов ответа (для choice-шаблонов).</p>
+									<p className="text-xs text-muted-foreground">Сколько вариантов ответа должно быть минимум.</p>
 								</div>
 								<div className="space-y-1">
-									<Label>maxOptions</Label>
+									<Label htmlFor="new-type-max">Вариантов не больше</Label>
 									<Input
+										id="new-type-max"
 										type="number"
 										min={0}
 										value={form.validationMaxOptions}
 										onChange={(e) => setForm((prev) => ({ ...prev, validationMaxOptions: e.target.value }))}
 									/>
-									<p className="text-xs text-muted-foreground">Максимум вариантов ответа.</p>
+									<p className="text-xs text-muted-foreground">Сколько вариантов ответа может быть максимум.</p>
 								</div>
 								<div className="space-y-1">
-									<Label>exactChoiceCount</Label>
+									<Label htmlFor="new-type-exact">Верных ответов ровно</Label>
 									<Input
+										id="new-type-exact"
 										type="number"
 										min={0}
 										value={form.validationExactChoiceCount}
 										onChange={(e) => setForm((prev) => ({ ...prev, validationExactChoiceCount: e.target.value }))}
 									/>
-									<p className="text-xs text-muted-foreground">
-										Требует фиксированное количество выбранных вариантов. Пример: `3 из 6`.
-									</p>
+									<p className="text-xs text-muted-foreground">Например, 3 для заданий «выберите три ответа».</p>
 								</div>
-							</CardContent>
-						</Card>
+							</div>
+						</div>
 						<div className="space-y-2">
-							<Label>Формула начисления баллов</Label>
+							<p className="text-sm font-medium text-foreground">Формула баллов</p>
 							<QuestionTypeScoringRuleEditor
 								rule={form.scoringRule}
 								uiTemplate={form.uiTemplate}
+								onlyFields
 								onChange={(next) => setForm((prev) => ({ ...prev, scoringRule: next }))}
 							/>
 						</div>

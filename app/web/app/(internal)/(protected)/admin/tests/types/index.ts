@@ -43,51 +43,33 @@ export interface TestScoringRules {
 
 export type QuestionTypeTier = NonNullable<QuestionTypeScoringRule['tiers']>[number]
 
-export const TEMPLATE_META: Record<
-	QuestionUiTemplate,
-	{
-		label: string
-		description: string
-		answerFormat: string
-		example: string
-	}
-> = {
+export const TEMPLATE_META: Record<QuestionUiTemplate, { label: string; description: string }> = {
 	single_choice: {
 		label: 'Один вариант',
-		description: 'Пользователь выбирает один ответ из списка.',
-		answerFormat: '`correct` = строковый id варианта',
-		example: 'Вопрос: 2+2. Варианты: [1,2,3,4], correct = "4"',
+		description: 'Ученик выбирает один ответ из списка.',
 	},
 	multi_choice: {
 		label: 'Множественный выбор',
-		description: 'Пользователь отмечает несколько вариантов.',
-		answerFormat: '`correct` = массив id вариантов',
-		example: 'Выберите 3 признака. correct = ["1","3","5"]',
+		description: 'Ученик отмечает несколько вариантов.',
 	},
 	matching: {
 		label: 'Сопоставление',
 		description: 'Нужно сопоставить элементы слева и справа.',
-		answerFormat: '`correct` = объект leftId -> rightId',
-		example: 'correct = { "a": "1", "b": "2", "c": "3" }',
 	},
 	short_text: {
 		label: 'Краткий ответ',
 		description: 'Одна строка: слово, число или код.',
-		answerFormat: '`correct` = строка',
-		example: 'correct = "митоз"',
 	},
 	sequence_digits: {
 		label: 'Последовательность цифр',
 		description: 'Ответ проверяется как порядок цифр.',
-		answerFormat: '`correct` = строка из цифр без пробелов',
-		example: 'correct = "2314"',
 	},
 }
 
 export const MISTAKE_METRIC_LABELS: Record<MistakeMetric, string> = {
 	boolean_correct: 'Точное совпадение (0/1)',
-	set_distance: 'Расстояние множеств (для multi-choice)',
-	pair_mismatch_count: 'Количество неверных пар (для matching)',
+	set_distance: 'Лишние и пропущенные варианты',
+	pair_mismatch_count: 'Количество неверных пар',
 	compact_text_equal: 'Сравнение строк без пробелов/регистра',
 	compact_text_in_set: 'Совпадение с одним из вариантов',
 	hamming_digits: 'Позиционные ошибки в последовательности',

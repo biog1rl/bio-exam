@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { ArrowLeft, Loader2, Save, Settings } from 'lucide-react'
+import { Loader2, Save } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -10,11 +10,13 @@ import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { failureMessage } from '@/lib/http/errors'
 import {
 	adminTestsKeys,
@@ -23,57 +25,75 @@ import {
 	saveTestScoringRules,
 	scoringRulesFetcher,
 	topicsListFetcher,
+	type QuestionTypeOverridePayload,
 } from '@/lib/tests/admin-api'
 
 import { QuestionTypeScoringRuleEditorFields } from '../components/QuestionTypeScoringRuleEditor'
-import { TEMPLATE_META, isMetricAllowedForTemplate, type QuestionTypeDefinition } from '../types'
+import { MISTAKE_METRIC_LABELS, TEMPLATE_META, isMetricAllowedForTemplate, type QuestionTypeDefinition } from '../types'
 
 type Scope = 'global' | 'test'
 
 const RULES_SWR_OPTIONS = { revalidateOnFocus: false, revalidateOnReconnect: false, revalidateOnMount: false }
 
+const KICKER_CLASS = 'font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase'
+
+const SEGMENT_CLASS =
+	'h-8 shrink-0 rounded-full px-4 text-muted-foreground hover:bg-transparent hover:text-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm'
+
 function validateScoring(type: QuestionTypeDefinition): string | null {
 	const rule = type.scoringRule
+	const name = `Тип «${type.title}»`
 	if (!isMetricAllowedForTemplate(type.uiTemplate, rule.mistakeMetric)) {
-		return `Тип "${type.title}": метрика ${rule.mistakeMetric} несовместима с шаблоном ${type.uiTemplate}`
+		return `${name}: подсчёт ошибок «${MISTAKE_METRIC_LABELS[rule.mistakeMetric]}» не подходит к формату «${TEMPLATE_META[type.uiTemplate].label}»`
 	}
 	if (!Number.isFinite(rule.correctPoints) || rule.correctPoints < 0) {
-		return `Тип "${type.title}": неверные баллы за правильный ответ`
+		return `${name}: неверные баллы за правильный ответ`
 	}
 	if (rule.formula === 'one_mistake_partial') {
 		if (!Number.isFinite(rule.oneMistakePoints ?? NaN) || (rule.oneMistakePoints ?? -1) < 0) {
-			return `Тип "${type.title}": неверные баллы за 1 ошибку`
+			return `${name}: неверные баллы за одну ошибку`
 		}
 		if ((rule.oneMistakePoints ?? 0) > rule.correctPoints) {
-			return `Тип "${type.title}": баллы за 1 ошибку не могут быть больше полного балла`
+			return `${name}: баллы за одну ошибку не могут быть больше полного балла`
 		}
 	}
 	if (rule.formula === 'tiers') {
-		if (!rule.tiers || rule.tiers.length === 0) {
-			return `Тип "${type.title}": добавьте хотя бы один tier`
-		}
+		if (!rule.tiers || rule.tiers.length === 0) return `${name}: добавьте хотя бы одну ступень шкалы`
 		for (const tier of rule.tiers) {
 			if (!Number.isFinite(tier.maxMistakes) || tier.maxMistakes < 1)
-				return `Тип "${type.title}": tier.maxMistakes должен быть >= 1`
-			if (!Number.isFinite(tier.points) || tier.points < 0) return `Тип "${type.title}": tier.points должен быть >= 0`
-			if (tier.points > rule.correctPoints) return `Тип "${type.title}": tier.points не может быть больше correctPoints`
+				return `${name}: порог ошибок в ступени должен быть не меньше 1`
+			if (!Number.isFinite(tier.points) || tier.points < 0) return `${name}: баллы ступени не могут быть отрицательными`
+			if (tier.points > rule.correctPoints) return `${name}: баллы ступени не могут быть больше полного балла`
 		}
 	}
 	return null
 }
 
+function savedOverride(type: QuestionTypeDefinition): QuestionTypeOverridePayload | null {
+	if (!type.override) return null
+	return {
+		titleOverride: type.override.titleOverride ?? null,
+		scoringRuleOverride: type.override.scoringRuleOverride ?? null,
+		isDisabled: Boolean(type.override.isDisabled),
+	}
+}
+
 export default function ScoringSettingsPageClient() {
 	const searchParams = useSearchParams()
 
-	const [scope, setScope] = useState<Scope>((searchParams.get('scope') as Scope) || 'global')
+	const [scope, setScope] = useState<Scope>(searchParams.get('scope') === 'test' ? 'test' : 'global')
 	const [selectedTopicId, setSelectedTopicId] = useState('')
 	const [selectedTestId, setSelectedTestId] = useState('')
 	const [types, setTypes] = useState<QuestionTypeDefinition[]>([])
 	const [overrideEnabled, setOverrideEnabled] = useState<Record<string, boolean>>({})
+	const [openTypes, setOpenTypes] = useState<string[]>(() => {
+		const key = searchParams.get('type')
+		return key ? [key] : []
+	})
 	const [seededKey, setSeededKey] = useState<string | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [didResolveQuerySelection, setDidResolveQuerySelection] = useState(false)
-	const rulesTitleRef = useRef<HTMLDivElement>(null)
+	const rulesTitleRef = useRef<HTMLHeadingElement>(null)
 
 	const topicsQuery = useSWR(adminTestsKeys.topics(), topicsListFetcher)
 	const testsQuery = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
@@ -109,7 +129,7 @@ export default function ScoringSettingsPageClient() {
 			setTypes(fresh.questionTypes)
 			const initialOverrides: Record<string, boolean> = {}
 			for (const item of fresh.questionTypes) {
-				initialOverrides[item.key] = Boolean(item.hasOverride)
+				initialOverrides[item.key] = Boolean(item.override?.scoringRuleOverride)
 			}
 			setOverrideEnabled(initialOverrides)
 			setSeededKey(key)
@@ -125,11 +145,8 @@ export default function ScoringSettingsPageClient() {
 	useEffect(() => {
 		if (didResolveQuerySelection || tests.length === 0 || topics.length === 0) return
 
-		const queryScope = searchParams.get('scope')
 		const queryTopicSlug = searchParams.get('topicSlug')
 		const queryTestSlug = searchParams.get('testSlug')
-
-		if (queryScope === 'test') setScope('test')
 		if (queryTopicSlug && queryTestSlug) {
 			const matched = tests.find((test) => test.topicSlug === queryTopicSlug && test.slug === queryTestSlug)
 			if (matched) {
@@ -165,6 +182,7 @@ export default function ScoringSettingsPageClient() {
 							key: type.key,
 							scoringRule: type.scoringRule,
 							override: Boolean(overrideEnabled[type.key]),
+							saved: savedOverride(type),
 						}))
 					)
 		setSaving(false)
@@ -173,168 +191,185 @@ export default function ScoringSettingsPageClient() {
 			if (message) toast.error(message)
 			return
 		}
-		toast.success(scope === 'global' ? 'Глобальные правила сохранены' : 'Override правил для теста сохранены')
-		void mutateRules()
+		toast.success(scope === 'global' ? 'Общие формулы сохранены' : 'Формулы теста сохранены')
+		if (rulesKey) void loadRules(rulesKey)
 	}
 
 	const retryTopicsAndTests = () =>
 		Promise.all([topicsFailed ? topicsQuery.mutate() : null, testsFailed ? testsQuery.mutate() : null])
 
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				<div className="space-y-1">
-					<h1 className="text-2xl font-semibold">Настройка баллов</h1>
-					<p className="text-sm text-muted-foreground">Глобально или для отдельного теста по каждому типу вопроса</p>
+		<div className="space-y-5">
+			<section className="flex flex-col gap-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:flex-row tab-sm:items-start tab-sm:justify-between tab-sm:p-unit">
+				<div className="min-w-0">
+					<p className={KICKER_CLASS}>банк заданий</p>
+					<h1 className="mt-2 font-serif text-3xl leading-tight text-foreground tab-sm:text-4xl">Настройка баллов</h1>
+					<p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+						Формула баллов для каждого типа вопроса — общая для всех тестов или своя для отдельного теста. Формат ответа
+						и название типа задаются в{' '}
+						<Link
+							href="/admin/tests/question-types"
+							className="font-medium text-primary underline-offset-4 hover:underline"
+						>
+							типах вопросов
+						</Link>
+						.
+					</p>
 				</div>
-				<div className="flex gap-2">
-					<Button variant="outline" asChild>
-						<Link href="/admin/tests">
-							<ArrowLeft />К тестам
-						</Link>
-					</Button>
-					<Button variant="outline" asChild>
-						<Link href="/admin/tests/question-types">
-							<Settings />
-							Типы вопросов
-						</Link>
-					</Button>
-					{selectedTest?.topicSlug ? (
-						<Button variant="outline" asChild>
+				<div className="flex shrink-0 flex-wrap items-center gap-2">
+					{scope === 'test' && selectedTest?.topicSlug ? (
+						<Button variant="outline" asChild className="rounded-full bg-card">
 							<Link href={`/admin/tests/${selectedTest.topicSlug}/${selectedTest.slug}`}>Открыть тест</Link>
 						</Button>
 					) : null}
-				</div>
-			</div>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Параметры</CardTitle>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					{topicsFailed || testsFailed ? (
-						<LoadErrorAlert
-							title="Не удалось загрузить темы и тесты"
-							error={topicsQuery.error ?? testsQuery.error}
-							onRetry={retryTopicsAndTests}
-						/>
-					) : null}
-					<div className="space-y-2">
-						<Label>Режим</Label>
-						<Select value={scope} onValueChange={(value) => setScope(value as Scope)}>
-							<SelectTrigger className="max-w-sm">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="global">Глобально для всех тестов</SelectItem>
-								<SelectItem value="test">Только для выбранного теста</SelectItem>
-							</SelectContent>
-						</Select>
-						<p className="text-xs text-muted-foreground">
-							В глобальном режиме вы задаете базовую формулу для всех тестов. В режиме теста можно переопределить только
-							отдельные типы.
-						</p>
-					</div>
-
-					{scope === 'test' ? (
-						<div className="grid gap-4 md:grid-cols-2">
-							<div className="space-y-2">
-								<Label>Тема</Label>
-								<Select
-									value={selectedTopicId}
-									onValueChange={(value) => {
-										setSelectedTopicId(value)
-										setSelectedTestId('')
-									}}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Выберите тему" />
-									</SelectTrigger>
-									<SelectContent>
-										{topics.map((topic) => (
-											<SelectItem key={topic.id} value={topic.id}>
-												{topic.title}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-							<div className="space-y-2">
-								<Label>Тест</Label>
-								<Select value={selectedTestId} onValueChange={setSelectedTestId} disabled={!selectedTopicId}>
-									<SelectTrigger>
-										<SelectValue placeholder="Выберите тест" />
-									</SelectTrigger>
-									<SelectContent>
-										{testsForTopic.map((test) => (
-											<SelectItem key={test.id} value={test.id}>
-												{test.title}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								<p className="text-xs text-muted-foreground">
-									Выберите тест, чтобы включать/отключать override по каждому типу вопроса.
-								</p>
-							</div>
-						</div>
-					) : null}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader className="flex flex-row items-center justify-between">
-					<CardTitle ref={rulesTitleRef} tabIndex={-1}>
-						Правила начисления
-					</CardTitle>
-					<Button onClick={handleSave} disabled={saving || !rulesReady}>
-						{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+					<Button className="rounded-full" onClick={handleSave} disabled={saving || !rulesReady}>
+						{saving ? (
+							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+						) : (
+							<Save className="size-4" aria-hidden="true" />
+						)}
 						Сохранить
 					</Button>
-				</CardHeader>
-				<CardContent className="space-y-3">
-					{rulesFailed ? (
-						<LoadErrorAlert
-							title="Не удалось загрузить правила"
-							error={rulesQuery.error}
-							onRetry={() => (rulesKey ? loadRules(rulesKey) : undefined)}
-							focusTarget={rulesTitleRef}
-						/>
-					) : loadingRules ? (
-						<div className="flex items-center gap-2 text-sm text-muted-foreground">
-							<Loader2 className="h-4 w-4 animate-spin" />
-							Загрузка правил...
+				</div>
+			</section>
+
+			<section className="space-y-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+				{topicsFailed || testsFailed ? (
+					<LoadErrorAlert
+						title="Не удалось загрузить темы и тесты"
+						error={topicsQuery.error ?? testsQuery.error}
+						onRetry={retryTopicsAndTests}
+					/>
+				) : null}
+				<ToggleGroup
+					type="single"
+					value={scope}
+					onValueChange={(value) => {
+						if (value) setScope(value as Scope)
+					}}
+					aria-label="Для каких тестов формула"
+					className="w-full justify-start gap-1 rounded-full bg-secondary/60 p-1 mob:w-fit"
+				>
+					<ToggleGroupItem value="global" className={SEGMENT_CLASS}>
+						Для всех тестов
+					</ToggleGroupItem>
+					<ToggleGroupItem value="test" className={SEGMENT_CLASS}>
+						Для одного теста
+					</ToggleGroupItem>
+				</ToggleGroup>
+				<p className="text-sm text-muted-foreground">
+					{scope === 'global'
+						? 'Общая формула действует во всех тестах, где для типа не задана своя.'
+						: 'Включите «Своя формула» у нужных типов — остальные считаются по общей формуле.'}
+				</p>
+
+				{scope === 'test' ? (
+					<div className="grid gap-4 tab-sm:grid-cols-2">
+						<div className="space-y-2">
+							<Label htmlFor="scoring-topic">Тема</Label>
+							<Select
+								value={selectedTopicId}
+								onValueChange={(value) => {
+									setSelectedTopicId(value)
+									setSelectedTestId('')
+								}}
+							>
+								<SelectTrigger id="scoring-topic" className="w-full">
+									<SelectValue placeholder="Выберите тему" />
+								</SelectTrigger>
+								<SelectContent>
+									{topics.map((topic) => (
+										<SelectItem key={topic.id} value={topic.id}>
+											{topic.title}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 						</div>
-					) : rulesKey === null ? (
-						<p className="text-sm text-muted-foreground">Выберите тест, чтобы настроить override.</p>
-					) : (
-						<Accordion type="multiple" className="space-y-2">
-							{types.map((type) => (
-								<AccordionItem value={type.key} key={type.key} className="rounded-md border px-3">
+						<div className="space-y-2">
+							<Label htmlFor="scoring-test">Тест</Label>
+							<Select value={selectedTestId} onValueChange={setSelectedTestId} disabled={!selectedTopicId}>
+								<SelectTrigger id="scoring-test" className="w-full">
+									<SelectValue placeholder="Выберите тест" />
+								</SelectTrigger>
+								<SelectContent>
+									{testsForTopic.map((test) => (
+										<SelectItem key={test.id} value={test.id}>
+											{test.title}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
+				) : null}
+			</section>
+
+			<section className="space-y-3">
+				<h2 ref={rulesTitleRef} tabIndex={-1} className="px-1 font-serif text-2xl text-foreground">
+					Формулы по типам вопросов
+				</h2>
+				{rulesFailed ? (
+					<LoadErrorAlert
+						title="Не удалось загрузить формулы"
+						error={rulesQuery.error}
+						onRetry={() => (rulesKey ? loadRules(rulesKey) : undefined)}
+						focusTarget={rulesTitleRef}
+					/>
+				) : loadingRules ? (
+					<Skeleton className="h-72 rounded-3xl" aria-label="Загрузка формул" />
+				) : rulesKey === null ? (
+					<p className="rounded-3xl border border-dashed border-border bg-card/70 px-6 py-10 text-center text-sm text-muted-foreground">
+						Выберите тему и тест, чтобы задать для него свои формулы.
+					</p>
+				) : (
+					<Accordion type="multiple" value={openTypes} onValueChange={setOpenTypes} className="space-y-2">
+						{types.map((type) => {
+							const own = scope === 'test' && Boolean(overrideEnabled[type.key])
+							const disabledInTest = scope === 'test' && Boolean(type.override?.isDisabled)
+							return (
+								<AccordionItem
+									value={type.key}
+									key={type.key}
+									className="rounded-3xl border border-border/80 bg-card px-4 shadow-sm last:border-b"
+								>
 									<AccordionTrigger className="hover:no-underline">
-										<div className="pr-4 text-left">
-											<p className="font-medium">{type.title}</p>
-											<p className="text-xs text-muted-foreground">
-												{type.key} | {type.uiTemplate}
-												{type.isSystem ? ' | system' : ''}
+										<div className="min-w-0 pr-4 text-left">
+											<p className="font-medium text-foreground">{type.title}</p>
+											<p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+												<span>{TEMPLATE_META[type.uiTemplate].label}</span>
+												{own ? (
+													<Badge variant="default" className="rounded-full">
+														Своя формула
+													</Badge>
+												) : null}
+												{disabledInTest ? (
+													<Badge variant="secondary" className="rounded-full">
+														Отключён в тесте
+													</Badge>
+												) : null}
+												{!type.isActive && !disabledInTest ? (
+													<Badge variant="secondary" className="rounded-full">
+														Отключён
+													</Badge>
+												) : null}
 											</p>
 										</div>
 									</AccordionTrigger>
-									<AccordionContent className="space-y-3 pb-3">
-										<div>
-											<p className="text-xs text-muted-foreground">{TEMPLATE_META[type.uiTemplate].description}</p>
-											<p className="text-xs text-muted-foreground">Пример: {TEMPLATE_META[type.uiTemplate].example}</p>
-										</div>
+									<AccordionContent className="space-y-3 pb-4">
+										<p className="text-sm text-muted-foreground">{TEMPLATE_META[type.uiTemplate].description}</p>
 										{scope === 'test' ? (
-											<div className="flex items-center justify-between rounded-md border p-2">
-												<div>
-													<p className="text-sm font-medium">Override для этого теста</p>
-													<p className="text-xs text-muted-foreground">
-														Если выключено, используется глобальная формула.
-													</p>
-												</div>
+											<label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-secondary/50 px-3 py-2">
+												<span>
+													<span className="block text-sm font-medium text-foreground">
+														Своя формула для этого теста
+													</span>
+													<span className="block text-xs text-muted-foreground">
+														Если выключено, действует общая формула.
+													</span>
+												</span>
 												<Switch
-													checked={Boolean(overrideEnabled[type.key])}
+													checked={own}
 													onCheckedChange={(checked) =>
 														setOverrideEnabled((prev) => ({
 															...prev,
@@ -342,10 +377,10 @@ export default function ScoringSettingsPageClient() {
 														}))
 													}
 												/>
-											</div>
+											</label>
 										) : null}
-										{scope === 'test' && !overrideEnabled[type.key] ? (
-											<p className="text-sm text-muted-foreground">Используется глобальная формула для этого типа.</p>
+										{scope === 'test' && !own ? (
+											<p className="text-sm text-muted-foreground">Используется общая формула.</p>
 										) : (
 											<QuestionTypeScoringRuleEditorFields
 												rule={type.scoringRule}
@@ -359,11 +394,11 @@ export default function ScoringSettingsPageClient() {
 										)}
 									</AccordionContent>
 								</AccordionItem>
-							))}
-						</Accordion>
-					)}
-				</CardContent>
-			</Card>
+							)
+						})}
+					</Accordion>
+				)}
+			</section>
 		</div>
 	)
 }

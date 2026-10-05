@@ -53,7 +53,37 @@ export type ScoringRulesResponse = QuestionTypesResponse
 
 export type ScoringRuleEntry = { key: string; scoringRule: QuestionTypeScoringRule }
 
-export type TestScoringRuleEntry = ScoringRuleEntry & { override: boolean }
+export type TestScoringRuleEntry = ScoringRuleEntry & {
+	override: boolean
+	saved: QuestionTypeOverridePayload | null
+}
+
+export type TestOverrideStep =
+	| { key: string; method: 'PUT'; body: QuestionTypeOverridePayload }
+	| { key: string; method: 'DELETE' }
+
+export function testOverrideSteps(rules: readonly TestScoringRuleEntry[]): TestOverrideStep[] {
+	const steps: TestOverrideStep[] = []
+	for (const rule of rules) {
+		const body: QuestionTypeOverridePayload = {
+			titleOverride: rule.saved?.titleOverride ?? null,
+			scoringRuleOverride: rule.override ? rule.scoringRule : null,
+			isDisabled: rule.saved?.isDisabled ?? false,
+		}
+		const empty = !body.titleOverride && !body.isDisabled && body.scoringRuleOverride === null
+		if (empty) {
+			if (rule.saved) steps.push({ key: rule.key, method: 'DELETE' })
+			continue
+		}
+		if (
+			rule.saved &&
+			JSON.stringify(rule.saved.scoringRuleOverride ?? null) === JSON.stringify(body.scoringRuleOverride)
+		)
+			continue
+		steps.push({ key: rule.key, method: 'PUT', body })
+	}
+	return steps
+}
 
 export type ArchiveDownload = { blob: Blob; filename: string }
 
@@ -292,12 +322,15 @@ export function saveTestQuestionTypeOverride(
 	return request(testOverridePath(testId, key), {
 		method: 'PUT',
 		json: body,
-		fallbackMessage: 'Не удалось сохранить override',
+		fallbackMessage: 'Не удалось сохранить настройки типа для теста',
 	})
 }
 
 export function deleteTestQuestionTypeOverride(testId: string, key: string): Promise<RequestOutcome<unknown>> {
-	return request(testOverridePath(testId, key), { method: 'DELETE', fallbackMessage: 'Не удалось удалить override' })
+	return request(testOverridePath(testId, key), {
+		method: 'DELETE',
+		fallbackMessage: 'Не удалось сбросить настройки типа для теста',
+	})
 }
 
 async function runInOrder(steps: Array<() => Promise<RequestOutcome<unknown>>>): Promise<RequestOutcome<unknown>> {
@@ -324,14 +357,11 @@ export function saveGlobalScoringRules(rules: ScoringRuleEntry[]): Promise<Reque
 
 export function saveTestScoringRules(testId: string, rules: TestScoringRuleEntry[]): Promise<RequestOutcome<unknown>> {
 	return runInOrder(
-		rules.map((rule) => () => {
-			const fallbackMessage = `Не удалось сохранить override для ${rule.key}`
-			if (!rule.override) return request(testOverridePath(testId, rule.key), { method: 'DELETE', fallbackMessage })
-			return request(testOverridePath(testId, rule.key), {
-				method: 'PUT',
-				json: { scoringRuleOverride: rule.scoringRule, isDisabled: false },
-				fallbackMessage,
-			})
+		testOverrideSteps(rules).map((step) => () => {
+			const fallbackMessage = `Не удалось сохранить формулу теста для типа ${step.key}`
+			if (step.method === 'DELETE')
+				return request(testOverridePath(testId, step.key), { method: 'DELETE', fallbackMessage })
+			return request(testOverridePath(testId, step.key), { method: 'PUT', json: step.body, fallbackMessage })
 		})
 	)
 }

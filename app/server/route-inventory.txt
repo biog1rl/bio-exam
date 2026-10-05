@@ -43,12 +43,12 @@ POST /api/rbac/pages  sessionRequired > requirePerm(rbac.write) > <anonymous>
 PATCH /api/rbac/pages/:id  validateUUID(id) > sessionRequired > requirePerm(rbac.write) > <anonymous>
 DELETE /api/rbac/pages/:id  validateUUID(id) > sessionRequired > requirePerm(rbac.write) > <anonymous>
 GET /api/search  sessionRequired > rateLimiter(search,60/60000ms) > <anonymous>
-GET /api/sidebar  <anonymous>
+GET /api/sidebar  sessionRequired > <anonymous>
 GET /api/sidebar/all  sessionRequired > requirePerm(settings.manage) > <anonymous>
 POST /api/sidebar  sessionRequired > requirePerm(settings.manage) > <anonymous>
-PUT /api/sidebar/:id  sessionRequired > requirePerm(settings.manage) > <anonymous>
+PUT /api/sidebar/:id  validateUUID(id) > sessionRequired > requirePerm(settings.manage) > <anonymous>
 PATCH /api/sidebar/reorder  sessionRequired > requirePerm(settings.manage) > <anonymous>
-DELETE /api/sidebar/:id  sessionRequired > requirePerm(settings.manage) > <anonymous>
+DELETE /api/sidebar/:id  validateUUID(id) > sessionRequired > requirePerm(settings.manage) > <anonymous>
 GET /api/tests/topics  sessionRequired > requirePerm(tests.read) > <anonymous>
 GET /api/tests/topics/teacher-options  sessionRequired > <anonymous>
 PUT /api/tests/topics/:id/teachers  validateUUID(id) > sessionRequired > <anonymous>

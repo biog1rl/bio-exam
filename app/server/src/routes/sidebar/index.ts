@@ -1,3 +1,5 @@
+import { canOpenPath } from '@bio-exam/rbac'
+
 import { eq } from 'drizzle-orm'
 import { Router } from 'express'
 
@@ -5,17 +7,18 @@ import { db } from '../../db/index.js'
 import { sidebarItems } from '../../db/schema.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { validateUUID } from '../../middleware/validateParams.js'
+import { requestAccess } from '../../services/access-policy/index.js'
+import { SidebarItemCreateSchema, SidebarItemUpdateSchema, SidebarReorderSchema, badRequestBody } from './schema.js'
 
 const router = Router()
 
 // GET /api/sidebar - получить все активные пункты меню
-router.get('/', async (_req, res) => {
+router.get('/', sessionRequired(), async (req, res) => {
 	try {
-		const items = await db
-			.select()
-			.from(sidebarItems)
-			.where(eq(sidebarItems.isActive, true))
-			.orderBy(sidebarItems.order)
+		const access = await requestAccess(req)
+		const rows = await db.select().from(sidebarItems).where(eq(sidebarItems.isActive, true)).orderBy(sidebarItems.order)
+		const items = rows.filter((row) => canOpenPath(access.permissions, row.url))
 
 		res.json({ items })
 	} catch (error) {
@@ -39,22 +42,10 @@ router.get('/all', sessionRequired(), requirePerm('settings', 'manage'), async (
 // POST /api/sidebar - создать новый пункт меню
 router.post('/', sessionRequired(), requirePerm('settings', 'manage'), async (req, res) => {
 	try {
-		const { title, url, icon, target = '_self', order = 0 } = req.body
+		const parsed = SidebarItemCreateSchema.safeParse(req.body)
+		if (!parsed.success) return res.status(400).json(badRequestBody(parsed.error))
 
-		if (!title || !url || !icon) {
-			return res.status(400).json({ error: 'title, url and icon are required' })
-		}
-
-		const [newItem] = await db
-			.insert(sidebarItems)
-			.values({
-				title,
-				url,
-				icon,
-				target: target as '_self' | '_blank',
-				order,
-			})
-			.returning()
+		const [newItem] = await db.insert(sidebarItems).values(parsed.data).returning()
 
 		res.json({ item: newItem })
 	} catch (error) {
@@ -64,20 +55,17 @@ router.post('/', sessionRequired(), requirePerm('settings', 'manage'), async (re
 })
 
 // PUT /api/sidebar/:id - обновить пункт меню
-router.put('/:id', sessionRequired(), requirePerm('settings', 'manage'), async (req, res) => {
+router.put('/:id', validateUUID('id'), sessionRequired(), requirePerm('settings', 'manage'), async (req, res) => {
 	try {
 		const id = req.params.id as string
-		const { title, url, icon, target, order, isActive } = req.body
+		const parsed = SidebarItemUpdateSchema.safeParse(req.body)
+		if (!parsed.success) return res.status(400).json(badRequestBody(parsed.error))
 
-		const updateData: any = { updatedAt: new Date() }
-		if (title !== undefined) updateData.title = title
-		if (url !== undefined) updateData.url = url
-		if (icon !== undefined) updateData.icon = icon
-		if (target !== undefined) updateData.target = target
-		if (order !== undefined) updateData.order = order
-		if (isActive !== undefined) updateData.isActive = isActive
-
-		const [updatedItem] = await db.update(sidebarItems).set(updateData).where(eq(sidebarItems.id, id)).returning()
+		const [updatedItem] = await db
+			.update(sidebarItems)
+			.set({ ...parsed.data, updatedAt: new Date() })
+			.where(eq(sidebarItems.id, id))
+			.returning()
 
 		if (!updatedItem) {
 			return res.status(404).json({ error: 'Sidebar item not found' })
@@ -93,15 +81,12 @@ router.put('/:id', sessionRequired(), requirePerm('settings', 'manage'), async (
 // PATCH /api/sidebar/reorder - изменить порядок всех пунктов
 router.patch('/reorder', sessionRequired(), requirePerm('settings', 'manage'), async (req, res) => {
 	try {
-		const { items } = req.body
-
-		if (!Array.isArray(items)) {
-			return res.status(400).json({ error: 'items must be an array' })
-		}
+		const parsed = SidebarReorderSchema.safeParse(req.body)
+		if (!parsed.success) return res.status(400).json(badRequestBody(parsed.error))
 
 		// Обновляем order для каждого элемента
 		await Promise.all(
-			items.map((item: { id: string; order: number }) =>
+			parsed.data.items.map((item) =>
 				db.update(sidebarItems).set({ order: item.order, updatedAt: new Date() }).where(eq(sidebarItems.id, item.id))
 			)
 		)
@@ -116,7 +101,7 @@ router.patch('/reorder', sessionRequired(), requirePerm('settings', 'manage'), a
 })
 
 // DELETE /api/sidebar/:id - удалить пункт меню
-router.delete('/:id', sessionRequired(), requirePerm('settings', 'manage'), async (req, res) => {
+router.delete('/:id', validateUUID('id'), sessionRequired(), requirePerm('settings', 'manage'), async (req, res) => {
 	try {
 		const id = req.params.id as string
 

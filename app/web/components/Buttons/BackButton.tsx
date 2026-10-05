@@ -8,10 +8,16 @@ import { usePathname, useRouter } from 'next/navigation'
 import { UnsavedChangesDialog } from '@/components/Buttons/UnsavedChangesDialog'
 import { Button } from '@/components/ui/button'
 import { UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
+import { backAction } from '@/lib/navigation/paths'
 import { type LeaveDecision, useUnsavedChanges } from '@/store/unsavedChanges.store'
 
 type Props = {
 	className?: string
+}
+
+function canGoBack(): boolean {
+	const navigation = (window as { navigation?: { canGoBack?: boolean } }).navigation
+	return navigation?.canGoBack ?? window.history.length > 1
 }
 
 export default function BackButton({ className }: Props) {
@@ -24,6 +30,12 @@ export default function BackButton({ className }: Props) {
 	const [description, setDescription] = useState(UNSAVED_CHANGES_TEXT.description)
 	const handledLeaveRef = useRef<Promise<LeaveDecision> | null>(null)
 
+	const goBack = () => {
+		const action = backAction(pathname, canGoBack())
+		if (action.kind === 'history') router.back()
+		else router.push(action.href)
+	}
+
 	const onClick = async () => {
 		const pending = leave(pathname)
 		if (handledLeaveRef.current === pending) return
@@ -31,7 +43,7 @@ export default function BackButton({ className }: Props) {
 		try {
 			const decision = await pending
 			if (decision.kind === 'navigate') {
-				router.back()
+				goBack()
 				return
 			}
 			setDescription(decision.description)
@@ -60,7 +72,7 @@ export default function BackButton({ className }: Props) {
 				description={description}
 				onLeave={() => {
 					clearUnsaved(pathname)
-					router.back()
+					goBack()
 				}}
 			/>
 		</>

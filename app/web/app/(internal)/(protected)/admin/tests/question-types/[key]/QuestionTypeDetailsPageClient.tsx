@@ -1,19 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { QUESTION_UI_TEMPLATES } from '@bio-exam/exam-core'
 
-import { ArrowLeft, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+
+import { Save } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
@@ -21,7 +24,6 @@ import { failureMessage } from '@/lib/http/errors'
 import {
 	adminTestsKeys,
 	adminTestsListFetcher,
-	deleteQuestionType,
 	deleteTestQuestionTypeOverride,
 	questionTypeFetcher,
 	questionTypesFetcher,
@@ -30,13 +32,17 @@ import {
 	topicsListFetcher,
 } from '@/lib/tests/admin-api'
 
-import QuestionTypeScoringRuleEditor from '../../components/QuestionTypeScoringRuleEditor'
+import { QuestionTypeScoringRuleEditorFields } from '../../components/QuestionTypeScoringRuleEditor'
 import type { QuestionTypeDefinition, QuestionTypeScoringRule, QuestionUiTemplate } from '../../types'
 import { TEMPLATE_META, createDefaultQuestionTypeScoringRule } from '../../types'
 
 const FORM_SWR_OPTIONS = { revalidateOnFocus: false, revalidateOnReconnect: false }
 
 const TYPE_SWR_OPTIONS = { ...FORM_SWR_OPTIONS, revalidateOnMount: false }
+
+const KICKER_CLASS = 'font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase'
+
+const CARD_CLASS = 'space-y-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit'
 
 type GlobalForm = {
 	title: string
@@ -48,6 +54,8 @@ type GlobalForm = {
 	validationMaxOptions: string
 	validationExactChoiceCount: string
 }
+
+type TestForm = { titleOverride: string; isDisabled: boolean }
 
 function toGlobalForm(questionType: QuestionTypeDefinition): GlobalForm {
 	return {
@@ -63,10 +71,6 @@ function toGlobalForm(questionType: QuestionTypeDefinition): GlobalForm {
 function toastFailure(outcome: Parameters<typeof failureMessage>[0], fallback: string) {
 	const message = failureMessage(outcome, fallback)
 	if (message) toast.error(message)
-}
-
-type Props = {
-	typeKey: string
 }
 
 function toValidationFields(validationSchema: QuestionTypeDefinition['validationSchema']) {
@@ -91,10 +95,75 @@ function toValidationPayload(state: {
 	}
 }
 
-export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
+function NumberField({
+	id,
+	label,
+	hint,
+	value,
+	onChange,
+}: {
+	id: string
+	label: string
+	hint: string
+	value: string
+	onChange: (value: string) => void
+}) {
+	return (
+		<div className="space-y-1">
+			<Label htmlFor={id}>{label}</Label>
+			<Input
+				id={id}
+				type="number"
+				min={0}
+				value={value}
+				onChange={(e) => onChange(e.target.value)}
+				placeholder="Не задано"
+			/>
+			<p className="text-xs text-muted-foreground">{hint}</p>
+		</div>
+	)
+}
+
+function SwitchRow({
+	id,
+	title,
+	hint,
+	checked,
+	onCheckedChange,
+}: {
+	id: string
+	title: string
+	hint: string
+	checked: boolean
+	onCheckedChange: (checked: boolean) => void
+}) {
+	return (
+		<div className="flex items-center justify-between gap-4 rounded-2xl bg-secondary/50 px-3 py-2">
+			<Label htmlFor={id} className="block cursor-pointer">
+				<span className="block text-sm font-medium text-foreground">{title}</span>
+				<span className="block text-xs font-normal text-muted-foreground">{hint}</span>
+			</Label>
+			<Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+		</div>
+	)
+}
+
+function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+	return (
+		<section className={CARD_CLASS}>
+			<div>
+				<h2 className="font-serif text-2xl text-foreground">{title}</h2>
+				{description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+			</div>
+			{children}
+		</section>
+	)
+}
+
+export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: string }) {
 	const { confirm, alertDialog } = useUiAlertDialog()
 	const [savingGlobal, setSavingGlobal] = useState(false)
-	const [savingOverride, setSavingOverride] = useState(false)
+	const [savingTest, setSavingTest] = useState(false)
 	const [selectedTopicId, setSelectedTopicId] = useState('')
 	const [selectedTestId, setSelectedTestId] = useState('')
 
@@ -112,6 +181,10 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 		() => (testsData?.tests ?? []).filter((test) => test.topicId === selectedTopicId),
 		[testsData?.tests, selectedTopicId]
 	)
+	const selectedTest = useMemo(
+		() => (testsData?.tests ?? []).find((test) => test.id === selectedTestId) ?? null,
+		[testsData?.tests, selectedTestId]
+	)
 
 	const { data: testScopedData, mutate: mutateTestScoped } = useSWR(
 		selectedTestId ? adminTestsKeys.scoringTest(selectedTestId) : null,
@@ -124,21 +197,13 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 	)
 
 	const [globalForm, setGlobalForm] = useState<GlobalForm | null>(null)
+	const [testForm, setTestForm] = useState<TestForm | null>(null)
 	const activeTypeKeyRef = useRef(typeKey)
 
-	const [overrideForm, setOverrideForm] = useState<{
-		titleOverride: string
-		scoringRuleOverride: QuestionTypeScoringRule | null
-		isDisabled: boolean
-	} | null>(null)
-
 	const breadcrumbLabels = useMemo(() => {
-		const title = globalForm?.title?.trim() || typeData?.questionType?.title
-		if (!title) return {}
-		return {
-			[`/admin/tests/question-types/${typeKey}`]: title,
-		}
-	}, [globalForm?.title, typeData?.questionType?.title, typeKey])
+		const title = typeData?.questionType?.title
+		return title ? { [`/admin/tests/question-types/${typeKey}`]: title } : {}
+	}, [typeData?.questionType?.title, typeKey])
 
 	const loadType = useCallback(
 		async (key: string) => {
@@ -154,16 +219,16 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 		void loadType(typeKey)
 	}, [typeKey, loadType])
 
-	const reseedGlobalForm = () => loadType(typeKey)
-
 	useEffect(() => {
 		if (!testScopedType) return
-		setOverrideForm({
+		setTestForm({
 			titleOverride: testScopedType.override?.titleOverride || '',
-			scoringRuleOverride: testScopedType.override?.scoringRuleOverride ?? null,
 			isDisabled: Boolean(testScopedType.override?.isDisabled),
 		})
 	}, [testScopedType])
+
+	const savedFormula = testScopedType?.override?.scoringRuleOverride ?? null
+	const hasTestSettings = Boolean(testScopedType?.override)
 
 	const saveGlobal = async () => {
 		if (!globalForm) return
@@ -184,370 +249,314 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 			toastFailure(outcome, 'Не удалось сохранить тип вопроса')
 			return
 		}
-		toast.success('Тип вопроса обновлен')
-		await reseedGlobalForm()
+		toast.success('Тип вопроса сохранён')
+		await loadType(typeKey)
 		await mutateTestScoped()
 		setSavingGlobal(false)
 	}
 
-	const removeType = async () => {
+	const saveForTest = async () => {
+		if (!selectedTestId || !testForm) return
+		const titleOverride = testForm.titleOverride.trim() || null
+		setSavingTest(true)
+		const outcome =
+			!titleOverride && !testForm.isDisabled && !savedFormula
+				? hasTestSettings
+					? await deleteTestQuestionTypeOverride(selectedTestId, typeKey)
+					: { ok: true as const, status: 204, data: null }
+				: await saveTestQuestionTypeOverride(selectedTestId, typeKey, {
+						titleOverride,
+						scoringRuleOverride: savedFormula,
+						isDisabled: testForm.isDisabled,
+					})
+		setSavingTest(false)
+		if (!outcome.ok) {
+			toastFailure(outcome, 'Не удалось сохранить настройки типа для теста')
+			return
+		}
+		toast.success('Настройки типа для теста сохранены')
+		await mutateTestScoped()
+	}
+
+	const resetForTest = async () => {
+		if (!selectedTestId) return
 		const confirmed = await confirm({
-			title: 'Отключить тип вопроса?',
-			description: 'Тип станет недоступен для новых вопросов.',
-			confirmText: 'Отключить',
+			title: 'Сбросить название и отключение для теста?',
+			description: savedFormula
+				? 'Своя формула баллов для теста останется — её можно убрать в настройке баллов.'
+				: 'В тесте снова будут действовать общие настройки типа.',
+			confirmText: 'Сбросить',
 			cancelText: 'Отмена',
-			destructive: true,
 		})
 		if (!confirmed) return
-		setSavingGlobal(true)
-		const outcome = await deleteQuestionType(typeKey)
+		setSavingTest(true)
+		const outcome = savedFormula
+			? await saveTestQuestionTypeOverride(selectedTestId, typeKey, {
+					titleOverride: null,
+					scoringRuleOverride: savedFormula,
+					isDisabled: false,
+				})
+			: await deleteTestQuestionTypeOverride(selectedTestId, typeKey)
+		setSavingTest(false)
 		if (!outcome.ok) {
-			setSavingGlobal(false)
-			toastFailure(outcome, 'Не удалось отключить тип')
+			toastFailure(outcome, 'Не удалось сбросить настройки типа для теста')
 			return
 		}
-		toast.success('Тип вопроса отключен')
-		await reseedGlobalForm()
-		setSavingGlobal(false)
-	}
-
-	const saveOverride = async () => {
-		if (!selectedTestId || !overrideForm) return
-		setSavingOverride(true)
-		const outcome = await saveTestQuestionTypeOverride(selectedTestId, typeKey, {
-			titleOverride: overrideForm.titleOverride.trim() || null,
-			scoringRuleOverride: overrideForm.scoringRuleOverride,
-			isDisabled: overrideForm.isDisabled,
-		})
-		if (!outcome.ok) {
-			setSavingOverride(false)
-			toastFailure(outcome, 'Не удалось сохранить override')
-			return
-		}
-		toast.success('Override для теста сохранен')
+		toast.success('Настройки типа для теста сброшены')
 		await mutateTestScoped()
-		setSavingOverride(false)
-	}
-
-	const clearOverride = async () => {
-		if (!selectedTestId) return
-		setSavingOverride(true)
-		const outcome = await deleteTestQuestionTypeOverride(selectedTestId, typeKey)
-		if (!outcome.ok) {
-			setSavingOverride(false)
-			toastFailure(outcome, 'Не удалось удалить override')
-			return
-		}
-		toast.success('Override удален')
-		await mutateTestScoped()
-		setSavingOverride(false)
 	}
 
 	if (typeLoading || !globalForm || !typeData?.questionType) {
 		return (
 			<div className="space-y-4">
 				<SetBreadcrumbsLabels labels={breadcrumbLabels} />
-				<Button variant="outline" asChild>
-					<Link href="/admin/tests/question-types">
-						<ArrowLeft className="mr-2 h-4 w-4" />К типам вопросов
-					</Link>
-				</Button>
 				{typeLoadFailed ? (
-					<LoadErrorAlert title="Не удалось загрузить тип вопроса" error={typeError} onRetry={reseedGlobalForm} />
+					<LoadErrorAlert
+						title="Не удалось загрузить тип вопроса"
+						error={typeError}
+						onRetry={() => loadType(typeKey)}
+					/>
 				) : (
-					<Card>
-						<CardContent className="py-8 text-sm">Загрузка...</CardContent>
-					</Card>
+					<Skeleton className="h-96 rounded-4xl" aria-label="Загрузка типа вопроса" />
 				)}
 			</div>
 		)
 	}
 
+	const questionType = typeData.questionType
+	const scoringHref = selectedTest
+		? `/admin/tests/scoring?scope=test&topicSlug=${selectedTest.topicSlug}&testSlug=${selectedTest.slug}&type=${typeKey}`
+		: `/admin/tests/scoring?type=${typeKey}`
+
 	return (
-		<div className="space-y-6">
+		<div className="space-y-5">
 			<SetBreadcrumbsLabels labels={breadcrumbLabels} />
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<h1 className="text-2xl font-semibold">{typeData.questionType.title}</h1>
-					<p className="text-sm text-muted-foreground">
-						`{typeData.questionType.key}` • {typeData.questionType.uiTemplate}
-						{typeData.questionType.isSystem ? ' • system' : ''}
+			<section className="flex flex-col gap-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:flex-row tab-sm:items-start tab-sm:justify-between tab-sm:p-unit">
+				<div className="min-w-0">
+					<p className={KICKER_CLASS}>тип вопроса</p>
+					<h1 className="mt-2 font-serif text-3xl leading-tight break-words text-foreground tab-sm:text-4xl">
+						{questionType.title}
+					</h1>
+					<p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+						<span>Формат ответа: {TEMPLATE_META[questionType.uiTemplate].label}</span>
+						{questionType.isSystem ? (
+							<Badge variant="outline" className="rounded-full">
+								Системный
+							</Badge>
+						) : null}
+						{questionType.isActive ? null : (
+							<Badge variant="secondary" className="rounded-full">
+								Отключён
+							</Badge>
+						)}
 					</p>
 				</div>
-				<Button variant="outline" asChild>
-					<Link href="/admin/tests/question-types">
-						<ArrowLeft className="mr-2 h-4 w-4" />К типам вопросов
-					</Link>
+				<Button className="shrink-0 rounded-full" onClick={saveGlobal} disabled={savingGlobal}>
+					<Save className="size-4" aria-hidden="true" />
+					Сохранить тип
 				</Button>
-			</div>
+			</section>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Глобальная конфигурация типа</CardTitle>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					<div className="grid gap-3 md:grid-cols-2">
-						<div className="space-y-1">
-							<Label>Название</Label>
-							<Input
-								value={globalForm.title}
-								onChange={(e) => setGlobalForm((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
-							/>
-							<p className="text-xs text-muted-foreground">Отображается в выборе типа вопроса и в настройках.</p>
-						</div>
-						<div className="space-y-1">
-							<Label>UI шаблон</Label>
-							<Select
-								value={globalForm.uiTemplate}
-								onValueChange={(value) =>
-									setGlobalForm((prev) =>
-										prev
-											? {
-													...prev,
-													uiTemplate: value as QuestionUiTemplate,
-													scoringRule: createDefaultQuestionTypeScoringRule(value as QuestionUiTemplate),
-												}
-											: prev
-									)
-								}
-								disabled={typeData.questionType.isSystem}
-							>
-								<SelectTrigger>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="short_text">short_text</SelectItem>
-									<SelectItem value="sequence_digits">sequence_digits</SelectItem>
-									<SelectItem value="single_choice">single_choice</SelectItem>
-									<SelectItem value="multi_choice">multi_choice</SelectItem>
-									<SelectItem value="matching">matching</SelectItem>
-								</SelectContent>
-							</Select>
-							<p className="text-xs text-muted-foreground">
-								Шаблон определяет формат ответа и допустимую метрику ошибок.
-							</p>
-						</div>
+			<Section title="Основное">
+				<div className="grid gap-4 tab-sm:grid-cols-2">
+					<div className="space-y-1">
+						<Label htmlFor="type-title">Название</Label>
+						<Input
+							id="type-title"
+							value={globalForm.title}
+							onChange={(e) => setGlobalForm((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
+						/>
+						<p className="text-xs text-muted-foreground">Так тип называется при выборе в вопросе.</p>
 					</div>
 					<div className="space-y-1">
-						<Label>Описание</Label>
-						<Textarea
-							value={globalForm.description}
-							onChange={(e) => setGlobalForm((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
-							rows={2}
-						/>
-						<p className="text-xs text-muted-foreground">Используйте описание как инструкцию для составителя тестов.</p>
+						<Label htmlFor="type-template">Формат ответа</Label>
+						<Select
+							value={globalForm.uiTemplate}
+							onValueChange={(value) =>
+								setGlobalForm((prev) =>
+									prev
+										? {
+												...prev,
+												uiTemplate: value as QuestionUiTemplate,
+												scoringRule: createDefaultQuestionTypeScoringRule(value as QuestionUiTemplate),
+											}
+										: prev
+								)
+							}
+							disabled={questionType.isSystem}
+						>
+							<SelectTrigger id="type-template" className="w-full">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{QUESTION_UI_TEMPLATES.map((template) => (
+									<SelectItem key={template} value={template}>
+										{TEMPLATE_META[template].label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<p className="text-xs text-muted-foreground">
+							{questionType.isSystem
+								? 'У системного типа формат не меняется.'
+								: TEMPLATE_META[globalForm.uiTemplate].description}
+						</p>
 					</div>
-					<Card>
-						<CardHeader>
-							<CardTitle className="text-base">Памятка и пример</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-1 text-sm">
-							<p className="font-medium">{TEMPLATE_META[globalForm.uiTemplate].label}</p>
-							<p className="text-muted-foreground">{TEMPLATE_META[globalForm.uiTemplate].description}</p>
-							<p className="text-muted-foreground">
-								Формат ответа: {TEMPLATE_META[globalForm.uiTemplate].answerFormat}
-							</p>
-							<p className="text-muted-foreground">Пример: {TEMPLATE_META[globalForm.uiTemplate].example}</p>
-						</CardContent>
-					</Card>
-					<div className="grid gap-3 md:grid-cols-3">
+				</div>
+				<div className="space-y-1">
+					<Label htmlFor="type-description">Описание</Label>
+					<Textarea
+						id="type-description"
+						value={globalForm.description}
+						onChange={(e) => setGlobalForm((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+						rows={2}
+					/>
+					<p className="text-xs text-muted-foreground">Подсказка для того, кто составляет вопросы.</p>
+				</div>
+				<div className="grid gap-4 tab-sm:grid-cols-3">
+					<NumberField
+						id="type-min-options"
+						label="Вариантов не меньше"
+						hint="Сколько вариантов ответа должно быть минимум."
+						value={globalForm.validationMinOptions}
+						onChange={(value) => setGlobalForm((prev) => (prev ? { ...prev, validationMinOptions: value } : prev))}
+					/>
+					<NumberField
+						id="type-max-options"
+						label="Вариантов не больше"
+						hint="Сколько вариантов ответа может быть максимум."
+						value={globalForm.validationMaxOptions}
+						onChange={(value) => setGlobalForm((prev) => (prev ? { ...prev, validationMaxOptions: value } : prev))}
+					/>
+					<NumberField
+						id="type-exact-choices"
+						label="Верных ответов ровно"
+						hint="Например, 3 для заданий «выберите три ответа»."
+						value={globalForm.validationExactChoiceCount}
+						onChange={(value) =>
+							setGlobalForm((prev) => (prev ? { ...prev, validationExactChoiceCount: value } : prev))
+						}
+					/>
+				</div>
+				<SwitchRow
+					id="type-active"
+					title="Тип доступен"
+					hint="Если выключить, тип нельзя выбрать в новых вопросах."
+					checked={globalForm.isActive}
+					onCheckedChange={(checked) => setGlobalForm((prev) => (prev ? { ...prev, isActive: checked } : prev))}
+				/>
+			</Section>
+
+			<Section
+				title="Общая формула баллов"
+				description={
+					<>
+						Действует во всех тестах. Все формулы сразу и свои формулы для отдельных тестов — в{' '}
+						<Link
+							href={`/admin/tests/scoring?type=${typeKey}`}
+							className="font-medium text-primary underline-offset-4 hover:underline"
+						>
+							настройке баллов
+						</Link>
+						.
+					</>
+				}
+			>
+				<QuestionTypeScoringRuleEditorFields
+					rule={globalForm.scoringRule}
+					uiTemplate={globalForm.uiTemplate}
+					onChange={(next) => setGlobalForm((prev) => (prev ? { ...prev, scoringRule: next } : prev))}
+				/>
+			</Section>
+
+			<Section title="Для отдельного теста" description="Своё название типа или отключение только в выбранном тесте.">
+				<div className="grid gap-4 tab-sm:grid-cols-2">
+					<div className="space-y-1">
+						<Label htmlFor="type-test-topic">Тема</Label>
+						<Select
+							value={selectedTopicId}
+							onValueChange={(value) => {
+								setSelectedTopicId(value)
+								setSelectedTestId('')
+								setTestForm(null)
+							}}
+						>
+							<SelectTrigger id="type-test-topic" className="w-full">
+								<SelectValue placeholder="Выберите тему" />
+							</SelectTrigger>
+							<SelectContent>
+								{(topicsData?.topics ?? []).map((topic) => (
+									<SelectItem key={topic.id} value={topic.id}>
+										{topic.title}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="space-y-1">
+						<Label htmlFor="type-test-test">Тест</Label>
+						<Select
+							value={selectedTestId}
+							onValueChange={(value) => {
+								setSelectedTestId(value)
+								setTestForm(null)
+							}}
+							disabled={!selectedTopicId}
+						>
+							<SelectTrigger id="type-test-test" className="w-full">
+								<SelectValue placeholder="Выберите тест" />
+							</SelectTrigger>
+							<SelectContent>
+								{testsForTopic.map((test) => (
+									<SelectItem key={test.id} value={test.id}>
+										{test.title}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
+
+				{selectedTestId && testForm ? (
+					<div className="space-y-4">
 						<div className="space-y-1">
-							<Label>minOptions</Label>
+							<Label htmlFor="type-test-title">Название в этом тесте</Label>
 							<Input
-								type="number"
-								min={0}
-								value={globalForm.validationMinOptions}
-								onChange={(e) =>
-									setGlobalForm((prev) => (prev ? { ...prev, validationMinOptions: e.target.value } : prev))
-								}
+								id="type-test-title"
+								value={testForm.titleOverride}
+								onChange={(e) => setTestForm((prev) => (prev ? { ...prev, titleOverride: e.target.value } : prev))}
+								placeholder={`Как везде: ${questionType.title}`}
 							/>
-							<p className="text-xs text-muted-foreground">Нижняя граница количества вариантов ответа.</p>
 						</div>
-						<div className="space-y-1">
-							<Label>maxOptions</Label>
-							<Input
-								type="number"
-								min={0}
-								value={globalForm.validationMaxOptions}
-								onChange={(e) =>
-									setGlobalForm((prev) => (prev ? { ...prev, validationMaxOptions: e.target.value } : prev))
-								}
-							/>
-							<p className="text-xs text-muted-foreground">Верхняя граница количества вариантов ответа.</p>
-						</div>
-						<div className="space-y-1">
-							<Label>exactChoiceCount</Label>
-							<Input
-								type="number"
-								min={0}
-								value={globalForm.validationExactChoiceCount}
-								onChange={(e) =>
-									setGlobalForm((prev) => (prev ? { ...prev, validationExactChoiceCount: e.target.value } : prev))
-								}
-							/>
-							<p className="text-xs text-muted-foreground">
-								Фиксированное число правильных выборов. Пример: для задания "выберите 3" укажите `3`.
-							</p>
-						</div>
-					</div>
-					<div className="flex items-center justify-between rounded border p-3">
-						<div>
-							<p className="text-sm font-medium">Активен</p>
-							<p className="text-xs text-muted-foreground">Если выключить, тип нельзя выбрать в новых вопросах</p>
-						</div>
-						<Switch
-							checked={globalForm.isActive}
-							onCheckedChange={(checked) => setGlobalForm((prev) => (prev ? { ...prev, isActive: checked } : prev))}
+						<SwitchRow
+							id="type-test-disabled"
+							title="Отключить в этом тесте"
+							hint="Тип нельзя будет выбрать в вопросах этого теста."
+							checked={testForm.isDisabled}
+							onCheckedChange={(checked) => setTestForm((prev) => (prev ? { ...prev, isDisabled: checked } : prev))}
 						/>
-					</div>
-					<div className="space-y-2">
-						<Label>Формула начисления баллов</Label>
-						<QuestionTypeScoringRuleEditor
-							rule={globalForm.scoringRule}
-							uiTemplate={globalForm.uiTemplate}
-							onChange={(next) => setGlobalForm((prev) => (prev ? { ...prev, scoringRule: next } : prev))}
-						/>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						<Button onClick={saveGlobal} disabled={savingGlobal}>
-							<Save className="mr-2 h-4 w-4" />
-							Сохранить глобально
-						</Button>
-						{!typeData.questionType.isSystem ? (
-							<Button variant="outline" onClick={removeType} disabled={savingGlobal}>
-								<Trash2 className="mr-2 h-4 w-4 text-destructive" />
-								Отключить тип
+						<p className="text-sm text-muted-foreground">
+							Формула в этом тесте: {savedFormula ? 'своя' : 'общая'}.{' '}
+							<Link href={scoringHref} className="font-medium text-primary underline-offset-4 hover:underline">
+								Изменить формулу для теста
+							</Link>
+						</p>
+						<div className="flex flex-wrap gap-2">
+							<Button className="rounded-full" onClick={saveForTest} disabled={savingTest}>
+								<Save className="size-4" aria-hidden="true" />
+								Сохранить для теста
 							</Button>
-						) : null}
-					</div>
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Override для конкретного теста</CardTitle>
-					<CardDescription>Настройка этого типа вопроса только для выбранного теста</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					<div className="grid gap-3 md:grid-cols-2">
-						<div className="space-y-1">
-							<Label>Тема</Label>
-							<Select
-								value={selectedTopicId}
-								onValueChange={(value) => {
-									setSelectedTopicId(value)
-									setSelectedTestId('')
-								}}
-							>
-								<SelectTrigger>
-									<SelectValue placeholder="Выберите тему" />
-								</SelectTrigger>
-								<SelectContent>
-									{(topicsData?.topics ?? []).map((topic) => (
-										<SelectItem key={topic.id} value={topic.id}>
-											{topic.title}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="space-y-1">
-							<Label>Тест</Label>
-							<Select value={selectedTestId} onValueChange={setSelectedTestId} disabled={!selectedTopicId}>
-								<SelectTrigger>
-									<SelectValue placeholder="Выберите тест" />
-								</SelectTrigger>
-								<SelectContent>
-									{testsForTopic.map((test) => (
-										<SelectItem key={test.id} value={test.id}>
-											{test.title}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
+							{hasTestSettings ? (
+								<Button variant="outline" className="rounded-full" onClick={resetForTest} disabled={savingTest}>
+									Сбросить
+								</Button>
+							) : null}
 						</div>
 					</div>
-
-					{selectedTestId && overrideForm ? (
-						<div className="space-y-3 rounded border p-3">
-							<div className="space-y-1">
-								<Label>Переопределенное название (опционально)</Label>
-								<Input
-									value={overrideForm.titleOverride}
-									onChange={(e) =>
-										setOverrideForm((prev) => (prev ? { ...prev, titleOverride: e.target.value } : prev))
-									}
-									placeholder="Если пусто, используется глобальное"
-								/>
-								<p className="text-xs text-muted-foreground">
-									Позволяет изменить название типа только в выбранном тесте.
-								</p>
-							</div>
-							<div className="space-y-2">
-								<div className="flex items-center justify-between">
-									<Label>ScoringRule override</Label>
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										onClick={() =>
-											setOverrideForm((prev) =>
-												prev
-													? {
-															...prev,
-															scoringRuleOverride: prev.scoringRuleOverride
-																? null
-																: (globalForm.scoringRule as QuestionTypeScoringRule),
-														}
-													: prev
-											)
-										}
-									>
-										<RotateCcw className="mr-2 h-4 w-4" />
-										{overrideForm.scoringRuleOverride ? 'Убрать scoring override' : 'Создать scoring override'}
-									</Button>
-								</div>
-								{overrideForm.scoringRuleOverride ? (
-									<QuestionTypeScoringRuleEditor
-										rule={overrideForm.scoringRuleOverride}
-										uiTemplate={testScopedType?.uiTemplate ?? globalForm.uiTemplate}
-										onChange={(next) =>
-											setOverrideForm((prev) => (prev ? { ...prev, scoringRuleOverride: next } : prev))
-										}
-									/>
-								) : (
-									<p className="text-sm text-muted-foreground">Используется глобальная формула начисления баллов.</p>
-								)}
-							</div>
-							<div className="flex items-center justify-between rounded border p-3">
-								<div>
-									<p className="text-sm font-medium">Отключить тип в этом тесте</p>
-									<p className="text-xs text-muted-foreground">
-										Если включено, тип нельзя использовать в выбранном тесте
-									</p>
-								</div>
-								<Switch
-									checked={overrideForm.isDisabled}
-									onCheckedChange={(checked) =>
-										setOverrideForm((prev) => (prev ? { ...prev, isDisabled: checked } : prev))
-									}
-								/>
-							</div>
-							<div className="flex flex-wrap gap-2">
-								<Button onClick={saveOverride} disabled={savingOverride}>
-									<Save className="mr-2 h-4 w-4" />
-									Сохранить override
-								</Button>
-								<Button variant="outline" onClick={clearOverride} disabled={savingOverride}>
-									Удалить override
-								</Button>
-							</div>
-						</div>
-					) : (
-						<p className="text-sm text-muted-foreground">Выберите тест, чтобы настроить override для этого типа.</p>
-					)}
-				</CardContent>
-			</Card>
+				) : (
+					<p className="text-sm text-muted-foreground">Выберите тему и тест.</p>
+				)}
+			</Section>
 			{alertDialog}
 		</div>
 	)

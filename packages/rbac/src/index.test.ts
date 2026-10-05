@@ -19,10 +19,16 @@ const RUNTIME_EXPORTS = [
 	'createAccessRule',
 	'accessRuleToSerializable',
 	'normaliseActionList',
+	'SECTION_PERMISSIONS',
+	'canAccessSection',
+	'canOpenPath',
+	'sectionForPath',
+	'RESERVED_TOPIC_SLUGS',
+	'isReservedTopicSlug',
 ]
 
 describe('@bio-exam/rbac', () => {
-	test('экспортирует ровно 15 рантайм-имён', () => {
+	test('экспортирует ровно 21 рантайм-имя', () => {
 		expect(Object.keys(rbac).sort()).toEqual([...RUNTIME_EXPORTS].sort())
 	})
 
@@ -49,6 +55,27 @@ describe('@bio-exam/rbac', () => {
 		expect(rbac.roleDisplayName('user')).toBe('Ученик')
 		expect(rbac.roleDisplayName('teacher')).toBe('Учитель')
 		expect(rbac.roleDisplayName('admin')).toBe('Администратор')
+	})
+
+	test('canOpenPath: адрес вне разделов открыт всем, раздел — по правам', () => {
+		const none = new Set<rbac.PermissionKey>()
+		const teacher = new Set<rbac.PermissionKey>(['tests.read', 'users.read', 'groups.manage_groups'])
+		expect(rbac.canOpenPath(none, '/dashboard')).toBe(true)
+		expect(rbac.canOpenPath(none, 'https://example.test/docs')).toBe(true)
+		expect(rbac.canOpenPath(none, '/admin')).toBe(false)
+		expect(rbac.canOpenPath(teacher, '/admin/tests')).toBe(true)
+		expect(rbac.canOpenPath(teacher, '/admin/tests/scoring')).toBe(false)
+		expect(rbac.canOpenPath(teacher, '/admin/settings/rbac')).toBe(false)
+	})
+
+	test('sectionForPath отрезает query, hash и завершающий слэш', () => {
+		const settingsOnly = new Set<rbac.PermissionKey>(['settings.manage'])
+		expect(rbac.sectionForPath('/admin?x=1')).toBe('admin')
+		expect(rbac.sectionForPath('/admin#a')).toBe('admin')
+		expect(rbac.sectionForPath('/admin/settings/rbac?x=1')).toBe('rbac')
+		expect(rbac.sectionForPath('/admin/users/')).toBe('users')
+		expect(rbac.canOpenPath(new Set<rbac.PermissionKey>(), '/admin?x=1')).toBe(false)
+		expect(rbac.canOpenPath(settingsOnly, '/admin/settings/rbac?x')).toBe(false)
 	})
 
 	test('домен zone с единственным действием all', () => {

@@ -639,6 +639,25 @@ describe('гонка одинакового slug при переименован
 	})
 })
 
+describe('адрес темы, занятый разделом сайта', () => {
+	test('создание и переименование темы в new, scoring, question-types: 400 с понятным текстом, тема не меняется', async () => {
+		const slug = nextSlug('topic-reserved')
+		const topicId = await createTopic(slug)
+		for (const reserved of ['new', 'scoring', 'question-types']) {
+			const created = await call(ctx, 'POST', '/api/tests/topics', {
+				cookies: adminJar,
+				body: { slug: reserved, title: `Тема ${reserved}` },
+			})
+			assert.equal(created.status, 400, JSON.stringify(created.body))
+			assert.equal(created.body.error, 'Этот адрес темы занят разделом сайта, выберите другой')
+			const renamed = await patchTopic(topicId, { slug: reserved })
+			assert.equal(renamed.status, 400, JSON.stringify(renamed.body))
+		}
+		const { rows } = await ctx.pgPool.query<{ slug: string }>('SELECT slug FROM topics WHERE id = $1', [topicId])
+		assert.deepEqual(rows, [{ slug }])
+	})
+})
+
 describe('переименование темы', () => {
 	test('смена slug темы переносит файлы всех тестов темы', async () => {
 		const oldTopic = nextSlug('topic-old')

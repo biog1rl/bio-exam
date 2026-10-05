@@ -139,7 +139,7 @@ export default function LoginPage() {
 				return
 			}
 
-			window.location.assign(callbackUrl)
+			window.location.replace(callbackUrl)
 			navigating = true
 		} catch {
 			setError({ kind: 'text', text: NETWORK_ERROR_TEXT })

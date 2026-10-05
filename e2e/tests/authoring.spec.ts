@@ -15,6 +15,7 @@ import { readFile } from 'node:fs/promises'
 
 import { readZipEntries } from '../../app/server/src/test-support/zip'
 import { seedTest, seedTopic } from '../fixtures/accounts'
+import { openNewQuestionDraft } from '../fixtures/drafts'
 import { expect, newSessionContext, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 
 type SavedQuestion = {
@@ -30,11 +31,9 @@ function testPageUrl(slug: string): string {
 	return `/admin/tests/${TOPIC_SLUG}/${slug}`
 }
 
-/** Открывает форму нового вопроса: страница создаёт черновик и ведёт на его адрес */
+/** Открывает форму нового вопроса кнопкой «Добавить вопрос» в редакторе теста */
 async function openNewQuestion(page: Page, slug: string): Promise<void> {
-	await page.goto(`${testPageUrl(slug)}/questions/new`)
-	await expect(page).toHaveURL(new RegExp(`${testPageUrl(slug)}/questions/drafts/[0-9a-f-]+$`))
-	await expect(page.getByRole('heading', { level: 1, name: 'Новый вопрос' })).toBeVisible()
+	await openNewQuestionDraft(page, testPageUrl(slug))
 	// Список типов приходит отдельным запросом: пока он пуст, селект типа заблокирован
 	await expect(typeSelect(page)).toBeEnabled()
 }
@@ -190,7 +189,11 @@ test.describe.serial('flow 4: question authoring', () => {
 			// Перезагрузка: вопрос приходит с сервера, а не из состояния страницы
 			await page.reload()
 			await expect(page.getByText(authored.prompt)).toBeVisible()
-			if (authored.typeTitle) await expect(page.getByText(authored.typeTitle, { exact: true }).first()).toBeVisible()
+			if (authored.typeTitle) {
+				await expect(
+					page.getByText(authored.typeTitle, { exact: true }).filter({ visible: true }).first()
+				).toBeVisible()
+			}
 
 			const stored = (await savedQuestions(page, slug)).find((question) =>
 				question.promptText.includes(authored.prompt)
@@ -252,8 +255,9 @@ test.describe.serial('D-34: test export', () => {
 
 			await page.goto(testPageUrl(seeded.slug))
 			await expect(page.getByRole('heading', { level: 1, name: seeded.title })).toBeVisible()
+			await page.getByRole('button', { name: 'Экспорт', exact: true }).click()
 			const downloaded = page.waitForEvent('download')
-			await page.getByRole('button', { name: withAnswers ? 'С ответами' : 'Экспорт', exact: true }).click()
+			await page.getByRole('menuitem', { name: withAnswers ? 'С ответами' : 'Без ответов', exact: true }).click()
 			const download = await downloaded
 
 			expect(download.suggestedFilename()).toBe(`${TOPIC_SLUG}-${seeded.slug}.zip`)

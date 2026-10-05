@@ -205,10 +205,6 @@ export async function saveTestQuestion(testId: string, questionId: string | null
 	await send(url, 'Ошибка сохранения вопроса', { method: questionId ? 'PATCH' : 'POST', json: question })
 }
 
-export function fetchTestBySlug(topicSlug: string, testSlug: string): Promise<TestDetailResponse> {
-	return send(adminTestsKeys.bySlug(topicSlug, testSlug), 'Не удалось загрузить тест', { parse: parseTestDetail })
-}
-
 export function exportToast(outcome: RequestOutcome<ArchiveDownload>): ExportToast {
 	if (outcome.ok) return { kind: 'success', text: EXPORT_SUCCESS_MESSAGE }
 	const text = exportFailureMessage(outcome, EXPORT_FALLBACK_MESSAGE)

@@ -46,7 +46,7 @@ test('таблица эмодзи не грузится при открытии 
 
 	const log = watchScripts(page)
 	await page.goto(`/admin/tests/${TOPIC_SLUG}/${slug}/questions/${question.id}`)
-	await expect(page.getByRole('heading', { level: 1, name: 'Редактирование' })).toBeVisible()
+	await expect(page.getByRole('heading', { level: 1, name: /^Вопрос \d+$/ })).toBeVisible()
 	const editor = page.getByRole('textbox').first()
 	await expect(editor).toHaveAttribute('contenteditable', 'true')
 	await expect(editor).toContainText(question.promptText)

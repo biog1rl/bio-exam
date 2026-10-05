@@ -61,13 +61,16 @@ function FormulaField({ rule, update }: RuleBlockProps) {
 				</SelectTrigger>
 				<SelectContent>
 					<SelectItem value="exact_match">Только полностью верный ответ</SelectItem>
-					<SelectItem value="one_mistake_partial">Полный балл + частичный за 1 ошибку</SelectItem>
-					<SelectItem value="tiers">Шкала по числу ошибок (tiers)</SelectItem>
+					<SelectItem value="one_mistake_partial">Полный балл и часть за одну ошибку</SelectItem>
+					<SelectItem value="tiers">Шкала по числу ошибок</SelectItem>
 				</SelectContent>
 			</Select>
 			<p className="text-xs text-muted-foreground">
-				`exact_match` - баллы только за 0 ошибок. `one_mistake_partial` - отдельный балл за 1 ошибку. `tiers` - шкала по
-				количеству ошибок.
+				{rule.formula === 'exact_match'
+					? 'Баллы начисляются только за ответ без ошибок.'
+					: rule.formula === 'one_mistake_partial'
+						? 'За ответ без ошибок — полный балл, за одну ошибку — отдельный балл ниже.'
+						: 'Баллы зависят от числа ошибок: задайте ступени ниже.'}
 			</p>
 		</div>
 	)
@@ -82,7 +85,7 @@ type MistakeMetricFieldProps = {
 function MistakeMetricField({ rule, allowedMetrics, update }: MistakeMetricFieldProps) {
 	return (
 		<div className="space-y-1">
-			<Label className="text-xs">Метрика ошибок</Label>
+			<Label className="text-xs">Как считать ошибки</Label>
 			<Select value={rule.mistakeMetric} onValueChange={(value) => update({ mistakeMetric: value as MistakeMetric })}>
 				<SelectTrigger>
 					<SelectValue />
@@ -153,46 +156,51 @@ function TiersField({ rule, update }: RuleBlockProps) {
 					}}
 				>
 					<Plus className="mr-2 h-4 w-4" />
-					Добавить tier
+					Добавить ступень
 				</Button>
 			</div>
 			<p className="text-xs text-muted-foreground">
-				Каждый tier задает порог ошибок и баллы. Пример: `maxMistakes=1, points=1` означает, что при 1 ошибке
+				Ступень: если ошибок не больше порога, начисляются её баллы. Например, порог 1 и 1 балл — за одну ошибку
 				начисляется 1 балл.
 			</p>
 			<div className="space-y-2">
 				{(rule.tiers ?? []).map((tier, index) => (
 					<div
 						key={`${index}-${tier.maxMistakes}-${tier.points}`}
-						className="grid gap-2 rounded border p-2 md:grid-cols-[1fr_1fr_auto]"
+						className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 rounded-2xl border border-border/70 p-2"
 					>
-						<Input
-							type="number"
-							min={1}
-							value={tier.maxMistakes}
-							onChange={(e) => {
-								const next = [...(rule.tiers ?? [])]
-								next[index] = { ...next[index], maxMistakes: Math.max(1, Number(e.target.value || 1)) }
-								update({ tiers: next })
-							}}
-							placeholder="maxMistakes"
-						/>
-						<Input
-							type="number"
-							min={0}
-							step={0.1}
-							value={tier.points}
-							onChange={(e) => {
-								const next = [...(rule.tiers ?? [])]
-								next[index] = { ...next[index], points: Math.max(0, Number(e.target.value || 0)) }
-								update({ tiers: next })
-							}}
-							placeholder="points"
-						/>
+						<label className="space-y-1">
+							<span className="text-xs text-muted-foreground">Ошибок не больше</span>
+							<Input
+								type="number"
+								min={1}
+								value={tier.maxMistakes}
+								onChange={(e) => {
+									const next = [...(rule.tiers ?? [])]
+									next[index] = { ...next[index], maxMistakes: Math.max(1, Number(e.target.value || 1)) }
+									update({ tiers: next })
+								}}
+							/>
+						</label>
+						<label className="space-y-1">
+							<span className="text-xs text-muted-foreground">Баллы</span>
+							<Input
+								type="number"
+								min={0}
+								step={0.1}
+								value={tier.points}
+								onChange={(e) => {
+									const next = [...(rule.tiers ?? [])]
+									next[index] = { ...next[index], points: Math.max(0, Number(e.target.value || 0)) }
+									update({ tiers: next })
+								}}
+							/>
+						</label>
 						<Button
 							type="button"
 							variant="ghost"
 							size="icon"
+							aria-label={`Удалить ступень ${index + 1}`}
 							onClick={() => {
 								const next = (rule.tiers ?? []).filter((_, tierIndex) => tierIndex !== index)
 								update({ tiers: next })
@@ -210,12 +218,9 @@ function TiersField({ rule, update }: RuleBlockProps) {
 export function QuestionTypeScoringRuleEditorHeader({ uiTemplate }: { uiTemplate: QuestionUiTemplate }) {
 	const templateMeta = TEMPLATE_META[uiTemplate]
 	return (
-		<div className="rounded-md border bg-muted/40 p-2 text-xs">
-			<p className="font-medium">{templateMeta.label}</p>
+		<div className="rounded-2xl bg-secondary/50 px-3 py-2 text-xs">
+			<p className="font-medium text-foreground">{templateMeta.label}</p>
 			<p className="text-muted-foreground">{templateMeta.description}</p>
-			<p className="mt-1 text-muted-foreground">
-				Формат ответа: {templateMeta.answerFormat}. Пример: {templateMeta.example}
-			</p>
 		</div>
 	)
 }
@@ -229,7 +234,7 @@ type EditorContentProps = {
 function QuestionTypeScoringRuleEditorFieldsContent({ rule, update, allowedMetrics }: EditorContentProps) {
 	return (
 		<>
-			<div className="grid gap-3 md:grid-cols-2">
+			<div className="grid gap-3 tab-sm:grid-cols-2">
 				<FormulaField rule={rule} update={update} />
 				<MistakeMetricField rule={rule} allowedMetrics={allowedMetrics} update={update} />
 			</div>
@@ -263,7 +268,7 @@ export function QuestionTypeScoringEditorContent({ rule, uiTemplate, onChange }:
 
 export default function QuestionTypeScoringRuleEditor({ rule, uiTemplate, onChange, onlyFields }: Props) {
 	return (
-		<div className="space-y-3 rounded-md border p-3">
+		<div className="space-y-3 rounded-2xl border border-border/70 p-3">
 			{!onlyFields && <QuestionTypeScoringRuleEditorHeader uiTemplate={uiTemplate} />}
 			<QuestionTypeScoringRuleEditorFields rule={rule} uiTemplate={uiTemplate} onChange={onChange} />
 		</div>

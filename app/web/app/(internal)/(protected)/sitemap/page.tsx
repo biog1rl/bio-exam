@@ -4,8 +4,9 @@ import { ArrowRight } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
+import { NAV_ICONS } from '@/components/navigation/nav-icons'
+import { sectionDescription, siteMapGroups } from '@/lib/navigation/sections'
 import { getServerMe } from '@/lib/session/server'
-import { visibleSiteMap } from '@/lib/site-map'
 
 export const metadata: Metadata = { title: 'Карта сайта' }
 
@@ -13,7 +14,8 @@ export default async function SiteMapPage() {
 	const me = await getServerMe()
 	if (!me) return null
 
-	const groups = visibleSiteMap(new Set<PermissionKey>(me.perms))
+	const perms = new Set<PermissionKey>(me.perms)
+	const groups = siteMapGroups(perms)
 
 	return (
 		<main className="space-y-unit">
@@ -35,28 +37,36 @@ export default async function SiteMapPage() {
 						{group.title}
 					</h2>
 					<ul className="mt-unit grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-3">
-						{group.pages.map((page) => (
-							<li key={page.href}>
-								<Link
-									href={page.href}
-									className="group flex h-full flex-col justify-between gap-3 rounded-3xl border border-border/70 bg-secondary/45 px-4 py-4 transition-colors hover:border-primary/45 hover:bg-secondary/75 focus-visible:border-primary focus-visible:bg-secondary/75 focus-visible:outline-none"
-								>
-									<span className="flex items-center justify-between gap-3">
-										<span className="font-serif text-2xl leading-none transition-colors group-hover:text-primary">
-											{page.title}
+						{group.sections.map((section) => {
+							const Icon = NAV_ICONS[section.icon]
+							return (
+								<li key={section.href}>
+									<Link
+										href={section.href}
+										className="group flex h-full flex-col justify-between gap-3 rounded-3xl border border-border/70 bg-secondary/45 px-4 py-4 transition-colors hover:border-primary/45 hover:bg-secondary/75 focus-visible:border-primary focus-visible:bg-secondary/75 focus-visible:outline-none"
+									>
+										<span className="flex items-center justify-between gap-3">
+											<span className="flex items-center gap-3">
+												<Icon
+													className="size-5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+													aria-hidden="true"
+												/>
+												<span className="font-serif text-2xl leading-none transition-colors group-hover:text-primary">
+													{section.title}
+												</span>
+											</span>
+											<ArrowRight
+												className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+												aria-hidden="true"
+											/>
 										</span>
-										<ArrowRight
-											className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-											aria-hidden="true"
-										/>
-									</span>
-									<span className="text-sm leading-6 text-muted-foreground">{page.description}</span>
-									<span className="font-mono text-[0.6875rem] tracking-[0.12em] text-muted-foreground">
-										{page.href}
-									</span>
-								</Link>
-							</li>
-						))}
+										<span className="text-sm leading-6 text-muted-foreground">
+											{sectionDescription(perms, section)}
+										</span>
+									</Link>
+								</li>
+							)
+						})}
 					</ul>
 				</section>
 			))}

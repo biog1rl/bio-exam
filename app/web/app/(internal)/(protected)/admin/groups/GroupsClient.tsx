@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useRef } from 'react'
 
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { PencilIcon, PlusIcon, Trash2Icon, UsersRoundIcon } from 'lucide-react'
+import Link from 'next/link'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
@@ -15,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { groupsKeys, groupsListFetcher, type Group } from '@/lib/groups/api'
 import { TEACHER_GROUPS_EMPTY, groupsEmptyState, ownerLabel } from '@/lib/groups/group-form'
+import { usersUrl } from '@/lib/users/users-url'
 
 export default function GroupsClient() {
 	const { can } = useAuth()
@@ -130,6 +132,11 @@ export default function GroupsClient() {
 											<TableCell>{g.memberCount}</TableCell>
 											<TableCell>
 												<div className="flex justify-end gap-2">
+													<Button size="icon" variant="outline" asChild>
+														<Link href={usersUrl(g.id)} aria-label={`Ученики группы ${g.name}`} title="Ученики группы">
+															<UsersRoundIcon />
+														</Link>
+													</Button>
 													<Button
 														size="icon"
 														variant="outline"

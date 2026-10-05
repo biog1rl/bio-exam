@@ -18,7 +18,7 @@ export function validateScoringRuleTemplateCompatibility(params: {
 	scoringRule: z.infer<typeof QuestionTypeScoringRuleSchema>
 }): string | null {
 	if (!isMistakeMetricAllowedForTemplate(params.uiTemplate, params.scoringRule.mistakeMetric)) {
-		return `Метрика ${params.scoringRule.mistakeMetric} несовместима с шаблоном ${params.uiTemplate}`
+		return 'Способ подсчёта ошибок не подходит к формату ответа этого типа вопроса'
 	}
 	return null
 }

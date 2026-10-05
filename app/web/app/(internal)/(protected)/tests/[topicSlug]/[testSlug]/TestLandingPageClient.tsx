@@ -5,12 +5,14 @@ import type { DateRange } from 'react-day-picker'
 
 import { format, subMonths, subWeeks } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { TestMissingState } from '@/components/tests/TestMissingState'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
@@ -151,7 +153,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 	if (!test) {
 		return (
 			<main className="p-4 tab-sm:p-6">
-				<p className="text-muted-foreground">Тест не найден</p>
+				<TestMissingState />
 			</main>
 		)
 	}
@@ -170,11 +172,18 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 			{/* Header */}
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div>
-					<h1 className="text-2xl font-semibold">{test.title}</h1>
+					<Link
+						href="/tests"
+						className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:underline focus-visible:outline-none"
+					>
+						<ArrowLeft className="size-4" aria-hidden="true" />
+						Все тесты · {test.topicTitle}
+					</Link>
+					<h1 className="mt-2 text-2xl font-semibold">{test.title}</h1>
 					{test.description && <p className="mt-1 text-sm text-muted-foreground">{test.description}</p>}
 				</div>
 				<Button asChild size="lg" className="w-full mob:w-auto">
-					<Link href={`/tests/${topicSlug}/${testSlug}/start/`}>Начать тест</Link>
+					<Link href={`/tests/${topicSlug}/${testSlug}/start`}>Начать тест</Link>
 				</Button>
 			</div>
 

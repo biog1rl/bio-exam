@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 
 import { UserPlusIcon } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
@@ -14,6 +15,7 @@ import { InviteUserDialog } from '@/components/users/dialogs/InviteUserDialog'
 import { groupsKeys, groupsListFetcher } from '@/lib/groups/api'
 import { usersKeys, usersListFetcher } from '@/lib/users/api'
 import { matchesGroup } from '@/lib/users/invite-form'
+import { effectiveGroup, parseUsersGroup, usersUrl } from '@/lib/users/users-url'
 
 export default function UsersClient() {
 	const { can } = useAuth()
@@ -23,8 +25,13 @@ export default function UsersClient() {
 	const { data: groupsData } = useSWR(groupsKeys.list(), groupsListFetcher)
 	const titleRef = useRef<HTMLHeadingElement>(null)
 	const [open, setOpen] = useState(false)
-	const [groupFilter, setGroupFilter] = useState<string>('all')
+	const searchParams = useSearchParams()
 	const allGroups = useMemo(() => groupsData?.groups ?? [], [groupsData])
+	const groupFilter =
+		effectiveGroup(parseUsersGroup(searchParams ?? new URLSearchParams()), groupsData?.groups) ?? 'all'
+	const setGroupFilter = (value: string) => {
+		window.history.replaceState(null, '', usersUrl(value === 'all' ? null : value))
+	}
 	const users = useMemo(() => {
 		const all = data?.rows ?? []
 		if (groupFilter === 'all') return all

@@ -1,26 +1,8 @@
-import type { PermissionKey } from '@bio-exam/rbac'
-
 import type { RequestFailureKind } from '@/lib/http/request'
-import { canAccessSection } from '@/lib/session/route-permissions'
 
 import type { SidebarItem } from './api'
 
 export const SIDEBAR_RELOAD_ERROR = 'Ошибка загрузки пунктов меню'
-
-export const ADMIN_LINK: SidebarItem = {
-	id: 'builtin-admin',
-	title: 'Админка',
-	url: '/admin',
-	icon: 'ShieldCheck',
-	target: '_self',
-	order: Number.MAX_SAFE_INTEGER,
-	isActive: false,
-}
-
-export function sidebarNavItems(items: readonly SidebarItem[], perms: ReadonlySet<PermissionKey>): SidebarItem[] {
-	if (!canAccessSection(perms, 'admin') || items.some((item) => item.url === ADMIN_LINK.url)) return [...items]
-	return [...items, ADMIN_LINK]
-}
 
 function normalizePath(url: string): string {
 	return url.length > 1 && url.endsWith('/') ? url.slice(0, -1) : url

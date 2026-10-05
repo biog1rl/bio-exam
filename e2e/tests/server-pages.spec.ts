@@ -6,7 +6,7 @@ const ERROR_HEADING = 'Не удалось загрузить страницу'
 test.describe('server pages reach Express through one request path', () => {
 	test('admin opens the attempts list without the error page', async ({ adminPage: page }) => {
 		await page.goto('/admin/attempts')
-		await expect(page.getByRole('heading', { level: 1, name: 'Попытки студентов' })).toBeVisible()
+		await expect(page.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
 		await expect(page.getByText(ERROR_HEADING)).toHaveCount(0)
 	})
 

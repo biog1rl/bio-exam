@@ -1,6 +1,7 @@
 import { type Locator, type Page } from '@playwright/test'
 
 import { seedTest } from '../fixtures/accounts'
+import { openNewQuestionDraft } from '../fixtures/drafts'
 import { expect, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 
 type OpenedDraft = { url: string; draftId: string }
@@ -18,15 +19,10 @@ function promptEditor(page: Page): Locator {
 }
 
 async function openNewDraft(page: Page, slug: string): Promise<OpenedDraft> {
-	await page.goto(`${testPageUrl(slug)}/questions/new`)
-	await expect(page).toHaveURL(new RegExp(`${testPageUrl(slug)}/questions/drafts/[0-9a-f-]+$`))
-	await expect(page.getByRole('heading', { level: 1, name: 'Новый вопрос' })).toBeVisible()
+	const draftId = await openNewQuestionDraft(page, testPageUrl(slug))
 	await expect(typeSelect(page)).toBeEnabled()
 	await expect(promptEditor(page)).toHaveAttribute('contenteditable', 'true')
-	const url = page.url()
-	const draftId = /\/questions\/drafts\/([0-9a-f-]+)$/.exec(new URL(url).pathname)?.[1]
-	if (!draftId) throw new Error(`setup: no draft id in ${url}`)
-	return { url, draftId }
+	return { url: page.url(), draftId }
 }
 
 async function testIdOf(page: Page, slug: string): Promise<string> {
@@ -138,7 +134,7 @@ function unsavedDialog(page: Page): Locator {
 
 async function openQuestionEdit(page: Page, url: string, prompt: string): Promise<void> {
 	await page.goto(url)
-	await expect(page.getByRole('heading', { level: 1, name: 'Редактирование' })).toBeVisible()
+	await expect(page.getByRole('heading', { level: 1, name: /^Вопрос \d+$/ })).toBeVisible()
 	await expect(promptEditor(page)).toHaveAttribute('contenteditable', 'true')
 	await expect(promptEditor(page)).toContainText(prompt)
 }

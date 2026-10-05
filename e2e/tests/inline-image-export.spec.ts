@@ -61,9 +61,9 @@ test('вставленная base64-картинка сохраняется ка
 		await expect(student.getByRole('heading', { name: 'Результат' })).toBeVisible()
 
 		await page.goto(`/admin/tests/${TOPIC_SLUG}`)
-		await page.getByRole('button', { name: 'Экспорт', exact: true }).first().click()
+		await page.getByRole('button', { name: 'Действия с темой', exact: true }).click()
 		const download = page.waitForEvent('download')
-		await page.getByRole('menuitem', { name: 'Без ответов' }).click()
+		await page.getByRole('menuitem', { name: 'Экспорт без ответов' }).click()
 		const archive = await download
 		expect(archive.suggestedFilename()).toBe(`${TOPIC_SLUG}.zip`)
 		const bytes = await fs.readFile(await archive.path())

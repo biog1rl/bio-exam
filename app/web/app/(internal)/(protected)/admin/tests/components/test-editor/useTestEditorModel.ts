@@ -3,7 +3,7 @@ import { arrayMove } from '@dnd-kit/sortable'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
@@ -13,6 +13,7 @@ import { swrFetcher } from '@/lib/http/swr'
 import { adminTestsKeys, questionTypesFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { canManageCatalog, testTopicPickerState } from '@/lib/tests/bank-view'
 import { usersKeys } from '@/lib/users/api'
+import { isStudentOnly } from '@/lib/users/student-card'
 
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type { QuestionDraft, TestFormData } from '../../types'
@@ -42,6 +43,9 @@ import {
 	normalizeFormPayload,
 	resolveQuestionDraftId,
 } from './test-editor-utils'
+import { savedSettings, settingsDirty, totalPoints } from './test-editor-view'
+
+const CANDIDATES_LIMIT = 500
 
 function toastActionError(error: unknown, fallback: string) {
 	const message = actionErrorMessage(error, fallback)
@@ -102,7 +106,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		testAssignmentsFetcher
 	)
 	const { data: allUsersData } = useSWR<{ rows: UserItem[]; total: number }>(
-		testId ? usersKeys.list() : null,
+		testId ? `${usersKeys.list()}?limit=${CANDIDATES_LIMIT}` : null,
 		swrFetcher
 	)
 	const { data: questionTypesData } = useSWR(
@@ -120,6 +124,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null)
 	const [reorderingQuestions, setReorderingQuestions] = useState(false)
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
+	const [settingsOpen, setSettingsOpen] = useState(isCreateMode)
 	const [form, setForm] = useState<TestFormData>(() => createInitialTestForm())
 
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData])
@@ -127,7 +132,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	const studentAssignments = useMemo(() => studentAssignmentsData?.assignments ?? [], [studentAssignmentsData])
 	const assignedUserIds = useMemo(() => new Set(studentAssignments.map((a) => a.userId)), [studentAssignments])
 	const availableUsers = useMemo(
-		() => (allUsersData?.rows ?? []).filter((u) => !assignedUserIds.has(u.id)),
+		() => (allUsersData?.rows ?? []).filter((u) => !assignedUserIds.has(u.id) && isStudentOnly(u.roles ?? [])),
 		[allUsersData, assignedUserIds]
 	)
 
@@ -163,13 +168,24 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	}, [isEditingExisting, questionsData])
 
 	const questionCount = questionsData ? form.questions.length : (testData?.questionsCount ?? form.questions.length)
+	const saved = useMemo(() => (testData?.test ? savedSettings(testData.test) : null), [testData])
+	const dirty = isEditingExisting && settingsDirty(form, saved)
+
+	const discardChanges = () => {
+		if (!saved) return
+		setTestSlugError(null)
+		setForm((prev) => ({ ...prev, ...saved }))
+	}
+
+	const presetTopicSlug = useSearchParams()?.get('topic') ?? null
 
 	useEffect(() => {
 		if (!isCreateMode) return
 		if (topics.length === 0 || form.topicId) return
 
-		setForm((prev) => ({ ...prev, topicId: topics[0].id }))
-	}, [isCreateMode, topics, form.topicId])
+		const preset = topics.find((topic) => topic.slug === presetTopicSlug)
+		setForm((prev) => ({ ...prev, topicId: (preset ?? topics[0]).id }))
+	}, [isCreateMode, topics, form.topicId, presetTopicSlug])
 
 	const handleAssignStudent = useCallback(
 		async (userId: string) => {
@@ -178,7 +194,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			try {
 				await assignStudentToTest(testId, userId)
 				await mutateStudentAssignments()
-				toast.success('Студент добавлен')
+				toast.success('Доступ выдан')
 			} catch (err) {
 				toastActionError(err, 'Ошибка назначения студента')
 			} finally {
@@ -195,7 +211,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			try {
 				await removeStudentFromTest(testId, userId)
 				await mutateStudentAssignments()
-				toast.success('Доступ удален')
+				toast.success('Доступ убран')
 			} catch (err) {
 				toastActionError(err, 'Ошибка удаления студента')
 			} finally {
@@ -207,7 +223,10 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 
 	const applySaveFailure = useCallback((error: unknown): string => {
 		const failure = testSaveFailure(error, 'Ошибка сохранения')
-		if (failure.slugError) setTestSlugError(failure.slugError)
+		if (failure.slugError) {
+			setTestSlugError(failure.slugError)
+			setSettingsOpen(true)
+		}
 		return failure.toast
 	}, [])
 
@@ -426,6 +445,8 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			const data = await updateTestSettings(currentTestId, form).catch((error: unknown) => {
 				throw new Error(applySaveFailure(error))
 			})
+			await mutateTest()
+			setSettingsOpen(false)
 			toast.success('Настройки теста сохранены')
 
 			if (data.test) {
@@ -474,35 +495,60 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 
 	const headerProps = {
 		title: form.title,
+		totalPoints: totalPoints(form.questions),
+		onPublishedChange: (isPublished: boolean) => setForm((prev) => ({ ...prev, isPublished })),
+		route:
+			topicSlug && testSlug
+				? { topicSlug, testSlug, topicTitle: topics.find((topic) => topic.slug === topicSlug)?.title ?? null }
+				: null,
 		questionCount,
 		isEditingExisting,
 		isPublished: form.isPublished,
 		timeLimitMinutes: form.timeLimitMinutes,
-		saving,
-		onSave: handleSave,
+		settingsDirty: dirty,
 		onExport: handleExport,
+		onOpenSettings: () => setSettingsOpen(true),
 	}
 
-	const settingsPanelProps = {
-		form,
-		setForm,
-		topics,
-		topicsLoading,
-		topicsError: Boolean(topicsError),
-		isCreateMode,
-		isEditingExisting,
-		topicSlug,
-		testSlug,
-		testSlugError,
-		setTestSlugError,
+	const saveDisabled =
+		!topicsLoading &&
+		!topicsError &&
+		testTopicPickerState({ topics: topics.length, canManage: catalog }) === 'ask-admin'
+	const onDiscard = isCreateMode ? undefined : discardChanges
+
+	const settingsSheetProps = {
+		open: settingsOpen,
+		onOpenChange: setSettingsOpen,
+		isNew: isCreateMode,
+		dirty,
 		saving,
-		canManageCatalog: catalog,
-		saveDisabled:
-			!topicsLoading &&
-			!topicsError &&
-			testTopicPickerState({ topics: topics.length, canManage: catalog }) === 'ask-admin',
-		onCreateTopic: handleCreateTopic,
+		saveDisabled,
 		onSave: handleSave,
+		onDiscard,
+		panel: {
+			form,
+			setForm,
+			topics,
+			topicsLoading,
+			topicsError: Boolean(topicsError),
+			isCreateMode,
+			isEditingExisting,
+			topicSlug,
+			testSlug,
+			testSlugError,
+			setTestSlugError,
+			canManageCatalog: catalog,
+			onCreateTopic: handleCreateTopic,
+		},
+	}
+
+	const saveBarProps = {
+		visible: (isCreateMode || dirty) && !settingsOpen,
+		isNew: isCreateMode,
+		saving,
+		disabled: saveDisabled,
+		onSave: handleSave,
+		onDiscard,
 	}
 
 	const questionsPanelProps = {
@@ -518,14 +564,17 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		onDragEnd: handleDragEnd,
 	}
 
-	const studentAccessPanelProps = {
-		assignmentsLoaded: Boolean(studentAssignmentsData),
+	const studentAccessToolbarProps = {
 		usersLoaded: Boolean(allUsersData),
-		studentAssignments,
 		availableUsers,
 		assigningUserId,
-		removingUserId,
 		onAssignStudent: handleAssignStudent,
+	}
+
+	const studentAccessPanelProps = {
+		assignmentsLoaded: Boolean(studentAssignmentsData),
+		studentAssignments,
+		removingUserId,
 		onRemoveStudent: handleRemoveStudent,
 	}
 
@@ -548,7 +597,11 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		questionsError: questionsLoadFailed ? questionsError : undefined,
 		retryQuestions: () => mutateQuestions(),
 		questionsPanelProps,
-		settingsPanelProps,
+		saveBarProps,
+		settingsSheetProps,
+		isCreateMode,
+		assignedCount: studentAssignments.length,
+		studentAccessToolbarProps,
 		studentAccessPanelProps,
 		testId,
 		topicDialogProps,

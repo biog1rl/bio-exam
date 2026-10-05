@@ -1,7 +1,7 @@
-import { requireSectionAccess } from '@/lib/session/section-access'
+import { SectionGate } from '@/components/auth/SectionGate'
 
-export default async function RBACLayout({ children }: { children: React.ReactNode }) {
-	const me = await requireSectionAccess('rbac')
-	if (!me) return null
-	return <>{children}</>
+export const metadata = { title: 'Права доступа' }
+
+export default function RBACLayout({ children }: { children: React.ReactNode }) {
+	return <SectionGate section="rbac">{children}</SectionGate>
 }

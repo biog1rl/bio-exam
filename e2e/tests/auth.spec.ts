@@ -72,24 +72,17 @@ async function logIn(page: Page, login: string): Promise<void> {
 
 /**
  * Кнопка меню пользователя в подвале сайдбара. На мобильной ширине сайдбар — закрытый Sheet,
- * а видимой кнопки его открытия в шапке нет; открываем его штатной горячей клавишей Ctrl+B.
+ * его открывает кнопка «Открыть меню» в шапке.
  */
 async function openUserMenu(page: Page, testInfo: TestInfo, login: string): Promise<void> {
 	const menuButton = page.getByRole('button', { name: new RegExp(login) })
 	if (projectKey(testInfo) === 'mobile') {
-		testInfo.annotations.push({
-			type: 'issue',
-			description: 'mobile layout renders no visible sidebar trigger; the user menu is reached with Ctrl+B',
-		})
-		await expect(async () => {
-			if (!(await menuButton.isVisible())) await page.keyboard.press('Control+b')
-			await expect(menuButton).toBeVisible({ timeout: 2_000 })
-		}).toPass({ timeout: 20_000 })
+		await page.getByRole('button', { name: 'Открыть меню' }).click()
 	}
 	await expect(menuButton).toBeVisible()
 	const logoutItem = page.getByRole('menuitem', { name: 'Выйти' })
 	await expect(async () => {
-		if (!(await logoutItem.isVisible())) await menuButton.click()
+		if ((await menuButton.getAttribute('aria-expanded')) !== 'true') await menuButton.click()
 		await expect(logoutItem).toBeVisible({ timeout: 2_000 })
 	}).toPass({ timeout: 20_000 })
 }
@@ -133,7 +126,7 @@ test.describe('flow 1: login, logout and protected-page redirect', () => {
 
 		await page.goto('/admin')
 		await expect(page).toHaveURL(/\/admin$/)
-		await expect(page.getByText('admin console')).toBeVisible()
+		await expect(page.getByRole('heading', { level: 1, name: 'Панель управления' })).toBeVisible()
 		await expect(page.getByRole('link', { name: /Пользователи/ }).first()).toBeVisible()
 
 		await logOut(page, testInfo, login)

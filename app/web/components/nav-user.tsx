@@ -19,6 +19,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/c
 import { getInitials } from '@/helpers/getAvatarColor'
 import { versionedUrl } from '@/lib/assets/versioned-url'
 import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
+import { DEFAULT_AVATAR_COLOR, readableTextOn } from '@/lib/utils/readable-text'
 
 export function NavUser() {
 	const { isMobile, setOpenMobile } = useSidebar()
@@ -34,7 +35,8 @@ export function NavUser() {
 	const avatarColor = me?.avatarColor
 
 	const initials = getInitials(me?.firstName, me?.lastName)
-	const backgroundColor = avatarColor || '#3B82F6'
+	const backgroundColor = avatarColor || DEFAULT_AVATAR_COLOR
+	const initialsColor = readableTextOn(backgroundColor)
 
 	const handleLogout = async () => {
 		if (!(await logout())) toast.error(LOGOUT_FAILED_MESSAGE)
@@ -61,13 +63,16 @@ export function NavUser() {
 						>
 							<Avatar className="h-8 w-8 rounded-lg">
 								<AvatarImage src={avatar || undefined} className="rounded-full" />
-								<AvatarFallback className="rounded-full font-semibold text-white" style={{ backgroundColor }}>
+								<AvatarFallback
+									className="rounded-full font-semibold"
+									style={{ backgroundColor, color: initialsColor }}
+								>
 									{initials || displayName?.charAt(0).toUpperCase()}
 								</AvatarFallback>
 							</Avatar>
 							<div className="grid flex-1 text-left text-sm leading-tight">
 								<span className="truncate font-medium">{displayName}</span>
-								<span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
+								<span className="truncate text-xs text-sidebar-foreground/80">{displayEmail}</span>
 							</div>
 							<MoreVerticalIcon className="ml-auto size-4" />
 						</SidebarMenuButton>

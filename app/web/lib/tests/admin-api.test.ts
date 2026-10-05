@@ -36,6 +36,7 @@ import {
 	saveTestQuestionTypeOverride,
 	saveTestScoringRules,
 	saveTopic,
+	testOverrideSteps,
 } from './admin-api'
 
 const apiFetchMock = vi.mocked(apiFetch)
@@ -314,11 +315,18 @@ describe('saveGlobalScoringRules', () => {
 })
 
 describe('saveTestScoringRules', () => {
-	test('включённый override — PUT с правилом, выключенный — DELETE', async () => {
+	const RENAMED = { titleOverride: 'Своё название', scoringRuleOverride: null, isDisabled: true }
+
+	test('своя формула сохраняет название и отключение типа в тесте, пустая строка удаляется', async () => {
 		apiFetchMock.mockImplementation(async () => json(200, { ok: true }))
 		const outcome = await saveTestScoringRules(TEST_ID, [
-			{ key: 'a', scoringRule: RULE_A, override: true },
-			{ key: 'b', scoringRule: RULE_B, override: false },
+			{ key: 'a', scoringRule: RULE_A, override: true, saved: RENAMED },
+			{
+				key: 'b',
+				scoringRule: RULE_B,
+				override: false,
+				saved: { ...RENAMED, titleOverride: null, isDisabled: false, scoringRuleOverride: RULE_B },
+			},
 		])
 		const calls = apiFetchMock.mock.calls.map(([url, init]) => [
 			url,
@@ -329,24 +337,35 @@ describe('saveTestScoringRules', () => {
 			[
 				`/api/tests/question-types/tests/${TEST_ID}/overrides/a`,
 				'PUT',
-				{ scoringRuleOverride: RULE_A, isDisabled: false },
+				{ titleOverride: 'Своё название', scoringRuleOverride: RULE_A, isDisabled: true },
 			],
 			[`/api/tests/question-types/tests/${TEST_ID}/overrides/b`, 'DELETE', undefined],
 		])
 		assert.equal(outcome.ok, true)
 	})
 
-	test('отказ DELETE тоже возвращается, дальше запись не идёт', async () => {
+	test('снятая формула у переименованного типа — PUT без формулы, а не DELETE; без изменений запросов нет', () => {
+		assert.deepEqual(
+			testOverrideSteps([
+				{ key: 'a', scoringRule: RULE_A, override: false, saved: { ...RENAMED, scoringRuleOverride: RULE_A } },
+				{ key: 'b', scoringRule: RULE_B, override: false, saved: null },
+				{ key: 'c', scoringRule: RULE_A, override: true, saved: { ...RENAMED, scoringRuleOverride: RULE_A } },
+			]),
+			[{ key: 'a', method: 'PUT', body: RENAMED }]
+		)
+	})
+
+	test('отказ записи возвращается, дальше запись не идёт', async () => {
 		apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Internal Server Error' }))
 		const outcome = await saveTestScoringRules(TEST_ID, [
-			{ key: 'b', scoringRule: RULE_B, override: false },
-			{ key: 'a', scoringRule: RULE_A, override: true },
+			{ key: 'b', scoringRule: RULE_B, override: true, saved: null },
+			{ key: 'a', scoringRule: RULE_A, override: true, saved: null },
 		])
 		assert.equal(apiFetchMock.mock.calls.length, 1)
 		assert.equal(outcome.ok, false)
 		if (outcome.ok) return
 		assert.equal(outcome.status, 500)
-		assert.equal(outcome.message, 'Не удалось сохранить override для b')
+		assert.equal(outcome.message, 'Не удалось сохранить формулу теста для типа b')
 	})
 })
 
@@ -436,7 +455,7 @@ describe('переопределения типа для теста', () => {
 		apiFetchMock.mockResolvedValueOnce(json(500, {}))
 		const saved = await saveTestQuestionTypeOverride(TEST_ID, 'a', OVERRIDE)
 		assert.equal(saved.ok, false)
-		if (!saved.ok) assert.equal(saved.message, 'Не удалось сохранить override')
+		if (!saved.ok) assert.equal(saved.message, 'Не удалось сохранить настройки типа для теста')
 		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
 		const removed = await deleteTestQuestionTypeOverride(TEST_ID, 'a')
 		assert.equal(removed.ok, false)

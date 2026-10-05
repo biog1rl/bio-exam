@@ -710,6 +710,31 @@ describe('перенос вопроса', () => {
 		assert.equal(stored(moving.prompt_path), 'Остаётся')
 	})
 
+	test('в другой тест той же темы: вопрос последний в цели, объекты под префиксом цели', async () => {
+		const topicSlug = nextSlug('same-topic')
+		const topicId = await createTopic(topicSlug)
+		const sourceSlug = nextSlug('src')
+		const targetSlug = nextSlug('dst')
+		const sourceId = await saveTest(topicId, sourceSlug, [
+			radio('Остаётся', { order: 0 }),
+			radio('Уезжает', { order: 1 }),
+		])
+		const targetId = await saveTest(topicId, targetSlug, [radio('Цель', { order: 0 })])
+		const moving = (await questionRows(sourceId))[1]
+		assert.ok(moving)
+		const reply = await moveCall(sourceId, moving.id, { targetTestId: targetId })
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body.target, { topicId, topicSlug, testId: targetId, testSlug: targetSlug })
+		assert.deepEqual(
+			(await questionRows(sourceId)).map((row) => row.order),
+			[0]
+		)
+		const target = await questionRows(targetId)
+		assert.equal(target[1]?.id, moving.id)
+		assert.ok((target[1]?.prompt_path ?? '').startsWith(`${questionDir(topicSlug, targetSlug, moving.id)}/`))
+		assert.equal(stored(target[1]?.prompt_path), 'Уезжает')
+	})
+
 	test('в тот же тест: 400', async () => {
 		const topicId = await createTopic(nextSlug('topic'))
 		const testId = await saveTest(topicId, nextSlug('same'), [radio('Здесь', { order: 0 })])

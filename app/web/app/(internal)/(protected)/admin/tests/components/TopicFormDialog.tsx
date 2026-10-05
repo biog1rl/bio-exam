@@ -1,5 +1,7 @@
 'use client'
 
+import { isReservedTopicSlug } from '@bio-exam/rbac'
+
 import { useEffect, useMemo, useState } from 'react'
 
 import { Check, ChevronsUpDown, X } from 'lucide-react'
@@ -48,6 +50,7 @@ function validateSlug(slug: string): string | null {
 	if (slug.length < 2) return 'Минимум 2 символа'
 	if (slug.length > 100) return 'Максимум 100 символов'
 	if (!SLUG_REGEX.test(slug)) return 'Только латинские буквы, цифры и дефисы'
+	if (isReservedTopicSlug(slug)) return 'Этот адрес занят разделом сайта, выберите другой'
 	return null
 }
 
@@ -63,7 +66,7 @@ interface TopicFormDialogProps {
 	editingTopic?: Topic | null
 	initialOrder?: number
 	showIsActive?: boolean
-	onSaved: (topic?: { id?: string }) => void
+	onSaved: (topic?: { id?: string; slug?: string }) => void
 }
 
 export function TopicFormDialog({

@@ -1,5 +1,6 @@
 'use client'
 
+import type { PermissionKey } from '@bio-exam/rbac'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -9,9 +10,12 @@ import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from
 import { useRouter } from 'next/navigation'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { NAV_ICONS } from '@/components/navigation/nav-icons'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { DialogTitle, DialogDescription, Dialog, DialogContent } from '@/components/ui/dialog'
 import { RequestError } from '@/lib/http/request'
+import { searchSections, sectionDescription, type NavSection } from '@/lib/navigation/sections'
 import { searchAll } from '@/lib/search/api'
 import { makeSearchValue } from '@/lib/search/query'
 import { prefersReducedMotion } from '@/lib/utils/reduced-motion'
@@ -20,6 +24,8 @@ import type { SearchCategory, SearchResponse, SearchResultItem, SearchScope } fr
 import { useSearch } from './SearchProvider'
 
 type TabScope = SearchScope
+
+const MAX_SECTION_HITS = 6
 
 const TAB_LABELS: Record<TabScope, string> = {
 	all: 'Все',
@@ -126,6 +132,41 @@ function ResultItem({ item, onSelect }: { item: SearchResultItem; onSelect: (hre
 	)
 }
 
+function SectionResults({
+	sections,
+	perms,
+	onSelect,
+}: {
+	sections: NavSection[]
+	perms: ReadonlySet<PermissionKey>
+	onSelect: (href: string | null) => void
+}) {
+	if (sections.length === 0) return null
+	return (
+		<CommandGroup heading="Разделы" className="mb-2 [&_[cmdk-group-heading]]:px-3">
+			{sections.map((section) => {
+				const Icon = NAV_ICONS[section.icon]
+				return (
+					<CommandItem
+						key={section.href}
+						value={`section:${section.href}`}
+						onSelect={() => onSelect(section.href)}
+						className="cursor-pointer items-start gap-3 rounded-md px-3 py-3 transition-colors"
+					>
+						<div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+							<Icon className="size-4" />
+						</div>
+						<div className="min-w-0 flex-1">
+							<div className="truncate text-sm font-medium">{section.title}</div>
+							<div className="truncate text-xs text-muted-foreground">{sectionDescription(perms, section)}</div>
+						</div>
+					</CommandItem>
+				)
+			})}
+		</CommandGroup>
+	)
+}
+
 function CategoryResults({
 	category,
 	onSelect,
@@ -149,6 +190,7 @@ export default function SearchDialog() {
 
 	const [tab, setTab] = useState<TabScope>('all')
 	const [query, setQuery] = useState('')
+	const { perms } = useAuth()
 	const [results, setResults] = useState<SearchResponse | null>(null)
 	const [loading, setLoading] = useState(false)
 	const [searchError, setSearchError] = useState<RequestError | null>(null)
@@ -263,7 +305,11 @@ export default function SearchDialog() {
 		if (tab === 'all') return availableCategories
 		return availableCategories.filter((category) => category.scope === tab)
 	}, [availableCategories, tab])
-	const hasResults = selectedCategories.some((category) => category.items.length > 0)
+	const sectionHits = useMemo(
+		() => (tab === 'all' && query.trim().length >= 2 ? searchSections(perms, query).slice(0, MAX_SECTION_HITS) : []),
+		[perms, query, tab]
+	)
+	const hasResults = sectionHits.length > 0 || selectedCategories.some((category) => category.items.length > 0)
 
 	const onSelect = (href: string | null) => {
 		if (!href) return
@@ -298,7 +344,9 @@ export default function SearchDialog() {
 						<div className="mb-3 flex items-center justify-between gap-4 pr-8">
 							<div>
 								<div className="text-sm font-semibold">Поиск</div>
-								<div className="text-xs text-muted-foreground">Тесты, вопросы, пользователи и попытки</div>
+								<div className="text-xs text-muted-foreground">
+									Разделы, тесты, вопросы, пользователи, группы и попытки
+								</div>
 							</div>
 							{loading && (
 								<div className="animate-pulse text-xs text-muted-foreground motion-reduce:animate-none">Ищем…</div>
@@ -350,6 +398,7 @@ export default function SearchDialog() {
 								{query.trim().length < 2 && <CommandEmpty>Введите минимум 2 символа для поиска</CommandEmpty>}
 
 								<div className="min-h-full px-2 py-3 sm:px-3">
+									<SectionResults sections={sectionHits} perms={perms} onSelect={onSelect} />
 									{searchError ? (
 										<LoadErrorAlert
 											title="Не удалось выполнить поиск"

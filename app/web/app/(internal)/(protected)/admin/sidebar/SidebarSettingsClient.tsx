@@ -16,7 +16,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 
 import type { LucideIcon } from 'lucide-react'
-import { GripVertical, Plus, Trash2, Eye, EyeOff, ExternalLink, Search, CircleIcon } from 'lucide-react'
+import { GripVertical, Plus, Trash2, Eye, EyeOff, ExternalLink, Search, CircleIcon, Pencil } from 'lucide-react'
 import * as Icons from 'lucide-react'
 import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import { toast } from 'sonner'
@@ -90,29 +90,44 @@ function SortableItem({
 			style={style}
 			className="flex items-center gap-2 rounded-lg border bg-card p-3 hover:bg-accent/50"
 		>
-			<button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+			<button
+				{...attributes}
+				{...listeners}
+				aria-label={`Перетащить ссылку ${item.title}`}
+				className="shrink-0 cursor-grab active:cursor-grabbing"
+			>
 				<GripVertical className="h-5 w-5 text-muted-foreground" />
 			</button>
 
-			<div className="flex flex-1 items-center gap-3">
-				<IconComponent className="h-5 w-5" />
-				<div className="flex-1">
-					<div className="flex items-center gap-2">
-						<span className="font-medium">{item.title}</span>
-						{item.target === '_blank' && <ExternalLink className="h-3 w-3 text-muted-foreground" />}
+			<div className="flex min-w-0 flex-1 items-center gap-3">
+				<IconComponent className="h-5 w-5 shrink-0" />
+				<div className="min-w-0 flex-1">
+					<div className="flex min-w-0 items-center gap-2">
+						<span className="truncate font-medium">{item.title}</span>
+						{item.target === '_blank' && <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />}
 					</div>
-					<span className="text-sm text-muted-foreground">{item.url}</span>
+					<span className="block truncate text-sm text-muted-foreground">{item.url}</span>
 				</div>
 			</div>
 
-			<div className="flex items-center gap-1">
-				<Button size="sm" variant="ghost" onClick={() => onToggle(item.id)}>
+			<div className="flex shrink-0 items-center gap-1">
+				<Button
+					size="icon"
+					variant="ghost"
+					onClick={() => onToggle(item.id)}
+					aria-label={item.isActive ? `Скрыть ссылку ${item.title}` : `Показать ссылку ${item.title}`}
+				>
 					{item.isActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
 				</Button>
-				<Button size="sm" variant="ghost" onClick={() => onEdit(item)}>
-					Изменить
+				<Button size="icon" variant="ghost" onClick={() => onEdit(item)} aria-label={`Изменить ссылку ${item.title}`}>
+					<Pencil className="h-4 w-4" />
 				</Button>
-				<Button size="sm" variant="ghost" onClick={() => onDelete(item.id)}>
+				<Button
+					size="icon"
+					variant="ghost"
+					onClick={() => onDelete(item.id)}
+					aria-label={`Удалить ссылку ${item.title}`}
+				>
 					<Trash2 className="h-4 w-4 text-destructive" />
 				</Button>
 			</div>
@@ -338,9 +353,13 @@ export function SidebarSettingsClient() {
 			<div className="flex items-center justify-between">
 				<div>
 					<h1 ref={titleRef} tabIndex={-1} className="text-2xl font-bold">
-						Настройки сайдбара
+						Ссылки в меню
 					</h1>
-					<p className="text-muted-foreground">Управление пунктами бокового меню</p>
+					<p className="max-w-2xl text-muted-foreground">
+						Разделы сайта появляются в меню сами, по правам пользователя. Здесь — дополнительные ссылки: они идут
+						отдельной группой «Ссылки», ссылку на закрытый раздел видят только те, кому он доступен. Пункты с адресом
+						раздела сайта в меню не дублируются.
+					</p>
 				</div>
 				<Button onClick={handleAdd}>
 					<Plus className="mr-2 h-4 w-4" />
@@ -397,12 +416,17 @@ export function SidebarSettingsClient() {
 						</div>
 
 						<div className="space-y-2">
-							<Label>URL</Label>
+							<Label htmlFor="sidebar-link-url">Адрес</Label>
 							<Input
+								id="sidebar-link-url"
 								value={formData.url}
 								onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-								placeholder="/projects"
+								placeholder="/tests или https://example.ru"
+								aria-describedby="sidebar-link-url-hint"
 							/>
+							<p id="sidebar-link-url-hint" className="text-xs text-muted-foreground">
+								Путь от корня сайта, например /tests, или полный адрес http(s)://…
+							</p>
 						</div>
 
 						<div className="space-y-2">

@@ -1,3 +1,5 @@
+import { STUDENT_ROLE_KEY } from '@bio-exam/rbac'
+
 import { format, isValid, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
@@ -6,6 +8,10 @@ import { FORBIDDEN_ACTION_TEXT } from '@/components/users/session-actions'
 export type AssignmentAction = 'remove' | 'locked'
 
 export const NOT_YOUR_GROUPS_TEXT = 'Не из ваших групп'
+
+export function isStudentOnly(roles: readonly string[]): boolean {
+	return roles.length === 1 && roles[0] === STUDENT_ROLE_KEY
+}
 
 export function assignmentAction({ canUnassign }: { canUnassign: boolean }): AssignmentAction {
 	return canUnassign === true ? 'remove' : 'locked'

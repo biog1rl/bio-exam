@@ -1,6 +1,7 @@
 import { type Locator, type Page } from '@playwright/test'
 
 import { seedTest } from '../fixtures/accounts'
+import { openNewQuestionDraft } from '../fixtures/drafts'
 import { expect, projectKey, test } from '../fixtures/exam'
 
 const DRAFT_PATCH = /\/api\/tests\/[^/]+\/question-drafts\/[^/]+$/
@@ -16,12 +17,8 @@ async function openTeacherDraft(page: Page, topic: string, slug: string): Promis
 	expect(response.ok(), `setup: read test ${slug}`).toBe(true)
 	const testId = ((await response.json()) as { test: { id: string } }).test.id
 	const listUrl = `/admin/tests/${topic}/${slug}`
-	await page.goto(`${listUrl}/questions/new`)
-	await expect(page).toHaveURL(new RegExp(`${listUrl}/questions/drafts/[0-9a-f-]+$`))
-	await expect(page.getByRole('heading', { level: 1, name: 'Новый вопрос' })).toBeVisible()
+	const draftId = await openNewQuestionDraft(page, listUrl)
 	await expect(promptEditor(page)).toHaveAttribute('contenteditable', 'true')
-	const draftId = /\/questions\/drafts\/([0-9a-f-]+)$/.exec(new URL(page.url()).pathname)?.[1]
-	if (!draftId) throw new Error('setup: no draft id')
 	return { testId, draftId, url: page.url(), listUrl }
 }
 

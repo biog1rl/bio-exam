@@ -198,11 +198,16 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		})
 	}
 
+	const currentTopicId = testData?.test?.topicId
 	const availableTopics = useMemo(() => {
 		const allTopics = topicsData?.topics ?? []
-		const currentTopicId = testData?.test?.topicId
-		return allTopics.filter((topic) => topic.id !== currentTopicId)
-	}, [topicsData, testData?.test?.topicId])
+		const allTests = testsData?.tests ?? []
+		const currentTestId = testData?.test?.id
+		const hasOtherTest = (topicId: string) =>
+			allTests.some((test) => test.topicId === topicId && test.id !== currentTestId)
+		return allTopics.filter((topic) => topic.id !== currentTopicId || hasOtherTest(topic.id))
+	}, [topicsData, testsData, currentTopicId, testData?.test?.id])
+	const moveWithinTopic = targetTopicId !== '' && targetTopicId === currentTopicId
 
 	const availableTests = useMemo(() => {
 		const allTests = testsData?.tests ?? []
@@ -331,18 +336,18 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		}
 
 		if (availableTopics.length === 0) {
-			toast.error('Нет доступных тем для переноса')
+			toast.error('Некуда переносить: нет других тестов и тем')
 			return
 		}
 
-		const initialTopicId = availableTopics[0].id
+		const initialTopicId = (availableTopics.find((topic) => topic.id === currentTopicId) ?? availableTopics[0]).id
 		const initialTest = (testsData?.tests ?? []).find(
 			(test) => test.topicId === initialTopicId && test.id !== testData.test.id
 		)
 		setTargetTopicId(initialTopicId)
 		setTargetTestId(initialTest?.id || '')
 		setMoveDialogOpen(true)
-	}, [isEditingExistingQuestion, questionId, testData, testsData, availableTopics])
+	}, [isEditingExistingQuestion, questionId, testData, testsData, availableTopics, currentTopicId])
 
 	const handleTargetTopicChange = useCallback(
 		(nextTopicId: string) => {
@@ -359,6 +364,10 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		if (!testData?.test?.id || !questionId) return
 		if (!targetTopicId) {
 			toast.error('Выберите тему назначения')
+			return
+		}
+		if (moveWithinTopic && !targetTestId) {
+			toast.error('Выберите тест назначения')
 			return
 		}
 
@@ -378,7 +387,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		} finally {
 			setMoving(false)
 		}
-	}, [testData, questionId, targetTopicId, targetTestId, router])
+	}, [testData, questionId, targetTopicId, targetTestId, moveWithinTopic, router])
 
 	const handleSaveQuestion = useCallback(
 		async (nextQuestion: Question) => {
@@ -509,6 +518,17 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 						: undefined
 				}
 				leaving={isDraftMode && isLeaving}
+				context={
+					testData
+						? {
+								number: questionId ? testData.questions.findIndex((item) => item.id === questionId) + 1 || null : null,
+								total: testData.questions.length,
+								testTitle: testData.test.title,
+								topicTitle: testData.test.topicTitle,
+								testHref: `/admin/tests/${topicSlug}/${testSlug}`,
+							}
+						: undefined
+				}
 			/>
 
 			{isEditMode || isDraftMode ? (
@@ -525,21 +545,23 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 					<DialogHeader>
 						<DialogTitle>Перенести вопрос</DialogTitle>
 						<DialogDescription>
-							Выберите тему назначения. Если тест не выбран, он будет создан автоматически.
+							{moveWithinTopic
+								? 'Выберите другой тест этой темы.'
+								: 'Выберите тему и тест. Если тест не выбран, в теме будет создан новый.'}
 						</DialogDescription>
 					</DialogHeader>
 
 					<div className="space-y-4">
 						<div className="space-y-2">
-							<Label>Тема</Label>
+							<Label htmlFor="move-topic">Тема</Label>
 							<Select value={targetTopicId} onValueChange={handleTargetTopicChange}>
-								<SelectTrigger>
+								<SelectTrigger id="move-topic" className="w-full">
 									<SelectValue placeholder="Выберите тему" />
 								</SelectTrigger>
 								<SelectContent>
 									{availableTopics.map((topic) => (
 										<SelectItem key={topic.id} value={topic.id}>
-											{topic.title}
+											{topic.id === currentTopicId ? `${topic.title} (текущая)` : topic.title}
 										</SelectItem>
 									))}
 								</SelectContent>
@@ -547,10 +569,10 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 						</div>
 
 						<div className="space-y-2">
-							<Label>Тест</Label>
+							<Label htmlFor="move-test">Тест</Label>
 							<Select value={targetTestId} onValueChange={setTargetTestId}>
-								<SelectTrigger>
-									<SelectValue placeholder="Создать тест автоматически" />
+								<SelectTrigger id="move-test" className="w-full">
+									<SelectValue placeholder={moveWithinTopic ? 'Выберите тест' : 'Создать новый тест'} />
 								</SelectTrigger>
 								<SelectContent>
 									{availableTests.map((test) => (
@@ -567,7 +589,10 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 						<Button variant="outline" onClick={() => setMoveDialogOpen(false)} disabled={moving}>
 							Отмена
 						</Button>
-						<Button onClick={handleMoveQuestion} disabled={moving || !targetTopicId}>
+						<Button
+							onClick={handleMoveQuestion}
+							disabled={moving || !targetTopicId || (moveWithinTopic && !targetTestId)}
+						>
 							{moving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
 							Перенести
 						</Button>

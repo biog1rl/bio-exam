@@ -2,6 +2,8 @@ import { getServerMe } from '@/lib/session/server'
 
 import { ProfileClient } from './ProfileClient'
 
+export const metadata = { title: 'Профиль' }
+
 export default async function ProfilePage() {
 	const me = await getServerMe()
 	return (

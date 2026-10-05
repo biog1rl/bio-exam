@@ -1,0 +1,40 @@
+import {
+	Calculator,
+	ChartLine,
+	ClipboardCheck,
+	ClipboardList,
+	FilePlus2,
+	House,
+	LayoutGrid,
+	Library,
+	Link2,
+	LockKeyhole,
+	Map,
+	School,
+	Settings2,
+	Shapes,
+	UserRound,
+	UsersRound,
+	type LucideIcon,
+} from 'lucide-react'
+
+import type { NavIcon } from '@/lib/navigation/sections'
+
+export const NAV_ICONS: Readonly<Record<NavIcon, LucideIcon>> = {
+	home: House,
+	tests: ClipboardCheck,
+	admin: LayoutGrid,
+	bank: Library,
+	newTest: FilePlus2,
+	attempts: ClipboardList,
+	users: UsersRound,
+	groups: School,
+	questionTypes: Shapes,
+	scoring: Calculator,
+	settings: Settings2,
+	rbac: LockKeyhole,
+	chart: ChartLine,
+	links: Link2,
+	profile: UserRound,
+	sitemap: Map,
+}

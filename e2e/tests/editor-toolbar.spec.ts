@@ -1,6 +1,7 @@
 import { type Locator, type Page } from '@playwright/test'
 
 import { seedTest } from '../fixtures/accounts'
+import { openNewQuestionDraft } from '../fixtures/drafts'
 import { expect, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 
 type ControlList = { toolbar: string[]; actions: string[] }
@@ -113,7 +114,7 @@ async function openEditPage(page: Page, slug: string): Promise<{ testId: string;
 	const questionId = data.questions[0]?.id
 	if (!questionId) throw new Error(`setup: no question in ${slug}`)
 	await page.goto(`${testPageUrl(slug)}/questions/${questionId}`)
-	await expect(page.getByRole('heading', { level: 1, name: 'Редактирование' })).toBeVisible()
+	await expect(page.getByRole('heading', { level: 1, name: /^Вопрос \d+$/ })).toBeVisible()
 	await expect(promptEditor(page)).toHaveAttribute('contenteditable', 'true')
 	return { testId: data.test.id, questionId }
 }
@@ -154,12 +155,8 @@ test.describe('редактор формулировки: пресет full', ()
 	test('promptText черновика', async ({ adminPage: page }, testInfo) => {
 		const slug = seedTest(projectKey(testInfo), 'editor').slug
 		const testId = (await bySlug(page, slug)).test.id
-		await page.goto(`${testPageUrl(slug)}/questions/new`)
-		await expect(page).toHaveURL(new RegExp(`${testPageUrl(slug)}/questions/drafts/[0-9a-f-]+$`))
-		await expect(page.getByRole('heading', { level: 1, name: 'Новый вопрос' })).toBeVisible()
+		const draftId = await openNewQuestionDraft(page, testPageUrl(slug))
 		await expect(promptEditor(page)).toHaveAttribute('contenteditable', 'true')
-		const draftId = /\/questions\/drafts\/([0-9a-f-]+)$/.exec(new URL(page.url()).pathname)?.[1]
-		if (!draftId) throw new Error(`setup: no draft id in ${page.url()}`)
 		try {
 			const saved = page.waitForResponse(
 				(response) =>

@@ -1,8 +1,8 @@
 import { SidebarSettingsClient } from './SidebarSettingsClient'
 
 export const metadata = {
-	title: 'Настройки сайдбара',
-	description: 'Управление пунктами бокового меню',
+	title: 'Ссылки в меню',
+	description: 'Дополнительные ссылки в боковом меню',
 }
 
 export default function SidebarSettingsPage() {

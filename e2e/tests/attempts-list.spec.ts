@@ -1,6 +1,6 @@
 import type { Route } from '@playwright/test'
 
-import { expect, test } from '../fixtures/exam'
+import { expect, projectKey, test } from '../fixtures/exam'
 
 const LIST_PATH = '/api/tests/admin/attempts'
 const MOCK_QUERY = 'e2e-показать-ещё'
@@ -42,7 +42,7 @@ function page(rows: unknown[], offset: number) {
 test.describe('attempts list: server filters and «Показать ещё»', () => {
 	test('search goes to the server and an unknown query shows the empty state', async ({ adminPage: browserPage }) => {
 		await browserPage.goto('/admin/attempts')
-		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки студентов' })).toBeVisible()
+		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
 
 		const query = `нет-такой-попытки-${Date.now()}`
 		const searched = browserPage.waitForRequest((request) => {
@@ -56,6 +56,35 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 
 		await browserPage.getByRole('button', { name: 'Сбросить' }).click()
 		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toHaveCount(0)
+	})
+
+	test('filters come from the address and the address follows the filters', async ({ adminPage: browserPage }) => {
+		await browserPage.goto('/admin/attempts?topic=e2e-no-such-topic')
+		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toBeVisible()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts\?topic=e2e-no-such-topic$/)
+
+		await browserPage.goto('/admin/attempts?status=all')
+		await expect(browserPage).toHaveURL(/\/admin\/attempts\?status=all$/)
+		await browserPage.getByRole('button', { name: 'Сбросить' }).click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
+	})
+
+	test('a filter picked on the page resets when the menu opens the bare list again', async ({
+		adminPage: browserPage,
+	}, testInfo) => {
+		await browserPage.goto('/admin/attempts')
+		await browserPage.getByRole('button', { name: 'Статус студентов' }).click()
+		await browserPage.getByRole('menuitemradio', { name: 'Все' }).click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts\?status=all$/)
+		await expect(browserPage.getByRole('button', { name: 'Сбросить' })).toBeEnabled()
+
+		if (projectKey(testInfo) === 'mobile') await browserPage.getByRole('button', { name: 'Открыть меню' }).click()
+		await browserPage
+			.getByRole('navigation', { name: 'Основная навигация' })
+			.getByRole('link', { name: 'Попытки', exact: true })
+			.click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
+		await expect(browserPage.locator('button:enabled', { hasText: 'Сбросить' })).toHaveCount(0)
 	})
 
 	test('«Показать ещё» appends the next page, keeps rows after a failure and hides at total', async ({
@@ -74,7 +103,7 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		)
 
 		await browserPage.goto('/admin/attempts')
-		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки студентов' })).toBeVisible()
+		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
 		await browserPage.getByPlaceholder('Поиск по студенту, тесту, теме').fill(MOCK_QUERY)
 
 		const firstRow = browserPage.locator(`a[href="/admin/attempts/${FIRST.attemptId}"]`)
