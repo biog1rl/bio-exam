@@ -1,7 +1,9 @@
 import {
 	ATTEMPT_GRACE_PERIOD_MINUTES,
+	findAnswerViolation,
 	mergeTelemetryMaps,
 	type AnswerValue,
+	type AnswerViolation,
 	type AttemptSession,
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
@@ -9,7 +11,8 @@ import {
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
-import { testSessions } from '../../db/schema.js'
+import { questions, testSessions } from '../../db/schema.js'
+import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 
 export type SessionInfo = AttemptSession
 
@@ -28,7 +31,7 @@ export type SaveSessionDraftParams = {
 	telemetry?: TelemetryMap
 }
 
-export type SaveSessionDraftResult = 'saved' | 'not_found'
+export type SaveSessionDraftResult = 'saved' | 'not_found' | { kind: 'invalid'; violation: AnswerViolation }
 
 type SessionRow = {
 	id: string
@@ -126,6 +129,21 @@ export async function saveSessionDraft({
 	value,
 	telemetry,
 }: SaveSessionDraftParams): Promise<SaveSessionDraftResult> {
+	if (questionId !== undefined && value !== undefined) {
+		const [question] = await db
+			.select({ type: questions.type })
+			.from(questions)
+			.where(and(eq(questions.id, questionId), eq(questions.testId, testId)))
+		const template = question
+			? ((await getQuestionTypeMapForTest({ testId, includeInactive: true }))[question.type]?.uiTemplate ?? null)
+			: null
+		const violation = findAnswerViolation({
+			answers: { [questionId]: value },
+			questions: question ? [{ id: questionId, template }] : [],
+		})
+		if (violation) return { kind: 'invalid', violation }
+	}
+
 	return db.transaction(async (tx) => {
 		const [session] = await tx
 			.select({ draftAnswers: testSessions.draftAnswers, draftTelemetry: testSessions.draftTelemetry })

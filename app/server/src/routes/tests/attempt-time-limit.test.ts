@@ -191,6 +191,57 @@ describe('PATCH черновика и лимит времени', () => {
 	})
 })
 
+describe('PATCH черновика: входная проверка', () => {
+	test('чужой questionId отвечает 400 foreign_question, черновик не меняется', async () => {
+		const { testId, questionId } = await prepareTest('time-draft-foreign', null)
+		const other = await prepareTest('time-draft-foreign-other', null)
+		const sessionId = await startOk(testId)
+		const saved = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'a' })
+		assert.equal(saved.status, 200)
+
+		const reply = await saveDraft(world, student.cookie, testId, sessionId, {
+			questionId: other.questionId,
+			value: 'a',
+		})
+		assert.equal(reply.status, 400, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: 'ANSWERS_INVALID', reason: 'foreign_question' })
+		assert.deepEqual((await sessionRow(sessionId)).draft_answers, { [questionId]: 'a' })
+	})
+
+	test('краткий ответ в 201 знак отвечает 400 short_text_too_long, а следующее корректное сохранение проходит', async () => {
+		const testId = await createAttemptTest(world, { slug: 'time-draft-short', timeLimitMinutes: null })
+		const questionId = await addQuestion(world, testId, 'short_answer')
+		await assignTest(world, testId, student.id)
+		const sessionId = await startOk(testId)
+
+		const reply = await saveDraft(world, student.cookie, testId, sessionId, {
+			questionId,
+			value: 'а'.repeat(201),
+		})
+		assert.equal(reply.status, 400, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: 'ANSWERS_INVALID', reason: 'short_text_too_long', limit: 200 })
+		assert.equal((await sessionRow(sessionId)).draft_answers, null)
+
+		const ok = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'а'.repeat(200) })
+		assert.equal(ok.status, 200, JSON.stringify(ok.body))
+		assert.deepEqual((await sessionRow(sessionId)).draft_answers, { [questionId]: 'а'.repeat(200) })
+	})
+
+	test('25 одновременных сохранений черновика отвечают 200 без зависания', async () => {
+		const { testId, questionId } = await prepareTest('time-draft-concurrent', null)
+		const sessionId = await startOk(testId)
+
+		const replies = await Promise.all(
+			Array.from({ length: 25 }, () => saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'b' }))
+		)
+		assert.deepEqual(
+			replies.map((reply) => reply.status),
+			Array.from({ length: 25 }, () => 200)
+		)
+		assert.deepEqual((await sessionRow(sessionId)).draft_answers, { [questionId]: 'b' })
+	})
+})
+
 async function attemptsOf(testId: string): Promise<number> {
 	return countRows(world, 'SELECT count(*)::int AS count FROM test_attempts WHERE test_id = $1 AND user_id = $2', [
 		testId,

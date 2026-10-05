@@ -1,7 +1,12 @@
 /**
  * Публичные API роуты для прохождения тестов (для студентов)
  */
-import { SaveAttemptDraftRequestSchema, SUBMIT_ERROR_CODES, SubmitAttemptRequestSchema } from '@bio-exam/exam-core'
+import {
+	SaveAttemptDraftRequestSchema,
+	SUBMIT_ERROR_CODES,
+	SubmitAttemptRequestSchema,
+	type AnswerViolation,
+} from '@bio-exam/exam-core'
 
 import { and, asc, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { Router, type Response } from 'express'
@@ -29,6 +34,7 @@ import {
 	readQuestionTexts,
 } from '../../services/question-content/index.js'
 import { readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
+import { studentQuestionView } from './student-question-view.js'
 
 const router = Router()
 
@@ -74,6 +80,14 @@ function isTransientDbError(err: unknown): boolean {
 		message.includes('etimedout') ||
 		message.includes('eai_again')
 	)
+}
+
+function answersInvalidBody(violation: AnswerViolation) {
+	return {
+		error: SUBMIT_ERROR_CODES.answersInvalid,
+		reason: violation.reason,
+		...(violation.limit ? { limit: violation.limit } : {}),
+	}
 }
 
 function denyAttemptAccess(res: Response, status: 403 | 404) {
@@ -315,17 +329,7 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 			if (!typeConfig) {
 				throw new Error(`Question type is not configured: ${q.type}`)
 			}
-			return {
-				id: q.id,
-				type: q.type,
-				questionUiTemplate: typeConfig.uiTemplate,
-				questionTypeTitle: typeConfig.title,
-				order: q.order,
-				points: q.points,
-				options: q.options,
-				matchingPairs: q.matchingPairs,
-				promptText: promptTexts[index] ?? '',
-			}
+			return studentQuestionView(q, typeConfig, promptTexts[index] ?? '')
 		})
 
 		res.json({
@@ -379,17 +383,7 @@ router.get('/tests/:id', validateUUID('id'), sessionRequired(), async (req, res,
 			if (!typeConfig) {
 				throw new Error(`Question type is not configured: ${q.type}`)
 			}
-			return {
-				id: q.id,
-				type: q.type,
-				questionUiTemplate: typeConfig.uiTemplate,
-				questionTypeTitle: typeConfig.title,
-				order: q.order,
-				points: q.points,
-				options: q.options,
-				matchingPairs: q.matchingPairs,
-				promptText: promptTexts[index] ?? '',
-			}
+			return studentQuestionView(q, typeConfig, promptTexts[index] ?? '')
 		})
 
 		res.json({
@@ -548,6 +542,7 @@ router.patch(
 			if (saved === 'not_found') {
 				return res.status(404).json({ error: 'Session not found or already submitted' })
 			}
+			if (saved !== 'saved') return res.status(400).json(answersInvalidBody(saved.violation))
 
 			res.json({ ok: true })
 		} catch (e) {
@@ -613,7 +608,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		})
 		if (!scored.ok) {
 			if (scored.reason === 'no_questions') return res.status(404).json({ error: 'Questions not found' })
-			return res.status(500).json({ error: `Question type is not configured: ${scored.type}` })
+			return res.status(422).json(answersInvalidBody(scored.violation))
 		}
 		const { facts, outcome: scoredOutcome, passingScore, earnedPoints, totalPoints, scorePercentage, passed } = scored
 

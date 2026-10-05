@@ -1,9 +1,11 @@
 import {
 	computeAttemptOutcome,
+	findAnswerViolation,
 	MatchingPairsSchema,
 	OptionSchema,
 	scoreQuestionFacts,
 	type AnswerValue,
+	type AnswerViolation,
 	type AttemptOutcome,
 	type QuestionContent,
 	type ScoredQuestionFact,
@@ -39,7 +41,7 @@ export type ScoreSubmissionResult =
 			passed: boolean
 	  }
 	| { ok: false; reason: 'no_questions' }
-	| { ok: false; reason: 'type_not_configured'; type: string }
+	| { ok: false; reason: 'answers_invalid'; violation: AnswerViolation }
 
 function readContent(row: { options: unknown; matchingPairs: unknown }): QuestionContent {
 	const options = OptionSchema.array().safeParse(row.options)
@@ -68,9 +70,11 @@ export async function scoreSubmission(params: ScoreSubmissionParams): Promise<Sc
 	if (questionRows.length === 0) return { ok: false, reason: 'no_questions' }
 
 	const questionTypesMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
-	for (const q of questionRows) {
-		if (!questionTypesMap[q.type]) return { ok: false, reason: 'type_not_configured', type: q.type }
-	}
+	const violation = findAnswerViolation({
+		answers,
+		questions: questionRows.map((q) => ({ id: q.id, template: questionTypesMap[q.type]?.uiTemplate ?? null })),
+	})
+	if (violation) return { ok: false, reason: 'answers_invalid', violation }
 
 	const keyRows = await db
 		.select({
