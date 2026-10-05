@@ -78,14 +78,12 @@ export function resolveInitialDraftPayload(input: {
 	copy: QuestionDraftCopy | null
 	serverPayload: unknown
 	serverLockVersion: number
-	serialize?: (payload: unknown) => string
 }): { payload: unknown; restored: boolean; divergedCopy: unknown | null; dropCopy: boolean } {
 	const { copy, serverPayload, serverLockVersion } = input
-	const serialize = input.serialize ?? stableSerialize
 	const server = { payload: serverPayload, restored: false, divergedCopy: null, dropCopy: false }
 	if (!copy) return server
 	if (copy.forbidden) return { ...server, dropCopy: true }
-	if (serialize(copy.payload) === serialize(serverPayload)) return { ...server, dropCopy: true }
+	if (stableSerialize(copy.payload) === stableSerialize(serverPayload)) return { ...server, dropCopy: true }
 	if (copy.baseLockVersion >= serverLockVersion) {
 		return { payload: copy.payload, restored: true, divergedCopy: null, dropCopy: false }
 	}

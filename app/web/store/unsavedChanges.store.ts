@@ -16,7 +16,7 @@ type UnsavedChangesState = {
 	isDirty: (path: string) => boolean
 	registerFlush: (path: string, flush: LeaveFlush | null) => void
 	leave: (path: string) => Promise<LeaveDecision>
-	clear: (path?: string) => void
+	clear: (path: string) => void
 }
 
 const FAILED_FLUSH: LeaveFlushResult = { ok: false, reason: 'failed' }
@@ -70,11 +70,8 @@ export const useUnsavedChanges = create<UnsavedChangesState>((set, get) => ({
 		return decision
 	},
 	clear: (path) =>
-		set((state) => {
-			if (!path) return { dirtyByPath: {}, flushByPath: {} }
-			return {
-				dirtyByPath: without(state.dirtyByPath, path),
-				flushByPath: without(state.flushByPath, path),
-			}
-		}),
+		set((state) => ({
+			dirtyByPath: without(state.dirtyByPath, path),
+			flushByPath: without(state.flushByPath, path),
+		})),
 }))

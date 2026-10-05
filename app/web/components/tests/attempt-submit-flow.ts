@@ -24,7 +24,6 @@ export type AttemptStorageEvent =
 	| 'not-found'
 	| 'start-not-assigned'
 	| 'submit-not-assigned'
-	| 'retry'
 	| 'session-replaced'
 
 export const SUBMIT_FLOW_TEXT = {
@@ -65,7 +64,6 @@ const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorage
 	'not-found': ['session', 'clientAttemptId'],
 	'start-not-assigned': ['session', 'clientAttemptId'],
 	'submit-not-assigned': [],
-	retry: [],
 	'session-replaced': ['wal', 'frozen', 'clientAttemptId'],
 }
 
@@ -91,8 +89,4 @@ export function bannerFor(banner: AttemptBanner): AttemptBannerView {
 
 export function storageKeysToClear(event: AttemptStorageEvent): readonly AttemptStorageKey[] {
 	return STORAGE_KEYS_BY_EVENT[event]
-}
-
-export function blocksInteraction(banner: AttemptBanner): boolean {
-	return banner !== 'retry'
 }

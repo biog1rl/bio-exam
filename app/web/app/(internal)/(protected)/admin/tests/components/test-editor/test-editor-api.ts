@@ -1,6 +1,6 @@
 import { forgetQuestionDraftCopies } from '@/lib/drafts/question-draft-copy'
 import { saveBlob } from '@/lib/http/download'
-import { exportFailureMessage, failureMessage, failureOf } from '@/lib/http/errors'
+import { exportFailureMessage, failureMessage, failureOf, readApiError } from '@/lib/http/errors'
 import {
 	MalformedBodyError,
 	RequestError,
@@ -11,13 +11,7 @@ import {
 import { fetcherWith } from '@/lib/http/swr'
 import { adminTestsKeys, exportTestArchive, type ArchiveDownload } from '@/lib/tests/admin-api'
 
-import type {
-	QuestionDraftDetailResponse,
-	QuestionDraftsResponse,
-	QuestionTypesResponse,
-	TestDetailResponse,
-	TestFormData,
-} from '../../types'
+import type { QuestionDraftDetailResponse, QuestionDraftsResponse, TestDetailResponse, TestFormData } from '../../types'
 import type { StudentAssignment } from './test-editor-types'
 
 export type TestSummaryResponse = Pick<TestDetailResponse, 'test'> & { questionsCount: number }
@@ -78,11 +72,6 @@ export function parseTestAssignments(body: unknown): TestAssignmentsResponse {
 	return body as TestAssignmentsResponse
 }
 
-export function parseQuestionTypes(body: unknown): QuestionTypesResponse {
-	requireArray(body, 'questionTypes')
-	return body as QuestionTypesResponse
-}
-
 function parseCreatedTest(body: unknown): CreatedTestResponse {
 	if (!body || typeof body !== 'object' || Array.isArray(body)) return null
 	return body as CreatedTestResponse
@@ -108,12 +97,24 @@ export const questionDraftDetailFetcher = fetcherWith(parseQuestionDraftDetail)
 
 export const testAssignmentsFetcher = fetcherWith(parseTestAssignments)
 
-export const questionTypesFetcher = fetcherWith(parseQuestionTypes)
-
 export function actionErrorMessage(error: unknown, fallback: string): string {
 	if (error instanceof RequestError) return failureMessage(failureOf(error), fallback)
 	if (error instanceof Error) return error.message
 	return fallback
+}
+
+export const TEST_SLUG_TAKEN = 'Тест с таким адресом уже есть в этой теме'
+
+export function testSaveFailure(error: unknown, fallback: string): { slugError: string | null; toast: string } {
+	if (
+		error instanceof RequestError &&
+		error.kind === 'http' &&
+		error.status === 409 &&
+		readApiError(error.body) === null
+	) {
+		return { slugError: TEST_SLUG_TAKEN, toast: '' }
+	}
+	return { slugError: null, toast: actionErrorMessage(error, fallback) }
 }
 
 function send<T = unknown>(url: string, fallbackMessage: string, options: RequestOptions<T> = {}): Promise<T> {

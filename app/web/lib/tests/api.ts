@@ -49,12 +49,6 @@ export async function fetchPublicTestBySlug(topicSlug: string, testSlug: string)
 	)
 }
 
-export async function fetchPublicTestById(testId: string) {
-	return requestJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(
-		`/api/tests/public/tests/${segment(testId)}`
-	)
-}
-
 export async function fetchPublicTestSummary(topicSlug: string, testSlug: string) {
 	return requestJson<{ test: PublicTestDetail }>(
 		`/api/tests/public/topics/${segment(topicSlug)}/tests/${segment(testSlug)}?view=summary`
@@ -94,10 +88,6 @@ export async function fetchChartDefaultRange(): Promise<{ value: string }> {
 	} catch {
 		return { value: 'month' }
 	}
-}
-
-export async function fetchTopicTests(topicSlug: string) {
-	return requestJson<{ tests: PublicTestListItem[] }>(`/api/tests/public/topics/${segment(topicSlug)}/tests`)
 }
 
 export async function startTestSession(testId: string): Promise<AttemptSession> {

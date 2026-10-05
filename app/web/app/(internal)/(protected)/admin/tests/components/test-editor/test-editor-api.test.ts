@@ -20,6 +20,7 @@ import type { TestFormData } from '../../types'
 import {
 	actionErrorMessage,
 	assignStudentToTest,
+	createTest,
 	deleteQuestionDraft,
 	deleteTestQuestion,
 	exportTestFromEditor,
@@ -27,12 +28,12 @@ import {
 	moveTestQuestion,
 	parseQuestionDraftDetail,
 	parseQuestionDrafts,
-	parseQuestionTypes,
 	parseTestAssignments,
 	parseTestDetail,
 	parseTestSummary,
 	removeStudentFromTest,
 	saveTestQuestion,
+	testSaveFailure,
 	updateTestSettings,
 } from './test-editor-api'
 
@@ -243,6 +244,48 @@ describe('actionErrorMessage', () => {
 	})
 })
 
+describe('testSaveFailure', () => {
+	test.each(
+		[
+			{
+				name: 'создание: 409 с текстом сервера о занятом адресе — ошибка у поля адреса, без тоста',
+				arrange: () =>
+					apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Test with this slug already exists in this topic' })),
+				run: () => createTest(FORM),
+				expected: { slugError: 'Тест с таким адресом уже есть в этой теме', toast: '' },
+			},
+			{
+				name: 'настройки: 409 о занятом адресе — ошибка у поля адреса',
+				arrange: () =>
+					apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Test with this slug already exists in this topic' })),
+				run: () => updateTestSettings(TEST_ID, FORM),
+				expected: { slugError: 'Тест с таким адресом уже есть в этой теме', toast: '' },
+			},
+			{
+				name: 'настройки: 409 с русским текстом сервера — тост с этим текстом, поле не трогается',
+				arrange: () => apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Содержимое изменилось, повторите' })),
+				run: () => updateTestSettings(TEST_ID, FORM),
+				expected: { slugError: null, toast: 'Содержимое изменилось, повторите' },
+			},
+			{
+				name: 'создание: 500 — запасной текст в тосте',
+				arrange: () => apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Internal Server Error' })),
+				run: () => createTest(FORM),
+				expected: { slugError: null, toast: 'Ошибка сохранения' },
+			},
+			{
+				name: 'создание: истёкшая сессия — без тоста',
+				arrange: () => apiFetchMock.mockRejectedValueOnce(new AuthExpiredError()),
+				run: () => createTest(FORM),
+				expected: { slugError: null, toast: '' },
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { arrange, run, expected }) => {
+		arrange()
+		assert.deepEqual(testSaveFailure(await rejection(run()), 'Ошибка сохранения'), expected)
+	})
+})
+
 describe('запросы слоя редактора', () => {
 	test('deleteQuestionDraft — DELETE черновика и очистка его локальных копий', async () => {
 		const keep = questionDraftCopyKey('other', USER_ID)
@@ -353,8 +396,6 @@ describe('парсеры конвертов', () => {
 		assert.equal(parseQuestionDraftDetail(draft), draft)
 		const assignments = { assignments: [] }
 		assert.equal(parseTestAssignments(assignments), assignments)
-		const questionTypes = { scope: 'global', questionTypes: [] }
-		assert.equal(parseQuestionTypes(questionTypes), questionTypes)
 	})
 
 	test('бросают MalformedBodyError при неверном конверте', () => {
@@ -366,8 +407,6 @@ describe('парсеры конвертов', () => {
 			[parseQuestionDrafts, { drafts: {} }],
 			[parseQuestionDraftDetail, { draft: null }],
 			[parseTestAssignments, { error: 'x' }],
-			[parseQuestionTypes, { questionTypes: null }],
-			[parseQuestionTypes, []],
 			[parseTestSummary, null],
 		]
 		for (const [parse, body] of cases) {

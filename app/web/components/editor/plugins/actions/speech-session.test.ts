@@ -34,7 +34,7 @@ class FakeRecognition implements SpeechRecognitionLike {
 	interimResults = false
 	listeners = new Map<string, Set<Listener>>()
 	added: Array<[string, Listener]> = []
-	calls = { start: 0, stop: 0, abort: 0 }
+	calls = { start: 0, abort: 0 }
 
 	constructor() {
 		FakeRecognition.instances.push(this)
@@ -42,10 +42,6 @@ class FakeRecognition implements SpeechRecognitionLike {
 
 	start() {
 		this.calls.start++
-	}
-
-	stop() {
-		this.calls.stop++
 	}
 
 	abort() {

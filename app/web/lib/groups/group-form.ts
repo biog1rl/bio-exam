@@ -27,18 +27,6 @@ export type GroupOwner = {
 
 export type CandidatesState = 'hint' | 'loading' | 'error' | 'empty' | 'list'
 
-export function candidatesSource(input: { zoneAll: boolean; query?: string }): string | null {
-	if (input.zoneAll) return '/api/users'
-	const q = (input.query ?? '').trim()
-	if (q.length < MIN_CANDIDATE_QUERY) return null
-	return `/api/groups/candidates?q=${encodeURIComponent(q)}`
-}
-
-export function candidatesHint(input: { zoneAll: boolean; query?: string }): string | null {
-	if (input.zoneAll) return null
-	return (input.query ?? '').trim().length < MIN_CANDIDATE_QUERY ? CANDIDATES_HINT : null
-}
-
 export function candidatesState(input: {
 	query: string
 	debounced: string

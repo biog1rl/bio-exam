@@ -40,8 +40,6 @@ function sequenceView(key: unknown, answer: unknown, correctAnswer: unknown = ke
 
 test('getSequenceReview: соседняя перестановка 1234 при ключе 1243 даёт одну ошибку и две ячейки swapped', () => {
 	const review = getSequenceReview(sequenceView('1243', '1234'))
-	assert.equal(review.visible, true)
-	assert.equal(review.mistakes, 1)
 	assert.equal(review.summaryText, 'Ошибок: 1')
 	assert.deepEqual(kinds(review), ['correct', 'correct', 'swapped', 'swapped'])
 	assert.equal(review.showCells, true)
@@ -51,8 +49,6 @@ test('getSequenceReview: соседняя перестановка 1234 при �
 test('getSequenceReview: пустой ответ считает ошибки по длине ключа и не рисует ячейки', () => {
 	for (const studentAnswer of ['', null]) {
 		const review = getSequenceReview(sequenceView('2314', studentAnswer))
-		assert.equal(review.visible, true)
-		assert.equal(review.mistakes, 4)
 		assert.equal(review.summaryText, 'Ошибок: 4')
 		assert.equal(review.showCells, false)
 	}

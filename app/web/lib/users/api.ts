@@ -1,4 +1,4 @@
-import { MalformedBodyError, request, requestJson, type RequestOutcome } from '@/lib/http/request'
+import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
 import { fetcherWith } from '@/lib/http/swr'
 import type { ProgressAttempt } from '@/lib/progress/attempt-chart'
 import type { UserPatch } from '@/lib/users/edit-user-form'
@@ -40,7 +40,6 @@ function userPath(id: string): string {
 export const usersKeys = {
 	list: () => '/api/users' as const,
 	byLogin: (login: string) => `/api/users/by-login/${encodeURIComponent(login)}`,
-	byId: (id: string) => userPath(id),
 	assignments: (userId: string) => `${userPath(userId)}/test-assignments`,
 	attempts: (userId: string) => `${userPath(userId)}/test-attempts`,
 }
@@ -94,10 +93,6 @@ export const userByLoginFetcher = fetcherWith(parseUserEnvelope)
 export const userAssignmentsFetcher = fetcherWith(parseUserAssignments)
 
 export const userAttemptsFetcher = fetcherWith(parseUserAttempts)
-
-export function getUserByLogin(login: string): Promise<UserRow> {
-	return requestJson(usersKeys.byLogin(login), { parse: parseUserEnvelope })
-}
 
 export function assignTest(userId: string, testId: string): Promise<RequestOutcome<unknown>> {
 	return request(usersKeys.assignments(userId), { method: 'POST', json: { testId } })

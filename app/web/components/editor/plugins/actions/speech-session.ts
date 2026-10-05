@@ -1,6 +1,5 @@
 export type SpeechRecognitionLike = {
 	start(): void
-	stop(): void
 	abort(): void
 	addEventListener(type: string, fn: (event: unknown) => void): void
 	removeEventListener(type: string, fn: (event: unknown) => void): void
@@ -8,7 +7,6 @@ export type SpeechRecognitionLike = {
 
 export type SpeechSession = {
 	start(): void
-	stop(): void
 	dispose(): void
 }
 
@@ -90,9 +88,6 @@ export function createSpeechSession({ create, onText, onStop }: SpeechSessionOpt
 			created.addEventListener('error', onFinish)
 			recognition = created
 			created.start()
-		},
-		stop() {
-			recognition?.stop()
 		},
 		dispose() {
 			if (disposed) return

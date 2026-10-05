@@ -55,8 +55,6 @@ export function getChoiceOptionReviewRows(
 }
 
 export type SequenceReview = {
-	visible: boolean
-	mistakes: number | null
 	summaryText: string | null
 	parts: SequencePositionVerdict[]
 	showCells: boolean
@@ -71,8 +69,6 @@ export function getSequenceReview(input: {
 	const { verdicts, mistakes, correctAnswer } = input
 	const parts = verdicts?.template === 'sequence_digits' ? verdicts.parts : []
 	return {
-		visible: mistakes != null,
-		mistakes,
 		summaryText: mistakes != null ? `Ошибок: ${mistakes}` : null,
 		parts,
 		showCells: correctAnswer != null && mistakes != null && mistakes > 0 && parts.some((part) => part.given != null),

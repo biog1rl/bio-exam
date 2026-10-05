@@ -38,11 +38,6 @@ function toAccessPayload(record: Record<string, unknown>): AccessPayload {
 	}
 }
 
-export function decodeAccessPayload(token: string | null | undefined): AccessPayload | null {
-	const record = decodePayloadRecord(token)
-	return record ? toAccessPayload(record) : null
-}
-
 function refreshThresholdSec(iat: number | null, exp: number): number {
 	if (iat === null || exp <= iat) return REFRESH_THRESHOLD_SEC
 	return Math.min(REFRESH_THRESHOLD_SEC, (exp - iat) / 2)

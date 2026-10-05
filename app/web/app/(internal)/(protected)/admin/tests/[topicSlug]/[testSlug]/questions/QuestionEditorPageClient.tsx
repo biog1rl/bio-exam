@@ -28,7 +28,7 @@ import { type AutosaveStatusView, autosaveStatusView, UNSAVED_CHANGES_TEXT } fro
 import type { QuestionDraftAutosave } from '@/lib/drafts/question-draft-autosave'
 import { useQuestionDraftAutosave } from '@/lib/drafts/use-question-draft-autosave'
 import { failureMessage, failureOf } from '@/lib/http/errors'
-import { adminTestsKeys, adminTestsListFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
+import { adminTestsKeys, adminTestsListFetcher, questionTypesFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { type LeaveDecision, useUnsavedChanges } from '@/store/unsavedChanges.store'
 
 import QuestionEditor from '../../../components/QuestionEditor'
@@ -37,7 +37,6 @@ import {
 	deleteQuestionDraft,
 	moveTestQuestion,
 	questionDraftDetailFetcher,
-	questionTypesFetcher,
 	saveTestQuestion,
 	testDetailFetcher,
 } from '../../../components/test-editor/test-editor-api'

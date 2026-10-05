@@ -50,10 +50,6 @@ export function parseChartRange(body: unknown): ChartRangeSetting {
 
 export const chartRangeFetcher = fetcherWith(parseChartRange)
 
-export function getChartRange(): Promise<RequestOutcome<ChartRangeSetting>> {
-	return request(settingsKeys.chartRange(), { parse: parseChartRange })
-}
-
 export function saveChartRange(value: ChartRange): Promise<RequestOutcome<ChartRangeSetting>> {
 	return request(settingsKeys.chartRange(), {
 		method: 'PUT',

@@ -14,7 +14,7 @@ import { type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 
 import { readZipEntries } from '../../app/server/src/test-support/zip'
-import { seedTest } from '../fixtures/accounts'
+import { seedTest, seedTopic } from '../fixtures/accounts'
 import { expect, newSessionContext, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 
 type SavedQuestion = {
@@ -263,4 +263,24 @@ test.describe.serial('D-34: test export', () => {
 			expect(names.includes('answer_keys.json')).toBe(withAnswers)
 		})
 	}
+})
+
+test('admin creating a test with an address already taken in the topic sees the error at the address field', async ({
+	adminPage: page,
+}, testInfo) => {
+	const taken = seedTest(projectKey(testInfo), 'authoring')
+
+	await page.goto('/admin/tests/new')
+	const topicSelect = page.getByText('Тема', { exact: true }).locator('xpath=..').getByRole('combobox')
+	await expect(topicSelect).toBeEnabled()
+	await topicSelect.click()
+	await page.getByRole('option', { name: seedTopic(TOPIC_SLUG).title, exact: true }).click()
+
+	await page.getByPlaceholder('Тест по теме...').fill('Повтор адреса')
+	await page.getByPlaceholder('test-slug').fill(taken.slug)
+	await page.getByRole('button', { name: 'Сохранить', exact: true }).first().click()
+
+	await expect(page.getByText('Тест с таким адресом уже есть в этой теме', { exact: true })).toBeVisible()
+	await expect(page.getByText('Ошибка сохранения', { exact: true })).toHaveCount(0)
+	await expect(page).toHaveURL(/\/admin\/tests\/new\/?$/)
 })

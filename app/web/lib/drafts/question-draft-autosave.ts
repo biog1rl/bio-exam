@@ -55,7 +55,6 @@ export type QuestionDraftAutosaveOptions = {
 	storage: QuestionDraftCopyStorage
 	win: BeforeUnloadWindow
 	clock?: Partial<SaveQueueClock>
-	serialize?: (payload: unknown) => string
 	onNotice?: (notice: QuestionDraftNotice) => void
 }
 
@@ -90,7 +89,6 @@ const STOPPED_ERROR: Record<number, QuestionDraftAutosaveSnapshot['error']> = {
 
 export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOptions): QuestionDraftAutosave {
 	const { api, storage, win, onNotice } = options
-	const serialize = options.serialize ?? stableSerialize
 	const now = options.clock?.now ?? (() => Date.now())
 	const setTimer = options.clock?.setTimer ?? ((callback: () => void, ms: number) => setTimeout(callback, ms))
 	const clearTimer =
@@ -101,7 +99,6 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 		copy: readQuestionDraftCopy(storage, copyKey),
 		serverPayload: options.serverPayload,
 		serverLockVersion: options.serverLockVersion,
-		serialize,
 	})
 	if (initial.dropCopy) removeQuestionDraftCopy(storage, copyKey)
 	const initialPayload = initial.payload
@@ -114,9 +111,9 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 	let forbiddenNoticeSent = false
 	let goneNoticeSent = false
 	let lockVersion = options.serverLockVersion
-	let ackedSerial = serialize(options.serverPayload)
+	let ackedSerial = stableSerialize(options.serverPayload)
 	let latestPayload: unknown = initialPayload
-	let latestSerial = serialize(initialPayload)
+	let latestSerial = stableSerialize(initialPayload)
 	let queue: SaveQueue<unknown> | null = null
 	let guard: BeforeUnloadGuard | null = null
 	let started = false
@@ -222,7 +219,7 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 	function settleCopy(serial: string): void {
 		const copy = readQuestionDraftCopy(storage, copyKey)
 		if (!copy) return
-		const copySerial = serialize(copy.payload)
+		const copySerial = stableSerialize(copy.payload)
 		if (copySerial === serial) {
 			removeQuestionDraftCopy(storage, copyKey)
 			return
@@ -310,7 +307,7 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 	function send(_key: string, payload: unknown, sendOptions: { keepalive: boolean }): Promise<SaveOutcome> {
 		if (gone) return Promise.resolve(STOP_GONE)
 		if (forbidden) return Promise.resolve(STOP_FORBIDDEN)
-		const serial = serialize(payload)
+		const serial = stableSerialize(payload)
 		if (serial === ackedSerial) {
 			settleCopy(serial)
 			return Promise.resolve(OK)
@@ -388,7 +385,7 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 		},
 		change(payload) {
 			if (gone) return
-			const serial = serialize(payload)
+			const serial = stableSerialize(payload)
 			if (serial === latestSerial) return
 			if (closed) {
 				latestPayload = payload
@@ -400,7 +397,7 @@ export function createQuestionDraftAutosave(options: QuestionDraftAutosaveOption
 		restoreDivergedCopy() {
 			if (divergedCopy === null || closed || gone) return null
 			const payload = divergedCopy
-			applyChange(payload, serialize(payload))
+			applyChange(payload, stableSerialize(payload))
 			return payload
 		},
 		flushForLeave() {

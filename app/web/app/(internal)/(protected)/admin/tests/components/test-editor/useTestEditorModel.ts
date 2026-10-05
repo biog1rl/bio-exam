@@ -10,7 +10,7 @@ import useSWR from 'swr'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { swrFetcher } from '@/lib/http/swr'
-import { adminTestsKeys, topicsListFetcher } from '@/lib/tests/admin-api'
+import { adminTestsKeys, questionTypesFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { canManageCatalog, testTopicPickerState } from '@/lib/tests/bank-view'
 import { usersKeys } from '@/lib/users/api'
 
@@ -26,11 +26,11 @@ import {
 	deleteTestQuestion,
 	exportTestFromEditor,
 	questionDraftsFetcher,
-	questionTypesFetcher,
 	removeStudentFromTest,
 	reorderTestQuestions,
 	testAssignmentsFetcher,
 	testDetailFetcher,
+	testSaveFailure,
 	testSummaryFetcher,
 	updateTestSettings,
 } from './test-editor-api'
@@ -205,6 +205,12 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		[testId, removingUserId, mutateStudentAssignments]
 	)
 
+	const applySaveFailure = useCallback((error: unknown): string => {
+		const failure = testSaveFailure(error, 'Ошибка сохранения')
+		if (failure.slugError) setTestSlugError(failure.slugError)
+		return failure.toast
+	}, [])
+
 	const persistNewTest = useCallback(async (): Promise<CreateTestPersistenceResult> => {
 		const baseValidationError = getBaseValidationError(form)
 		if (baseValidationError) {
@@ -227,7 +233,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				isPublished: persistedPublicationState,
 			})
 		).catch((error: unknown) => {
-			throw new Error(actionErrorMessage(error, 'Ошибка сохранения'))
+			throw new Error(applySaveFailure(error))
 		})
 		const createdTestId = data?.test?.id
 		const createdTopicSlug = data?.test?.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
@@ -242,7 +248,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			testSlug: createdTestSlug,
 			forcedDraft: shouldForceDraft,
 		}
-	}, [form, topics, questionTypesData])
+	}, [form, topics, questionTypesData, applySaveFailure])
 
 	const handleCreateTopic = () => {
 		if (!catalog) return
@@ -417,7 +423,9 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			if (!currentTestId) {
 				throw new Error('Не удалось определить ID теста')
 			}
-			const data = await updateTestSettings(currentTestId, form)
+			const data = await updateTestSettings(currentTestId, form).catch((error: unknown) => {
+				throw new Error(applySaveFailure(error))
+			})
 			toast.success('Настройки теста сохранены')
 
 			if (data.test) {

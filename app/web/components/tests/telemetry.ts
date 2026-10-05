@@ -1,7 +1,6 @@
 import type { QuestionTelemetry, TelemetryMap } from '@bio-exam/exam-core'
 
 export { mergeTelemetryMaps } from '@bio-exam/exam-core'
-export type { QuestionTelemetry, TelemetryMap } from '@bio-exam/exam-core'
 
 function getQuestionTelemetryEntry(telemetry: TelemetryMap, questionId: string): QuestionTelemetry {
 	return (

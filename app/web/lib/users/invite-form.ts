@@ -125,11 +125,6 @@ export function groupOwnerLabel(owner: InviteGroupOwner | null | undefined): str
 	return fullName || owner.name || '—'
 }
 
-export function groupOptionLabel(group: { name: string; owner?: InviteGroupOwner | null }): string {
-	const owner = groupOwnerLabel(group.owner)
-	return owner === null ? group.name : `${group.name} · ${owner}`
-}
-
 function asNullableString(value: unknown): string | null {
 	return typeof value === 'string' ? value : null
 }
