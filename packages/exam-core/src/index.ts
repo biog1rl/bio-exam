@@ -2,6 +2,7 @@ export {
 	getTemplateAdapter,
 	matchingAdapter,
 	multiChoiceAdapter,
+	openAdapter,
 	sequenceDigitsAdapter,
 	shortTextAdapter,
 	singleChoiceAdapter,
@@ -73,11 +74,13 @@ export {
 } from './normalize'
 export {
 	ALLOWED_MISTAKE_METRICS_BY_TEMPLATE,
+	AUTO_SCORED_TEMPLATES,
 	BUILTIN_QUESTION_TYPES,
 	createDefaultScoringRuleForTemplate,
 	defaultMistakeMetricForTemplate,
 	getAllowedMistakeMetricsForTemplate,
 	getBuiltinQuestionTypeByKey,
+	isAutoScoredTemplate,
 	isMistakeMetricAllowedForTemplate,
 	MISTAKE_METRICS,
 	QUESTION_UI_TEMPLATES,
@@ -89,6 +92,7 @@ export {
 	templateForMetric,
 } from './registry'
 export type {
+	AutoScoredTemplate,
 	BuiltinQuestionType,
 	MistakeMetric,
 	QuestionTypeDefinition,

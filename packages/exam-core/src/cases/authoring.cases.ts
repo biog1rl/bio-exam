@@ -92,6 +92,9 @@ const SHORT_TEXT_IN_SET: TemplateConfig = { uiTemplate: 'short_text', mistakeMet
 const SHORT_TEXT_EQUAL: TemplateConfig = { uiTemplate: 'short_text', mistakeMetric: 'compact_text_equal' }
 const SEQUENCE: TemplateConfig = { uiTemplate: 'sequence_digits', mistakeMetric: 'hamming_digits' }
 
+const OPEN_HAS_OPTIONS = 'У открытого вопроса не бывает вариантов ответа'
+const OPEN: TemplateConfig = { uiTemplate: 'open', mistakeMetric: 'manual' }
+
 const PROMPT = 'Назовите метод исследования'
 const NO_CONTENT: QuestionContent = { options: null, matchingPairs: null }
 
@@ -1173,12 +1176,56 @@ export const ORDER_AUTHORING_CASES: AuthoringCase[] = [
 	},
 ]
 
+export const OPEN_AUTHORING_CASES: AuthoringCase[] = [
+	{
+		name: 'открытый вопрос без вариантов и без ключа проходит проверку',
+		config: OPEN,
+		promptText: 'Опишите процесс фотосинтеза',
+		content: NO_CONTENT,
+		key: null,
+		expected: null,
+	},
+	{
+		name: 'открытый вопрос с пустым содержимым проходит проверку',
+		config: OPEN,
+		promptText: 'Опишите процесс фотосинтеза',
+		content: {},
+		key: undefined,
+		expected: null,
+	},
+	{
+		name: 'открытый вопрос с вариантами ответа отклоняется',
+		config: OPEN,
+		promptText: 'Опишите процесс фотосинтеза',
+		content: choice(options(2)),
+		key: null,
+		expected: OPEN_HAS_OPTIONS,
+	},
+	{
+		name: 'открытый вопрос с парами сопоставления отклоняется',
+		config: OPEN,
+		promptText: 'Опишите процесс фотосинтеза',
+		content: pairs(side('l', 2), side('r', 2)),
+		key: null,
+		expected: OPEN_HAS_OPTIONS,
+	},
+	{
+		name: 'открытый вопрос с пустой формулировкой отклоняется',
+		config: OPEN,
+		promptText: '  ',
+		content: NO_CONTENT,
+		key: null,
+		expected: AUTHORING_MESSAGES.promptEmpty,
+	},
+]
+
 export const AUTHORING_CASE_GROUPS: ReadonlyArray<{ template: QuestionUiTemplate; cases: AuthoringCase[] }> = [
 	{ template: 'single_choice', cases: SINGLE_CHOICE_AUTHORING_CASES },
 	{ template: 'multi_choice', cases: MULTI_CHOICE_AUTHORING_CASES },
 	{ template: 'matching', cases: MATCHING_AUTHORING_CASES },
 	{ template: 'short_text', cases: SHORT_TEXT_AUTHORING_CASES },
 	{ template: 'sequence_digits', cases: SEQUENCE_AUTHORING_CASES },
+	{ template: 'open', cases: OPEN_AUTHORING_CASES },
 ]
 
 export const KEY_SHAPE_CASES: ReadonlyArray<{ config: TemplateConfig; expected: KeyShape | null }> = [
@@ -1188,6 +1235,7 @@ export const KEY_SHAPE_CASES: ReadonlyArray<{ config: TemplateConfig; expected: 
 	{ config: SHORT_TEXT_EQUAL, expected: 'text' },
 	{ config: SHORT_TEXT_IN_SET, expected: 'text_variants' },
 	{ config: SEQUENCE, expected: 'digits' },
+	{ config: OPEN, expected: 'none' },
 	{ config: { uiTemplate: 'essay' as QuestionUiTemplate, mistakeMetric: 'compact_text_equal' }, expected: null },
 ]
 
@@ -1207,4 +1255,5 @@ export const TO_CANONICAL_KEY_CASES: ReadonlyArray<{
 	{ name: 'single_choice: строка без изменений', uiTemplate: 'single_choice', key: 'b', expected: 'b' },
 	{ name: 'multi_choice: массив без изменений', uiTemplate: 'multi_choice', key: ['a', 'c'], expected: ['a', 'c'] },
 	{ name: 'matching: объект без изменений', uiTemplate: 'matching', key: { l1: 'r1' }, expected: { l1: 'r1' } },
+	{ name: 'open: null без изменений', uiTemplate: 'open', key: null, expected: null },
 ]

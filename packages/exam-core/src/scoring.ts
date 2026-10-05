@@ -2,6 +2,7 @@ import { TEMPLATE_ADAPTERS } from './adapters/index'
 import { MISTAKES_UNSCORABLE, type QuestionContent, type QuestionVerdicts } from './adapters/types'
 import type { AnswerValue } from './attempt-result'
 import {
+	OPEN_QUESTION_MAX_POINTS,
 	QuestionTypeScoringRuleSchema,
 	createDefaultScoringRuleForTemplate,
 	defaultMistakeMetricForTemplate,
@@ -95,6 +96,14 @@ export function scoreQuestionByType(input: ScoreQuestionByTypeInput): ScoreQuest
 		template: typeConfig.uiTemplate,
 		fallbackMaxPoints,
 	})
+	if (normalizedRule.mistakeMetric === 'manual') {
+		return {
+			maxPoints: OPEN_QUESTION_MAX_POINTS,
+			earnedPoints: 0,
+			isCorrect: false,
+			mistakesCount: MISTAKES_UNSCORABLE,
+		}
+	}
 	const mistakesCount = countMistakes(normalizedRule.mistakeMetric, userAnswer, correctAnswer)
 	const earnedPoints = scoreByRule(normalizedRule, mistakesCount)
 
@@ -129,6 +138,18 @@ export function scoreQuestionFacts(input: ScoreQuestionFactsInput): ScoreQuestio
 	const { typeConfig, rawKey, userAnswer, fallbackMaxPoints, content } = input
 	const template = typeConfig.uiTemplate
 	const metric = normalizeScoringRule({ rule: typeConfig.scoringRule, template, fallbackMaxPoints }).mistakeMetric
+	if (metric === 'manual') {
+		return {
+			template,
+			metric,
+			points: OPEN_QUESTION_MAX_POINTS,
+			earnedPoints: 0,
+			isCorrect: false,
+			mistakes: null,
+			key: null,
+			verdicts: null,
+		}
+	}
 	const score = scoreQuestionByType({
 		questionType: typeConfig.key,
 		userAnswer,

@@ -6,8 +6,21 @@ export const QUESTION_UI_TEMPLATES = [
 	'matching',
 	'short_text',
 	'sequence_digits',
+	'open',
 ] as const
 export type QuestionUiTemplate = (typeof QUESTION_UI_TEMPLATES)[number]
+
+export type AutoScoredTemplate = Exclude<QuestionUiTemplate, 'open'>
+
+export const AUTO_SCORED_TEMPLATES: readonly AutoScoredTemplate[] = QUESTION_UI_TEMPLATES.filter(
+	(template): template is AutoScoredTemplate => template !== 'open'
+)
+
+export function isAutoScoredTemplate(template: QuestionUiTemplate): template is AutoScoredTemplate {
+	return template !== 'open'
+}
+
+export const OPEN_QUESTION_MAX_POINTS = 3
 
 export const MISTAKE_METRICS = [
 	'boolean_correct',
@@ -16,6 +29,7 @@ export const MISTAKE_METRICS = [
 	'compact_text_equal',
 	'compact_text_in_set',
 	'hamming_digits',
+	'manual',
 ] as const
 export type MistakeMetric = (typeof MISTAKE_METRICS)[number]
 
@@ -25,6 +39,7 @@ export const ALLOWED_MISTAKE_METRICS_BY_TEMPLATE: Record<QuestionUiTemplate, Mis
 	matching: ['pair_mismatch_count'],
 	short_text: ['compact_text_equal', 'compact_text_in_set'],
 	sequence_digits: ['hamming_digits'],
+	open: ['manual'],
 }
 
 export const SCORING_FORMULAS = ['exact_match', 'one_mistake_partial', 'tiers'] as const
@@ -210,6 +225,13 @@ export const BUILTIN_QUESTION_TYPES: BuiltinQuestionType[] = [
 			oneMistakePoints: 1,
 		},
 	},
+	{
+		key: 'open',
+		title: 'Открытый вопрос',
+		description: 'Развёрнутый ответ, баллы от 0 до 3 выставляет учитель',
+		uiTemplate: 'open',
+		scoringRule: { formula: 'exact_match', mistakeMetric: 'manual', correctPoints: OPEN_QUESTION_MAX_POINTS },
+	},
 ]
 
 export function getBuiltinQuestionTypeByKey(key: string): BuiltinQuestionType | undefined {
@@ -230,6 +252,9 @@ export function isMistakeMetricAllowedForTemplate(template: QuestionUiTemplate, 
 
 export function createDefaultScoringRuleForTemplate(template: QuestionUiTemplate): QuestionTypeScoringRule {
 	const metric = defaultMistakeMetricForTemplate(template)
+	if (template === 'open') {
+		return { formula: 'exact_match', mistakeMetric: 'manual', correctPoints: OPEN_QUESTION_MAX_POINTS }
+	}
 	if (template === 'single_choice' || template === 'short_text') {
 		return { formula: 'exact_match', mistakeMetric: metric, correctPoints: 1 }
 	}

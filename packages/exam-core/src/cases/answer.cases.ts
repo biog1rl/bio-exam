@@ -131,4 +131,14 @@ export const ANSWER_SHAPE_CASES: AnswerShapeCase[] = [
 		accepted: false,
 		normalized: null,
 	},
+	{
+		name: 'open: строка принимается как есть',
+		template: 'open',
+		value: ' Развёрнутый ответ\nв две строки ',
+		accepted: true,
+		normalized: ' Развёрнутый ответ\nв две строки ',
+	},
+	{ name: 'open: пустая строка принимается', template: 'open', value: '', accepted: true, normalized: '' },
+	{ name: 'open: массив отклоняется', template: 'open', value: ['a'], accepted: false, normalized: null },
+	{ name: 'open: число отклоняется', template: 'open', value: 3, accepted: false, normalized: null },
 ]

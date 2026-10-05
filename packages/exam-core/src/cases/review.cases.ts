@@ -740,6 +740,10 @@ export const IS_ANSWERED_CASES: IsAnsweredCase[] = [
 	{ name: 'sequence_digits: пустая строка', template: 'sequence_digits', answer: '', expected: false },
 	{ name: 'sequence_digits: строка из пробелов', template: 'sequence_digits', answer: '  ', expected: false },
 	{ name: 'sequence_digits: число', template: 'sequence_digits', answer: 1243, expected: false },
+	{ name: 'open: текст', template: 'open', answer: 'Развёрнутый ответ', expected: true },
+	{ name: 'open: пустая строка', template: 'open', answer: '', expected: false },
+	{ name: 'open: строка из пробелов и переводов строки', template: 'open', answer: ' \n ', expected: false },
+	{ name: 'open: массив', template: 'open', answer: ['a'], expected: false },
 	{ name: 'шаблон null', template: null, answer: 'a', expected: false },
 	{
 		name: 'неизвестный шаблон essay',
@@ -758,6 +762,8 @@ export type ReadKeyCase = {
 }
 
 export const READ_KEY_CASES: ReadKeyCase[] = [
+	{ name: 'open: строка не считается ключом', template: 'open', metric: 'manual', raw: 'Митоз', expected: null },
+	{ name: 'open: null', template: 'open', metric: 'manual', raw: null, expected: null },
 	{ name: 'single_choice: число 3', template: 'single_choice', metric: 'boolean_correct', raw: 3, expected: '3' },
 	{ name: 'single_choice: строка', template: 'single_choice', metric: 'boolean_correct', raw: 'a', expected: 'a' },
 	{ name: 'single_choice: массив', template: 'single_choice', metric: 'boolean_correct', raw: ['a'], expected: null },

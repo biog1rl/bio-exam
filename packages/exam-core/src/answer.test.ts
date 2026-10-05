@@ -34,3 +34,10 @@ test('таблица формы ответа покрывает все шабл�
 		)
 	}
 })
+
+test('open: схема принимает пустую строку, но пустой ответ не считается данным', () => {
+	const adapter = TEMPLATE_ADAPTERS.open
+	assert.equal(adapter.answerSchema.safeParse('').success, true)
+	assert.equal(adapter.isAnswered('', {}), false)
+	assert.equal(adapter.isAnswered('текст', {}), true)
+})

@@ -4,6 +4,7 @@ import {
 	questionStatus,
 	scoreQuestionFacts,
 	type AttemptQuestionView,
+	type AutoScoredTemplate,
 	type QuestionUiTemplate,
 	type RuntimeQuestionTypeConfig,
 	type ScoreQuestionFactsResult,
@@ -81,12 +82,12 @@ const QUESTIONS = {
 		options: null,
 		matchingPairs: null,
 	}),
-} satisfies Record<QuestionUiTemplate, PublicTestQuestion>
+} satisfies Record<AutoScoredTemplate, PublicTestQuestion>
 
 type Outcome = 'верно' | 'частично' | 'нет ответа' | 'неверно'
 
 type Row = {
-	template: QuestionUiTemplate
+	template: AutoScoredTemplate
 	key: unknown
 	answer: unknown
 	outcome: Outcome

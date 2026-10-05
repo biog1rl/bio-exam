@@ -11,7 +11,7 @@ import {
 	SEQUENCE_REVIEW_CASES,
 	SHORT_TEXT_REVIEW_CASES,
 } from './cases/review.cases'
-import { QUESTION_UI_TEMPLATES, type QuestionUiTemplate } from './registry'
+import { AUTO_SCORED_TEMPLATES, QUESTION_UI_TEMPLATES, type QuestionUiTemplate } from './registry'
 import {
 	allPartsCorrect,
 	answerIdList,
@@ -166,4 +166,11 @@ test('у каждого шаблона есть строки isAnswered с true 
 			template
 		)
 	}
+})
+
+test('разбор по ключу есть у каждого шаблона с автопроверкой и недоступен для open', () => {
+	for (const template of AUTO_SCORED_TEMPLATES) {
+		assert.doesNotThrow(() => computeVerdicts({ template, key: null, answer: null }), template)
+	}
+	assert.throws(() => computeVerdicts({ template: 'open', metric: 'manual', key: null, answer: 'текст' }))
 })

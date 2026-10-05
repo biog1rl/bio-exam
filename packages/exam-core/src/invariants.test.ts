@@ -19,13 +19,13 @@ import {
 } from './cases/scoring.cases'
 import {
 	defaultMistakeMetricForTemplate,
+	AUTO_SCORED_TEMPLATES,
 	isMistakeMetricAllowedForTemplate,
-	QUESTION_UI_TEMPLATES,
 	type MistakeMetric,
 	type QuestionUiTemplate,
 } from './registry'
 import { allPartsCorrect, computeVerdicts, errorUnits } from './review'
-import { MISTAKES_UNSCORABLE, countMistakes, normalizeScoringRule } from './scoring'
+import { MISTAKES_UNSCORABLE, countMistakes, normalizeScoringRule, scoreQuestionFacts } from './scoring'
 
 type InvariantRow = {
 	name: string
@@ -199,7 +199,7 @@ describe('инвариант «все части верны ⇔ ошибок 0»
 
 	test('проверено не меньше 80 строк, есть строки каждого шаблона', () => {
 		assert.ok(ROWS.length >= 80, `строк ${ROWS.length}`)
-		for (const template of QUESTION_UI_TEMPLATES) {
+		for (const template of AUTO_SCORED_TEMPLATES) {
 			assert.ok(
 				ROWS.some((row) => row.template === template),
 				template
@@ -208,7 +208,7 @@ describe('инвариант «все части верны ⇔ ошибок 0»
 	})
 
 	test('у каждого шаблона есть строка с ошибками и строка без ошибок', () => {
-		for (const template of QUESTION_UI_TEMPLATES) {
+		for (const template of AUTO_SCORED_TEMPLATES) {
 			const mistakes = ROWS.filter((row) => row.template === template).map(
 				(row) =>
 					computeVerdicts({
@@ -264,6 +264,32 @@ describe('инвариант «все части верны ⇔ ошибок 0»
 			})
 			if (row.template !== 'sequence_digits') assert.ok(verdicts.parts.length > 0, row.name)
 			else assert.equal(verdicts.parts.length, 0, row.name)
+		}
+	})
+})
+
+describe('инвариант открытого вопроса', () => {
+	const ANSWERS: unknown[] = [null, '', 'Развёрнутый ответ', ['a'], { l1: 'r1' }, 42]
+	const KEYS: unknown[] = [null, 'Митоз', ['a', 'b'], { l1: 'r1' }]
+
+	test('при любом ответе и любом ключе: 3 балла максимум, 0 получено, без ошибок и вердиктов', () => {
+		for (const answer of ANSWERS) {
+			for (const key of KEYS) {
+				const facts = scoreQuestionFacts({
+					typeConfig: SCORING_TYPES_MAP.open,
+					rawKey: key,
+					userAnswer: answer,
+					fallbackMaxPoints: 1,
+					content: {},
+				})
+				const label = `${JSON.stringify(answer)} / ${JSON.stringify(key)}`
+				assert.equal(facts.points, 3, label)
+				assert.equal(facts.earnedPoints, 0, label)
+				assert.equal(facts.isCorrect, false, label)
+				assert.equal(facts.mistakes, null, label)
+				assert.equal(facts.key, null, label)
+				assert.equal(facts.verdicts, null, label)
+			}
 		}
 	})
 })

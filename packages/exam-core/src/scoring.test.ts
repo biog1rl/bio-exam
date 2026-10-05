@@ -276,3 +276,57 @@ describe('scoreQuestionFacts: баллы и вердикты одним вызо
 		assert.deepEqual(factsOf(checkbox).key, ['a', 'c'])
 	})
 })
+
+const OPEN_ROWS: Array<{ name: string; rawKey: unknown; answer: unknown; fallbackMaxPoints: number }> = [
+	{ name: 'без ключа и с текстовым ответом', rawKey: null, answer: 'Развёрнутый ответ', fallbackMaxPoints: 5 },
+	{ name: 'без ответа', rawKey: null, answer: null, fallbackMaxPoints: 5 },
+	{ name: 'с ключом, переданным по ошибке', rawKey: 'Митоз', answer: 'Митоз', fallbackMaxPoints: 1 },
+	{ name: 'с массивом в ключе и fallback 1', rawKey: ['a', 'b'], answer: ['a', 'b'], fallbackMaxPoints: 1 },
+]
+
+describe('scoreQuestionFacts: открытый вопрос', () => {
+	test.each(OPEN_ROWS)('$name: 3 балла максимум, 0 получено, без ключа и вердиктов', (row) => {
+		const facts = scoreQuestionFacts({
+			typeConfig: SCORING_TYPES_MAP.open!,
+			rawKey: row.rawKey,
+			userAnswer: row.answer,
+			fallbackMaxPoints: row.fallbackMaxPoints,
+			content: {},
+		})
+		assert.deepEqual(facts, {
+			template: 'open',
+			metric: 'manual',
+			points: 3,
+			earnedPoints: 0,
+			isCorrect: false,
+			mistakes: null,
+			key: null,
+			verdicts: null,
+		})
+	})
+
+	test.each(OPEN_ROWS)('$name: scoreQuestionByType даёт максимум 3 и 0 получено', (row) => {
+		assert.deepEqual(
+			scoreQuestionByType({
+				questionType: 'open',
+				userAnswer: row.answer,
+				correctAnswer: row.rawKey,
+				fallbackMaxPoints: row.fallbackMaxPoints,
+				questionTypesMap: SCORING_TYPES_MAP,
+			}),
+			{ maxPoints: 3, earnedPoints: 0, isCorrect: false, mistakesCount: MISTAKES_UNSCORABLE }
+		)
+	})
+
+	test('повреждённое правило типа не меняет максимум', () => {
+		const facts = scoreQuestionFacts({
+			typeConfig: { key: 'open', uiTemplate: 'open', scoringRule: { formula: 'bad' } },
+			rawKey: null,
+			userAnswer: 'текст',
+			fallbackMaxPoints: 7,
+			content: {},
+		})
+		assert.equal(facts.points, 3)
+		assert.equal(facts.earnedPoints, 0)
+	})
+})

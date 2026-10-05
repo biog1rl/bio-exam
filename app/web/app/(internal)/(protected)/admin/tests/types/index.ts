@@ -64,6 +64,10 @@ export const TEMPLATE_META: Record<QuestionUiTemplate, { label: string; descript
 		label: 'Последовательность цифр',
 		description: 'Ответ проверяется как порядок цифр.',
 	},
+	open: {
+		label: 'Открытый ответ',
+		description: 'Ученик пишет развёрнутый ответ, учитель выставляет от 0 до 3 баллов.',
+	},
 }
 
 export const MISTAKE_METRIC_LABELS: Record<MistakeMetric, string> = {
@@ -73,6 +77,7 @@ export const MISTAKE_METRIC_LABELS: Record<MistakeMetric, string> = {
 	compact_text_equal: 'Сравнение строк без пробелов/регистра',
 	compact_text_in_set: 'Совпадение с одним из вариантов',
 	hamming_digits: 'Позиционные ошибки в последовательности',
+	manual: 'Ручная проверка',
 }
 
 export const MISTAKE_METRIC_DESCRIPTIONS: Record<MistakeMetric, string> = {
@@ -83,6 +88,7 @@ export const MISTAKE_METRIC_DESCRIPTIONS: Record<MistakeMetric, string> = {
 	compact_text_in_set: 'Ответ совпадает хотя бы с одной допустимой строкой без учёта пробелов и регистра.',
 	hamming_digits:
 		'Считаются несовпадения по позициям и разница длины. Соседняя перестановка при длине больше 3 считается одной ошибкой.',
+	manual: 'Баллы выставляет учитель, ошибки не считаются.',
 }
 
 export interface QuestionTypeDefinition {

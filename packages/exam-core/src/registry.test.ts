@@ -3,10 +3,17 @@ import { test } from 'vitest'
 
 import {
 	ALLOWED_MISTAKE_METRICS_BY_TEMPLATE,
+	AUTO_SCORED_TEMPLATES,
+	createDefaultScoringRuleForTemplate,
+	getBuiltinQuestionTypeByKey,
+	isAutoScoredTemplate,
+	isMistakeMetricAllowedForTemplate,
 	MISTAKE_METRICS,
 	QUESTION_UI_TEMPLATES,
 	QuestionTypeDefinitionSchema,
+	QuestionTypeScoringRuleSchema,
 	templateForMetric,
+	type AutoScoredTemplate,
 	type MistakeMetric,
 	type QuestionUiTemplate,
 } from './registry'
@@ -85,6 +92,7 @@ const metricTemplateRows: Array<{ metric: MistakeMetric; template: QuestionUiTem
 	{ metric: 'compact_text_equal', template: 'short_text' },
 	{ metric: 'compact_text_in_set', template: 'short_text' },
 	{ metric: 'hamming_digits', template: 'sequence_digits' },
+	{ metric: 'manual', template: 'open' },
 ]
 
 test.each(metricTemplateRows)('templateForMetric: $metric → $template', (row) => {
@@ -97,4 +105,28 @@ test('templateForMetric: таблица покрывает все метрики
 
 test('ALLOWED_MISTAKE_METRICS_BY_TEMPLATE задан ровно для QUESTION_UI_TEMPLATES', () => {
 	assert.deepEqual(Object.keys(ALLOWED_MISTAKE_METRICS_BY_TEMPLATE), [...QUESTION_UI_TEMPLATES])
+})
+
+test('AUTO_SCORED_TEMPLATES равен QUESTION_UI_TEMPLATES без open', () => {
+	assert.deepEqual(
+		[...AUTO_SCORED_TEMPLATES],
+		QUESTION_UI_TEMPLATES.filter((template) => template !== 'open')
+	)
+	for (const template of QUESTION_UI_TEMPLATES) {
+		assert.equal(isAutoScoredTemplate(template), AUTO_SCORED_TEMPLATES.includes(template as AutoScoredTemplate))
+	}
+})
+
+test('метрика manual разрешена только шаблону open', () => {
+	for (const template of QUESTION_UI_TEMPLATES) {
+		assert.equal(isMistakeMetricAllowedForTemplate(template, 'manual'), template === 'open')
+	}
+	assert.deepEqual(ALLOWED_MISTAKE_METRICS_BY_TEMPLATE.open, ['manual'])
+})
+
+test('встроенный тип open: правило manual с максимумом 3, то же правило по умолчанию для шаблона', () => {
+	const builtin = getBuiltinQuestionTypeByKey('open')
+	assert.deepEqual(builtin?.scoringRule, { formula: 'exact_match', mistakeMetric: 'manual', correctPoints: 3 })
+	assert.deepEqual(createDefaultScoringRuleForTemplate('open'), builtin?.scoringRule)
+	assert.equal(QuestionTypeScoringRuleSchema.safeParse(builtin?.scoringRule).success, true)
 })

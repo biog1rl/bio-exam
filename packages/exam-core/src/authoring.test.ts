@@ -135,6 +135,20 @@ describe('тексты ошибок', () => {
 	})
 })
 
+describe('открытый вопрос: ключ не нужен', () => {
+	test.each([null, undefined, 'Митоз', ['a', 'b'], { l1: 'r1' }])('ключ %j не влияет на проверку', (key) => {
+		assert.equal(
+			validateQuestionForSave({
+				config: { uiTemplate: 'open', mistakeMetric: 'manual' },
+				promptText: 'Опишите процесс фотосинтеза',
+				content: {},
+				key,
+			}),
+			null
+		)
+	})
+})
+
 describe('форма ключа', () => {
 	test.each(KEY_SHAPE_CASES)('$config.uiTemplate + $config.mistakeMetric → $expected', ({ config, expected }) => {
 		assert.equal(keyShapeFor(config), expected)

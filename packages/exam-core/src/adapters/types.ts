@@ -58,7 +58,7 @@ export type TemplateConfig = {
 	validationSchema?: QuestionTypeValidation | null
 }
 
-export type KeyShape = 'option_id' | 'option_ids' | 'pairs' | 'text' | 'text_variants' | 'digits'
+export type KeyShape = 'option_id' | 'option_ids' | 'pairs' | 'text' | 'text_variants' | 'digits' | 'none'
 
 export type AuthoringInput = {
 	config: TemplateConfig
