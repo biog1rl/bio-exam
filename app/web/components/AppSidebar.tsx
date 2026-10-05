@@ -8,20 +8,11 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from '@/components/ui/sidebar'
+import { getSidebarItems } from '@/lib/settings/api'
 import { cn } from '@/lib/utils/cn'
 
 import LogoSidebar from './LogoSidebar'
 import { NavUser } from './nav-user'
-
-interface SidebarItem {
-	id: string
-	title: string
-	url: string
-	icon: string
-	target: '_self' | '_blank'
-	order: number
-	isActive: boolean
-}
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 	const [links, setLinks] = useState<
@@ -36,28 +27,22 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 	const pathname = usePathname()
 
 	useEffect(() => {
-		fetch('/api/sidebar')
-			.then((res) => res.json())
-			.then((data) => {
-				const items: SidebarItem[] = data.items || []
-				const mappedLinks = items.map((item) => {
-					// Получаем иконку из lucide-react по имени
-					const IconComponent = (Icons as any)[item.icon] || Icons.CircleIcon
-					return {
-						name: item.title,
-						url: item.url,
-						icon: IconComponent,
-						target: item.target,
-						isActive: item.isActive,
-					}
-				})
-				setLinks(mappedLinks)
+		const controller = new AbortController()
+		void getSidebarItems(controller.signal).then((outcome) => {
+			if (!outcome.ok) return
+			const mappedLinks = outcome.data.map((item) => {
+				const IconComponent = (Icons as any)[item.icon] || Icons.CircleIcon
+				return {
+					name: item.title,
+					url: item.url,
+					icon: IconComponent,
+					target: item.target,
+					isActive: item.isActive,
+				}
 			})
-			.catch((err) => {
-				console.error('Failed to load sidebar items:', err)
-				// Fallback на дефолтные ссылки при ошибке
-				setLinks([])
-			})
+			setLinks(mappedLinks)
+		})
+		return () => controller.abort()
 	}, [])
 
 	return (

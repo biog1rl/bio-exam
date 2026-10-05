@@ -2,31 +2,27 @@
 
 import { PERMISSION_DOMAINS, type RoleKey } from '@bio-exam/rbac'
 
-import { useState, useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
+import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { RbacSwitchesRow, type GrantsState } from '@/components/rbac/RbacSwitchesRow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-
-type RoleRow = {
-	key: RoleKey
-	name: string
-	order: number
-	grants: Record<string, string[]>
-}
-type OverrideRow = { roleKey: string; domain: string; action: string; allow: boolean }
-
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
+import { failureMessage } from '@/lib/http/errors'
+import { rbacKeys, rbacRolesFetcher, setRoleGrant } from '@/lib/rbac/api'
 
 export default function RbacSettingsPage() {
 	const { can } = useAuth()
 	const canWrite = can('rbac', 'write')
 
-	const { data, mutate, isLoading } = useSWR<{ roles: RoleRow[]; overrides: OverrideRow[] }>('/api/rbac/roles', fetcher)
+	const { data, error, mutate, isLoading } = useSWR(rbacKeys.roles(), rbacRolesFetcher)
 	const [saving, setSaving] = useState(false)
+	const titleRef = useRef<HTMLDivElement>(null)
+	const loadFailed = error !== undefined && data === undefined
 
 	const overrides = useMemo(() => {
 		const map = new Map<string, boolean>()
@@ -41,13 +37,12 @@ export default function RbacSettingsPage() {
 		if (roleKey === 'admin') return
 		setSaving(true)
 		try {
-			const res = await fetch('/api/rbac/grant', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ roleKey, domain, action, allow: next }),
-			})
-			if (!res.ok) throw new Error(await res.text())
+			const outcome = await setRoleGrant({ roleKey, domain, action, allow: next })
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка сохранения')
+				if (message) toast.error(message)
+				return
+			}
 			await mutate()
 		} finally {
 			setSaving(false)
@@ -58,12 +53,23 @@ export default function RbacSettingsPage() {
 		<div className="p-6">
 			<Card>
 				<CardHeader className="flex items-center justify-between">
-					<CardTitle>RBAC: роли и права</CardTitle>
+					<CardTitle ref={titleRef} tabIndex={-1}>
+						RBAC: роли и права
+					</CardTitle>
 				</CardHeader>
 				<CardContent className="space-y-4">
-					{isLoading && <div>Загрузка…</div>}
+					{loadFailed ? (
+						<LoadErrorAlert
+							title="Не удалось загрузить роли и права"
+							error={error}
+							onRetry={() => mutate()}
+							focusTarget={titleRef}
+						/>
+					) : null}
 
-					{!isLoading && data && (
+					{!loadFailed && isLoading && <div>Загрузка…</div>}
+
+					{!loadFailed && !isLoading && data && (
 						<Table>
 							<TableHeader>
 								<TableRow>

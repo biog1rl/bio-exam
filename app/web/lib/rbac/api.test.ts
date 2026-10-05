@@ -1,0 +1,119 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { beforeEach, describe, test, vi } from 'vitest'
+
+vi.mock('@/lib/session/client', () => ({
+	apiFetch: vi.fn(),
+	AuthExpiredError: class AuthExpiredError extends Error {},
+}))
+
+import { MalformedBodyError, RequestError } from '@/lib/http/request'
+import { apiFetch } from '@/lib/session/client'
+
+import { parseRbacRoles, rbacKeys, rbacRolesFetcher, setRoleGrant } from './api'
+
+const apiFetchMock = vi.mocked(apiFetch)
+
+function json(status: number, body: unknown): Response {
+	return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+}
+
+beforeEach(() => {
+	apiFetchMock.mockReset()
+})
+
+describe('rbacKeys', () => {
+	test('ключ ролей — строка /api/rbac/roles', () => {
+		assert.equal(rbacKeys.roles(), '/api/rbac/roles')
+	})
+
+	test('та же строка, что ключ useRoleTraits: кэш SWR общий', () => {
+		const source = readFileSync(fileURLToPath(new URL('../users/role-traits.ts', import.meta.url)), 'utf8')
+		const match = /const ROLE_TRAITS_URL = '([^']+)'/.exec(source)
+		assert.ok(match)
+		assert.equal(match[1], rbacKeys.roles())
+	})
+})
+
+describe('parseRbacRoles', () => {
+	test('конверт ролей возвращается тем же объектом', () => {
+		const body = { roles: [], overrides: [] }
+		assert.equal(parseRbacRoles(body), body)
+	})
+
+	test('поля ролей не преобразуются', () => {
+		const body = {
+			roles: [{ key: 'teacher', name: 'Учитель', order: 2, grants: { tests: ['read'] }, ownsZone: true }],
+			overrides: [{ roleKey: 'teacher', domain: 'tests', action: 'write', allow: false }],
+		}
+		assert.equal(parseRbacRoles(body), body)
+	})
+
+	test('ответ с ошибкой и чужие формы — MalformedBodyError', () => {
+		for (const body of [
+			{ error: 'Forbidden' },
+			null,
+			undefined,
+			[],
+			'roles',
+			{ roles: [] },
+			{ overrides: [] },
+			{ roles: {}, overrides: [] },
+			{ roles: [], overrides: null },
+		]) {
+			assert.throws(() => parseRbacRoles(body), MalformedBodyError)
+		}
+	})
+})
+
+describe('rbacRolesFetcher', () => {
+	test('возвращает тело как есть по строковому ключу', async () => {
+		const body = { roles: [{ key: 'student', name: 'Ученик', order: 3, grants: {} }], overrides: [] }
+		apiFetchMock.mockResolvedValueOnce(json(200, body))
+		assert.deepEqual(await rbacRolesFetcher(rbacKeys.roles()), body)
+		assert.equal(apiFetchMock.mock.calls[0]?.[0], '/api/rbac/roles')
+	})
+
+	test('200 с { error } — RequestError вида malformed', async () => {
+		apiFetchMock.mockResolvedValueOnce(json(200, { error: 'Forbidden' }))
+		await assert.rejects(rbacRolesFetcher(rbacKeys.roles()), (error: unknown) => {
+			assert.ok(error instanceof RequestError)
+			assert.equal(error.kind, 'malformed')
+			return true
+		})
+	})
+
+	test('403 — RequestError вида http со статусом', async () => {
+		apiFetchMock.mockResolvedValueOnce(json(403, { error: 'Forbidden' }))
+		await assert.rejects(rbacRolesFetcher(rbacKeys.roles()), (error: unknown) => {
+			assert.ok(error instanceof RequestError)
+			assert.equal(error.kind, 'http')
+			assert.equal(error.status, 403)
+			return true
+		})
+	})
+})
+
+describe('setRoleGrant', () => {
+	test('POST /api/rbac/grant с JSON-телом', async () => {
+		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
+		const body = { roleKey: 'teacher' as const, domain: 'tests', action: 'write', allow: true }
+		const outcome = await setRoleGrant(body)
+		assert.deepEqual(outcome, { ok: true, status: 200, data: { ok: true } })
+		const [url, init] = apiFetchMock.mock.calls[0] ?? []
+		assert.equal(url, '/api/rbac/grant')
+		assert.equal(init?.method, 'POST')
+		assert.equal(init?.body, JSON.stringify(body))
+		assert.equal(new Headers(init?.headers).get('content-type'), 'application/json')
+	})
+
+	test('400 с английским текстом — сырой текст сервера не попадает в сообщение', async () => {
+		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Bad request' }))
+		const outcome = await setRoleGrant({ roleKey: 'teacher', domain: 'tests', action: 'write', allow: false })
+		assert.equal(outcome.ok, false)
+		if (outcome.ok) return
+		assert.equal(outcome.kind, 'http')
+		assert.equal(outcome.message, 'Ошибка сохранения')
+	})
+})

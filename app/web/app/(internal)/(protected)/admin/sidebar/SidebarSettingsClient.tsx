@@ -21,6 +21,7 @@ import * as Icons from 'lucide-react'
 import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import { toast } from 'sonner'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -36,17 +37,16 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
-import { apiFetch } from '@/lib/api-fetch'
-
-interface SidebarItem {
-	id: string
-	title: string
-	url: string
-	icon: string
-	target: '_self' | '_blank'
-	order: number
-	isActive: boolean
-}
+import { failureMessage } from '@/lib/http/errors'
+import { RequestError, type RequestFailure } from '@/lib/http/request'
+import {
+	deleteSidebarItem,
+	getAllSidebarItems,
+	reorderSidebarItems,
+	saveSidebarItem,
+	setSidebarItemActive,
+	type SidebarItem,
+} from '@/lib/settings/api'
 
 const iconsMap = Icons as Record<string, unknown>
 
@@ -123,6 +123,9 @@ export function SidebarSettingsClient() {
 	const { confirm, alertDialog } = useUiAlertDialog()
 	const [items, setItems] = useState<SidebarItem[]>([])
 	const [loading, setLoading] = useState(true)
+	const [loadError, setLoadError] = useState<RequestError | null>(null)
+	const loadedRef = useRef(false)
+	const titleRef = useRef<HTMLHeadingElement>(null)
 	const [dialogOpen, setDialogOpen] = useState(false)
 	const [iconPickerOpen, setIconPickerOpen] = useState(false)
 	const [editingItem, setEditingItem] = useState<SidebarItem | null>(null)
@@ -182,22 +185,27 @@ export function SidebarSettingsClient() {
 
 	const observerTarget = useRef<HTMLButtonElement>(null)
 
-	useEffect(() => {
-		loadItems()
+	const loadItems = useCallback(async () => {
+		const outcome = await getAllSidebarItems()
+		if (!outcome.ok) {
+			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
+			if (!loadedRef.current) setLoadError(new RequestError(outcome))
+			setLoading(false)
+			return
+		}
+		loadedRef.current = true
+		setItems(outcome.data)
+		setLoadError(null)
+		setLoading(false)
 	}, [])
 
-	const loadItems = async () => {
-		try {
-			const res = await fetch('/api/sidebar/all', { credentials: 'include' })
-			if (!res.ok) throw new Error('Failed to load')
-			const data = await res.json()
-			setItems(data.items || [])
-		} catch (err) {
-			console.error(err)
-			toast.error('Ошибка загрузки пунктов меню')
-		} finally {
-			setLoading(false)
-		}
+	useEffect(() => {
+		void loadItems()
+	}, [loadItems])
+
+	const showActionError = (outcome: RequestFailure, fallback: string) => {
+		const message = failureMessage(outcome, fallback)
+		if (message) toast.error(message)
 	}
 
 	const handleDragEnd = async (event: DragEndEvent) => {
@@ -211,20 +219,13 @@ export function SidebarSettingsClient() {
 		const reorderedItems = newItems.map((item, index) => ({ ...item, order: index }))
 		setItems(reorderedItems)
 
-		try {
-			await apiFetch('/api/sidebar/reorder', {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					items: reorderedItems.map((item) => ({ id: item.id, order: item.order })),
-				}),
-			})
-			toast.success('Порядок обновлен')
-		} catch (err) {
-			console.error(err)
-			toast.error('Ошибка обновления порядка')
-			loadItems()
+		const outcome = await reorderSidebarItems(reorderedItems.map((item) => ({ id: item.id, order: item.order })))
+		if (!outcome.ok) {
+			showActionError(outcome, 'Ошибка обновления порядка')
+			void loadItems()
+			return
 		}
+		toast.success('Порядок обновлен')
 	}
 
 	const handleAdd = () => {
@@ -252,48 +253,29 @@ export function SidebarSettingsClient() {
 			return
 		}
 
-		try {
-			if (editingItem) {
-				const res = await apiFetch(`/api/sidebar/${editingItem.id}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(formData),
-				})
-				if (!res.ok) throw new Error('Failed to update')
-				toast.success('Пункт обновлен')
-			} else {
-				const res = await apiFetch('/api/sidebar', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ ...formData, order: items.length }),
-				})
-				if (!res.ok) throw new Error('Failed to create')
-				toast.success('Пункт добавлен')
-			}
-			setDialogOpen(false)
-			loadItems()
-		} catch (err) {
-			console.error(err)
-			toast.error('Ошибка сохранения')
+		const outcome = editingItem
+			? await saveSidebarItem(editingItem.id, formData)
+			: await saveSidebarItem(null, { ...formData, order: items.length })
+		if (!outcome.ok) {
+			showActionError(outcome, 'Ошибка сохранения')
+			return
 		}
+		toast.success(editingItem ? 'Пункт обновлен' : 'Пункт добавлен')
+		setDialogOpen(false)
+		void loadItems()
 	}
 
 	const handleToggle = async (id: string) => {
 		const item = items.find((i) => i.id === id)
 		if (!item) return
 
-		try {
-			await apiFetch(`/api/sidebar/${id}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ isActive: !item.isActive }),
-			})
-			loadItems()
-			toast.success(item.isActive ? 'Пункт скрыт' : 'Пункт показан')
-		} catch (err) {
-			console.error(err)
-			toast.error('Ошибка изменения видимости')
+		const outcome = await setSidebarItemActive(id, !item.isActive)
+		if (!outcome.ok) {
+			showActionError(outcome, 'Ошибка изменения видимости')
+			return
 		}
+		void loadItems()
+		toast.success(item.isActive ? 'Пункт скрыт' : 'Пункт показан')
 	}
 
 	const handleDelete = async (id: string) => {
@@ -306,16 +288,13 @@ export function SidebarSettingsClient() {
 		})
 		if (!confirmed) return
 
-		try {
-			await apiFetch(`/api/sidebar/${id}`, {
-				method: 'DELETE',
-			})
-			loadItems()
-			toast.success('Пункт удален')
-		} catch (err) {
-			console.error(err)
-			toast.error('Ошибка удаления')
+		const outcome = await deleteSidebarItem(id)
+		if (!outcome.ok) {
+			showActionError(outcome, 'Ошибка удаления')
+			return
 		}
+		void loadItems()
+		toast.success('Пункт удален')
 	}
 
 	const handleSelectIcon = (iconName: string) => {
@@ -356,7 +335,9 @@ export function SidebarSettingsClient() {
 		<div className="space-y-6 p-6">
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 className="text-2xl font-bold">Настройки сайдбара</h1>
+					<h1 ref={titleRef} tabIndex={-1} className="text-2xl font-bold">
+						Настройки сайдбара
+					</h1>
 					<p className="text-muted-foreground">Управление пунктами бокового меню</p>
 				</div>
 				<Button onClick={handleAdd}>
@@ -365,27 +346,36 @@ export function SidebarSettingsClient() {
 				</Button>
 			</div>
 
-			<Card className="p-4">
-				<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-					<SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-						<div className="space-y-2">
-							{items.map((item) => (
-								<SortableItem
-									key={item.id}
-									item={item}
-									onEdit={handleEdit}
-									onToggle={handleToggle}
-									onDelete={handleDelete}
-								/>
-							))}
-						</div>
-					</SortableContext>
-				</DndContext>
+			{loadError ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить пункты меню"
+					error={loadError}
+					onRetry={loadItems}
+					focusTarget={titleRef}
+				/>
+			) : (
+				<Card className="p-4">
+					<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+						<SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+							<div className="space-y-2">
+								{items.map((item) => (
+									<SortableItem
+										key={item.id}
+										item={item}
+										onEdit={handleEdit}
+										onToggle={handleToggle}
+										onDelete={handleDelete}
+									/>
+								))}
+							</div>
+						</SortableContext>
+					</DndContext>
 
-				{items.length === 0 && (
-					<div className="py-12 text-center text-muted-foreground">Нет пунктов меню. Добавьте первый!</div>
-				)}
-			</Card>
+					{items.length === 0 && (
+						<div className="py-12 text-center text-muted-foreground">Нет пунктов меню. Добавьте первый!</div>
+					)}
+				</Card>
+			)}
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
