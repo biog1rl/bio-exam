@@ -22,6 +22,12 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 - Обе создаёт миграция `0025_teacher_zones`; тест миграции: `app/server/src/db/teacher-zone-migration.test.ts`.
 - Читают и пишут таблицы зоны только `app/server/src/services/access-policy/zone-loader.ts` и `app/server/src/services/access-policy/zone-store.ts`; кроме них имена таблиц допустимы в `app/server/src/db/schema.ts` и `app/server/src/test-support`. Это держит `scripts/teacher-zone-guards.test.mjs`.
 
+## Удаление пользователя
+
+- Данные ученика (попытки, ответы, фото, проверки его ответов, уведомления) уходят вместе с ним: `ON DELETE cascade`; файлы хранилища сервис удаляет до строк.
+- Авторство для других (проверяющий, автор теста, назначивший, приглашавший, включая `users.created_by`) - `ON DELETE SET NULL`, столбец допускает NULL; сохранить историю можно только отключением пользователя.
+- Правило и причины: `docs/adr/0007-user-deletion-rule.md`. Тест-каталог `app/server/src/db/user-deletion-rule.test.ts` сам находит внешние ключи на `users` по `pg_constraint`; новая миграция держит его зелёным, исключения только в `LEGACY_EXCEPTIONS`.
+
 ## База для тестов и скриптов
 
 - Любая работа с базой идёт только против одноразовой локальной базы `test_*`: `TEST_DATABASE_URL` и `BIO_EXAM_ISOLATED_ENV=1`. `DATABASE_URL` из `.env` для тестов, миграций и опытов не используется.

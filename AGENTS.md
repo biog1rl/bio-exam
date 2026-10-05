@@ -49,6 +49,7 @@ Run everything from the repository root. Node 24 (`.nvmrc`), Yarn 4.12 through C
 | Schema and migrations                               | `app/server/src/db`, `app/server/drizzle`                                       | `docs/adr/0003-verification-before-refactoring.md`     | `bio-exam-data` |
 | Module structure and decomposition                  | `app/server/src`, `app/web`                                                     | `docs/adr/0005-decompose-by-concept.md`                | -               |
 | Verification, e2e, repository checks                | `scripts`, `e2e`, `turbo.json`                                                  | `docs/adr/0003-verification-before-refactoring.md`     | -               |
+| User deletion and foreign keys to users             | `app/server/src/db/schema.ts`, `app/server/drizzle`                             | `docs/adr/0007-user-deletion-rule.md`                  | `bio-exam-data` |
 | Work order and plans                                | `plans`                                                                         | `plans/README.md`                                      | -               |
 
 Project skills live in `.agents/skills/<name>/SKILL.md`. Read the skill named in the Skill column before editing its area.
