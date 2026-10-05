@@ -25,7 +25,8 @@ import {
 } from '../../services/attempt-sessions/index.js'
 import {
 	questionMarkdownCandidates,
-	readFirstMarkdown as readFirstQuestionMarkdown,
+	readFirstMarkdown,
+	readQuestionTexts,
 } from '../../services/question-content/index.js'
 import { readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
 
@@ -52,10 +53,6 @@ function buildQuestionMarkdownCandidates(params: {
 	fileName: 'prompt.md' | 'explanation.md'
 }): string[] {
 	return questionMarkdownCandidates(params)
-}
-
-async function readFirstMarkdown(candidates: string[]): Promise<string> {
-	return readFirstQuestionMarkdown(candidates)
 }
 
 function errorText(err: unknown): string {
@@ -301,35 +298,35 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 			getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
 		)
 
-		const questionsWithTexts = await Promise.all(
-			questionRows.map(async (q) => {
-				const promptCandidates = buildQuestionMarkdownCandidates({
+		const promptTexts = await readQuestionTexts(
+			questionRows.map((q) => ({
+				candidates: buildQuestionMarkdownCandidates({
 					storedPath: q.promptPath,
 					topicSlug: test.topicSlug,
 					testSlug: test.slug,
 					testId: test.id,
 					questionId: q.id,
 					fileName: 'prompt.md',
-				})
-
-				const promptText = await readFirstMarkdown(promptCandidates)
-				const typeConfig = questionTypesMap[q.type]
-				if (!typeConfig) {
-					throw new Error(`Question type is not configured: ${q.type}`)
-				}
-				return {
-					id: q.id,
-					type: q.type,
-					questionUiTemplate: typeConfig.uiTemplate,
-					questionTypeTitle: typeConfig.title,
-					order: q.order,
-					points: q.points,
-					options: q.options,
-					matchingPairs: q.matchingPairs,
-					promptText,
-				}
-			})
+				}),
+			}))
 		)
+		const questionsWithTexts = questionRows.map((q, index) => {
+			const typeConfig = questionTypesMap[q.type]
+			if (!typeConfig) {
+				throw new Error(`Question type is not configured: ${q.type}`)
+			}
+			return {
+				id: q.id,
+				type: q.type,
+				questionUiTemplate: typeConfig.uiTemplate,
+				questionTypeTitle: typeConfig.title,
+				order: q.order,
+				points: q.points,
+				options: q.options,
+				matchingPairs: q.matchingPairs,
+				promptText: promptTexts[index] ?? '',
+			}
+		})
 
 		res.json({
 			test,
@@ -365,35 +362,35 @@ router.get('/tests/:id', validateUUID('id'), sessionRequired(), async (req, res,
 			.orderBy(asc(questions.order))
 		const questionTypesMap = await getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
 
-		const questionsWithTexts = await Promise.all(
-			questionRows.map(async (q) => {
-				const promptCandidates = buildQuestionMarkdownCandidates({
+		const promptTexts = await readQuestionTexts(
+			questionRows.map((q) => ({
+				candidates: buildQuestionMarkdownCandidates({
 					storedPath: q.promptPath,
 					topicSlug: test.topicSlug,
 					testSlug: test.slug,
 					testId: test.id,
 					questionId: q.id,
 					fileName: 'prompt.md',
-				})
-
-				const promptText = await readFirstMarkdown(promptCandidates)
-				const typeConfig = questionTypesMap[q.type]
-				if (!typeConfig) {
-					throw new Error(`Question type is not configured: ${q.type}`)
-				}
-				return {
-					id: q.id,
-					type: q.type,
-					questionUiTemplate: typeConfig.uiTemplate,
-					questionTypeTitle: typeConfig.title,
-					order: q.order,
-					points: q.points,
-					options: q.options,
-					matchingPairs: q.matchingPairs,
-					promptText,
-				}
-			})
+				}),
+			}))
 		)
+		const questionsWithTexts = questionRows.map((q, index) => {
+			const typeConfig = questionTypesMap[q.type]
+			if (!typeConfig) {
+				throw new Error(`Question type is not configured: ${q.type}`)
+			}
+			return {
+				id: q.id,
+				type: q.type,
+				questionUiTemplate: typeConfig.uiTemplate,
+				questionTypeTitle: typeConfig.title,
+				order: q.order,
+				points: q.points,
+				options: q.options,
+				matchingPairs: q.matchingPairs,
+				promptText: promptTexts[index] ?? '',
+			}
+		})
 
 		res.json({
 			test,

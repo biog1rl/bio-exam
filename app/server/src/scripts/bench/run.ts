@@ -23,7 +23,7 @@ import type { BenchSeed } from './seed.js'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..')
 const USAGE =
-	'usage: node scripts/with-test-db.mjs -- yarn workspace @bio-exam/server tsx src/scripts/bench/run.ts --out <file.json> [--quick]'
+	'usage: node scripts/with-test-db.mjs -- yarn workspace @bio-exam/server tsx src/scripts/bench/run.ts --out <file.json> [--quick] [--only prompts] [--read-delay <ms>] [--runs <n>]'
 
 const PG_POOL_MAX = 20
 const SEARCH_QUERIES = ['клетка', 'митохондрия', 'фотосинтез']
@@ -40,22 +40,52 @@ const MEMORY_SAMPLE_MS = 5
 
 type SearchAccess = Parameters<typeof SearchDatabase>[0]['access']
 
-type Args = { out: string | null; quick: boolean }
+type Section = 'prompts'
+
+type Args = { out: string | null; quick: boolean; only: Section | null; readDelayMs: number; runs: number }
+
+const SECTIONS: readonly Section[] = ['prompts']
+
+function readValue(argv: string[], index: number, name: string): string {
+	const arg = argv[index] ?? ''
+	if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1)
+	const value = argv[index + 1]
+	if (value === undefined) throw new Error(`${name} needs a value\n${USAGE}`)
+	return value
+}
+
+function readNumber(value: string, name: string, min: number): number {
+	const parsed = Number(value)
+	if (value.trim() === '' || !Number.isInteger(parsed) || parsed < min) {
+		throw new Error(`${name} needs an integer >= ${min}\n${USAGE}`)
+	}
+	return parsed
+}
 
 function parseArgs(argv: string[]): Args {
 	let out: string | null = null
 	let quick = false
+	let only: Section | null = null
+	let readDelayMs = PROMPT_READ_DELAY_MS
+	let runs = PROMPT_RUNS
 	for (let index = 0; index < argv.length; index += 1) {
-		const arg = argv[index]
+		const arg = argv[index] ?? ''
+		const name = arg.split('=')[0] ?? ''
+		const inline = arg.includes('=')
 		if (arg === '--quick') quick = true
-		else if (arg === '--out') {
-			out = argv[index + 1] ?? null
-			index += 1
-		} else if (arg?.startsWith('--out=')) out = arg.slice('--out='.length)
+		else if (name === '--out') out = readValue(argv, index, name)
+		else if (name === '--only') {
+			const value = readValue(argv, index, name)
+			if (!SECTIONS.includes(value as Section)) throw new Error(`--only accepts ${SECTIONS.join(', ')}\n${USAGE}`)
+			only = value as Section
+		} else if (name === '--read-delay') readDelayMs = readNumber(readValue(argv, index, name), name, 0)
+		else if (name === '--runs') runs = readNumber(readValue(argv, index, name), name, 1)
 		else throw new Error(`unknown argument ${arg}\n${USAGE}`)
+		if (name !== '--quick' && !inline) index += 1
 	}
 	if (out === '') throw new Error(`--out needs a file\n${USAGE}`)
-	return { out, quick }
+	if (quick && only === 'prompts') throw new Error(`--quick skips prompts, drop one of them\n${USAGE}`)
+	return { out, quick, only, readDelayMs, runs }
 }
 
 function assertIsolated(): void {
@@ -149,14 +179,20 @@ async function measureSearch(
 	}
 }
 
-async function measurePrompts(poolProbe: PoolProbe, storageProbe: StorageProbe, seed: BenchSeed, baseUrl: string) {
+async function measurePrompts(
+	poolProbe: PoolProbe,
+	storageProbe: StorageProbe,
+	seed: BenchSeed,
+	baseUrl: string,
+	options: { readDelayMs: number; runs: number }
+) {
 	const student = seed.students[0]
 	if (!student) throw new Error('prompts: no student in seed')
 	const { sessionCookieFor } = await import('../../test-support/http.js')
 	const { readAdminTest } = await import('../../services/question-content/index.js')
 	const cookie = await sessionCookieFor(student)
 	const expected = seed.largestTest.questions
-	storageProbe.setReadDelay(PROMPT_READ_DELAY_MS)
+	storageProbe.setReadDelay(options.readDelayMs)
 
 	const pass = async () => {
 		const response = await fetch(`${baseUrl}/api/tests/public/tests/${seed.largestTest.id}`, { headers: { cookie } })
@@ -178,7 +214,7 @@ async function measurePrompts(poolProbe: PoolProbe, storageProbe: StorageProbe, 
 		const reads: number[] = []
 		const queries: number[] = []
 		let maxConcurrentReads = 0
-		for (let run = 0; run < PROMPT_RUNS; run += 1) {
+		for (let run = 0; run < options.runs; run += 1) {
 			storageProbe.reset()
 			poolProbe.reset()
 			const started = performance.now()
@@ -202,8 +238,8 @@ async function measurePrompts(poolProbe: PoolProbe, storageProbe: StorageProbe, 
 	}
 
 	const result = {
-		readDelayMs: PROMPT_READ_DELAY_MS,
-		runs: PROMPT_RUNS,
+		readDelayMs: options.readDelayMs,
+		runs: options.runs,
 		warmupRunsExcluded: WARMUP_RUNS,
 		test: { slug: seed.largestTest.slug, questions: expected },
 		pass: await measure(pass),
@@ -332,25 +368,33 @@ async function main(): Promise<void> {
 		const poolProbe = instrumentPool(dbModule.pgPool)
 		const storageProbe = instrumentStorage(memoryStorage, { readDelayMs: 0 })
 
-		const accounts = [{ name: 'admin', userId: seed.admin.id }]
-		if (seed.teacher) accounts.push({ name: 'teacher', userId: seed.teacher.id })
-		const search = await measureSearch(poolProbe, accounts, {
-			queries: args.quick ? SEARCH_QUERIES.slice(0, 1) : SEARCH_QUERIES,
-			runs: args.quick ? QUICK_SEARCH_RUNS : SEARCH_RUNS,
-		})
-		console.error('bench: search done')
+		report = { mode: scale, env: environment(postgres), seed: seedSummary(seed) }
+		if (args.only) report.only = args.only
 
-		report = { mode: scale, env: environment(postgres), seed: seedSummary(seed), search }
+		if (!args.only) {
+			const accounts = [{ name: 'admin', userId: seed.admin.id }]
+			if (seed.teacher) accounts.push({ name: 'teacher', userId: seed.teacher.id })
+			report.search = await measureSearch(poolProbe, accounts, {
+				queries: args.quick ? SEARCH_QUERIES.slice(0, 1) : SEARCH_QUERIES,
+				runs: args.quick ? QUICK_SEARCH_RUNS : SEARCH_RUNS,
+			})
+			console.error('bench: search done')
+		}
 
 		if (!args.quick) {
 			const app = (await import('../../app.js')).default
 			const { startTestServer } = await import('../../test-support/http.js')
 			const server = await startTestServer(app)
 			closeServer = server.close
-			report.prompts = await measurePrompts(poolProbe, storageProbe, seed, server.baseUrl)
+			report.prompts = await measurePrompts(poolProbe, storageProbe, seed, server.baseUrl, {
+				readDelayMs: args.readDelayMs,
+				runs: args.runs,
+			})
 			console.error('bench: prompts done')
-			report.zip = await measureZip(poolProbe, storageProbe, seed)
-			console.error('bench: zip done')
+			if (!args.only) {
+				report.zip = await measureZip(poolProbe, storageProbe, seed)
+				console.error('bench: zip done')
+			}
 		}
 		storageProbe.restore()
 		poolProbe.restore()

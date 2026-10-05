@@ -80,8 +80,9 @@ import {
 	deleteTest,
 	deleteTopic,
 	moveQuestion,
+	questionMarkdownCandidates,
 	readAdminTest,
-	readQuestionMarkdown,
+	readQuestionTexts,
 	reorderQuestions,
 	resolveQuestionPoints,
 	updateQuestion,
@@ -1724,33 +1725,35 @@ router.get('/admin/attempts/:attemptId', validateUUID('attemptId'), sessionRequi
 			},
 		})
 
-		const questionsWithTexts = await Promise.all(
-			questionRows.map(async (q) => {
-				const promptText = testRow
-					? await readQuestionMarkdown({
+		const promptTexts = testRow
+			? await readQuestionTexts(
+					questionRows.map((q) => ({
+						candidates: questionMarkdownCandidates({
 							storedPath: q.promptPath,
 							topicSlug: testRow.topic.slug,
 							testSlug: testRow.slug,
 							testId: testRow.id,
 							questionId: q.id,
-							kind: 'prompt',
-						})
-					: ''
+							fileName: 'prompt.md',
+						}),
+					}))
+				)
+			: []
 
-				const typeConfig = questionTypesMap[q.type]
-				return {
-					id: q.id,
-					type: q.type,
-					questionUiTemplate: typeConfig?.uiTemplate ?? null,
-					questionTypeTitle: typeConfig?.title ?? q.type,
-					order: q.order,
-					points: q.points,
-					options: q.options,
-					matchingPairs: q.matchingPairs,
-					promptText,
-				}
-			})
-		)
+		const questionsWithTexts = questionRows.map((q, index) => {
+			const typeConfig = questionTypesMap[q.type]
+			return {
+				id: q.id,
+				type: q.type,
+				questionUiTemplate: typeConfig?.uiTemplate ?? null,
+				questionTypeTitle: typeConfig?.title ?? q.type,
+				order: q.order,
+				points: q.points,
+				options: q.options,
+				matchingPairs: q.matchingPairs,
+				promptText: promptTexts[index] ?? '',
+			}
+		})
 
 		res.json({ attempt: review, questions: questionsWithTexts })
 	} catch (e) {

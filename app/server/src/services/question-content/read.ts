@@ -6,6 +6,7 @@ import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { ApiError } from '../../lib/errors.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { normalizeKey, storage, StorageKeyError, type StorageModule } from '../storage/index.js'
+import { mapBounded, PROMPT_READ_CONCURRENCY } from './bounded.js'
 import { questionMarkdownCandidates } from './paths.js'
 
 export type QuestionMarkdownKind = 'prompt' | 'explanation'
@@ -41,7 +42,7 @@ export type AdminTestSummary = { test: AdminTest; questionsCount: number }
 
 export type AdminTestFull = { test: AdminTest; questions: AdminTestQuestion[] }
 
-const ADMIN_READ_CONCURRENCY = 5
+export type QuestionTextRequest = { candidates: string[] }
 
 function isReadableKey(key: string): boolean {
 	try {
@@ -80,18 +81,19 @@ export function readQuestionMarkdown(params: {
 	return readFirstMarkdown(questionMarkdownCandidates({ ...location, fileName: `${kind}.md` }))
 }
 
+export function readQuestionTexts(requests: readonly QuestionTextRequest[]): Promise<string[]> {
+	return mapBounded(requests, PROMPT_READ_CONCURRENCY, (request) => readFirstMarkdown(request.candidates))
+}
+
 async function readTexts(keys: string[]): Promise<Map<string, string>> {
 	const found = new Map<string, string>()
 	if (keys.length === 0) return found
 	const module = storage()
-	for (let i = 0; i < keys.length; i += ADMIN_READ_CONCURRENCY) {
-		const batch = keys.slice(i, i + ADMIN_READ_CONCURRENCY)
-		const contents = await Promise.all(batch.map((key) => module.readText(key)))
-		batch.forEach((key, index) => {
-			const content = contents[index]
-			if (content !== null && content !== undefined) found.set(key, content)
-		})
-	}
+	const contents = await mapBounded(keys, PROMPT_READ_CONCURRENCY, (key) => module.readText(key))
+	keys.forEach((key, index) => {
+		const content = contents[index]
+		if (content !== null && content !== undefined) found.set(key, content)
+	})
 	return found
 }
 

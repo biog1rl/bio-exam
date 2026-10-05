@@ -33,11 +33,13 @@ export {
 	type QuestionMarkdownCandidatesParams,
 	type QuestionMarkdownFileName,
 } from './paths.js'
+export { mapBounded, PROMPT_READ_CONCURRENCY } from './bounded.js'
 export {
 	findFirstMarkdown,
 	readAdminTest,
 	readFirstMarkdown,
 	readQuestionMarkdown,
+	readQuestionTexts,
 	type AdminTest,
 	type AdminTestFull,
 	type AdminTestQuestion,
@@ -45,6 +47,7 @@ export {
 	type AdminTestSelector,
 	type AdminTestSummary,
 	type QuestionMarkdownKind,
+	type QuestionTextRequest,
 } from './read.js'
 export { MOVE_FAILED_MESSAGE, MOVE_SAME_TARGET_MESSAGE, moveQuestion, type MoveTarget } from './move.js'
 export {

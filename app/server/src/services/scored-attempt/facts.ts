@@ -13,6 +13,7 @@ import { db } from '../../db/index.js'
 import { answerKeys, questions } from '../../db/schema.js'
 import { logger } from '../../lib/logger.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
+import { mapBounded, PROMPT_READ_CONCURRENCY } from '../question-content/index.js'
 import { toStorableFact } from './storable-fact.js'
 
 export type ExplanationReader = (question: { id: string; explanationPath: string | null }) => Promise<string | null>
@@ -88,11 +89,15 @@ export async function scoreSubmission(params: ScoreSubmissionParams): Promise<Sc
 	const warn = (info: Parameters<Parameters<typeof toStorableFact>[1]>[0]) =>
 		logger.warn({ testId, ...info }, 'scored fact failed schema')
 
+	const explanations = await mapBounded(questionRows, PROMPT_READ_CONCURRENCY, (q) =>
+		q.explanationPath ? readExplanation({ id: q.id, explanationPath: q.explanationPath }) : Promise.resolve(null)
+	)
+
 	let totalPoints = 0
 	let earnedPoints = 0
 	const facts: ScoredQuestionFact[] = []
 
-	for (const q of questionRows) {
+	for (const [index, q] of questionRows.entries()) {
 		const typeConfig = questionTypesMap[q.type]!
 		const keyRow = keys.get(q.id)
 		const rawKey = keyRow?.correctAnswer ?? null
@@ -108,9 +113,7 @@ export async function scoreSubmission(params: ScoreSubmissionParams): Promise<Sc
 		totalPoints += scored.points
 		earnedPoints += scored.earnedPoints
 
-		const explanationText = q.explanationPath
-			? await readExplanation({ id: q.id, explanationPath: q.explanationPath })
-			: null
+		const explanationText = explanations[index] ?? null
 
 		facts.push(
 			toStorableFact(
