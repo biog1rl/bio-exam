@@ -24,12 +24,6 @@ const ROLE_STRING_CHECKS = [
 
 const SERVER_EXCEPTIONS = [
 	{
-		file: 'app/server/src/routes/tests/index.ts',
-		reason: 'studentOnly: SQL-фильтр статистики исключает попытки admin',
-		fragment: '${userRoles.roleKey} = \u0027admin\u0027',
-		count: 2,
-	},
-	{
 		file: 'app/server/src/routes/rbac/index.ts',
 		reason: 'защита конфигурации admin: гранты роли admin не меняются',
 		fragment: 'if (roleKey === \u0027admin\u0027)',
@@ -179,7 +173,7 @@ test('в routes, middleware и services сервера нет решений о 
 test('каждое исключение существует ровно в заявленном числе и ловится детектором', () => {
 	assert.equal(
 		SERVER_EXCEPTIONS.reduce((sum, item) => sum + item.count, 0),
-		5
+		3
 	)
 	for (const item of SERVER_EXCEPTIONS) {
 		const source = fs.readFileSync(path.join(REPO_ROOT, item.file), 'utf8')

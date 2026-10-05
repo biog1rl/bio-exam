@@ -15,32 +15,7 @@ import {
 } from '../../test-support/teacher-zone-world.js'
 import { readZipEntries } from '../../test-support/zip.js'
 
-const KNOWN_DEFECTS = new Set<string>([
-	'admin GET /admin/attempts',
-	'admin GET /admin/dashboard',
-	'adminNoZone GET /admin/attempts',
-	'adminNoZone GET /admin/dashboard',
-	'adminNoZone POST /question-types',
-	'adminNoZone PUT /scoring-rules/global',
-	'teacherA DELETE /question-types/:fresh',
-	'teacherA GET /admin/attempts',
-	'teacherA GET /admin/dashboard',
-	'teacherA GET /question-types?testId=tY',
-	'teacherA PATCH /question-types/:fresh',
-	'teacherA POST /question-types',
-	'teacherA PUT /scoring-rules/global',
-	'teacherB DELETE /api/tests/:freshX/question-drafts/:draft',
-	'teacherB DELETE /question-types/tests/:freshX/overrides/radio',
-	'teacherB GET /admin/attempts',
-	'teacherB GET /api/tests/:freshX/question-drafts',
-	'teacherB GET /api/tests/:freshX/question-drafts/:draft',
-	'teacherB GET /question-types/tests/:tX/overrides',
-	'teacherB GET /scoring-rules/tests/:tX',
-	'teacherB PATCH /api/tests/:freshX/question-drafts/:draft',
-	'teacherB POST /api/tests/:freshX/question-drafts',
-	'teacherB PUT /question-types/tests/:freshX/overrides/radio',
-	'teacherB PUT /scoring-rules/tests/:freshX',
-])
+const KNOWN_DEFECTS = new Set<string>([])
 
 function check(id: string, title: string, fn: () => Promise<void>): void {
 	const run = KNOWN_DEFECTS.has(id) ? test.fails : test

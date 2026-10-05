@@ -9,8 +9,9 @@ import {
 	isMistakeMetricAllowedForTemplate,
 	type QuestionUiTemplate,
 } from '@bio-exam/exam-core'
+import { STAFF_ROLE_KEYS } from '@bio-exam/rbac'
 
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
@@ -67,6 +68,7 @@ import {
 	testScope,
 	topicTeachers,
 	zoneOwnerCandidates,
+	type TestScope,
 } from '../../services/access-policy/index.js'
 import { uploadImage } from '../../services/assets/index.js'
 import {
@@ -471,6 +473,7 @@ router.get('/question-types', sessionRequired(), requirePerm('tests', 'read'), a
 		const includeInactive = req.query.includeInactive === 'true'
 
 		if (testId) {
+			if (!(await canReadTest(req, testId))) return res.status(403).json({ error: 'Forbidden' })
 			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
 			if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 
@@ -534,8 +537,9 @@ router.get('/question-types/:key', sessionRequired(), requirePerm('tests', 'read
 })
 
 // POST /api/tests/question-types - создать новый тип вопроса
-router.post('/question-types', sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.post('/question-types', sessionRequired(), async (req, res, next) => {
 	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
 		const parsed = CreateQuestionTypePayloadSchema.safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
@@ -589,8 +593,9 @@ router.post('/question-types', sessionRequired(), requirePerm('tests', 'write'),
 })
 
 // PATCH /api/tests/question-types/:key - обновить тип вопроса
-router.patch('/question-types/:key', sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.patch('/question-types/:key', sessionRequired(), async (req, res, next) => {
 	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
 		const key = req.params.key as string
 		const parsedKey = QuestionTypeKeySchema.safeParse(key)
 		if (!parsedKey.success) {
@@ -666,8 +671,9 @@ router.patch('/question-types/:key', sessionRequired(), requirePerm('tests', 'wr
 })
 
 // DELETE /api/tests/question-types/:key - мягко отключить тип вопроса
-router.delete('/question-types/:key', sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.delete('/question-types/:key', sessionRequired(), async (req, res, next) => {
 	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
 		const key = req.params.key as string
 		const parsedKey = QuestionTypeKeySchema.safeParse(key)
 		if (!parsedKey.success) {
@@ -701,36 +707,31 @@ router.delete('/question-types/:key', sessionRequired(), requirePerm('tests', 'w
 })
 
 // GET /api/tests/question-types/tests/:id/overrides - override баллов по типам для теста
-router.get(
-	'/question-types/tests/:id/overrides',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'read'),
-	async (req, res, next) => {
-		try {
-			const testId = req.params.id as string
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+router.get('/question-types/tests/:id/overrides', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		if (!(await canReadTest(req, testId))) return res.status(403).json({ error: 'Forbidden' })
+		const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+		if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 
-			const overrides = await db.query.testQuestionTypeOverrides.findMany({
-				where: eq(testQuestionTypeOverrides.testId, testId),
-			})
-			res.json({ overrides })
-		} catch (e) {
-			next(e)
-		}
+		const overrides = await db.query.testQuestionTypeOverrides.findMany({
+			where: eq(testQuestionTypeOverrides.testId, testId),
+		})
+		res.json({ overrides })
+	} catch (e) {
+		next(e)
 	}
-)
+})
 
 // PUT /api/tests/question-types/tests/:id/overrides/:key - upsert override типа для теста
 router.put(
 	'/question-types/tests/:id/overrides/:key',
 	validateUUID('id'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
 			const testId = req.params.id as string
+			if (!(await canWriteTest(req, testId))) return res.status(403).json({ error: 'Forbidden' })
 			const key = req.params.key as string
 			const parsedKey = QuestionTypeKeySchema.safeParse(key)
 			if (!parsedKey.success) {
@@ -811,10 +812,10 @@ router.delete(
 	'/question-types/tests/:id/overrides/:key',
 	validateUUID('id'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
 			const testId = req.params.id as string
+			if (!(await canWriteTest(req, testId))) return res.status(403).json({ error: 'Forbidden' })
 			const key = req.params.key as string
 			const parsedKey = QuestionTypeKeySchema.safeParse(key)
 			if (!parsedKey.success) {
@@ -851,8 +852,9 @@ router.get('/scoring-rules/global', sessionRequired(), requirePerm('tests', 'rea
 })
 
 // PUT /api/tests/scoring-rules/global - обновить глобальные правила начисления баллов
-router.put('/scoring-rules/global', sessionRequired(), requirePerm('tests', 'write'), async (req, res, next) => {
+router.put('/scoring-rules/global', sessionRequired(), async (req, res, next) => {
 	try {
+		if (!(await canManageCatalog(req))) return res.status(403).json({ error: 'Forbidden' })
 		const parsed = GlobalScoringRulesPayloadSchema.safeParse(req.body)
 		if (!parsed.success) {
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
@@ -890,84 +892,74 @@ router.put('/scoring-rules/global', sessionRequired(), requirePerm('tests', 'wri
 })
 
 // GET /api/tests/scoring-rules/tests/:id - правила начисления баллов конкретного теста
-router.get(
-	'/scoring-rules/tests/:id',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'read'),
-	async (req, res, next) => {
-		try {
-			const testId = req.params.id as string
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+router.get('/scoring-rules/tests/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		if (!(await canReadTest(req, testId))) return res.status(403).json({ error: 'Forbidden' })
+		const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+		if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 
-			const globalRules = await ensureGlobalScoringRules(req.authUser?.id)
-			const effectiveRules = resolveEffectiveScoringRules({
-				globalRules,
-				testOverrideRules: test.scoringRules,
-			})
+		const globalRules = await ensureGlobalScoringRules(req.authUser?.id)
+		const effectiveRules = resolveEffectiveScoringRules({
+			globalRules,
+			testOverrideRules: test.scoringRules,
+		})
 
-			res.json({
-				testId,
-				hasOverride: test.scoringRules != null,
-				overrideRules: test.scoringRules,
-				globalRules,
-				effectiveRules,
-			})
-		} catch (e) {
-			next(e)
-		}
+		res.json({
+			testId,
+			hasOverride: test.scoringRules != null,
+			overrideRules: test.scoringRules,
+			globalRules,
+			effectiveRules,
+		})
+	} catch (e) {
+		next(e)
 	}
-)
+})
 
 // PUT /api/tests/scoring-rules/tests/:id - обновить/сбросить override правил для теста
-router.put(
-	'/scoring-rules/tests/:id',
-	validateUUID('id'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const testId = req.params.id as string
-			const parsed = TestScoringRulesPayloadSchema.safeParse(req.body)
-			if (!parsed.success) {
-				return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
-			}
-
-			const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
-			if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-
-			const globalRules = await ensureGlobalScoringRules(req.authUser?.id)
-			const useGlobal = parsed.data.useGlobal === true
-			let overrideRules: z.infer<typeof TestScoringRulesSchema> | null = null
-			let effectiveRules = globalRules
-			if (!useGlobal) {
-				overrideRules = TestScoringRulesSchema.parse(parsed.data.rules)
-				effectiveRules = overrideRules
-			}
-
-			await db
-				.update(tests)
-				.set({
-					scoringRules: overrideRules,
-					updatedAt: new Date(),
-					updatedBy: req.authUser?.id ?? null,
-				})
-				.where(eq(tests.id, testId))
-
-			await syncQuestionPointsForTestByTypeConfig(testId)
-
-			res.json({
-				ok: true,
-				hasOverride: !useGlobal,
-				overrideRules,
-				effectiveRules,
-			})
-		} catch (e) {
-			next(e)
+router.put('/scoring-rules/tests/:id', validateUUID('id'), sessionRequired(), async (req, res, next) => {
+	try {
+		const testId = req.params.id as string
+		if (!(await canWriteTest(req, testId))) return res.status(403).json({ error: 'Forbidden' })
+		const parsed = TestScoringRulesPayloadSchema.safeParse(req.body)
+		if (!parsed.success) {
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		}
+
+		const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
+		if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+
+		const globalRules = await ensureGlobalScoringRules(req.authUser?.id)
+		const useGlobal = parsed.data.useGlobal === true
+		let overrideRules: z.infer<typeof TestScoringRulesSchema> | null = null
+		let effectiveRules = globalRules
+		if (!useGlobal) {
+			overrideRules = TestScoringRulesSchema.parse(parsed.data.rules)
+			effectiveRules = overrideRules
+		}
+
+		await db
+			.update(tests)
+			.set({
+				scoringRules: overrideRules,
+				updatedAt: new Date(),
+				updatedBy: req.authUser?.id ?? null,
+			})
+			.where(eq(tests.id, testId))
+
+		await syncQuestionPointsForTestByTypeConfig(testId)
+
+		res.json({
+			ok: true,
+			hasOverride: !useGlobal,
+			overrideRules,
+			effectiveRules,
+		})
+	} catch (e) {
+		next(e)
 	}
-)
+})
 
 // GET /api/tests/by-slug/:topicSlug/:testSlug - загрузить тест по slug
 router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), async (req, res, next) => {
@@ -993,68 +985,58 @@ router.get('/by-slug/:topicSlug/:testSlug', sessionRequired(), async (req, res, 
 })
 
 // POST /api/tests/:testId/question-drafts - создать черновик вопроса внутри теста
-router.post(
-	'/:testId/question-drafts',
-	validateUUID('testId'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const ownerId = req.authUser?.id
-			if (!ownerId) {
-				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
-			}
-
-			const testId = req.params.testId as string
-			const [existingTest] = await db.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).limit(1)
-			if (!existingTest) {
-				return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
-			}
-
-			const [created] = await db
-				.insert(questionDrafts)
-				.values({
-					testId,
-					ownerId,
-					payload: { ...DEFAULT_QUESTION_DRAFT_PAYLOAD },
-				})
-				.returning(questionDraftSelect)
-
-			res.status(201).json({ draft: toQuestionDraftResponse(created) })
-		} catch (e) {
-			next(e)
+router.post('/:testId/question-drafts', validateUUID('testId'), sessionRequired(), async (req, res, next) => {
+	try {
+		if (!(await canWriteTest(req, req.params.testId as string))) return res.status(403).json({ error: 'Forbidden' })
+		const ownerId = req.authUser?.id
+		if (!ownerId) {
+			return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 		}
+
+		const testId = req.params.testId as string
+		const [existingTest] = await db.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).limit(1)
+		if (!existingTest) {
+			return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
+		}
+
+		const [created] = await db
+			.insert(questionDrafts)
+			.values({
+				testId,
+				ownerId,
+				payload: { ...DEFAULT_QUESTION_DRAFT_PAYLOAD },
+			})
+			.returning(questionDraftSelect)
+
+		res.status(201).json({ draft: toQuestionDraftResponse(created) })
+	} catch (e) {
+		next(e)
 	}
-)
+})
 
 // GET /api/tests/:testId/question-drafts - список черновиков вопросов текущего теста
-router.get(
-	'/:testId/question-drafts',
-	validateUUID('testId'),
-	sessionRequired(),
-	requirePerm('tests', 'write'),
-	async (req, res, next) => {
-		try {
-			const ownerId = req.authUser?.id
-			if (!ownerId) {
-				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
-			}
-
-			const testId = req.params.testId as string
-			const rows = await db
-				.select(questionDraftSelect)
-				.from(questionDrafts)
-				.where(and(eq(questionDrafts.ownerId, ownerId), eq(questionDrafts.testId, testId)))
-				.orderBy(desc(questionDrafts.updatedAt))
-
-			res.json({
-				drafts: rows.map((draft) => toQuestionDraftListItem(draft)),
-			})
-		} catch (e) {
-			next(e)
+router.get('/:testId/question-drafts', validateUUID('testId'), sessionRequired(), async (req, res, next) => {
+	try {
+		if (!(await canWriteTest(req, req.params.testId as string))) return res.status(403).json({ error: 'Forbidden' })
+		const ownerId = req.authUser?.id
+		if (!ownerId) {
+			return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 		}
+
+		const testId = req.params.testId as string
+		const rows = await db
+			.select(questionDraftSelect)
+			.from(questionDrafts)
+			.where(and(eq(questionDrafts.ownerId, ownerId), eq(questionDrafts.testId, testId)))
+			.orderBy(desc(questionDrafts.updatedAt))
+
+		res.json({
+			drafts: rows.map((draft) => toQuestionDraftListItem(draft)),
+		})
+	} catch (e) {
+		next(e)
 	}
-)
+})
 
 // GET /api/tests/:testId/question-drafts/:draftId - получить черновик вопроса
 router.get(
@@ -1062,9 +1044,9 @@ router.get(
 	validateUUID('testId'),
 	validateUUID('draftId'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
+			if (!(await canWriteTest(req, req.params.testId as string))) return res.status(403).json({ error: 'Forbidden' })
 			const ownerId = req.authUser?.id
 			if (!ownerId) {
 				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
@@ -1097,9 +1079,9 @@ router.patch(
 	validateUUID('testId'),
 	validateUUID('draftId'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
+			if (!(await canWriteTest(req, req.params.testId as string))) return res.status(403).json({ error: 'Forbidden' })
 			const ownerId = req.authUser?.id
 			if (!ownerId) {
 				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
@@ -1179,9 +1161,9 @@ router.delete(
 	validateUUID('testId'),
 	validateUUID('draftId'),
 	sessionRequired(),
-	requirePerm('tests', 'write'),
 	async (req, res, next) => {
 		try {
+			if (!(await canWriteTest(req, req.params.testId as string))) return res.status(403).json({ error: 'Forbidden' })
 			const ownerId = req.authUser?.id
 			if (!ownerId) {
 				return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
@@ -1535,18 +1517,31 @@ router.get('/topics/:slug/export', sessionRequired(), async (req, res, next) => 
 // Admin: test-side assignment endpoints
 router.use('/:testId/assignments', assignmentsRouter)
 
+function studentAttemptsInScope(scope: TestScope): SQL | undefined {
+	const notStaff = sql`not exists (select 1 from ${userRoles} where ${userRoles.userId} = ${testAttempts.userId} and ${inArray(userRoles.roleKey, [...STAFF_ROLE_KEYS])})`
+	return scope.all ? notStaff : and(notStaff, inArray(tests.topicId, scope.topicIds))
+}
+
+function isEmptyScope(scope: TestScope): boolean {
+	return !scope.all && scope.topicIds.length === 0
+}
+
 // =============================================================================
 // Admin: Dashboard
 // =============================================================================
 
 // GET /api/tests/admin/dashboard — aggregate student activity for teacher/admin dashboard
-router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), async (_req, res, next) => {
+router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
 	try {
-		const studentOnly = sql`not exists (
-			select 1 from ${userRoles}
-			where ${userRoles.userId} = ${testAttempts.userId}
-				and ${userRoles.roleKey} = 'admin'
-		)`
+		const scope = await testScope(req)
+		if (isEmptyScope(scope)) {
+			return res.json({
+				summary: { totalAttempts: 0, activeStudents: 0, averageScore: 0, passedAttempts: 0 },
+				latestAttempts: [],
+				dailyActivity: [],
+			})
+		}
+		const visible = studentAttemptsInScope(scope)
 
 		const [summary] = await db
 			.select({
@@ -1556,7 +1551,8 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 				passedAttempts: sql<number>`count(*) filter (where ${testAttempts.passed})::int`,
 			})
 			.from(testAttempts)
-			.where(studentOnly)
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.where(visible)
 
 		const latestAttempts = await db
 			.select({
@@ -1578,7 +1574,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			.innerJoin(users, eq(users.id, testAttempts.userId))
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
 			.innerJoin(topics, eq(topics.id, tests.topicId))
-			.where(studentOnly)
+			.where(visible)
 			.orderBy(desc(testAttempts.submittedAt))
 			.limit(8)
 
@@ -1589,7 +1585,8 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 				averageScore: sql<number>`coalesce(round(avg(${testAttempts.scorePercentage})::numeric, 1), 0)::float`,
 			})
 			.from(testAttempts)
-			.where(sql`${studentOnly} and ${testAttempts.submittedAt} >= now() - interval '30 days'`)
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.where(and(visible, sql`${testAttempts.submittedAt} >= now() - interval '30 days'`))
 			.groupBy(sql`date_trunc('day', ${testAttempts.submittedAt})`)
 			.orderBy(sql`date_trunc('day', ${testAttempts.submittedAt})`)
 
@@ -1622,18 +1619,19 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 		const offsetRaw = Number(req.query.offset ?? 0)
 		const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 100)
 		const offset = Math.max(Number.isFinite(offsetRaw) ? offsetRaw : 0, 0)
-		const studentOnly = sql`not exists (
-			select 1 from ${userRoles}
-			where ${userRoles.userId} = ${testAttempts.userId}
-				and ${userRoles.roleKey} = 'admin'
-		)`
+		const scope = await testScope(req)
+		if (isEmptyScope(scope)) {
+			return res.json({ rows: [], total: 0, limit, offset })
+		}
+		const visible = studentAttemptsInScope(scope)
 
 		const [{ total: totalRaw }] = await db
 			.select({
 				total: sql<number>`count(*)::int`,
 			})
 			.from(testAttempts)
-			.where(studentOnly)
+			.innerJoin(tests, eq(tests.id, testAttempts.testId))
+			.where(visible)
 
 		const rows = await db
 			.select({
@@ -1656,7 +1654,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 			.innerJoin(users, eq(users.id, testAttempts.userId))
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
 			.innerJoin(topics, eq(topics.id, tests.topicId))
-			.where(studentOnly)
+			.where(visible)
 			.orderBy(desc(testAttempts.submittedAt))
 			.limit(limit)
 			.offset(offset)
@@ -1680,84 +1678,78 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 // =============================================================================
 
 // GET /api/tests/admin/attempts/:attemptId — fetch full attempt + questions for admin review
-router.get(
-	'/admin/attempts/:attemptId',
-	validateUUID('attemptId'),
-	sessionRequired(),
-	requirePerm('tests', 'read'),
-	async (req, res, next) => {
-		try {
-			const attemptId = req.params.attemptId as string
+router.get('/admin/attempts/:attemptId', validateUUID('attemptId'), sessionRequired(), async (req, res, next) => {
+	try {
+		const attemptId = req.params.attemptId as string
 
-			if (!(await canReviewAttempt(req, attemptId))) {
-				return res.status(403).json({ error: 'Forbidden' })
-			}
-
-			const review = await readAdminAttemptView(attemptId)
-
-			if (!review) {
-				return res.status(404).json({ error: 'Attempt not found' })
-			}
-
-			// Load questions for this attempt's test (same pattern as public test detail endpoint)
-			const questionRows = await db
-				.select({
-					id: questions.id,
-					type: questions.type,
-					order: questions.order,
-					points: questions.points,
-					options: questions.options,
-					matchingPairs: questions.matchingPairs,
-					promptPath: questions.promptPath,
-				})
-				.from(questions)
-				.where(eq(questions.testId, review.testId))
-				.orderBy(asc(questions.order))
-
-			const questionTypesMap = await getQuestionTypeMapForTest({ testId: review.testId, includeInactive: true })
-
-			// Load prompt text for each question
-			const testRow = await db.query.tests.findFirst({
-				where: eq(tests.id, review.testId),
-				columns: { id: true, slug: true },
-				with: {
-					topic: { columns: { slug: true } },
-				},
-			})
-
-			const questionsWithTexts = await Promise.all(
-				questionRows.map(async (q) => {
-					const promptText = testRow
-						? await readQuestionMarkdown({
-								storedPath: q.promptPath,
-								topicSlug: testRow.topic.slug,
-								testSlug: testRow.slug,
-								testId: testRow.id,
-								questionId: q.id,
-								kind: 'prompt',
-							})
-						: ''
-
-					const typeConfig = questionTypesMap[q.type]
-					return {
-						id: q.id,
-						type: q.type,
-						questionUiTemplate: typeConfig?.uiTemplate ?? null,
-						questionTypeTitle: typeConfig?.title ?? q.type,
-						order: q.order,
-						points: q.points,
-						options: q.options,
-						matchingPairs: q.matchingPairs,
-						promptText,
-					}
-				})
-			)
-
-			res.json({ attempt: review, questions: questionsWithTexts })
-		} catch (e) {
-			next(e)
+		if (!(await canReviewAttempt(req, attemptId))) {
+			return res.status(403).json({ error: 'Forbidden' })
 		}
+
+		const review = await readAdminAttemptView(attemptId)
+
+		if (!review) {
+			return res.status(404).json({ error: 'Attempt not found' })
+		}
+
+		// Load questions for this attempt's test (same pattern as public test detail endpoint)
+		const questionRows = await db
+			.select({
+				id: questions.id,
+				type: questions.type,
+				order: questions.order,
+				points: questions.points,
+				options: questions.options,
+				matchingPairs: questions.matchingPairs,
+				promptPath: questions.promptPath,
+			})
+			.from(questions)
+			.where(eq(questions.testId, review.testId))
+			.orderBy(asc(questions.order))
+
+		const questionTypesMap = await getQuestionTypeMapForTest({ testId: review.testId, includeInactive: true })
+
+		// Load prompt text for each question
+		const testRow = await db.query.tests.findFirst({
+			where: eq(tests.id, review.testId),
+			columns: { id: true, slug: true },
+			with: {
+				topic: { columns: { slug: true } },
+			},
+		})
+
+		const questionsWithTexts = await Promise.all(
+			questionRows.map(async (q) => {
+				const promptText = testRow
+					? await readQuestionMarkdown({
+							storedPath: q.promptPath,
+							topicSlug: testRow.topic.slug,
+							testSlug: testRow.slug,
+							testId: testRow.id,
+							questionId: q.id,
+							kind: 'prompt',
+						})
+					: ''
+
+				const typeConfig = questionTypesMap[q.type]
+				return {
+					id: q.id,
+					type: q.type,
+					questionUiTemplate: typeConfig?.uiTemplate ?? null,
+					questionTypeTitle: typeConfig?.title ?? q.type,
+					order: q.order,
+					points: q.points,
+					options: q.options,
+					matchingPairs: q.matchingPairs,
+					promptText,
+				}
+			})
+		)
+
+		res.json({ attempt: review, questions: questionsWithTexts })
+	} catch (e) {
+		next(e)
 	}
-)
+})
 
 export default router
