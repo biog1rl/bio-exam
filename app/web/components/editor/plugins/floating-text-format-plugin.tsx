@@ -184,7 +184,7 @@ function FloatingTextFormat({
 	return (
 		<div
 			ref={popupCharStylesEditorRef}
-			className="absolute top-0 left-0 flex gap-1 rounded-md border bg-background p-1 opacity-0 shadow-md transition-opacity duration-300 will-change-transform"
+			className="absolute top-0 left-0 flex gap-1 rounded-md border bg-background p-1 opacity-0 shadow-md transition-opacity duration-300 will-change-transform motion-reduce:transition-none"
 		>
 			{editor.isEditable() && (
 				<>

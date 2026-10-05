@@ -14,6 +14,7 @@ import { DialogTitle, DialogDescription, Dialog, DialogContent } from '@/compone
 import { RequestError } from '@/lib/http/request'
 import { searchAll } from '@/lib/search/api'
 import { makeSearchValue } from '@/lib/search/query'
+import { prefersReducedMotion } from '@/lib/utils/reduced-motion'
 import type { SearchCategory, SearchResponse, SearchResultItem, SearchScope } from '@/types/search'
 
 import { useSearch } from './SearchProvider'
@@ -151,6 +152,7 @@ export default function SearchDialog() {
 	const [results, setResults] = useState<SearchResponse | null>(null)
 	const [loading, setLoading] = useState(false)
 	const [searchError, setSearchError] = useState<RequestError | null>(null)
+	const [reduceMotion, setReduceMotion] = useState(false)
 	const controllerRef = useRef<AbortController | null>(null)
 	const inputRef = useRef<HTMLInputElement>(null)
 
@@ -225,6 +227,12 @@ export default function SearchDialog() {
 	}, [query, abortSearch, runSearch])
 
 	useEffect(() => {
+		const reduce = prefersReducedMotion()
+		setReduceMotion(reduce)
+		if (reduce) {
+			blur.set(0)
+			return
+		}
 		blur.set(8)
 		const timer = setTimeout(() => blur.set(0), 50)
 		return () => clearTimeout(timer)
@@ -288,7 +296,9 @@ export default function SearchDialog() {
 								<div className="text-sm font-semibold">Поиск</div>
 								<div className="text-xs text-muted-foreground">Тесты, вопросы, пользователи и попытки</div>
 							</div>
-							{loading && <div className="animate-pulse text-xs text-muted-foreground">Ищем…</div>}
+							{loading && (
+								<div className="animate-pulse text-xs text-muted-foreground motion-reduce:animate-none">Ищем…</div>
+							)}
 						</div>
 						<div className="[&_[cmdk-input-wrapper]]:rounded-xl [&_[cmdk-input-wrapper]]:border [&_[cmdk-input-wrapper]]:bg-white/70 [&_[cmdk-input-wrapper]]:shadow-inner [&_[cmdk-input]]:h-11">
 							<CommandInput ref={inputRef} placeholder="Введите запрос" value={query} onValueChange={setQuery} />
@@ -307,7 +317,7 @@ export default function SearchDialog() {
 											key={scope}
 											type="button"
 											onClick={() => setTab(scope)}
-											className={`flex min-w-32 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-all active:scale-[0.99] sm:min-w-0 ${
+											className={`flex min-w-32 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-all active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100 sm:min-w-0 ${
 												active
 													? 'bg-primary/10 text-foreground shadow-sm'
 													: 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
@@ -316,7 +326,7 @@ export default function SearchDialog() {
 											<Icon className="size-4 shrink-0" />
 											<span className="min-w-0 flex-1 truncate">{TAB_LABELS[scope]}</span>
 											{loading && scope === 'all' ? (
-												<span className="animate-pulse text-xs">…</span>
+												<span className="animate-pulse text-xs motion-reduce:animate-none">…</span>
 											) : count > 0 ? (
 												<span className="rounded-md bg-background/80 px-1.5 py-0.5 text-[11px] tabular-nums">
 													{count}
@@ -351,8 +361,8 @@ export default function SearchDialog() {
 												initial="enter"
 												animate="center"
 												exit="exit"
-												transition={{ duration: 0.18, ease: 'easeInOut' }}
-												style={{ filter: blurFilter }}
+												transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeInOut' }}
+												style={reduceMotion ? undefined : { filter: blurFilter }}
 												className="space-y-2"
 											>
 												{selectedCategories.map((category) => (

@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useObjectUrl } from '@/hooks/use-object-url'
 import { deleteAsset, listAssets, UPLOAD_FAILED_MESSAGE, uploadAsset } from '@/lib/assets/api'
 import { deleteErrorMessage } from '@/lib/assets/delete-error'
 import { failureMessage } from '@/lib/http/errors'
@@ -59,6 +60,7 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 	const [isUploading, setIsUploading] = useState(false)
 	const [isDragging, setIsDragging] = useState(false)
 	const [activeTab, setActiveTab] = useState('library')
+	const previewUrl = useObjectUrl(selectedFile)
 
 	const loadAssets = useCallback(async (currentOffset: number, append: boolean) => {
 		if (append) {
@@ -259,7 +261,7 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 												<img
 													src={asset.signedUrl}
 													alt={asset.filename}
-													className="size-full object-cover transition-transform group-hover:scale-105"
+													className="size-full object-cover transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
 													loading="lazy"
 												/>
 											</button>
@@ -269,8 +271,9 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 													e.stopPropagation()
 													handleDeleteClick(asset)
 												}}
-												className="absolute top-1 right-1 cursor-pointer rounded-full bg-black/60 p-1 text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-red-600"
+												className="absolute top-1 right-1 cursor-pointer rounded-full bg-black/60 p-1 text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-red-600 focus-visible:opacity-100 motion-reduce:transition-none"
 												title="Удалить"
+												aria-label={`Удалить ${asset.filename}`}
 											>
 												<Trash2 className="size-3.5" />
 											</button>
@@ -326,7 +329,7 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 							<div className="space-y-4">
 								<div className="relative aspect-video w-full overflow-hidden rounded-lg border">
 									{/* Нативный img для предварительного просмотра URL-адреса blob: */}
-									<img src={URL.createObjectURL(selectedFile)} alt="Preview" className="size-full object-contain" />
+									{previewUrl && <img src={previewUrl} alt="Preview" className="size-full object-contain" />}
 								</div>
 
 								<div className="space-y-2">
