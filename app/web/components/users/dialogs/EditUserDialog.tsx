@@ -5,7 +5,7 @@ import { ROLES_LIST, ROLE_KEYS, roleDisplayName, type RoleKey } from '@bio-exam/
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 
-import { ChevronDownIcon, LockKeyholeOpen, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
+import { Check, ChevronDownIcon, ChevronsUpDown, LockKeyholeOpen, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import useSWR, { useSWRConfig } from 'swr'
 
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
+import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import {
 	DropdownMenu,
@@ -35,12 +36,22 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { UserGrantsDialog } from '@/components/users/dialogs/UserGrantsDialog'
 import { AuthExpiredError, apiFetch } from '@/lib/api-fetch'
 import { LOGIN_PATTERN, LOGIN_HINT } from '@/lib/auth/validators'
+import {
+	buildUserPatch,
+	editRoleWarning,
+	groupIdsChanged,
+	groupItemSuffix,
+	groupsTriggerLabel,
+} from '@/lib/users/edit-user-form'
+import { parseInviteGroups } from '@/lib/users/invite-form'
+import { useRoleTraits } from '@/lib/users/role-traits'
+import { cn } from '@/lib/utils'
 import type { UserRow } from '@/types/users'
 
 import {
@@ -67,8 +78,6 @@ type GrantsResponse = {
 	effective: string[]
 }
 
-type Group = { id: string; name: string }
-
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json())
 
 function withLoginBreak(text: string, login: string) {
@@ -84,6 +93,40 @@ function withLoginBreak(text: string, login: string) {
 	)
 }
 
+function RoleZoneAlert(props: {
+	initialRoleKeys: string[]
+	initialRole: string | null
+	selectedRole: string | null
+	initialActive: boolean
+	isActive: boolean
+}) {
+	const { roles: roleTraits, loaded } = useRoleTraits()
+	const warning = editRoleWarning({ ...props, traits: roleTraits, loaded })
+	if (warning === 'teacher-without-topics') {
+		return (
+			<Alert>
+				<AlertTitle>Учитель без тем</AlertTitle>
+				<AlertDescription>
+					После сохранения закрепите за учителем темы в форме темы и назначьте его владельцем групп. До этого его
+					разделы пустые.
+				</AlertDescription>
+			</Alert>
+		)
+	}
+	if (warning === 'zone-release') {
+		return (
+			<Alert variant="destructive">
+				<AlertTitle>Темы и группы перейдут администраторам</AlertTitle>
+				<AlertDescription>
+					Закрепления тем снимаются, группы учителя становятся группами администраторов. При повторном назначении их
+					нужно закрепить заново.
+				</AlertDescription>
+			</Alert>
+		)
+	}
+	return null
+}
+
 export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const { mutate } = useSWRConfig()
 	const { me, can } = useAuth()
@@ -92,6 +135,8 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const [lastName, setLastName] = useState<string>('')
 	const [login, setLogin] = useState<string>('')
 	const [isActive, setIsActive] = useState<boolean>(false)
+	const [initialActive, setInitialActive] = useState<boolean>(false)
+	const [initialRoleKeys, setInitialRoleKeys] = useState<string[]>([])
 	const [birthdate, setBirthdate] = useState<string>('')
 	const [telegram, setTelegram] = useState<string>('')
 	const [phone, setPhone] = useState<string>('')
@@ -106,9 +151,9 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const [deleting, setDeleting] = useState(false)
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
-	// группа ("__none__" = без группы)
-	const [selectedGroupId, setSelectedGroupId] = useState<string>('__none__')
-	const [initialGroupId, setInitialGroupId] = useState<string>('__none__')
+	const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+	const [initialGroupIds, setInitialGroupIds] = useState<string[]>([])
+	const [groupsOpen, setGroupsOpen] = useState(false)
 
 	// модалка кастомных прав
 	const [grantsOpen, setGrantsOpen] = useState(false)
@@ -131,9 +176,14 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const { data: grantsMeta } = useSWR<GrantsResponse>(enabled ? `/api/rbac/user/${user!.id}/grants` : null, fetcher)
 	const hasCustomOverrides = (grantsMeta?.userOverrides?.length ?? 0) > 0
 
-	// список групп для select
-	const { data: groupsData } = useSWR<{ groups: Group[] }>(open ? '/api/groups' : null, fetcher)
-	const allGroups = useMemo(() => groupsData?.groups ?? [], [groupsData?.groups])
+	const { data: groupsData } = useSWR<unknown>(open ? '/api/groups' : null, fetcher)
+	const allGroups = useMemo(() => parseInviteGroups(groupsData), [groupsData])
+	const selectedGroups = useMemo(() => {
+		const known = new Map<string, { name: string }>()
+		for (const group of user?.groups ?? []) known.set(group.id, group)
+		for (const group of allGroups) known.set(group.id, group)
+		return selectedGroupIds.map((id) => known.get(id)).filter((group): group is { name: string } => group !== undefined)
+	}, [allGroups, selectedGroupIds, user?.groups])
 
 	useEffect(() => {
 		if (!open || !user) return
@@ -141,6 +191,8 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		setLastName(user.lastName ?? '')
 		setLogin(user.login ?? '')
 		setIsActive(Boolean(user.isActive))
+		setInitialActive(Boolean(user.isActive))
+		setInitialRoleKeys(user.roles ?? [])
 
 		// Конвертируем дату из YYYY-MM-DD в дд/мм/гггг
 		if (user.birthdate) {
@@ -160,17 +212,13 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		setSelectedRole(firstValid ?? null)
 		setInitialRole(firstValid ?? null)
 
+		const groupIds = (user.groups ?? []).map((group) => group.id)
+		setSelectedGroupIds(groupIds)
+		setInitialGroupIds(groupIds)
+		setGroupsOpen(false)
+
 		setError(null)
 	}, [open, user])
-
-	// когда загрузятся группы — ставим текущую группу пользователя
-	useEffect(() => {
-		if (!open || !user || allGroups.length === 0) return
-		const match = allGroups.find((g) => g.name === user.groupName)
-		const id = match?.id ?? '__none__'
-		setSelectedGroupId(id)
-		setInitialGroupId(id)
-	}, [open, user, allGroups])
 
 	const title = user ? `Редактировать пользователя: ${user.login}` : 'Редактировать пользователя'
 	const roleChanged = useMemo(
@@ -185,27 +233,18 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		try {
 			if (!selectedRole) throw new Error('Выберите роль')
 
-			const payload: {
-				firstName?: string
-				lastName?: string
-				login?: string
-				isActive?: boolean
-				roles: string[]
-				birthdate?: string | null
-				telegram?: string
-				phone?: string
-				email?: string
-			} = {
+			const payload = buildUserPatch({
 				firstName,
 				lastName,
 				login,
 				isActive,
-				roles: [selectedRole],
-				birthdate: birthdate || null,
+				birthdate,
 				telegram,
 				phone,
 				email,
-			}
+				selectedRole,
+				initialRole,
+			})
 
 			const res = await apiFetch(`/api/users/${user.id}`, {
 				method: 'PATCH',
@@ -224,14 +263,27 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 				throw new Error(msg || `HTTP ${res.status}`)
 			}
 
-			if (selectedGroupId !== initialGroupId) {
+			if (payload.roles) {
+				setInitialRoleKeys(payload.roles)
+				setInitialRole(selectedRole)
+			}
+			setInitialActive(isActive)
+
+			if (groupIdsChanged(initialGroupIds, selectedGroupIds)) {
 				const groupRes = await apiFetch(`/api/users/${user.id}/group`, {
 					method: 'PATCH',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ groupId: selectedGroupId === '__none__' ? null : selectedGroupId }),
+					body: JSON.stringify({ groupIds: selectedGroupIds }),
 				})
-				if (!groupRes.ok) throw new Error('Не удалось обновить группу')
-				setInitialGroupId(selectedGroupId)
+				if (!groupRes.ok) {
+					const body: unknown = await groupRes.json().catch(() => null)
+					const msg =
+						body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
+							? (body as { error: string }).error
+							: ''
+					throw new Error(msg || 'Не удалось обновить группу')
+				}
+				setInitialGroupIds(selectedGroupIds)
 			}
 
 			await Promise.all([mutate('/api/users'), user ? mutate(`/api/rbac/user/${user.id}/grants`) : Promise.resolve()])
@@ -311,6 +363,10 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 		}
 	}
 
+	function toggleGroup(id: string) {
+		setSelectedGroupIds((prev) => (prev.includes(id) ? prev.filter((groupId) => groupId !== id) : [...prev, id]))
+	}
+
 	const triggerLabel = selectedRole ? roleDisplayName(selectedRole) : 'Выберите роль'
 	const grantsDisabled = roleChanged // нельзя открывать, пока роль не сохранена
 
@@ -323,6 +379,14 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 					</DialogHeader>
 
 					<div className="space-y-4">
+						<RoleZoneAlert
+							initialRoleKeys={initialRoleKeys}
+							initialRole={initialRole}
+							selectedRole={selectedRole}
+							initialActive={initialActive}
+							isActive={isActive}
+						/>
+
 						{roleChanged && hasCustomOverrides && (
 							<Alert variant="destructive">
 								<ShieldCheck className="h-4 w-4" />
@@ -441,19 +505,37 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 						{allGroups.length > 0 && (
 							<div className="space-y-2">
 								<Label className="font-medium">Группа</Label>
-								<Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
-									<SelectTrigger className="w-full">
-										<SelectValue placeholder="Без группы" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="__none__">Без группы</SelectItem>
-										{allGroups.map((g) => (
-											<SelectItem key={g.id} value={g.id}>
-												{g.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
+								<Popover open={groupsOpen} onOpenChange={setGroupsOpen} modal>
+									<PopoverTrigger asChild>
+										<Button variant="outline" role="combobox" className="w-full justify-between">
+											<span className="min-w-0 truncate">{groupsTriggerLabel(selectedGroups)}</span>
+											<ChevronsUpDown className="size-4 shrink-0 opacity-50" aria-hidden="true" />
+										</Button>
+									</PopoverTrigger>
+									<PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+										<Command>
+											<CommandList className="max-h-60">
+												<CommandGroup>
+													{allGroups.map((g) => {
+														const selected = selectedGroupIds.includes(g.id)
+														return (
+															<CommandItem key={g.id} value={g.id} onSelect={() => toggleGroup(g.id)}>
+																<Check
+																	className={cn('size-4', selected ? 'opacity-100' : 'opacity-0')}
+																	aria-hidden="true"
+																/>
+																<span className="min-w-0 truncate">
+																	{g.name}
+																	<span className="text-muted-foreground">{groupItemSuffix(g.owner)}</span>
+																</span>
+															</CommandItem>
+														)
+													})}
+												</CommandGroup>
+											</CommandList>
+										</Command>
+									</PopoverContent>
+								</Popover>
 							</div>
 						)}
 
