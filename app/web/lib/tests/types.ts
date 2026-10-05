@@ -1,4 +1,4 @@
-import type { AdminAttemptView, QuestionUiTemplate } from '@bio-exam/exam-core'
+import type { AdminAttemptView, QuestionUiTemplate, ReviewStatus } from '@bio-exam/exam-core'
 
 export type TestQuestionType = string
 
@@ -65,6 +65,9 @@ export type TestAttemptSummary = {
 	totalPoints: number
 	scorePercentage: number
 	passed: boolean
+	reviewStatus: ReviewStatus
+	autoEarnedPoints: number
+	autoTotalPoints: number
 	submittedAt: string
 }
 

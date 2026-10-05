@@ -6,7 +6,7 @@ vi.mock('@/lib/session/client', () => ({
 	AuthExpiredError: class AuthExpiredError extends Error {},
 }))
 
-import { createDefaultScoringRuleForTemplate } from '@bio-exam/exam-core'
+import { createDefaultScoringRuleForTemplate, type ReviewStatus } from '@bio-exam/exam-core'
 
 import { MalformedBodyError } from '@/lib/http/request'
 import { apiFetch } from '@/lib/session/client'
@@ -481,6 +481,9 @@ function attemptRow(id: string) {
 		totalPoints: 2,
 		scorePercentage: 50,
 		passed: false,
+		reviewStatus: 'none' as ReviewStatus,
+		autoEarnedPoints: 1,
+		autoTotalPoints: 2,
 	}
 }
 
@@ -490,7 +493,7 @@ function attemptsPage(ids: string[], total: number, offset = 0) {
 		total,
 		limit: ATTEMPTS_PAGE_SIZE,
 		offset,
-		summary: { passed: 0, averageScore: 50 },
+		summary: { passed: 0, averageScore: 50, pendingTotal: 0 },
 		scopeTotal: total + 3,
 		facets: {
 			topics: [{ slug: 'cell', title: 'Клетка' }],
@@ -509,6 +512,7 @@ describe('список попыток: ключ и запрос', () => {
 			from: null,
 			to: null,
 			status: 'active',
+			review: 'all',
 		})
 		assert.equal(adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS), '/api/tests/admin/attempts?limit=50&status=active')
 	})
@@ -522,6 +526,7 @@ describe('список попыток: ключ и запрос', () => {
 				from: '2026-09-30T21:00:00.000Z',
 				to: '2026-10-01T20:59:59.999Z',
 				status: 'all',
+				review: 'pending',
 			},
 			100
 		)
@@ -536,6 +541,7 @@ describe('список попыток: ключ и запрос', () => {
 			student: STUDENT_ID,
 			from: '2026-09-30T21:00:00.000Z',
 			to: '2026-10-01T20:59:59.999Z',
+			review: 'pending',
 		})
 		assert.equal(
 			adminTestsKeys.attempts({ ...DEFAULT_ATTEMPTS_FILTERS, q: '   ' }),
@@ -583,6 +589,30 @@ describe('список попыток: ключ и запрос', () => {
 	])('parseAdminAttempts: $name', ({ averageScore, accepted }) => {
 		const page = attemptsPage(['a'], 1)
 		const body = { ...page, summary: { ...page.summary, averageScore } }
+		if (accepted) assert.equal(parseAdminAttempts(body), body)
+		else assert.throws(() => parseAdminAttempts(body), MalformedBodyError)
+	})
+
+	test.each([
+		{ name: 'pendingTotal: число принимается', pendingTotal: 3, accepted: true },
+		{ name: 'pendingTotal: undefined отвергается', pendingTotal: undefined, accepted: false },
+		{ name: 'pendingTotal: строка отвергается', pendingTotal: '3', accepted: false },
+		{ name: 'pendingTotal: null отвергается', pendingTotal: null, accepted: false },
+	])('parseAdminAttempts: $name', ({ pendingTotal, accepted }) => {
+		const page = attemptsPage(['a'], 1)
+		const body = { ...page, summary: { ...page.summary, pendingTotal } }
+		if (accepted) assert.equal(parseAdminAttempts(body), body)
+		else assert.throws(() => parseAdminAttempts(body), MalformedBodyError)
+	})
+
+	test.each([
+		{ name: 'pending принимается', reviewStatus: 'pending', accepted: true },
+		{ name: 'graded принимается', reviewStatus: 'graded', accepted: true },
+		{ name: 'неизвестный статус отвергается', reviewStatus: 'done', accepted: false },
+		{ name: 'отсутствующий статус отвергается', reviewStatus: undefined, accepted: false },
+	])('parseAdminAttempts: строка, $name', ({ reviewStatus, accepted }) => {
+		const page = attemptsPage(['a'], 1)
+		const body = { ...page, rows: [{ ...page.rows[0], reviewStatus }] }
 		if (accepted) assert.equal(parseAdminAttempts(body), body)
 		else assert.throws(() => parseAdminAttempts(body), MalformedBodyError)
 	})

@@ -14,6 +14,8 @@ import useSWR from 'swr'
 import { useDebounce } from '@/components/editor/editor-hooks/use-debounce'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
+import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -29,12 +31,20 @@ import {
 	mergeAttemptPages,
 	type AttemptsFilters,
 } from '@/lib/tests/admin-api'
-import { attemptsUrl, parseAttemptsUrl, type AttemptsUrlFilters } from '@/lib/tests/attempts-url'
+import { attemptResultView } from '@/lib/tests/attempt-result-view'
+import { attemptsUrl, parseAttemptsUrl, type AttemptsUrlFilters, type ReviewFilter } from '@/lib/tests/attempts-url'
 import { matchesUserStatus } from '@/lib/users/status-filter'
+import { cn } from '@/lib/utils/cn'
 
 import type { AdminAttemptListItem, AdminAttemptsResponse } from './attempts-types'
 
 const SEARCH_DEBOUNCE_MS = 300
+
+const REVIEW_TRIGGER_LABELS: Record<ReviewFilter, string> = {
+	all: 'Проверка: все',
+	pending: 'На проверке',
+	graded: 'Проверено',
+}
 
 type MorePages = { key: string; pages: AdminAttemptsResponse[] }
 
@@ -65,45 +75,119 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: string |
 	)
 }
 
-function emptyAttemptsText(filtered: boolean, zoneAll: boolean) {
-	if (filtered) return 'Измените поиск, тему, студента или дату, чтобы расширить выборку.'
-	if (!zoneAll) return 'Здесь появятся попытки учеников по вашим темам.'
-	return 'Когда студенты начнут проходить тесты, здесь появится журнал результатов.'
+function ReviewTile({
+	value,
+	active,
+	disabled,
+	onClick,
+}: {
+	value: string | number
+	active: boolean
+	disabled: boolean
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			aria-pressed={active}
+			disabled={disabled}
+			onClick={onClick}
+			className={cn(
+				'rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60',
+				active
+					? 'border-primary bg-card'
+					: 'border-border/70 bg-secondary/65 hover:border-primary/45 hover:bg-secondary'
+			)}
+		>
+			<Clock3 className="mb-4 size-5 text-primary" aria-hidden="true" />
+			<p className="font-serif text-3xl leading-none">{value}</p>
+			<p className="mt-2 text-sm text-muted-foreground">на проверке</p>
+		</button>
+	)
 }
 
-function AttemptsEmptyState({ filtered, zoneAll }: { filtered: boolean; zoneAll: boolean }) {
+function emptyAttemptsContent({
+	filtered,
+	onlyReview,
+	zoneAll,
+}: {
+	filtered: boolean
+	onlyReview: ReviewFilter
+	zoneAll: boolean
+}) {
+	if (onlyReview === 'pending') {
+		return {
+			title: 'Нет попыток на проверке',
+			text: 'Здесь появятся сданные попытки, в которых есть ответы, ожидающие проверки учителем.',
+		}
+	}
+	if (onlyReview === 'graded') {
+		return {
+			title: 'Нет проверенных попыток',
+			text: 'Здесь появятся попытки с открытыми вопросами, проверенные учителем.',
+		}
+	}
+	if (filtered) {
+		return {
+			title: 'Ничего не найдено',
+			text: 'Измените поиск, тему, студента, дату или проверку, чтобы расширить выборку.',
+		}
+	}
+	return {
+		title: 'Попыток пока нет',
+		text: zoneAll
+			? 'Когда студенты начнут проходить тесты, здесь появится журнал результатов.'
+			: 'Здесь появятся попытки учеников по вашим темам.',
+	}
+}
+
+function AttemptsEmptyState({
+	filtered,
+	onlyReview,
+	zoneAll,
+}: {
+	filtered: boolean
+	onlyReview: ReviewFilter
+	zoneAll: boolean
+}) {
+	const { title, text } = emptyAttemptsContent({ filtered, onlyReview, zoneAll })
 	return (
 		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
 			<FileText className="size-7 text-primary" />
-			<h2 className="mt-5 font-serif text-3xl">{filtered ? 'Ничего не найдено' : 'Попыток пока нет'}</h2>
-			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{emptyAttemptsText(filtered, zoneAll)}</p>
+			<h2 className="mt-5 font-serif text-3xl">{title}</h2>
+			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{text}</p>
 		</section>
 	)
 }
 
 function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
-	const ResultIcon = attempt.passed ? CheckCircle2 : XCircle
+	const view = attemptResultView(attempt)
+	const ResultIcon = view.kind === 'final' && !view.passed ? XCircle : CheckCircle2
 
 	return (
 		<Link
 			href={`/admin/attempts/${attempt.attemptId}`}
 			className="block rounded-3xl border border-border/80 bg-card/90 px-4 py-3 transition-colors outline-none hover:border-primary/45 hover:bg-secondary/45 focus-visible:border-primary"
 		>
-			<div className="grid gap-3 tab-sm:grid-cols-[minmax(0,1fr)_10.625rem_7.1875rem_1.5rem] tab-sm:items-center">
+			<div className="grid gap-3 tab-sm:grid-cols-[minmax(0,1fr)_10.625rem_10.625rem_1.5rem] tab-sm:items-center">
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
 						<span className="font-mono text-[0.625rem] tracking-[0.18em] text-muted-foreground uppercase">
 							{attempt.topicTitle}
 						</span>
-						<span
-							className={
-								attempt.passed
-									? 'rounded-full border border-green-500/35 bg-green-50 px-2.5 py-0.5 text-xs text-green-700'
-									: 'rounded-full border border-red-500/35 bg-red-50 px-2.5 py-0.5 text-xs text-red-700'
-							}
-						>
-							{attempt.passed ? 'Пройден' : 'Не пройден'}
-						</span>
+						{view.kind === 'pending' ? (
+							<ReviewStatusChip />
+						) : (
+							<span
+								className={
+									view.passed
+										? 'rounded-full border border-green-500/35 bg-green-50 px-2.5 py-0.5 text-xs text-green-700'
+										: 'rounded-full border border-red-500/35 bg-red-50 px-2.5 py-0.5 text-xs text-red-700'
+								}
+							>
+								{view.passed ? 'Пройден' : 'Не пройден'}
+							</span>
+						)}
 					</div>
 					<h2 className="mt-1 line-clamp-2 font-serif text-xl leading-tight mob:text-2xl tab-sm:truncate">
 						{attempt.testTitle}
@@ -113,15 +197,31 @@ function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
 
 				<p className="text-sm text-muted-foreground tab-sm:text-right">{formatDate(attempt.submittedAt)}</p>
 
-				<div className="flex items-center gap-2 tab-sm:justify-end">
-					<ResultIcon className={attempt.passed ? 'size-4 text-green-600' : 'size-4 text-red-600'} />
-					<div className="tab-sm:text-right">
-						<p className="font-serif text-2xl leading-none">{Math.round(attempt.scorePercentage)}%</p>
-						<p className="mt-1 text-xs text-muted-foreground">
-							{attempt.earnedPoints}/{attempt.totalPoints}
-						</p>
+				{view.kind === 'pending' ? (
+					<div className="flex items-center gap-2 tab-sm:justify-end">
+						<Clock3 className="size-4 text-muted-foreground" aria-hidden="true" />
+						{view.auto ? (
+							<p className="text-xs text-balance text-muted-foreground tab-sm:text-right">
+								авто {view.auto.earned} из {view.auto.total}
+							</p>
+						) : null}
 					</div>
-				</div>
+				) : (
+					<div className="flex items-center gap-2 tab-sm:justify-end">
+						<ResultIcon className={view.passed ? 'size-4 text-green-600' : 'size-4 text-red-600'} />
+						<div className="tab-sm:text-right">
+							<p className="font-serif text-2xl leading-none">{Math.round(view.percent)}%</p>
+							<p className="mt-1 text-xs text-muted-foreground">
+								{view.points.earned}/{view.points.total}
+							</p>
+							{view.teacherChecked ? (
+								<div className="mt-1 tab-sm:flex tab-sm:justify-end">
+									<TeacherCheckedMark />
+								</div>
+							) : null}
+						</div>
+					</div>
+				)}
 
 				<ArrowRight className="hidden size-5 shrink-0 text-primary tab-sm:block" />
 			</div>
@@ -140,6 +240,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	const topicSlug = urlFilters.topic ?? 'all'
 	const studentId = urlFilters.student ?? 'all'
 	const statusFilter = urlFilters.status
+	const reviewFilter = urlFilters.review
 	const updateUrlFilters = (next: Partial<AttemptsUrlFilters>) => {
 		window.history.replaceState(null, '', attemptsUrl({ ...urlFilters, ...next }))
 	}
@@ -158,8 +259,9 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 			student: studentId === 'all' ? null : studentId,
 			...attemptsDayRange(dateRange),
 			status: statusFilter,
+			review: reviewFilter,
 		}),
-		[dateRange, debouncedQuery, statusFilter, studentId, topicSlug]
+		[dateRange, debouncedQuery, reviewFilter, statusFilter, studentId, topicSlug]
 	)
 	const key = adminTestsKeys.attempts(filters)
 	const keyRef = useRef(key)
@@ -185,9 +287,12 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	)
 	const loadingMore = loadingMoreKey === key
 
-	const hasFilters = Boolean(
+	const hasOtherFilters = Boolean(
 		query || dateRange?.from || studentId !== 'all' || topicSlug !== 'all' || statusFilter !== 'active'
 	)
+	const hasFilters = hasOtherFilters || reviewFilter !== 'all'
+	const onlyReview = hasOtherFilters ? 'all' : reviewFilter
+	const pendingTotal = data ? data.summary.pendingTotal : '—'
 	const averageScore = data?.summary.averageScore != null ? `${Math.round(data.summary.averageScore)}%` : '—'
 	const shown = merged
 		? merged.rows.length < merged.total
@@ -209,7 +314,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 		pushQuery.cancel()
 		setQuery('')
 		setDebouncedQuery('')
-		updateUrlFilters({ topic: null, student: null, status: 'active' })
+		updateUrlFilters({ topic: null, student: null, status: 'active', review: 'all' })
 		setDateRange(undefined)
 	}
 
@@ -256,24 +361,46 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 						<CheckCircle2 className="size-6 text-primary" />
 						<p className="mt-5 font-serif text-4xl leading-none">{averageScore}</p>
 						<p className="mt-2 text-sm text-muted-foreground">средний результат</p>
+						{data && data.summary.pendingTotal > 0 ? (
+							<p className="mt-1 text-xs text-muted-foreground">без попыток на проверке</p>
+						) : null}
 					</div>
 				</div>
 
-				<div className="mt-6 grid gap-3 tab-sm:grid-cols-4">
+				<div className="mt-6 grid gap-3 tab-sm:grid-cols-3 tab:grid-cols-5">
 					<StatTile label="всего в базе" value={scopeTotal} icon={FileText} />
 					<StatTile label="показано" value={shown} icon={Clock3} />
 					<StatTile label="пройдено" value={data ? data.summary.passed : '—'} icon={CheckCircle2} />
+					<ReviewTile
+						value={pendingTotal}
+						active={reviewFilter === 'pending'}
+						disabled={data ? data.summary.pendingTotal === 0 && reviewFilter !== 'pending' : false}
+						onClick={() => updateUrlFilters({ review: reviewFilter === 'pending' ? 'all' : 'pending' })}
+					/>
 					<StatTile label="тем" value={facets.topics.length} icon={FileText} />
 				</div>
 			</section>
 
 			<section className="rounded-4xl border border-border/80 bg-card/90 p-3 tab-sm:p-4">
-				<div className="mb-3 max-w-xs">
+				<div className="mb-3 flex flex-wrap items-center gap-2">
 					<UserStatusFilter
 						align="start"
 						value={statusFilter}
 						onChange={(status) => updateUrlFilters({ status, student: null })}
 					/>
+					<Select value={reviewFilter} onValueChange={(value) => updateUrlFilters({ review: value as ReviewFilter })}>
+						<SelectTrigger
+							aria-label="Проверка"
+							className="h-10 w-full rounded-full border-border/70 bg-secondary/40 px-4 transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary mob:w-56"
+						>
+							<SelectValue>{REVIEW_TRIGGER_LABELS[reviewFilter]}</SelectValue>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">Все</SelectItem>
+							<SelectItem value="pending">На проверке</SelectItem>
+							<SelectItem value="graded">Проверено</SelectItem>
+						</SelectContent>
+					</Select>
 				</div>
 				<div className="grid gap-3 tab:grid-cols-[minmax(12rem,1fr)_repeat(3,minmax(0,13.125rem))_auto]">
 					<label className="relative block">
@@ -357,7 +484,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 					Загрузка...
 				</section>
 			) : merged.rows.length === 0 ? (
-				<AttemptsEmptyState filtered={hasFilters} zoneAll={zoneAll} />
+				<AttemptsEmptyState filtered={hasFilters} onlyReview={onlyReview} zoneAll={zoneAll} />
 			) : (
 				<section className="space-y-2">
 					{merged.rows.map((attempt) => (

@@ -1,3 +1,5 @@
+import { REVIEW_STATUSES, type ReviewStatus } from '@bio-exam/exam-core'
+
 import type {
 	AdminAttemptListItem,
 	AdminAttemptsResponse,
@@ -19,6 +21,7 @@ import { MalformedBodyError, request, requestBlob, type RequestFailure, type Req
 import { fetcherWith } from '@/lib/http/swr'
 import type { UserStatus } from '@/lib/users/status-filter'
 
+import type { ReviewFilter } from './attempts-url'
 import type { TopicTeacher } from './bank-view'
 
 export type AdminTestListItem = Test
@@ -96,6 +99,7 @@ export type AttemptsFilters = {
 	from: string | null
 	to: string | null
 	status: UserStatus
+	review: ReviewFilter
 }
 
 export type AttemptsDayRange = { from?: Date; to?: Date }
@@ -118,6 +122,7 @@ export const DEFAULT_ATTEMPTS_FILTERS: AttemptsFilters = {
 	from: null,
 	to: null,
 	status: 'active',
+	review: 'all',
 }
 
 type AttemptsKey = `/api/tests/admin/attempts?${string}`
@@ -133,6 +138,7 @@ function attemptsKey(filters: AttemptsFilters, offset = 0): AttemptsKey {
 	if (filters.student) params.set('student', filters.student)
 	if (filters.from) params.set('from', filters.from)
 	if (filters.to) params.set('to', filters.to)
+	if (filters.review !== 'all') params.set('review', filters.review)
 	return `/api/tests/admin/attempts?${params.toString()}`
 }
 
@@ -180,6 +186,10 @@ export function parseAdminAttempts(body: unknown): AdminAttemptsResponse {
 	const summary = asRecord(record.summary)
 	if (typeof summary.passed !== 'number') throw new MalformedBodyError()
 	if (summary.averageScore !== null && typeof summary.averageScore !== 'number') throw new MalformedBodyError()
+	if (typeof summary.pendingTotal !== 'number') throw new MalformedBodyError()
+	for (const row of record.rows) {
+		if (!REVIEW_STATUSES.includes(asRecord(row).reviewStatus as ReviewStatus)) throw new MalformedBodyError()
+	}
 	const facets = asRecord(record.facets)
 	if (!Array.isArray(facets.topics) || !Array.isArray(facets.students)) throw new MalformedBodyError()
 	return body as AdminAttemptsResponse

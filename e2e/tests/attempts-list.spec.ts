@@ -1,6 +1,7 @@
 import type { Route } from '@playwright/test'
 
 import { expect, projectKey, test } from '../fixtures/exam'
+import { horizontalOverflow, lowContrastTexts } from '../fixtures/page-checks'
 
 const LIST_PATH = '/api/tests/admin/attempts'
 const MOCK_QUERY = 'e2e-показать-ещё'
@@ -21,19 +22,54 @@ function attempt(id: string, title: string) {
 		totalPoints: 2,
 		scorePercentage: 50,
 		passed: false,
+		reviewStatus: 'none',
+		autoEarnedPoints: 1,
+		autoTotalPoints: 2,
 	}
 }
 
 const FIRST = attempt('00000000-0000-4000-8000-0000000000a1', 'Первая страница догрузки')
 const SECOND = attempt('00000000-0000-4000-8000-0000000000a2', 'Вторая страница догрузки')
 
-function page(rows: unknown[], offset: number) {
+const REVIEW_QUERY = 'e2e-на-проверке'
+
+const PENDING = {
+	...attempt('00000000-0000-4000-8000-0000000000b1', 'Тест на проверке'),
+	earnedPoints: null,
+	totalPoints: 4,
+	scorePercentage: null,
+	passed: null,
+	reviewStatus: 'pending',
+	autoEarnedPoints: 1,
+	autoTotalPoints: 1,
+}
+
+const GRADED = {
+	...attempt('00000000-0000-4000-8000-0000000000b2', 'Проверенный тест'),
+	earnedPoints: 3,
+	totalPoints: 4,
+	scorePercentage: 75,
+	passed: true,
+	reviewStatus: 'graded',
+	autoEarnedPoints: 1,
+	autoTotalPoints: 1,
+}
+
+function page(
+	rows: unknown[],
+	offset: number,
+	summary: { passed: number; averageScore: number | null; pendingTotal: number } = {
+		passed: 0,
+		averageScore: 50,
+		pendingTotal: 0,
+	}
+) {
 	return {
 		rows,
 		total: 2,
 		limit: 50,
 		offset,
-		summary: { passed: 0, averageScore: 50 },
+		summary,
 		scopeTotal: 2,
 		facets: { topics: [], students: [] },
 	}
@@ -130,5 +166,87 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		await expect(firstRow).toBeVisible()
 		await expect(more).toHaveCount(0)
 		expect(nextPageCalls).toBe(2)
+	})
+
+	test('a pending attempt shows the chip without a percent and the review filter follows the tile', async ({
+		adminPage: browserPage,
+	}) => {
+		await browserPage.route(
+			(url) => url.pathname === LIST_PATH && url.searchParams.get('q') === REVIEW_QUERY,
+			async (route: Route) => {
+				const review = new URL(route.request().url()).searchParams.get('review')
+				if (review === 'pending') {
+					return route.fulfill({
+						json: {
+							...page([PENDING], 0, { passed: 0, averageScore: null, pendingTotal: 1 }),
+							total: 1,
+						},
+					})
+				}
+				return route.fulfill({ json: page([PENDING, GRADED], 0, { passed: 1, averageScore: 75, pendingTotal: 1 }) })
+			}
+		)
+
+		await browserPage.goto('/admin/attempts')
+		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
+		await browserPage.getByPlaceholder('Поиск по студенту, тесту, теме').fill(REVIEW_QUERY)
+
+		const pendingRow = browserPage.locator(`a[href="/admin/attempts/${PENDING.attemptId}"]`)
+		const gradedRow = browserPage.locator(`a[href="/admin/attempts/${GRADED.attemptId}"]`)
+		await expect(pendingRow).toBeVisible()
+		await expect(pendingRow).toContainText('На проверке')
+		await expect(pendingRow).toContainText('авто 1 из 1')
+		await expect(pendingRow).not.toContainText('%')
+		await expect(pendingRow).not.toContainText('Пройден')
+		await expect(pendingRow).not.toContainText('Не пройден')
+		await expect(gradedRow).toContainText('проверено учителем')
+		await expect(gradedRow).toContainText('75%')
+
+		const marks = browserPage.getByText(/^(На проверке|проверено учителем)$/)
+		await expect(marks.first()).toBeVisible()
+		const lowContrast = (await lowContrastTexts(browserPage)).filter((text) => /проверк|авто|учителем/.test(text))
+		expect(lowContrast).toEqual([])
+		expect(await horizontalOverflow(browserPage)).toEqual([])
+
+		const tile = browserPage.getByRole('button', { name: '1 на проверке' })
+		const select = browserPage.getByRole('combobox', { name: 'Проверка' })
+		await expect(tile).toHaveAttribute('aria-pressed', 'false')
+		await expect(select).toHaveText('Проверка: все')
+
+		await tile.click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts\?review=pending$/)
+		await expect(select).toHaveText('На проверке')
+		await expect(tile).toHaveAttribute('aria-pressed', 'true')
+		await expect(gradedRow).toHaveCount(0)
+		const averageTile = browserPage.getByText('средний результат').locator('..')
+		await expect(averageTile).toContainText('—')
+		await expect(averageTile).toContainText('без попыток на проверке')
+
+		await tile.click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
+		await expect(select).toHaveText('Проверка: все')
+		await expect(gradedRow).toBeVisible()
+	})
+
+	test('the review filter lives in the address, resets with «Сбросить» and has its own empty states', async ({
+		adminPage: browserPage,
+	}) => {
+		await browserPage.goto('/admin/attempts?review=pending')
+		await expect(browserPage.getByRole('combobox', { name: 'Проверка' })).toHaveText('На проверке')
+		await expect(browserPage.getByRole('heading', { name: 'Нет попыток на проверке' })).toBeVisible()
+		await expect(
+			browserPage.getByText('Здесь появятся сданные попытки, в которых есть ответы, ожидающие проверки учителем.')
+		).toBeVisible()
+
+		await browserPage.goto('/admin/attempts?review=graded')
+		await expect(browserPage.getByRole('heading', { name: 'Нет проверенных попыток' })).toBeVisible()
+
+		await browserPage.goto('/admin/attempts?review=graded&topic=e2e-no-such-topic')
+		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toBeVisible()
+
+		await browserPage.getByRole('button', { name: 'Сбросить' }).click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
+		await expect(browserPage.getByRole('combobox', { name: 'Проверка' })).toHaveText('Проверка: все')
+		await expect(browserPage.getByRole('button', { name: '0 на проверке' })).toBeDisabled()
 	})
 })

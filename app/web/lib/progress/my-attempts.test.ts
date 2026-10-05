@@ -28,6 +28,9 @@ function summary(index: number): TestAttemptSummary {
 		totalPoints: 10,
 		scorePercentage: (index % 10) * 10,
 		passed: index % 2 === 0,
+		reviewStatus: 'none',
+		autoEarnedPoints: index % 10,
+		autoTotalPoints: 10,
 		submittedAt: new Date(Date.UTC(2026, 9, 1, 0, index)).toISOString(),
 	}
 }

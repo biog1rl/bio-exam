@@ -10,6 +10,7 @@ describe('parseAttemptsUrl', () => {
 			topic: 'cell',
 			student: '00000000-0000-4000-8000-000000000042',
 			status: 'all',
+			review: 'all',
 		})
 	})
 
@@ -18,6 +19,7 @@ describe('parseAttemptsUrl', () => {
 			topic: 'cell',
 			student: null,
 			status: 'active',
+			review: 'all',
 		})
 	})
 
@@ -30,7 +32,19 @@ describe('parseAttemptsUrl', () => {
 			topic: null,
 			student: null,
 			status: 'active',
+			review: 'all',
 		})
+	})
+
+	it.each([
+		['review=pending', 'pending'],
+		['review=graded', 'graded'],
+		['review=all', 'all'],
+		['review=none', 'all'],
+		['review=', 'all'],
+		['', 'all'],
+	])('review из «%s» читается как %s', (search, expected) => {
+		expect(parseAttemptsUrl(new URLSearchParams(search)).review).toBe(expected)
 	})
 })
 
@@ -46,8 +60,22 @@ describe('attemptsUrl', () => {
 		)
 	})
 
+	it.each([
+		[{ review: 'pending' as const }, '/admin/attempts?review=pending'],
+		[{ review: 'graded' as const }, '/admin/attempts?review=graded'],
+		[{ review: 'all' as const }, '/admin/attempts'],
+		[{ topic: 'cell', review: 'pending' as const }, '/admin/attempts?topic=cell&review=pending'],
+	])('review в ссылке: %j', (filters, expected) => {
+		expect(attemptsUrl(filters)).toBe(expected)
+	})
+
 	it('разбор обратен сборке', () => {
-		const filters = { topic: 'клетка', student: '00000000-0000-4000-8000-000000000042', status: 'inactive' as const }
+		const filters = {
+			topic: 'клетка',
+			student: '00000000-0000-4000-8000-000000000042',
+			status: 'inactive' as const,
+			review: 'graded' as const,
+		}
 		const url = attemptsUrl(filters)
 		expect(parseAttemptsUrl(new URL(url, 'http://x').searchParams)).toEqual(filters)
 	})
