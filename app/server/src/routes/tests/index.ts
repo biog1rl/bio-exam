@@ -72,14 +72,14 @@ import {
 } from '../../services/access-policy/index.js'
 import { uploadImage } from '../../services/assets/index.js'
 import {
-	buildTestArchive,
-	buildTopicArchive,
 	createQuestion,
 	createTestWithQuestions,
 	deleteQuestion,
 	deleteTest,
 	deleteTopic,
 	moveQuestion,
+	prepareTestArchive,
+	prepareTopicArchive,
 	questionMarkdownCandidates,
 	readAdminTest,
 	readQuestionTexts,
@@ -91,6 +91,7 @@ import {
 } from '../../services/question-content/index.js'
 import { readAdminAttemptView } from '../../services/scored-attempt/index.js'
 import { assignmentsRouter } from './assignments.js'
+import { sendArchive } from './export-response.js'
 
 const router = Router()
 
@@ -1483,11 +1484,8 @@ router.get('/:id/export', validateUUID('id'), sessionRequired(), async (req, res
 		if (!(await canReadTest(req, id))) return res.status(403).json({ error: 'Forbidden' })
 
 		const withAnswers = req.query.withAnswers === 'true' && (await canWriteTest(req, id))
-		const archive = await buildTestArchive({ testId: id, withAnswers })
-
-		res.setHeader('Content-Type', 'application/zip')
-		res.setHeader('Content-Disposition', `attachment; filename="${archive.filename}"`)
-		return res.send(archive.buffer)
+		const prepared = await prepareTestArchive({ testId: id, withAnswers })
+		return await sendArchive(req, res, prepared)
 	} catch (e) {
 		return next(e)
 	}
@@ -1500,16 +1498,13 @@ router.get('/topics/:slug/export', sessionRequired(), async (req, res, next) => 
 		if (!scope.all && scope.topicIds.length === 0) return res.status(403).json({ error: 'Forbidden' })
 
 		const withAnswers = req.query.withAnswers === 'true'
-		const archive = await buildTopicArchive({
+		const prepared = await prepareTopicArchive({
 			topicSlug: req.params.slug as string,
 			withAnswers,
 			scope,
 			answersAllowed: (topicId) => canWriteTopic(req, topicId),
 		})
-
-		res.setHeader('Content-Type', 'application/zip')
-		res.setHeader('Content-Disposition', `attachment; filename="${archive.filename}"`)
-		return res.send(archive.buffer)
+		return await sendArchive(req, res, prepared)
 	} catch (e) {
 		return next(e)
 	}

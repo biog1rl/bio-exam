@@ -11,6 +11,9 @@
  */
 import { type BrowserContext, type Locator, type Page } from '@playwright/test'
 
+import { readFile } from 'node:fs/promises'
+
+import { readZipEntries } from '../../app/server/src/test-support/zip'
 import { seedTest } from '../fixtures/accounts'
 import { expect, newSessionContext, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 
@@ -237,4 +240,27 @@ test.describe.serial('D5: short answer with several accepted variants', () => {
 		await expect(page!.getByLabel('Вариант 1', { exact: true })).toHaveValue('эксперимент')
 		await expect(page!.getByLabel('Вариант 2', { exact: true })).toHaveValue('моделирование')
 	})
+})
+
+test.describe.serial('D-34: test export', () => {
+	for (const withAnswers of [false, true]) {
+		test(`admin exports the test ${withAnswers ? 'with' : 'without'} answer keys`, async ({
+			adminPage: page,
+		}, testInfo) => {
+			const seeded = seedTest(projectKey(testInfo), 'authoring')
+			const questions = await savedQuestions(page, seeded.slug)
+
+			await page.goto(testPageUrl(seeded.slug))
+			await expect(page.getByRole('heading', { level: 1, name: seeded.title })).toBeVisible()
+			const downloaded = page.waitForEvent('download')
+			await page.getByRole('button', { name: withAnswers ? 'С ответами' : 'Экспорт', exact: true }).click()
+			const download = await downloaded
+
+			expect(download.suggestedFilename()).toBe(`${TOPIC_SLUG}-${seeded.slug}.zip`)
+			const names = [...readZipEntries(await readFile(await download.path())).keys()]
+			expect(names).toContain('settings.json')
+			for (const question of questions) expect(names).toContain(`questions/${question.id}/prompt.md`)
+			expect(names.includes('answer_keys.json')).toBe(withAnswers)
+		})
+	}
 })
