@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 
 import { isIsolatedEnv } from '../../config/test-database-url.js'
@@ -249,22 +250,39 @@ async function measurePrompts(
 	return result
 }
 
+function countingReceiver(): { writable: Writable; bytes(): number; peakBytes(): number } {
+	let total = 0
+	let peak = 0
+	const writable = new Writable({
+		write(chunk: Buffer, _encoding, callback) {
+			total += chunk.length
+			peak = Math.max(peak, chunk.length)
+			callback()
+		},
+	})
+	return { writable, bytes: () => total, peakBytes: () => peak }
+}
+
 async function measureZip(poolProbe: PoolProbe, storageProbe: StorageProbe, seed: BenchSeed) {
-	const { buildTopicArchive } = await import('../../services/question-content/index.js')
+	const { prepareTopicArchive, streamArchive } = await import('../../services/question-content/index.js')
 	storageProbe.setReadDelay(ZIP_READ_DELAY_MS)
-	const build = () =>
-		buildTopicArchive({
+	const build = async () => {
+		const prepared = await prepareTopicArchive({
 			topicSlug: seed.largestTopic.slug,
 			withAnswers: true,
 			scope: { all: true },
-			limitBytes: Number.MAX_SAFE_INTEGER,
 		})
+		const receiver = countingReceiver()
+		await streamArchive(prepared, receiver.writable)
+		return receiver
+	}
 
 	for (let index = 0; index < WARMUP_RUNS; index += 1) await build()
 	const durations: number[] = []
 	const peaks: number[] = []
 	const baselines: number[] = []
 	let archiveBytes = 0
+	let receiverPeakBytes = 0
 	let queries = 0
 	let reads = 0
 	let readBytes = 0
@@ -282,7 +300,8 @@ async function measureZip(poolProbe: PoolProbe, storageProbe: StorageProbe, seed
 		baselines.push(memory.baselineBytes)
 		const reading = storageProbe.snapshot()
 		if (reading.reads === 0) throw new Error('zip probe counted zero storage reads')
-		archiveBytes = archive.buffer.length
+		archiveBytes = archive.bytes()
+		receiverPeakBytes = Math.max(receiverPeakBytes, archive.peakBytes())
 		queries = poolProbe.snapshot().queries
 		reads = reading.reads
 		readBytes = reading.readBytes
@@ -300,7 +319,7 @@ async function measureZip(poolProbe: PoolProbe, storageProbe: StorageProbe, seed
 		readBytes,
 		maxConcurrentReads,
 		archiveBytes,
-		receiverPeakBytes: archiveBytes,
+		receiverPeakBytes,
 		arrayBuffersPeakDeltaBytes: { median: median(peaks), max: Math.max(...peaks), runs: peaks },
 		arrayBuffersBaselineBytes: baselines,
 		medianMs: round(median(durations)),

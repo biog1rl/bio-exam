@@ -390,7 +390,7 @@ describe('ZIP темы', () => {
 
 describe('buildZip', () => {
 	test('имя записи с .., пустым сегментом, ведущим / или повтором отклоняется до чтения хранилища', async () => {
-		const { buildZip } = await import('../storage/zip.js')
+		const { buildZip } = await import('../../test-support/export-reference.js')
 		for (const name of ['../evil.txt', 'a/../../evil.txt', '/etc/passwd', 'a//b.txt', 'a/./b.txt', 'a\\b.txt', '']) {
 			await assert.rejects(buildZip([{ name, buffer: Buffer.from('x') }]), /invalid entry name/)
 		}
@@ -404,7 +404,7 @@ describe('buildZip', () => {
 	})
 
 	test('отсутствующий ключ добавляется к missing и в missing-files.txt, записи идут в порядке списка', async () => {
-		const { buildZip } = await import('../storage/zip.js')
+		const { buildZip } = await import('../../test-support/export-reference.js')
 		const present = imageKey('present')
 		mem.put(present, 'data', 'image/webp')
 		const missing = ['topics/t/s/questions/q/prompt-0.md']

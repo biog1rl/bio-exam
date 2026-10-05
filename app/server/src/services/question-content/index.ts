@@ -15,10 +15,14 @@ export {
 export {
 	ARCHIVE_TOO_LARGE_MESSAGE,
 	ZIP_RESPONSE_LIMIT_BYTES,
-	assertArchiveFits,
+	archiveToBuffer,
 	buildTestArchive,
 	buildTopicArchive,
+	prepareTestArchive,
+	prepareTopicArchive,
+	streamArchive,
 	type ArchiveResult,
+	type PreparedArchive,
 } from './export.js'
 export { insertAt, lockTest, resequenceQuestions, type LockedTest, type Tx } from './order.js'
 export {

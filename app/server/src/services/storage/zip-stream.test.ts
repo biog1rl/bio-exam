@@ -4,12 +4,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { Writable } from 'node:stream'
 import { afterAll, afterEach, beforeAll, describe, test, vi } from 'vitest'
 
+import { buildZip } from '../../test-support/export-reference.js'
 import { memoryStorage } from '../../test-support/storage.js'
 import { readZipEntries } from '../../test-support/zip.js'
 import type { MemoryStorageAdapter } from './adapters/memory.js'
 import { StorageUnavailableError, type StorageReadResult } from './port.js'
 import {
-	buildZip,
 	createCeilingBuffer,
 	MISSING_FILES_ENTRY,
 	streamZip,
