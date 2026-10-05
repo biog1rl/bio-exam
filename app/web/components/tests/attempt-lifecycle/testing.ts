@@ -124,6 +124,9 @@ export function attemptViewOf(attemptId: string = ATTEMPT_ID): AttemptView {
 		totalPoints: 3,
 		scorePercentage: 33,
 		passed: false,
+		reviewStatus: 'none',
+		autoEarnedPoints: 1,
+		autoTotalPoints: 3,
 		results: [],
 	}
 }

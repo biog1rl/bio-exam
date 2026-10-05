@@ -5,6 +5,8 @@ import {
 	type AdminAttemptView,
 	type AttemptView,
 	type LegacyAttemptResultItem,
+	type OutcomeFact,
+	type ReviewStatus,
 	type ScoredQuestionFact,
 } from '@bio-exam/exam-core'
 
@@ -12,6 +14,7 @@ import { eq } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { testAttempts } from '../../db/schema.js'
+import { attemptResultColumns } from './columns.js'
 import { readLegacyFacts } from './legacy.js'
 import { buildAttemptView, type AttemptSummary, type AttemptViewer, type ReadableFact } from './view.js'
 
@@ -33,6 +36,7 @@ function parseResults(results: unknown, resultsVersion: number): ParsedResults {
 function readableFromStored(fact: ScoredQuestionFact): ReadableFact {
 	return {
 		questionId: fact.questionId,
+		template: fact.template,
 		points: fact.points,
 		earnedPoints: fact.earnedPoints,
 		isCorrect: fact.isCorrect,
@@ -60,6 +64,28 @@ export async function readFacts(row: {
 	return readLegacyFacts({ attemptId: row.attemptId, testId: row.testId, items: parsed.items })
 }
 
+export function readOutcomeFacts(row: { attemptId: string; results: unknown; resultsVersion: number }): OutcomeFact[] {
+	let parsed: ParsedResults
+	try {
+		parsed = parseResults(row.results, row.resultsVersion)
+	} catch {
+		throw new AttemptResultsShapeError(row.attemptId)
+	}
+	if (parsed.version === 2) {
+		return parsed.facts.map((fact) => ({
+			questionId: fact.questionId,
+			template: fact.template,
+			points: fact.points,
+			earnedPoints: fact.earnedPoints,
+		}))
+	}
+	return parsed.items.map((item) => ({
+		questionId: item.questionId,
+		points: item.points,
+		earnedPoints: item.earnedPoints,
+	}))
+}
+
 async function readAttemptRow(attemptId: string) {
 	const [row] = await db
 		.select({
@@ -68,10 +94,7 @@ async function readAttemptRow(attemptId: string) {
 			userId: testAttempts.userId,
 			answers: testAttempts.answers,
 			submittedAt: testAttempts.submittedAt,
-			earnedPoints: testAttempts.earnedPoints,
-			totalPoints: testAttempts.totalPoints,
-			scorePercentage: testAttempts.scorePercentage,
-			passed: testAttempts.passed,
+			...attemptResultColumns,
 			results: testAttempts.results,
 			resultsVersion: testAttempts.resultsVersion,
 			telemetry: testAttempts.telemetry,
@@ -88,10 +111,13 @@ function summaryOf(row: AttemptRow): AttemptSummary {
 	return {
 		id: row.id,
 		submittedAt: row.submittedAt.toISOString(),
+		reviewStatus: row.reviewStatus as ReviewStatus,
 		earnedPoints: row.earnedPoints,
 		totalPoints: row.totalPoints,
 		scorePercentage: row.scorePercentage,
 		passed: row.passed,
+		autoEarnedPoints: row.autoEarnedPoints,
+		autoTotalPoints: row.autoTotalPoints,
 	}
 }
 

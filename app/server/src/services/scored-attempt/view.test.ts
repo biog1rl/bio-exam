@@ -95,6 +95,9 @@ const ATTEMPT = {
 	totalPoints: 2,
 	scorePercentage: 50,
 	passed: false,
+	reviewStatus: 'none' as const,
+	autoEarnedPoints: 1,
+	autoTotalPoints: 2,
 }
 
 function factOf(row: Row): ReadableFact {
@@ -207,6 +210,46 @@ describe('buildAttemptView: 3 зрителя × 5 шаблонов × 3 исхо
 			assert.equal(question.keyVisible, false)
 			assert.equal(question.correctAnswer, null)
 		}
+	})
+})
+
+describe('buildAttemptView: открытый вопрос и состояние проверки', () => {
+	const open: ReadableFact = {
+		questionId: crypto.randomUUID(),
+		template: 'open',
+		points: 3,
+		earnedPoints: 0,
+		isCorrect: false,
+		userAnswer: 'Развёрнутый ответ',
+		explanationText: null,
+		key: null,
+		verdicts: null,
+		mistakes: null,
+	}
+
+	test.each(Object.entries(VIEWERS))('%s: открытый вопрос pending без ключа', (_name, viewer) => {
+		const question = viewOf(open, viewer)
+		assert.equal(question.status, 'pending')
+		assert.equal(question.keyVisible, false)
+		assert.equal(question.correctAnswer, null)
+		assert.equal(question.points, 3)
+		assert.equal(question.earnedPoints, 0)
+	})
+
+	test('факт версии 1 без template сохраняет прежний статус', () => {
+		const { template: _template, ...legacy } = { ...open, points: 1, earnedPoints: 1, isCorrect: true }
+		assert.equal(viewOf(legacy, VIEWERS.admin).status, 'correct')
+	})
+
+	test('вид несёт reviewStatus и автобаллы из сводки попытки', () => {
+		const view = buildAttemptView({
+			attempt: { ...ATTEMPT, reviewStatus: 'graded', autoEarnedPoints: 1, autoTotalPoints: 1 },
+			facts: [open],
+			viewer: VIEWERS.admin,
+		})
+		assert.equal(view.reviewStatus, 'graded')
+		assert.equal(view.autoEarnedPoints, 1)
+		assert.equal(view.autoTotalPoints, 1)
 	})
 })
 

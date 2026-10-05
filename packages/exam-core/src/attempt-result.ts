@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { QuestionVerdicts } from './adapters/types'
 import { ANSWER_VIOLATION_REASONS } from './answer-limits'
+import { REVIEW_STATUSES } from './outcome'
 import { MISTAKE_METRICS, QUESTION_UI_TEMPLATES, type QuestionUiTemplate } from './registry'
 import { TelemetryMapSchema } from './telemetry'
 
@@ -157,6 +158,9 @@ export const AttemptViewSchema = z.object({
 	totalPoints: z.number(),
 	scorePercentage: z.number(),
 	passed: z.boolean(),
+	reviewStatus: z.enum(REVIEW_STATUSES),
+	autoEarnedPoints: z.number(),
+	autoTotalPoints: z.number(),
 	results: z.array(AttemptQuestionViewSchema),
 })
 

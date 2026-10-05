@@ -333,9 +333,15 @@ test('AttemptQuestionViewSchema: отклоняет вид без status и с �
 	assert.equal(AttemptQuestionViewSchema.safeParse({ ...validQuestionView, keyVisible: undefined }).success, false)
 })
 
+const validReview = { reviewStatus: 'none', autoEarnedPoints: 2, autoTotalPoints: 2 }
+
 test('AttemptViewSchema: прежние поля submit плюс поля вида', () => {
-	const view = { ...validResult, results: [validQuestionView] }
+	const view = { ...validResult, ...validReview, results: [validQuestionView] }
 	assert.deepEqual(AttemptViewSchema.parse(view), view)
+	assert.equal(AttemptViewSchema.safeParse({ ...view, reviewStatus: undefined }).success, false)
+	assert.equal(AttemptViewSchema.safeParse({ ...view, reviewStatus: 'done' }).success, false)
+	assert.equal(AttemptViewSchema.safeParse({ ...view, autoEarnedPoints: undefined }).success, false)
+	assert.equal(AttemptViewSchema.safeParse({ ...view, autoTotalPoints: undefined }).success, false)
 	assert.equal(AttemptViewSchema.safeParse({ ...view, attemptId: 'x' }).success, false)
 	assert.equal(AttemptViewSchema.safeParse({ ...view, results: [validItem] }).success, false)
 })
@@ -343,6 +349,7 @@ test('AttemptViewSchema: прежние поля submit плюс поля вид
 test('AdminAttemptViewSchema: вид попытки плюс testId, userId, answers и telemetry', () => {
 	const view = {
 		...validResult,
+		...validReview,
 		results: [validQuestionView],
 		testId: ATTEMPT,
 		userId: Q1,

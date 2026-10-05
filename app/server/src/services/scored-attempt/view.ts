@@ -5,11 +5,14 @@ import {
 	type AnswerValue,
 	type AttemptQuestionView,
 	type AttemptView,
+	type QuestionUiTemplate,
 	type QuestionVerdicts,
+	type ReviewStatus,
 } from '@bio-exam/exam-core'
 
 export type ReadableFact = {
 	questionId: string
+	template?: QuestionUiTemplate
 	points: number
 	earnedPoints: number
 	isCorrect: boolean
@@ -25,10 +28,13 @@ export type AttemptViewer = { kind: 'admin' } | { kind: 'student'; showCorrectAn
 export type AttemptSummary = {
 	id: string
 	submittedAt: string
-	earnedPoints: number
+	reviewStatus: ReviewStatus
+	earnedPoints: number | null
 	totalPoints: number
-	scorePercentage: number
-	passed: boolean
+	scorePercentage: number | null
+	passed: boolean | null
+	autoEarnedPoints: number
+	autoTotalPoints: number
 }
 
 type KeyDisclosure = Pick<AttemptQuestionView, 'keyVisible' | 'correctAnswer' | 'verdicts' | 'mistakes'>
@@ -76,10 +82,13 @@ export function buildAttemptView(params: {
 	return AttemptViewSchema.parse({
 		attemptId: attempt.id,
 		submittedAt: attempt.submittedAt,
+		reviewStatus: attempt.reviewStatus,
 		earnedPoints: attempt.earnedPoints,
 		totalPoints: attempt.totalPoints,
 		scorePercentage: attempt.scorePercentage,
 		passed: attempt.passed,
+		autoEarnedPoints: attempt.autoEarnedPoints,
+		autoTotalPoints: attempt.autoTotalPoints,
 		results: facts.map((fact) => buildQuestionView(fact, viewer)),
 	})
 }
