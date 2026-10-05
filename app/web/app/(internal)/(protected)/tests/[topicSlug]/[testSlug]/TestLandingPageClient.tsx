@@ -13,6 +13,8 @@ import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { TestMissingState } from '@/components/tests/TestMissingState'
+import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
@@ -23,6 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { ChartDataPoint } from '@/lib/tests/api'
 import { fetchChartData, fetchChartDefaultRange, fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
+import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
 
@@ -211,13 +214,25 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{allRows.map((row, idx) => (
-									<TableRow key={row.id}>
-										<TableCell>{total - idx}</TableCell>
-										<TableCell>{format(new Date(row.submittedAt), 'dd.MM.yyyy', { locale: ru })}</TableCell>
-										<TableCell>{formatPercent(row.scorePercentage)}</TableCell>
-									</TableRow>
-								))}
+								{allRows.map((row, idx) => {
+									const view = attemptResultView(row)
+									return (
+										<TableRow key={row.id}>
+											<TableCell>{total - idx}</TableCell>
+											<TableCell>{format(new Date(row.submittedAt), 'dd.MM.yyyy', { locale: ru })}</TableCell>
+											<TableCell>
+												{view.kind === 'pending' ? (
+													<AttemptReviewLine view={view} audience="student" />
+												) : (
+													<div className="flex flex-col items-start gap-1">
+														<span>{formatPercent(view.percent)}</span>
+														{view.teacherChecked ? <TeacherCheckedMark /> : null}
+													</div>
+												)}
+											</TableCell>
+										</TableRow>
+									)
+								})}
 							</TableBody>
 						</Table>
 					)}

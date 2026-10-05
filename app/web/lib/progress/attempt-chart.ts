@@ -73,10 +73,8 @@ export function buildTopicChartConfig(colors: TopicColor[]): Record<string, { la
 	return config
 }
 
-export type AttemptBarRow = {
-	kind: 'attempt' | 'gap'
+type AttemptBarRowShared = {
 	key: string
-	percent: number | null
 	testTitle: string
 	topicTitle: string
 	topicKey: string
@@ -86,6 +84,10 @@ export type AttemptBarRow = {
 	totalPoints: number
 	tick: string
 }
+
+export type AttemptBarRow =
+	| (AttemptBarRowShared & { kind: 'attempt'; percent: number })
+	| (AttemptBarRowShared & { kind: 'gap'; percent: null })
 
 export type ChartMode = 'range' | 'day'
 

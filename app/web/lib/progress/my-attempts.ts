@@ -1,3 +1,4 @@
+import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
 
 import type { ProgressAttempt } from './attempt-chart'
@@ -11,7 +12,9 @@ export type FetchAttemptsPage = (
 
 type ProgressTest = Pick<PublicTestListItem, 'id' | 'slug' | 'title' | 'topicSlug' | 'topicTitle'>
 
-function toProgressAttempt(test: ProgressTest, row: TestAttemptSummary): ProgressAttempt {
+function toProgressAttempt(test: ProgressTest, row: TestAttemptSummary): ProgressAttempt | null {
+	const view = attemptResultView(row)
+	if (view.kind === 'pending') return null
 	return {
 		attemptId: row.id,
 		testId: test.id,
@@ -20,20 +23,25 @@ function toProgressAttempt(test: ProgressTest, row: TestAttemptSummary): Progres
 		topicSlug: test.topicSlug,
 		topicTitle: test.topicTitle,
 		submittedAt: row.submittedAt,
-		earnedPoints: row.earnedPoints,
-		totalPoints: row.totalPoints,
-		scorePercentage: row.scorePercentage,
-		passed: row.passed,
+		earnedPoints: view.points.earned,
+		totalPoints: view.points.total,
+		scorePercentage: view.percent,
+		passed: view.passed,
 	}
 }
 
 async function loadTestAttempts(test: ProgressTest, fetchPage: FetchAttemptsPage): Promise<ProgressAttempt[]> {
 	const collected: ProgressAttempt[] = []
+	let fetched = 0
 	for (;;) {
-		const page = await fetchPage(test.id, { offset: collected.length, limit: MY_ATTEMPTS_PAGE })
+		const page = await fetchPage(test.id, { offset: fetched, limit: MY_ATTEMPTS_PAGE })
 		if (page.rows.length === 0) break
-		for (const row of page.rows) collected.push(toProgressAttempt(test, row))
-		if (collected.length >= page.total) break
+		for (const row of page.rows) {
+			const attempt = toProgressAttempt(test, row)
+			if (attempt) collected.push(attempt)
+		}
+		fetched += page.rows.length
+		if (fetched >= page.total) break
 	}
 	return collected
 }

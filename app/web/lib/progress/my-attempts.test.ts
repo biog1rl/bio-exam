@@ -108,6 +108,55 @@ describe('loadMyProgressAttempts', () => {
 		])
 	})
 
+	test.each([
+		{ reviewStatus: 'none', kept: true },
+		{ reviewStatus: 'graded', kept: true },
+		{ reviewStatus: 'pending', kept: false },
+	] as const)('попытка со статусом $reviewStatus: попадает в график — $kept', async ({ reviewStatus, kept }) => {
+		const row: TestAttemptSummary =
+			reviewStatus === 'pending'
+				? {
+						...summary(4),
+						reviewStatus,
+						scorePercentage: null as never,
+						passed: null as never,
+						earnedPoints: null as never,
+					}
+				: { ...summary(4), reviewStatus }
+		const result = await loadMyProgressAttempts([testItem()], async () => ({ rows: [row], total: 1 }))
+		assert.deepEqual(
+			result.map((item) => item.attemptId),
+			kept ? [row.id] : []
+		)
+	})
+
+	test('попытки на проверке не сдвигают смещение страниц и не зацикливают загрузку', async () => {
+		const calls: { offset?: number; limit?: number }[] = []
+		const rows = Array.from({ length: 150 }, (_, index) =>
+			index % 2 === 0
+				? ({
+						...summary(index),
+						reviewStatus: 'pending',
+						scorePercentage: null,
+						passed: null,
+						earnedPoints: null,
+					} as unknown as TestAttemptSummary)
+				: summary(index)
+		)
+		const fetchPage: FetchAttemptsPage = async (_testId, options) => {
+			calls.push({ offset: options?.offset, limit: options?.limit })
+			const offset = options?.offset ?? 0
+			return { rows: rows.slice(offset, offset + (options?.limit ?? 5)), total: rows.length }
+		}
+		const result = await loadMyProgressAttempts([testItem()], fetchPage)
+		assert.deepEqual(calls, [
+			{ offset: 0, limit: 100 },
+			{ offset: 100, limit: 100 },
+		])
+		assert.equal(result.length, 75)
+		assert.ok(result.every((item) => Number.isFinite(item.scorePercentage)))
+	})
+
 	test('ошибка запроса по одному тесту отклоняет промис', async () => {
 		const failure = new Error('network down')
 		const fetchPage: FetchAttemptsPage = async (testId) => {

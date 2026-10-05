@@ -10,9 +10,12 @@ import { toast } from 'sonner'
 import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
+import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
 import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
+import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { AttemptQuestionView, PublicTestDetail, PublicTestQuestion, TestAttemptSummary } from '@/lib/tests/types'
 import { cn } from '@/lib/utils'
@@ -147,6 +150,7 @@ function AttemptRunner({
 	const answers = snapshot.answers
 	const currentQuestionId = snapshot.currentQuestionId
 	const submitResult = snapshot.result
+	const resultView = submitResult ? attemptResultView(submitResult) : null
 	const secondsLeft = snapshot.secondsLeft
 	const submitting = snapshot.phase === 'submitting' || snapshot.phase === 'autoSubmitting'
 	const interactionDisabled = snapshot.interactionDisabled
@@ -272,13 +276,27 @@ function AttemptRunner({
 				</div>
 
 				{submitResult ? (
-					<section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+					<section
+						className={cn(
+							'rounded-lg border p-4',
+							resultView?.kind === 'pending' ? 'border-border bg-secondary' : 'border-emerald-200 bg-emerald-50'
+						)}
+					>
 						<h2 className="mb-2 text-lg font-semibold">Результат</h2>
-						<p>
-							Баллы: {submitResult.earnedPoints} / {submitResult.totalPoints}
-						</p>
-						<p>Процент: {formatPercent(submitResult.scorePercentage)}</p>
-						<p>{submitResult.passed ? 'Статус: пройден' : 'Статус: не пройден'}</p>
+						{resultView?.kind === 'pending' ? (
+							<>
+								<AttemptReviewLine view={resultView} audience="student" />
+								<p className="mt-2 text-sm text-muted-foreground">Процент и итог появятся после проверки учителем.</p>
+							</>
+						) : resultView ? (
+							<>
+								<p>
+									Баллы: {resultView.points.earned} / {resultView.points.total}
+								</p>
+								<p>Процент: {formatPercent(resultView.percent)}</p>
+								<p>{resultView.passed ? 'Статус: пройден' : 'Статус: не пройден'}</p>
+							</>
+						) : null}
 						<div className="mt-3 flex flex-wrap gap-2">
 							<Button type="button" variant="outline" onClick={handleRetake}>
 								Пройти ещё раз
@@ -357,7 +375,9 @@ function AttemptRunner({
 									<div className={card.className}>
 										<p>{card.label}</p>
 										<p className="mt-0.5 text-xs text-muted-foreground">
-											{questionResult.earnedPoints} / {questionResult.points} баллов
+											{questionResult.status === 'pending'
+												? `до ${questionResult.points} балл.`
+												: `${questionResult.earnedPoints} / ${questionResult.points} баллов`}
 										</p>
 										<QuestionAnswerReview
 											question={question}
@@ -401,12 +421,29 @@ function AttemptRunner({
 							<AccordionTrigger className="cursor-pointer">Мои попытки</AccordionTrigger>
 							<AccordionContent>
 								<ul className="space-y-2 text-sm">
-									{attempts.map((attempt) => (
-										<li key={attempt.id} className="rounded border bg-muted/30 p-2">
-											{formatDate(attempt.submittedAt)} / {attempt.earnedPoints}/{attempt.totalPoints} /{' '}
-											{formatPercent(attempt.scorePercentage)} / {attempt.passed ? 'пройден' : 'не пройден'}
-										</li>
-									))}
+									{attempts.map((attempt) => {
+										const view = attemptResultView(attempt)
+										return (
+											<li key={attempt.id} className="rounded border bg-muted/30 p-2">
+												{view.kind === 'pending' ? (
+													<>
+														{formatDate(attempt.submittedAt)} / <AttemptReviewLine view={view} audience="student" />
+													</>
+												) : (
+													<>
+														{formatDate(attempt.submittedAt)} / {view.points.earned}/{view.points.total} /{' '}
+														{formatPercent(view.percent)} / {view.passed ? 'пройден' : 'не пройден'}
+														{view.teacherChecked ? (
+															<>
+																{' / '}
+																<TeacherCheckedMark />
+															</>
+														) : null}
+													</>
+												)}
+											</li>
+										)
+									})}
 								</ul>
 							</AccordionContent>
 						</AccordionItem>

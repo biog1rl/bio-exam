@@ -93,9 +93,11 @@ function BarLabelContent({ rows, ...props }: LabelProps & { rows: AttemptBarRow[
 	)
 }
 
-function rowOf(payload: unknown): AttemptBarRow | null {
+type AttemptRow = Extract<AttemptBarRow, { kind: 'attempt' }>
+
+function rowOf(payload: unknown): AttemptRow | null {
 	if (typeof payload !== 'object' || payload === null) return null
-	return (payload as AttemptBarRow).kind === 'attempt' ? (payload as AttemptBarRow) : null
+	return (payload as AttemptBarRow).kind === 'attempt' ? (payload as AttemptRow) : null
 }
 
 export function AttemptBarChart({ attempts, colors, mode }: Props) {
@@ -174,7 +176,7 @@ export function AttemptBarChart({ attempts, colors, mode }: Props) {
 												<span className="size-2.5 shrink-0 rounded-[0.125rem]" style={{ backgroundColor: row.fill }} />
 												<span className="text-muted-foreground">{row.topicTitle}</span>
 												<span className="ml-auto font-mono font-medium text-foreground tabular-nums">
-													{formatPercent(row.percent ?? 0)} · {row.earnedPoints}/{row.totalPoints}
+													{formatPercent(row.percent)} · {row.earnedPoints}/{row.totalPoints}
 												</span>
 											</div>
 										)
