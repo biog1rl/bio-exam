@@ -48,6 +48,8 @@ const FULL_CONTROLS: ControlList = {
 
 const TRACE_TEXT = 'trace text'
 const TRACE_PROMPT = 'trace text'
+const PLAIN_WORD = 'обычный'
+const BOLD_WORD = 'жирный'
 
 type DraftPayload = { question?: { promptText?: string }; promptText?: string }
 
@@ -180,5 +182,28 @@ test.describe('редактор формулировки: пресет full', ()
 			const deleted = await page.request.delete(`/api/tests/${testId}/question-drafts/${draftId}`)
 			expect([200, 404], `cleanup: delete draft ${draftId}`).toContain(deleted.status())
 		}
+	})
+
+	test('состояние кнопки форматирования следует выделению', async ({ adminPage: page }, testInfo) => {
+		await openEditPage(page, seedTest(projectKey(testInfo), 'editor').slug)
+		const editor = promptEditor(page)
+		const bold = editorFrame(page).locator('div.sticky').first().getByRole('button', { name: 'Bold', exact: true })
+		await editor.click()
+		await page.keyboard.press('ControlOrMeta+a')
+		await page.keyboard.press('Backspace')
+		await page.keyboard.type(`${PLAIN_WORD} ${BOLD_WORD}`)
+		await expect(editor).toContainText(`${PLAIN_WORD} ${BOLD_WORD}`)
+		for (let index = 0; index < BOLD_WORD.length; index++) await page.keyboard.press('Shift+ArrowLeft')
+		await expect(bold).toHaveAttribute('aria-pressed', 'false')
+		await bold.click()
+		const boldText = editor.locator('strong, b').filter({ hasText: BOLD_WORD })
+		await expect(boldText).toHaveCount(1)
+		await expect(bold).toHaveAttribute('aria-pressed', 'true')
+		await editor.getByText(PLAIN_WORD, { exact: true }).click()
+		await expect(bold).toHaveAttribute('aria-pressed', 'false')
+		await boldText.click()
+		await expect(bold).toHaveAttribute('aria-pressed', 'true')
+		await editor.getByText(PLAIN_WORD, { exact: true }).click()
+		await expect(bold).toHaveAttribute('aria-pressed', 'false')
 	})
 })

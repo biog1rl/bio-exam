@@ -9,7 +9,7 @@
  */
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import type { LexicalCommand, LexicalEditor, RangeSelection } from 'lexical'
 import {
@@ -23,9 +23,10 @@ import {
 import { MicIcon } from 'lucide-react'
 
 import { useReport } from '@/components/editor/editor-hooks/use-report'
-import { CAN_USE_DOM } from '@/components/editor/shared/can-use-dom'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+
+import { createBrowserSpeechRecognition, createSpeechSession, speechRecognitionSupported } from './speech-session'
 
 export const SPEECH_TO_TEXT_COMMAND: LexicalCommand<boolean> = createCommand('SPEECH_TO_TEXT_COMMAND')
 
@@ -41,68 +42,66 @@ const VOICE_COMMANDS: Readonly<Record<string, (arg0: { editor: LexicalEditor; se
 	},
 }
 
-export const SUPPORT_SPEECH_RECOGNITION: boolean =
-	CAN_USE_DOM && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+function insertTranscript(editor: LexicalEditor, transcript: string): void {
+	editor.update(() => {
+		const selection = $getSelection()
 
-function SpeechToTextPluginImpl() {
+		if ($isRangeSelection(selection)) {
+			const command = VOICE_COMMANDS[transcript.toLowerCase().trim()]
+
+			if (command) {
+				command({
+					editor,
+					selection,
+				})
+			} else if (transcript.match(/\s*\n\s*/)) {
+				selection.insertParagraph()
+			} else {
+				selection.insertText(transcript)
+			}
+		}
+	})
+}
+
+function subscribeToSupport(): () => void {
+	return () => {}
+}
+
+function supportedOnServer(): boolean {
+	return false
+}
+
+function SpeechToTextControl() {
 	const [editor] = useLexicalComposerContext()
 	const [isEnabled, setIsEnabled] = useState<boolean>(false)
 	const [isSpeechToText, setIsSpeechToText] = useState<boolean>(false)
-	const SpeechRecognition =
-		// @ts-expect-error missing type
-		CAN_USE_DOM && (window.SpeechRecognition || window.webkitSpeechRecognition)
-	const recognition = useRef<typeof SpeechRecognition | null>(null)
 	const report = useReport()
 
 	useEffect(() => {
-		if (isEnabled && recognition.current === null) {
-			recognition.current = new SpeechRecognition()
-			recognition.current.continuous = true
-			recognition.current.interimResults = true
-			recognition.current.addEventListener('result', (event: typeof SpeechRecognition) => {
-				const resultItem = event.results.item(event.resultIndex)
-				const { transcript } = resultItem.item(0)
+		if (!isEnabled) return
+
+		let active = true
+		const session = createSpeechSession({
+			create: createBrowserSpeechRecognition,
+			onText: (transcript, isFinal) => {
+				if (!active) return
 				report(transcript)
-
-				if (!resultItem.isFinal) {
-					return
-				}
-
-				editor.update(() => {
-					const selection = $getSelection()
-
-					if ($isRangeSelection(selection)) {
-						const command = VOICE_COMMANDS[transcript.toLowerCase().trim()]
-
-						if (command) {
-							command({
-								editor,
-								selection,
-							})
-						} else if (transcript.match(/\s*\n\s*/)) {
-							selection.insertParagraph()
-						} else {
-							selection.insertText(transcript)
-						}
-					}
-				})
-			})
-		}
-
-		if (recognition.current) {
-			if (isEnabled) {
-				recognition.current.start()
-			} else {
-				recognition.current.stop()
-			}
-		}
+				if (isFinal) insertTranscript(editor, transcript)
+			},
+			onStop: () => {
+				if (!active) return
+				setIsEnabled(false)
+				setIsSpeechToText(false)
+			},
+		})
+		session.start()
 
 		return () => {
-			if (recognition.current !== null) {
-				recognition.current.stop()
-			}
+			active = false
+			session.dispose()
 		}
-	}, [SpeechRecognition, editor, isEnabled, report])
+	}, [editor, isEnabled, report])
+
 	useEffect(() => {
 		return editor.registerCommand(
 			SPEECH_TO_TEXT_COMMAND,
@@ -136,4 +135,8 @@ function SpeechToTextPluginImpl() {
 	)
 }
 
-export const SpeechToTextPlugin = SUPPORT_SPEECH_RECOGNITION ? SpeechToTextPluginImpl : () => null
+export function SpeechToTextPlugin() {
+	const supported = useSyncExternalStore(subscribeToSupport, speechRecognitionSupported, supportedOnServer)
+
+	return supported ? <SpeechToTextControl /> : null
+}
