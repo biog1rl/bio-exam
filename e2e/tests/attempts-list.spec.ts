@@ -89,10 +89,13 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		)
 		await more.click()
 		await failed
-		await expect(browserPage.getByText('Не удалось загрузить попытки')).toBeVisible()
+		const failureToast = browserPage.getByText('Не удалось загрузить попытки')
+		await expect(failureToast).toBeVisible()
 		await expect(firstRow).toBeVisible()
 		await expect(more).toBeEnabled()
 
+		await browserPage.mouse.move(0, 0)
+		await expect(failureToast).toBeHidden({ timeout: 10_000 })
 		await more.click()
 		await expect(secondRow).toBeVisible()
 		await expect(firstRow).toBeVisible()

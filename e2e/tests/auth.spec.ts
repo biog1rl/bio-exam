@@ -87,7 +87,11 @@ async function openUserMenu(page: Page, testInfo: TestInfo, login: string): Prom
 		}).toPass({ timeout: 20_000 })
 	}
 	await expect(menuButton).toBeVisible()
-	await menuButton.click()
+	const logoutItem = page.getByRole('menuitem', { name: 'Выйти' })
+	await expect(async () => {
+		if (!(await logoutItem.isVisible())) await menuButton.click()
+		await expect(logoutItem).toBeVisible({ timeout: 2_000 })
+	}).toPass({ timeout: 20_000 })
 }
 
 async function logOut(page: Page, testInfo: TestInfo, login: string): Promise<void> {

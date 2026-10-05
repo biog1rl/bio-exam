@@ -13,7 +13,11 @@ async function openUserMenu(page: Page, testInfo: TestInfo): Promise<void> {
 		}).toPass({ timeout: 20_000 })
 	}
 	await expect(menuButton).toBeVisible()
-	await menuButton.click()
+	const siteMapItem = page.getByRole('menuitem', { name: 'Карта сайта' })
+	await expect(async () => {
+		if (!(await siteMapItem.isVisible())) await menuButton.click()
+		await expect(siteMapItem).toBeVisible({ timeout: 2_000 })
+	}).toPass({ timeout: 20_000 })
 }
 
 test.describe('site map', () => {
