@@ -1,25 +1,10 @@
 import type { AttemptSession, AttemptView, SaveAttemptDraftRequest, SubmitAttemptRequest } from '@bio-exam/exam-core'
 
-import { apiFetch } from '../api-fetch'
+import { request, RequestError, requestJson, type RequestOptions } from '@/lib/http/request'
+
 import type { PublicTestDetail, PublicTestListItem, PublicTestQuestion, TestAttemptSummary } from './types'
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-	const response = await apiFetch(url, {
-		cache: 'no-store',
-		...init,
-		headers: {
-			'Content-Type': 'application/json',
-			...(init?.headers ?? {}),
-		},
-	})
-
-	if (!response.ok) {
-		const text = await response.text()
-		throw new Error(text || `HTTP ${response.status}`)
-	}
-
-	return (await response.json()) as T
-}
+const segment = encodeURIComponent
 
 export class AttemptRequestError extends Error {
 	readonly status: number
@@ -35,55 +20,45 @@ export class AttemptRequestError extends Error {
 	}
 }
 
-function readAttemptErrorBody(text: string): { code: string | null; attemptId: string | null } {
-	try {
-		const body: unknown = JSON.parse(text)
-		if (!body || typeof body !== 'object' || Array.isArray(body)) return { code: null, attemptId: null }
-		const record = body as Record<string, unknown>
-		return {
-			code: typeof record.error === 'string' ? record.error : null,
-			attemptId: typeof record.attemptId === 'string' ? record.attemptId : null,
-		}
-	} catch {
-		return { code: null, attemptId: null }
+function readAttemptErrorBody(body: unknown): { code: string | null; attemptId: string | null } {
+	if (!body || typeof body !== 'object' || Array.isArray(body)) return { code: null, attemptId: null }
+	const record = body as Record<string, unknown>
+	return {
+		code: typeof record.error === 'string' ? record.error : null,
+		attemptId: typeof record.attemptId === 'string' ? record.attemptId : null,
 	}
 }
 
-async function fetchAttemptJson<T>(url: string, init?: RequestInit): Promise<T> {
-	const response = await apiFetch(url, {
-		cache: 'no-store',
-		...init,
-		headers: {
-			'Content-Type': 'application/json',
-			...(init?.headers ?? {}),
-		},
-	})
-
-	if (!response.ok) {
-		const text = await response.text().catch(() => '')
-		const { code, attemptId } = readAttemptErrorBody(text)
-		throw new AttemptRequestError(response.status, code, attemptId)
+async function fetchAttemptJson<T>(url: string, options: RequestOptions<T>): Promise<T> {
+	const outcome = await request<T>(url, options)
+	if (outcome.ok) return outcome.data
+	if (outcome.kind === 'http' && outcome.status !== undefined) {
+		const { code, attemptId } = readAttemptErrorBody(outcome.body)
+		throw new AttemptRequestError(outcome.status, code, attemptId)
 	}
-
-	return (await response.json()) as T
+	throw new RequestError(outcome)
 }
 
 export async function fetchPublicTestsList() {
-	return fetchJson<{ tests: PublicTestListItem[] }>('/api/tests/public/tests')
+	return requestJson<{ tests: PublicTestListItem[] }>('/api/tests/public/tests')
 }
 
 export async function fetchPublicTestBySlug(topicSlug: string, testSlug: string) {
-	return fetchJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(
-		`/api/tests/public/topics/${topicSlug}/tests/${testSlug}`
+	return requestJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(
+		`/api/tests/public/topics/${segment(topicSlug)}/tests/${segment(testSlug)}`
 	)
 }
 
 export async function fetchPublicTestById(testId: string) {
-	return fetchJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(`/api/tests/public/tests/${testId}`)
+	return requestJson<{ test: PublicTestDetail; questions: PublicTestQuestion[] }>(
+		`/api/tests/public/tests/${segment(testId)}`
+	)
 }
 
 export async function fetchPublicTestSummary(topicSlug: string, testSlug: string) {
-	return fetchJson<{ test: PublicTestDetail }>(`/api/tests/public/topics/${topicSlug}/tests/${testSlug}?view=summary`)
+	return requestJson<{ test: PublicTestDetail }>(
+		`/api/tests/public/topics/${segment(topicSlug)}/tests/${segment(testSlug)}?view=summary`
+	)
 }
 
 export async function fetchMyTestAttempts(testId: string, options?: { offset?: number; limit?: number }) {
@@ -91,8 +66,8 @@ export async function fetchMyTestAttempts(testId: string, options?: { offset?: n
 	if (options?.offset !== undefined) params.set('offset', String(options.offset))
 	if (options?.limit !== undefined) params.set('limit', String(options.limit))
 	const qs = params.toString()
-	return fetchJson<{ rows: TestAttemptSummary[]; total: number }>(
-		`/api/tests/public/tests/${testId}/attempts/me${qs ? `?${qs}` : ''}`
+	return requestJson<{ rows: TestAttemptSummary[]; total: number }>(
+		`/api/tests/public/tests/${segment(testId)}/attempts/me${qs ? `?${qs}` : ''}`
 	)
 }
 
@@ -108,25 +83,25 @@ export async function fetchChartData(testId: string, params: { from?: string; to
 	if (params.from) qs.set('from', params.from)
 	if (params.to) qs.set('to', params.to)
 	const query = qs.toString()
-	return fetchJson<{ data: ChartDataPoint[] }>(
-		`/api/tests/public/tests/${testId}/chart-data${query ? `?${query}` : ''}`
+	return requestJson<{ data: ChartDataPoint[] }>(
+		`/api/tests/public/tests/${segment(testId)}/chart-data${query ? `?${query}` : ''}`
 	)
 }
 
 export async function fetchChartDefaultRange(): Promise<{ value: string }> {
 	try {
-		return await fetchJson<{ value: string }>('/api/settings/chart-default-range')
+		return await requestJson<{ value: string }>('/api/settings/chart-default-range')
 	} catch {
 		return { value: 'month' }
 	}
 }
 
 export async function fetchTopicTests(topicSlug: string) {
-	return fetchJson<{ tests: PublicTestListItem[] }>(`/api/tests/public/topics/${topicSlug}/tests`)
+	return requestJson<{ tests: PublicTestListItem[] }>(`/api/tests/public/topics/${segment(topicSlug)}/tests`)
 }
 
 export async function startTestSession(testId: string): Promise<AttemptSession> {
-	return fetchAttemptJson<AttemptSession>(`/api/tests/public/tests/${testId}/start`, { method: 'POST' })
+	return fetchAttemptJson<AttemptSession>(`/api/tests/public/tests/${segment(testId)}/start`, { method: 'POST' })
 }
 
 export const KEEPALIVE_BODY_LIMIT_BYTES = 60_000
@@ -143,22 +118,19 @@ export async function saveAttemptDraft(
 	if (options.keepalive && new TextEncoder().encode(json).length > KEEPALIVE_BODY_LIMIT_BYTES) {
 		return { kind: 'too-large' }
 	}
-	try {
-		const response = await apiFetch(`/api/tests/public/tests/${testId}/sessions/${sessionId}/answers`, {
-			method: 'PATCH',
-			headers: { 'Content-Type': 'application/json' },
-			body: json,
-			keepalive: options.keepalive,
-		})
-		return { kind: 'response', status: response.status }
-	} catch {
-		return { kind: 'network' }
-	}
+	const outcome = await request(`/api/tests/public/tests/${segment(testId)}/sessions/${segment(sessionId)}/answers`, {
+		method: 'PATCH',
+		json: body,
+		keepalive: options.keepalive,
+	})
+	if (outcome.ok) return { kind: 'response', status: outcome.status }
+	if (outcome.status !== undefined) return { kind: 'response', status: outcome.status }
+	return { kind: 'network' }
 }
 
-export async function submitPublicTestAnswers(testId: string, request: SubmitAttemptRequest): Promise<AttemptView> {
-	return fetchAttemptJson<AttemptView>(`/api/tests/public/tests/${testId}/submit`, {
+export async function submitPublicTestAnswers(testId: string, body: SubmitAttemptRequest): Promise<AttemptView> {
+	return fetchAttemptJson<AttemptView>(`/api/tests/public/tests/${segment(testId)}/submit`, {
 		method: 'POST',
-		body: JSON.stringify(request),
+		json: body,
 	})
 }

@@ -26,7 +26,8 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
-import { apiFetch } from '@/lib/api-fetch'
+import { request } from '@/lib/http/request'
+import { optionalAdminData } from '@/lib/tests/admin-optional'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
@@ -122,10 +123,7 @@ const teacherChartConfig = {
 } satisfies ChartConfig
 
 async function fetchAdminJson<T>(url: string): Promise<T | null> {
-	const response = await apiFetch(url, { cache: 'no-store' })
-	if (response.status === 401 || response.status === 403) return null
-	if (!response.ok) throw new Error(`HTTP ${response.status}`)
-	return (await response.json()) as T
+	return optionalAdminData(await request<T>(url))
 }
 
 function formatDate(value?: string) {
@@ -184,7 +182,7 @@ export default function DashboardClient() {
 	const featuredTests = tests.slice(0, 4)
 
 	const attemptsQuery = useSWR(
-		!canReadTests && tests.length ? ['dashboard-attempts', tests.map((test) => test.id).join(',')] : null,
+		!canReadTests && tests.length ? `dashboard-attempts:${tests.map((test) => test.id).join(',')}` : null,
 		() =>
 			Promise.all(
 				tests.slice(0, 8).map(async (test): Promise<AttemptBundle> => {

@@ -12,10 +12,8 @@ import { TestsPageHero } from './_components/TestsPageHero'
 import { TestsPageEmpty, TestsPageError, TestsPageLoading } from './_components/TestsPageState'
 import { getPublicTestsStats, groupPublicTestsByTopic } from './_components/tests-page-utils'
 
-const fetcher = async () => fetchPublicTestsList()
-
 export default function TestsPageClient() {
-	const { data, isLoading, error } = useSWR('public-tests-list', fetcher)
+	const { data, isLoading, error } = useSWR('public-tests-list', fetchPublicTestsList)
 	const tests = useMemo(() => data?.tests ?? [], [data?.tests])
 	const groups = useMemo(() => groupPublicTestsByTopic(tests), [tests])
 	const stats = useMemo(() => getPublicTestsStats(groups), [groups])

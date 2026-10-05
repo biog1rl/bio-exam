@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { inviteAcceptErrorText, inviteValidationOutcome, loginAfterAcceptText } from '@/lib/auth/invite-flow'
 import { LOGIN_PATTERN, LOGIN_HINT, normalizeLogin, validateLogin } from '@/lib/auth/validators'
 
 export default function InviteClient({ token }: { token: string }) {
@@ -21,16 +22,13 @@ export default function InviteClient({ token }: { token: string }) {
 	useEffect(() => {
 		;(async () => {
 			setLoading(true)
-			const r = await fetch(`/api/auth/invites/validate/${token}`)
-			if (r.ok) {
-				const j = await r.json()
-				setFirstName(j.firstName || '')
-				setLastName(j.lastName || '')
-				setLogin(j.login || '')
-				setValid(true)
-			} else {
-				setValid(false)
-			}
+			const r = await fetch(`/api/auth/invites/validate/${encodeURIComponent(token)}`)
+			const body: unknown = r.ok ? await r.json().catch(() => null) : null
+			const outcome = inviteValidationOutcome(r.status, body)
+			setFirstName(outcome.firstName)
+			setLastName(outcome.lastName)
+			setLogin(outcome.login)
+			setValid(outcome.valid)
 			setLoading(false)
 		})()
 	}, [token])
@@ -56,44 +54,26 @@ export default function InviteClient({ token }: { token: string }) {
 		})
 
 		if (!r.ok) {
-			let msg = 'Ошибка. Попробуйте позже.'
-			try {
-				const j = await r.json()
-				if (j?.details?.fieldErrors) {
-					const fe = j.details.fieldErrors as Record<string, string[] | undefined>
-					const first = fe.login?.[0] || fe.password?.[0] || fe.token?.[0] || j.error
-					if (first) msg = first
-				} else if (j?.error) {
-					msg = j.error
-				}
-			} catch {}
-			setMsg(msg)
+			setMsg(inviteAcceptErrorText(await r.json().catch(() => null)))
 			return
 		}
 
-		if (r.ok) {
-			setMsg('Готово! Учётная запись активирована. Выполняется вход...')
+		setMsg('Готово! Учётная запись активирована. Выполняется вход...')
 
-			// Автоматическая авторизация после успешной регистрации
-			const loginResponse = await fetch('/api/auth/login', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ username: loginNorm, password: pass }),
-			})
+		const loginStatus = await fetch('/api/auth/login', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ username: loginNorm, password: pass }),
+		}).then(
+			(response) => response.status,
+			() => 0
+		)
 
-			if (loginResponse.ok) {
-				// Перенаправление на главную страницу после успешного входа
-				window.location.href = '/dashboard'
-			} else {
-				setMsg('Готово! Учётная запись активирована. Теперь вы можете войти по логину.')
-			}
-		} else if (r.status === 404) {
-			setMsg('Ссылка недействительна или уже использована.')
-		} else if (r.status === 409) {
-			setMsg('Такой логин уже занят, попробуйте другой.')
+		const loginText = loginAfterAcceptText(loginStatus)
+		if (loginText === null) {
+			window.location.href = '/dashboard'
 		} else {
-			const j = await r.json().catch(() => ({}) as Record<string, string>)
-			setMsg(j.error || 'Ошибка. Попробуйте позже.')
+			setMsg(loginText)
 		}
 	}
 

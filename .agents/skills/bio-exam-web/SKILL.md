@@ -9,8 +9,14 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 
 ## Запросы и сессия
 
-- Запрос к API из клиента идёт через `apiFetch` (`app/web/lib/session/client.ts`, реэкспорт в `app/web/lib/api-fetch.ts`): ответ 401 → один общий `refreshOnce()` → один повтор запроса. Отказ refresh или повторный 401 уводят на `/login` и бросают `AuthExpiredError`; недоступный refresh возвращает исходный 401 без выхода.
+- Запрос к API из клиента идёт через модуль запросов `app/web/lib/http/request.ts`: `request` возвращает исход `{ ok: true, status, data }` или отказ с `kind` (`auth`, `http`, `malformed`, `network`, `aborted`), `requestJson` бросает `RequestError`, `requestBlob` скачивает файл. `parse` проверяет конверт ответа 2xx, несовпадение даёт `malformed`.
+- SWR: ключ — строка из `*Keys` доменного слоя, фетчер — `swrFetcher` или `fetcherWith(parse)` из `app/web/lib/http/swr.ts`, объявленный на уровне модуля. Глобального `SWRConfig` нет.
+- Тексты отказов: `failureMessage`, `loadErrorView`, `readApiError` в `app/web/lib/http/errors.ts`. Блок ошибки загрузки на экране: `app/web/components/feedback/LoadErrorAlert.tsx`.
+- Доменные слои запросов: `app/web/lib/users/api.ts`, `app/web/lib/groups/api.ts`, `app/web/lib/tests/admin-api.ts`, `app/web/lib/tests/api.ts`, `app/web/lib/rbac/api.ts`, `app/web/lib/settings/api.ts`, `app/web/lib/assets/api.ts`. Сегменты пути кодируются `encodeURIComponent`.
+- Цепочкой 401 владеет `apiFetch` (`app/web/lib/session/client.ts`): ответ 401 → один общий `refreshOnce()` → один повтор запроса. Отказ refresh или повторный 401 уводят на `/login` и бросают `AuthExpiredError`; недоступный refresh возвращает исходный 401 без выхода. `apiFetch` импортируют только модуль сессии `app/web/lib/session` и модуль запросов `app/web/lib/http`.
 - Параллельные 401 ждут один и тот же refresh, второй не запускается.
+- Серверные страницы читают API через `serverRequest` и `requireServerData` (`app/web/lib/session/server.ts`).
+- Свой `fetch` с другим поведением при 401 есть только у входа (`app/web/app/(internal)/login/LoginPageClient.tsx`, разбор в `app/web/lib/session/login-errors.ts`) и приглашения (`app/web/app/(internal)/invite/[token]/InviteClient.tsx`, разбор в `app/web/lib/auth/invite-flow.ts`). Правило держит `scripts/web-requests-guards.test.mjs`.
 - Продление до истечения access-токена: `createKeepAlive` (`app/web/lib/session/keep-alive.ts`), подключён в `app/web/components/providers/AuthProvider.tsx`.
 - Страницы: `app/web/proxy.ts` обновляет сессию до рендера, когда access-токен истекает, и уводит на `/login`, если refresh отклонён или кук сессии нет.
 

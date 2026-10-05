@@ -444,11 +444,10 @@ describe('модуль по умолчанию', () => {
 				return replies.shift() ?? status(500)
 			})
 		)
-		const apiModule = await import('@/lib/api-fetch')
 		const sessionModule = await import('./client')
-		assert.equal(apiModule.apiFetch, sessionModule.apiFetch)
-		assert.equal(apiModule.AuthExpiredError, sessionModule.AuthExpiredError)
-		const response = await apiModule.apiFetch('/api/tests', { method: 'GET' })
+		const requestModule = await import('@/lib/http/request')
+		assert.equal(requestModule.AuthExpiredError, sessionModule.AuthExpiredError)
+		const response = await sessionModule.apiFetch('/api/tests', { method: 'GET' })
 		assert.equal(response.status, 200)
 		assert.deepEqual(
 			requests.map((r) => [r.url, r.init?.method ?? 'GET', r.init?.credentials]),
