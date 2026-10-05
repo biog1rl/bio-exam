@@ -21,8 +21,9 @@ import {
 import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { toast } from 'sonner'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { AttemptBarChart } from '@/components/progress/AttemptBarChart'
 import { useAuth } from '@/components/providers/AuthProvider'
 import {
@@ -54,7 +55,7 @@ import {
 	sessionActionsState,
 	type SessionActionKind,
 } from '@/components/users/session-actions'
-import { AuthExpiredError, apiFetch } from '@/lib/api-fetch'
+import { failureMessage, failureOf } from '@/lib/http/errors'
 import {
 	assignTopicColors,
 	DEFAULT_PERIOD,
@@ -64,33 +65,32 @@ import {
 	parsePeriod,
 	PERIOD_PRESETS,
 	resolvePeriodBounds,
-	type ProgressAttempt,
 } from '@/lib/progress/attempt-chart'
+import { adminTestsKeys, adminTestsListFetcher } from '@/lib/tests/admin-api'
+import {
+	assignTest,
+	clearLoginThrottle,
+	revokeUserSessions,
+	unassignTest,
+	userAssignmentsFetcher,
+	userAttemptsFetcher,
+	userByLoginFetcher,
+	usersKeys,
+} from '@/lib/users/api'
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
-import type { UserRow } from '@/types/users'
-
-const fetcher = async (url: string) => {
-	const response = await apiFetch(url)
-	if (!response.ok) throw new Error('Не удалось загрузить данные')
-	return response.json()
-}
-
-type TestAssignment = {
-	testId: string
-	testTitle: string
-	testSlug: string
-	assignedAt: string
-	canUnassign: boolean
-}
-
-type TestItem = {
-	id: string
-	title: string
-	topicTitle: string | null
-}
 
 type Props = {
 	login: string
+}
+
+type LoadSource = {
+	data: unknown
+	error: unknown
+	mutate: () => Promise<unknown>
+}
+
+function failedSources(sources: LoadSource[]): LoadSource[] {
+	return sources.filter((source) => source.error && source.data === undefined)
 }
 
 function ProfileSectionCard({
@@ -98,25 +98,35 @@ function ProfileSectionCard({
 	title,
 	children,
 	loading,
-	error,
+	sources = [],
 }: {
 	kicker: string
 	title: string
 	children: ReactNode
 	loading?: boolean
-	error?: boolean
+	sources?: LoadSource[]
 }) {
+	const titleRef = useRef<HTMLDivElement>(null)
+	const failed = failedSources(sources)
+
 	return (
 		<Card className="rounded-4xl border-border/80 bg-card/90">
 			<CardHeader>
 				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
-				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
+				<CardTitle ref={titleRef} tabIndex={-1} className="font-serif text-2xl leading-tight">
+					{title}
+				</CardTitle>
 			</CardHeader>
 			<CardContent>
-				{loading ? (
+				{failed.length > 0 ? (
+					<LoadErrorAlert
+						title="Не удалось загрузить данные"
+						error={failed[0].error}
+						onRetry={() => Promise.all(failed.map((source) => source.mutate()))}
+						focusTarget={titleRef}
+					/>
+				) : loading ? (
 					<p role="status">Загрузка...</p>
-				) : error ? (
-					<p role="alert">Не удалось загрузить данные</p>
 				) : (
 					children
 				)}
@@ -143,24 +153,19 @@ function withLoginBreak(text: string, login: string) {
 }
 
 export default function UserProfileAssignmentsPage({ login }: Props) {
-	const normalizedLogin = login.trim().toLowerCase()
 	const { me, can } = useAuth()
 	const canEditUser = can('users', 'edit')
 	const canViewUsers = can('users', 'read')
+	const { mutate: mutateCache } = useSWRConfig()
 
 	const {
-		data: usersData,
-		isLoading: usersLoading,
-		error: usersError,
-		mutate: mutateUsers,
-	} = useSWR<{ rows: UserRow[]; total: number }>('/api/users', fetcher)
+		data: userData,
+		isLoading: userLoading,
+		error: userError,
+		mutate: mutateUser,
+	} = useSWR(usersKeys.byLogin(login), userByLoginFetcher)
 
-	const user = useMemo(
-		() =>
-			usersData?.rows?.find((u) => typeof u.login === 'string' && u.login.toLowerCase() === normalizedLogin) ?? null,
-		[usersData, normalizedLogin]
-	)
-
+	const user = userData ?? null
 	const userId = user?.id ?? null
 
 	const {
@@ -168,18 +173,24 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		isLoading: assignmentsLoading,
 		error: assignmentsError,
 		mutate: mutateAssignments,
-	} = useSWR<{ assignments: TestAssignment[] }>(userId ? `/api/users/${userId}/test-assignments` : null, fetcher)
+	} = useSWR(userId ? usersKeys.assignments(userId) : null, userAssignmentsFetcher)
 	const {
 		data: attemptsData,
 		isLoading: attemptsLoading,
 		error: attemptsError,
-	} = useSWR<{ attempts: ProgressAttempt[] }>(userId ? `/api/users/${userId}/test-attempts` : null, fetcher)
+		mutate: mutateAttempts,
+	} = useSWR(userId ? usersKeys.attempts(userId) : null, userAttemptsFetcher)
 
 	const {
 		data: testsData,
 		isLoading: testsLoading,
 		error: testsError,
-	} = useSWR<{ tests: TestItem[] }>('/api/tests', fetcher)
+		mutate: mutateTests,
+	} = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
+
+	const assignmentsSource: LoadSource = { data: assignmentsData, error: assignmentsError, mutate: mutateAssignments }
+	const attemptsSource: LoadSource = { data: attemptsData, error: attemptsError, mutate: mutateAttempts }
+	const testsSource: LoadSource = { data: testsData, error: testsError, mutate: mutateTests }
 
 	const [editOpen, setEditOpen] = useState(false)
 	const [confirmAction, setConfirmAction] = useState<SessionActionKind | null>(null)
@@ -277,19 +288,14 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		if (!userId || assigningTestId) return
 		setAssigningTestId(testId)
 		try {
-			const res = await apiFetch(`/api/users/${userId}/test-assignments`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ testId }),
-			})
-			if (!res.ok) {
-				const data = (await res.json().catch(() => null)) as { error?: string } | null
-				throw new Error(assignmentErrorText(res.status, data?.error || 'Ошибка назначения теста'))
+			const outcome = await assignTest(userId, testId)
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка назначения теста')
+				if (message) toast.error(assignmentErrorText(outcome.status ?? 0, message))
+				return
 			}
 			await mutateAssignments()
 			toast.success('Тест назначен')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка назначения теста')
 		} finally {
 			setAssigningTestId(null)
 		}
@@ -299,17 +305,14 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		if (!userId || removingTestId) return
 		setRemovingTestId(testId)
 		try {
-			const res = await apiFetch(`/api/users/${userId}/test-assignments/${testId}`, {
-				method: 'DELETE',
-			})
-			if (!res.ok) {
-				const data = (await res.json().catch(() => null)) as { error?: string } | null
-				throw new Error(assignmentErrorText(res.status, data?.error || 'Ошибка удаления назначения'))
+			const outcome = await unassignTest(userId, testId)
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка удаления назначения')
+				if (message) toast.error(assignmentErrorText(outcome.status ?? 0, message))
+				return
 			}
 			await mutateAssignments()
 			toast.success('Назначение удалено')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления назначения')
 		} finally {
 			setRemovingTestId(null)
 		}
@@ -367,17 +370,12 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		const actionLogin = user.login ?? ''
 		setPendingAction(kind)
 		try {
-			const res = await apiFetch(
-				kind === 'revoke' ? `/api/users/${user.id}/sessions/revoke` : `/api/users/${user.id}/login-throttle`,
-				{ method: kind === 'revoke' ? 'POST' : 'DELETE' }
-			)
-			if (res.ok) {
+			const outcome = kind === 'revoke' ? await revokeUserSessions(user.id) : await clearLoginThrottle(user.id)
+			if (outcome.ok) {
 				toast.success(kind === 'revoke' ? revokeSuccessText(actionLogin) : clearSuccessText(actionLogin))
-			} else {
-				toast.error(actionErrorText(kind, res.status))
+			} else if (outcome.kind !== 'auth' && outcome.kind !== 'aborted') {
+				toast.error(actionErrorText(kind, outcome.status ?? 0))
 			}
-		} catch (e) {
-			if (!(e instanceof AuthExpiredError)) toast.error(actionErrorText(kind, 0))
 		} finally {
 			setPendingAction(null)
 			setConfirmAction(null)
@@ -396,15 +394,25 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		}
 	}
 
-	if (usersLoading) {
+	const userFailure = userError && userData === undefined ? failureOf(userError) : null
+	const userMissing =
+		userFailure !== null && userFailure.kind === 'http' && (userFailure.status === 403 || userFailure.status === 404)
+
+	if (userFailure && !userMissing) {
+		return <LoadErrorAlert title="Не удалось загрузить пользователя" error={userError} onRetry={() => mutateUser()} />
+	}
+
+	if (!userMissing && (userLoading || !user)) {
 		return (
-			<div className="rounded-4xl border border-border/80 bg-card/90 p-12">
+			<div
+				role="status"
+				aria-label="Загрузка пользователя"
+				className="rounded-4xl border border-border/80 bg-card/90 p-12"
+			>
 				<Loader2 className="h-8 w-8 animate-spin" />
 			</div>
 		)
 	}
-
-	if (usersError) return <p role="alert">Не удалось загрузить пользователя</p>
 
 	if (!user) {
 		return (
@@ -525,7 +533,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				kicker="динамика"
 				title="Пройденные тесты"
 				loading={attemptsLoading || assignmentsLoading}
-				error={Boolean(attemptsError || assignmentsError)}
+				sources={[attemptsSource, assignmentsSource]}
 			>
 				<div className="space-y-4">
 					{/* Filters */}
@@ -766,7 +774,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					kicker="назначения"
 					title="Назначенные тесты"
 					loading={assignmentsLoading}
-					error={Boolean(assignmentsError)}
+					sources={[assignmentsSource]}
 				>
 					{assignments.length === 0 ? (
 						<EmptyProfileState>Нет назначенных тестов</EmptyProfileState>
@@ -811,7 +819,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					kicker="банк тестов"
 					title="Назначить тест"
 					loading={testsLoading || assignmentsLoading}
-					error={Boolean(testsError || assignmentsError)}
+					sources={[testsSource, assignmentsSource]}
 				>
 					{(testsData?.tests ?? []).length === 0 ? (
 						<EmptyProfileState>Нет доступных тестов</EmptyProfileState>
@@ -854,7 +862,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			</div>
 
 			{canEditUser && (
-				<EditUserDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={() => void mutateUsers()} />
+				<EditUserDialog
+					open={editOpen}
+					onOpenChange={setEditOpen}
+					user={user}
+					onSaved={() => {
+						void mutateUser()
+						void mutateCache(usersKeys.list())
+					}}
+				/>
 			)}
 
 			{showSessionCard && (

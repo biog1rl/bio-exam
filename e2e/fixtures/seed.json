@@ -30,6 +30,7 @@
 			"description": "Тему закрепляет администратор в сценарии учителя mobile"
 		}
 	],
+	"bulkUsers": { "prefix": "bulk-user", "count": 110, "name": "Массовый пользователь" },
 	"projects": {
 		"desktop": {
 			"accounts": [

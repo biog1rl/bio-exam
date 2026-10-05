@@ -1,54 +1,31 @@
 import { can } from '@bio-exam/rbac'
 
-import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
-import { absoluteUrl } from '@/lib/http/absoluteUrl'
 import { buildLoginRedirect } from '@/lib/session/redirect'
-import { getServerMe } from '@/lib/session/server'
-
-type UserLite = {
-	id: string
-	login: string | null
-}
-
-async function resolveLoginByUserId(userId: string): Promise<string | null> {
-	try {
-		const cookieStorage = await cookies()
-		const cookieHeader = cookieStorage.toString()
-		const url = await absoluteUrl('/api/users')
-
-		const res = await fetch(url, {
-			method: 'GET',
-			headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-			cache: 'no-store',
-		})
-		if (!res.ok) return null
-
-		const json = (await res.json()) as { users?: UserLite[] }
-		const user = (json.users ?? []).find((u) => u.id === userId)
-		return user?.login ?? null
-	} catch {
-		return null
-	}
-}
+import { getServerMe, requireServerData, serverRequest } from '@/lib/session/server'
+import { parseUserEnvelope } from '@/lib/users/api'
 
 export default async function AdminUserPageRedirect({ params }: { params: Promise<{ id: string }> }) {
 	const { id } = await params
+	const currentPath = `/admin/users/${encodeURIComponent(id)}`
 	const me = await getServerMe()
 
 	if (!me) {
-		redirect(buildLoginRedirect(`/admin/users/${encodeURIComponent(id)}`))
+		redirect(buildLoginRedirect(currentPath))
 	}
 
 	if (!can(new Set(me.perms), 'tests.manage_assignments')) {
 		notFound()
 	}
 
-	const login = await resolveLoginByUserId(id)
-	if (!login) {
+	const user = requireServerData(
+		await serverRequest(`/api/users/${encodeURIComponent(id)}`, { parse: parseUserEnvelope }),
+		currentPath
+	)
+	if (!user.login) {
 		notFound()
 	}
 
-	redirect(`/profile/${encodeURIComponent(login)}`)
+	redirect(`/profile/${encodeURIComponent(user.login)}`)
 }

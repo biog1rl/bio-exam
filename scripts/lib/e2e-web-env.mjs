@@ -45,13 +45,10 @@ function apiOrigin(port) {
 export function buildWebEnv(env, { webDir = DEFAULT_WEB_DIR } = {}) {
 	const cookieName = requireVar(env, 'SESSION_COOKIE_NAME')
 	const apiPort = requireVar(env, 'E2E_API_PORT')
-	const webPort = requireVar(env, 'E2E_WEB_PORT')
-	const webOrigin = `http://${LOOPBACK}:${webPort}`
+	requireVar(env, 'E2E_WEB_PORT')
 	const webEnv = {
 		NODE_ENV: 'production',
 		API_ORIGIN: apiOrigin(apiPort),
-		APP_ORIGIN: webOrigin,
-		NEXT_PUBLIC_APP_ORIGIN: webOrigin,
 		SESSION_COOKIE_NAME: cookieName,
 		// Ключ есть в .env разработчика, поэтому задан явно. Значение '1', а не пустое: при пустом
 		// next build и next start пытаются «чинить» lockfile и вызывают yarn config get registry

@@ -92,8 +92,6 @@ test('buildWebEnv derives the closed Next environment from the runner env withou
 		assert.deepEqual(env, {
 			NODE_ENV: 'production',
 			API_ORIGIN: 'http://127.0.0.1:4101',
-			APP_ORIGIN: 'http://127.0.0.1:4102',
-			NEXT_PUBLIC_APP_ORIGIN: 'http://127.0.0.1:4102',
 			SESSION_COOKIE_NAME: 'bio_exam_session',
 			NEXT_IGNORE_INCORRECT_LOCKFILE: '1',
 			DATABASE_URL: '',

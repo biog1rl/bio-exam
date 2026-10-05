@@ -41,10 +41,13 @@ type SeedTopic = { slug: string; title: string; description: string; teachers?: 
 
 type SeedGroup = { name: string; owner: string; members: string[] }
 
+type SeedBulkUsers = { prefix: string; count: number; name: string }
+
 type SeedFile = {
 	password: string
 	topic: SeedTopic
 	topics?: SeedTopic[]
+	bulkUsers?: SeedBulkUsers
 	projects: Record<string, { accounts: SeedAccount[]; tests: SeedTest[]; groups?: SeedGroup[] }>
 }
 
@@ -61,6 +64,27 @@ function assertE2eEnvironment(): string {
 		throw new Error('e2e-seed needs E2E_SEED_FILE')
 	}
 	return seedFile
+}
+
+const BULK_CREATED_AT_BASE = Date.UTC(2020, 0, 1)
+const BULK_CREATED_AT_STEP_MS = 60_000
+
+function bulkUserRows(bulk: SeedBulkUsers | undefined, passwordHash: string) {
+	if (!bulk) return []
+	return Array.from({ length: bulk.count }, (_, index) => {
+		const number = String(index + 1).padStart(3, '0')
+		const createdAt = new Date(BULK_CREATED_AT_BASE + (index + 1) * BULK_CREATED_AT_STEP_MS)
+		const name = `${bulk.name} ${number}`
+		return {
+			login: `${bulk.prefix}-${number}`,
+			name,
+			firstName: name,
+			passwordHash,
+			isActive: true,
+			activatedAt: createdAt,
+			createdAt,
+		}
+	})
 }
 
 async function main(): Promise<void> {
@@ -128,6 +152,14 @@ async function main(): Promise<void> {
 					userIds.set(account.login, created.id)
 					await tx.insert(userRoles).values({ userId: created.id, roleKey: account.role })
 				}
+			}
+
+			const bulkRows = bulkUserRows(seed.bulkUsers, passwordHash)
+			let bulkCount = 0
+			if (bulkRows.length > 0) {
+				const bulkUsers = await tx.insert(users).values(bulkRows).returning({ id: users.id })
+				await tx.insert(userRoles).values(bulkUsers.map((created) => ({ userId: created.id, roleKey: 'user' })))
+				bulkCount = bulkUsers.length
 			}
 
 			const adminLogin = projects
@@ -243,7 +275,7 @@ async function main(): Promise<void> {
 				}
 			}
 
-			return { users: userIds.size, tests: testCount, questions: questionCount }
+			return { users: userIds.size + bulkCount, tests: testCount, questions: questionCount }
 		})
 
 		console.log(
