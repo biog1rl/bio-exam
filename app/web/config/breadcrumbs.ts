@@ -35,6 +35,10 @@ export const breadcrumbConfig = {
 		groups: 'Группы',
 		new: 'Создание',
 		start: 'Прохождение',
+		sitemap: 'Карта сайта',
+		chart: 'Диапазон графика',
+		rbac: 'Права доступа',
+		sidebar: 'Боковое меню',
 	} as Record<string, string>,
 
 	/** скрыть технические сегменты в конкретных ветках */

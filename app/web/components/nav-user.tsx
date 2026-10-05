@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOutIcon, MoreVerticalIcon, UserCircleIcon } from 'lucide-react'
+import { LogOutIcon, MapIcon, MoreVerticalIcon, UserCircleIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -21,7 +21,7 @@ import { versionedUrl } from '@/lib/assets/versioned-url'
 import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
 
 export function NavUser() {
-	const { isMobile } = useSidebar()
+	const { isMobile, setOpenMobile } = useSidebar()
 	const router = useRouter()
 	const { me, logout, avatarVersion } = useAuth()
 
@@ -41,7 +41,13 @@ export function NavUser() {
 	}
 
 	const handleProfileClick = () => {
+		setOpenMobile(false)
 		router.push('/profile')
+	}
+
+	const handleSiteMapClick = () => {
+		setOpenMobile(false)
+		router.push('/sitemap')
 	}
 
 	return (
@@ -85,6 +91,10 @@ export function NavUser() {
 							<DropdownMenuItem className="cursor-pointer" onClick={handleProfileClick}>
 								<UserCircleIcon />
 								Профиль
+							</DropdownMenuItem>
+							<DropdownMenuItem className="cursor-pointer" onClick={handleSiteMapClick}>
+								<MapIcon />
+								Карта сайта
 							</DropdownMenuItem>
 						</DropdownMenuGroup>
 						<DropdownMenuSeparator />
