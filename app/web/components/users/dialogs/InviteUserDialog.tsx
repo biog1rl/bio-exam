@@ -14,8 +14,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { AuthExpiredError, apiFetch } from '@/lib/api-fetch'
 import { LOGIN_PATTERN, LOGIN_HINT, normalizeLogin, validateLogin } from '@/lib/auth/validators'
+import { groupsKeys, groupsListFetcher } from '@/lib/groups/api'
+import type { RequestFailure } from '@/lib/http/request'
 import {
 	defaultGroupId,
 	defaultRoleKey,
@@ -26,6 +27,7 @@ import {
 	showGroupField,
 	type InviteVariant,
 } from '@/lib/users/invite-form'
+import { createInvite } from '@/lib/users/invites-api'
 import { useRoleTraits } from '@/lib/users/role-traits'
 
 type Props = {
@@ -47,16 +49,24 @@ type InviteFields = {
 	groupId: string | null
 }
 
-const GROUPS_URL = '/api/groups'
 const NO_GROUP = '__none__'
+const MISSING_LINK_TEXT = 'Сервис не вернул ссылку приглашения'
 
-async function fetchGroups(url: string): Promise<unknown> {
-	const res = await apiFetch(url)
-	return res.json()
+function inviteFailureText(failure: RequestFailure, variant: InviteVariant): string | null {
+	switch (failure.kind) {
+		case 'http':
+			return inviteErrorText({ status: failure.status, body: failure.body, variant })
+		case 'network':
+			return inviteErrorText({ network: true })
+		case 'malformed':
+			return MISSING_LINK_TEXT
+		default:
+			return null
+	}
 }
 
 function useInviteGroups() {
-	const { data, error } = useSWR<unknown>(GROUPS_URL, fetchGroups)
+	const { data, error } = useSWR(groupsKeys.list(), groupsListFetcher)
 	const groups = useMemo(() => parseInviteGroups(error ? undefined : data), [data, error])
 	return { groups, loaded: data !== undefined && !error }
 }
@@ -79,41 +89,23 @@ function useInviteRequest(variant: InviteVariant, onCreated: () => void) {
 				return false
 			}
 
-			let res: Response
-			try {
-				res = await apiFetch('/api/auth/invites', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(
-						invitePayload({
-							variant,
-							role: fields.role,
-							groupId: fields.groupId,
-							login: loginNorm,
-							firstName: fields.firstName,
-							lastName: fields.lastName,
-						})
-					),
+			const outcome = await createInvite(
+				invitePayload({
+					variant,
+					role: fields.role,
+					groupId: fields.groupId,
+					login: loginNorm,
+					firstName: fields.firstName,
+					lastName: fields.lastName,
 				})
-			} catch (e) {
-				setError(e instanceof AuthExpiredError ? e.message : inviteErrorText({ network: true }))
+			)
+
+			if (!outcome.ok) {
+				setError(inviteFailureText(outcome, variant))
 				return false
 			}
 
-			const body: unknown = await res.json().catch(() => null)
-
-			if (!res.ok) {
-				setError(inviteErrorText({ status: res.status, body, variant }))
-				return false
-			}
-
-			const link = (body as { inviteLink?: unknown } | null)?.inviteLink
-			if (typeof link !== 'string' || !link) {
-				setError('Сервис не вернул ссылку приглашения')
-				return false
-			}
-
-			setInviteLink(link)
+			setInviteLink(outcome.data.inviteLink)
 			onCreated()
 			return true
 		} finally {

@@ -5,6 +5,8 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { Upload, X, Loader2, Pencil } from 'lucide-react'
 
 import { versionedUrl } from '@/lib/assets/versioned-url'
+import { failureMessage } from '@/lib/http/errors'
+import { deleteAvatar, uploadAvatar } from '@/lib/users/profile-api'
 import { cn } from '@/lib/utils/cn'
 
 import { Avatar, AvatarFallback, AvatarImage } from './avatar'
@@ -144,18 +146,14 @@ export function ImageUpload({
 			if (cropParams.viewX !== undefined) formData.append('cropViewX', cropParams.viewX.toString())
 			if (cropParams.viewY !== undefined) formData.append('cropViewY', cropParams.viewY.toString())
 
-			const response = await fetch('/api/users/avatar', {
-				method: 'POST',
-				body: formData,
-				credentials: 'include',
-			})
-
-			if (!response.ok) {
-				const data = await response.json()
-				throw new Error(data.error || 'Ошибка загрузки')
+			const outcome = await uploadAvatar(formData)
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка загрузки')
+				if (message) setError(message)
+				return
 			}
 
-			const data = await response.json()
+			const data = outcome.data
 
 			// Используем кропнутое изображение, если оно есть, иначе оригинальное
 			await onChange(data.avatarCroppedUrl || data.avatarUrl)
@@ -188,14 +186,11 @@ export function ImageUpload({
 		setError(null)
 
 		try {
-			const response = await fetch('/api/users/avatar', {
-				method: 'DELETE',
-				credentials: 'include',
-			})
-
-			if (!response.ok) {
-				const data = await response.json()
-				throw new Error(data.error || 'Ошибка удаления')
+			const outcome = await deleteAvatar()
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка удаления')
+				if (message) setError(message)
+				return
 			}
 
 			await onChange(null)

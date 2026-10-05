@@ -9,8 +9,11 @@ import { useSWRConfig } from 'swr'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { apiFetch } from '@/lib/api-fetch'
+import { failureMessage } from '@/lib/http/errors'
+import type { RequestFailure } from '@/lib/http/request'
+import { usersKeys } from '@/lib/users/api'
 import { reinviteErrorText } from '@/lib/users/invite-form'
+import { reissueInvite } from '@/lib/users/invites-api'
 import type { UserRow } from '@/types/users'
 
 type Props = {
@@ -20,7 +23,13 @@ type Props = {
 	onIssued?: () => void
 }
 
-type InviteResponse = { inviteLink: string; userId: string }
+function reissueErrorText(failure: RequestFailure): string {
+	if (failure.kind === 'http' && (failure.status === 403 || failure.status === 409)) {
+		const text = failure.body === undefined ? '' : JSON.stringify(failure.body)
+		return reinviteErrorText({ status: failure.status, text })
+	}
+	return failureMessage(failure)
+}
 
 export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props) {
 	const { mutate } = useSWRConfig()
@@ -42,23 +51,15 @@ export function ReinviteUserDialog({ open, onOpenChange, user, onIssued }: Props
 		setLoading(true)
 		setError(null)
 		try {
-			const res = await apiFetch('/api/auth/invites', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ userId: user.id }),
-			})
-
-			if (!res.ok) {
-				const text = await res.text().catch(() => '')
-				throw new Error(reinviteErrorText({ status: res.status, text }))
+			const outcome = await reissueInvite(user.id)
+			if (!outcome.ok) {
+				setError(reissueErrorText(outcome) || null)
+				return
 			}
 
-			const json = (await res.json()) as InviteResponse
-			setInviteLink(json.inviteLink)
-			await mutate('/api/users')
+			setInviteLink(outcome.data.inviteLink)
+			await mutate(usersKeys.list())
 			onIssued?.()
-		} catch (e) {
-			setError(e instanceof Error ? e.message : 'Неизвестная ошибка')
 		} finally {
 			setLoading(false)
 		}

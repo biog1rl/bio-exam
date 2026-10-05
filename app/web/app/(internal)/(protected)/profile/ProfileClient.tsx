@@ -13,10 +13,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AvatarEditor } from '@/components/users/AvatarEditor'
-import { apiFetch } from '@/lib/api-fetch'
+import { groupsKeys, myGroupsFetcher } from '@/lib/groups/api'
+import { failureMessage } from '@/lib/http/errors'
 import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { changeOwnPassword, updateOwnProfile } from '@/lib/users/profile-api'
 
 interface ProfileData {
 	firstName: string | null
@@ -107,7 +107,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 
 	const canEditAvatar = can('users', 'edit')
 
-	const { data: myGroupsData } = useSWR<{ groups?: { id: string; name: string }[] }>('/api/groups/my', fetcher)
+	const { data: myGroupsData } = useSWR(groupsKeys.my(), myGroupsFetcher)
 	const myGroups = myGroupsData?.groups ?? []
 
 	useEffect(() => {
@@ -157,21 +157,17 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 				initialsToSave = first + last || null
 			}
 
-			const response = await apiFetch('/api/users/profile', {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ ...profileData, initials: initialsToSave }),
-			})
-
-			if (!response.ok) {
-				const error = await response.json()
-				throw new Error(error.error || 'Ошибка при сохранении профиля')
+			const outcome = await updateOwnProfile({ ...profileData, initials: initialsToSave })
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка при сохранении профиля')
+				if (message) toast.error(message)
+				return
 			}
 
 			await refresh()
 			toast.success('Профиль успешно обновлен')
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка при сохранении профиля')
+		} catch {
+			toast.error('Ошибка при сохранении профиля')
 		} finally {
 			setIsLoading(false)
 		}
@@ -188,19 +184,17 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 		}
 		setIsPasswordLoading(true)
 		try {
-			const response = await apiFetch('/api/users/profile/password', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ oldPassword: passwordData.oldPassword, newPassword: passwordData.newPassword }),
+			const outcome = await changeOwnPassword({
+				oldPassword: passwordData.oldPassword,
+				newPassword: passwordData.newPassword,
 			})
-			if (!response.ok) {
-				const error = await response.json()
-				throw new Error(error.error || 'Ошибка при смене пароля')
+			if (!outcome.ok) {
+				const message = failureMessage(outcome, 'Ошибка при смене пароля')
+				if (message) toast.error(message)
+				return
 			}
 			toast.success('Пароль успешно изменен', { description: 'На других устройствах нужно войти заново.' })
 			setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка при смене пароля')
 		} finally {
 			setIsPasswordLoading(false)
 		}
