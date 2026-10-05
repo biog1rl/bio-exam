@@ -3,6 +3,7 @@
 import { Loader2 } from 'lucide-react'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Skeleton } from '@/components/ui/skeleton'
 
 import { TopicFormDialog } from '../../components/TopicFormDialog'
@@ -21,16 +22,18 @@ interface Props {
 export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 	const model = useTestEditorModel({ topicSlug, testSlug })
 
+	if (model.testError) {
+		return (
+			<LoadErrorAlert title="Не удалось загрузить настройки теста" error={model.testError} onRetry={model.retryTest} />
+		)
+	}
+
 	if (model.isLoading) {
 		return (
 			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
 				<Loader2 className="size-8 animate-spin text-primary" />
 			</div>
 		)
-	}
-
-	if (model.testError) {
-		return <p role="alert">Не удалось загрузить настройки теста</p>
 	}
 
 	return (
@@ -40,10 +43,14 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 			<div className="grid gap-5 xl:grid-cols-[23.75rem_1fr]">
 				<TestSettingsPanel {...model.settingsPanelProps} />
-				{model.questionsLoading ? (
+				{model.questionsError ? (
+					<LoadErrorAlert
+						title="Не удалось загрузить вопросы"
+						error={model.questionsError}
+						onRetry={model.retryQuestions}
+					/>
+				) : model.questionsLoading ? (
 					<Skeleton className="h-96 rounded-4xl" aria-label="Загрузка вопросов" />
-				) : model.questionsError ? (
-					<p role="alert">Не удалось загрузить вопросы</p>
 				) : (
 					<QuestionsPanel {...model.questionsPanelProps} getQuestionDraftLabel={resolveQuestionDraftLabel} />
 				)}

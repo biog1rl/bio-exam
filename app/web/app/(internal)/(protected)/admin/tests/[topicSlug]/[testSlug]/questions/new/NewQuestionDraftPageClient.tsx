@@ -6,7 +6,11 @@ import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-import { apiFetch } from '@/lib/api-fetch'
+import {
+	actionErrorMessage,
+	createQuestionDraft as createQuestionDraftRequest,
+	fetchTestBySlug,
+} from '../../../../components/test-editor/test-editor-api'
 
 interface Props {
 	topicSlug: string
@@ -34,24 +38,10 @@ export default function NewQuestionDraftPageClient({ topicSlug, testSlug }: Prop
 
 		const createQuestionDraft = async () => {
 			try {
-				const testRes = await apiFetch(`/api/tests/by-slug/${topicSlug}/${testSlug}`)
-				if (!testRes.ok) {
-					const data = (await testRes.json().catch(() => null)) as { error?: string } | null
-					throw new Error(data?.error || 'Не удалось загрузить тест')
-				}
-				const testData = (await testRes.json().catch(() => null)) as { test?: { id?: string } } | null
-				const testId = testData?.test?.id
-				if (!testId) {
-					throw new Error('Не удалось определить id теста')
-				}
-
-				const createRes = await apiFetch(`/api/tests/${testId}/question-drafts`, { method: 'POST' })
-				if (!createRes.ok) {
-					const data = (await createRes.json().catch(() => null)) as { error?: string } | null
-					throw new Error(data?.error || 'Не удалось создать черновик вопроса')
-				}
-
-				const draftData = (await createRes.json().catch(() => null)) as unknown
+				const testData = await fetchTestBySlug(topicSlug, testSlug).catch((error: unknown) => {
+					throw new Error(actionErrorMessage(error, 'Не удалось загрузить тест'))
+				})
+				const draftData = await createQuestionDraftRequest(testData.test.id)
 				const draftId = resolveDraftId(draftData)
 				if (!draftId) {
 					throw new Error('API не вернул draftId черновика вопроса')
@@ -61,7 +51,9 @@ export default function NewQuestionDraftPageClient({ topicSlug, testSlug }: Prop
 					router.replace(`/admin/tests/${topicSlug}/${testSlug}/questions/drafts/${draftId}`)
 				}
 			} catch (error) {
-				toast.error(error instanceof Error ? error.message : 'Не удалось создать черновик вопроса')
+				const message = actionErrorMessage(error, 'Не удалось создать черновик вопроса')
+				if (!message) return
+				toast.error(message)
 				if (!isCancelled) {
 					router.replace(`/admin/tests/${topicSlug}/${testSlug}`)
 				}

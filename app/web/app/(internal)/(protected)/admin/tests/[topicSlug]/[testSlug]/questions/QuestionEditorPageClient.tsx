@@ -23,33 +23,36 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { apiFetch } from '@/lib/api-fetch'
 import { createBeforeUnloadGuard } from '@/lib/drafts/before-unload'
 import { type AutosaveStatusView, autosaveStatusView, UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
 import type { QuestionDraftAutosave } from '@/lib/drafts/question-draft-autosave'
 import { useQuestionDraftAutosave } from '@/lib/drafts/use-question-draft-autosave'
+import { failureMessage, failureOf } from '@/lib/http/errors'
+import { adminTestsKeys, adminTestsListFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { type LeaveDecision, useUnsavedChanges } from '@/store/unsavedChanges.store'
 
 import QuestionEditor from '../../../components/QuestionEditor'
+import {
+	actionErrorMessage,
+	deleteQuestionDraft,
+	moveTestQuestion,
+	questionDraftDetailFetcher,
+	questionTypesFetcher,
+	saveTestQuestion,
+	testDetailFetcher,
+} from '../../../components/test-editor/test-editor-api'
 import { validateQuestion } from '../../../question-validation'
-import type {
-	Question,
-	QuestionDraftDetailResponse,
-	QuestionTypesResponse,
-	TestDetailResponse,
-	TestsResponse,
-	TopicsResponse,
-} from '../../../types'
+import type { Question } from '../../../types'
 import { createDefaultQuestion, normalizeQuestionForSave } from '../../../types'
 import { questionFormKey, toQuestionDraftPayload } from './question-draft-payload'
 
-const fetcher = async (url: string) => {
-	const res = await fetch(url, { credentials: 'include' })
-	if (!res.ok) {
-		const data = await res.json().catch(() => null)
-		throw new Error(data?.error || 'Не удалось загрузить тест')
-	}
-	return res.json()
+function loadFailureText(error: unknown): string {
+	return failureMessage(failureOf(error), 'Не удалось загрузить тест')
+}
+
+function toastActionError(error: unknown, fallback: string) {
+	const message = actionErrorMessage(error, fallback)
+	if (message) toast.error(message)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -144,16 +147,18 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		error,
 		isLoading,
 		mutate,
-	} = useSWR<TestDetailResponse>(`/api/tests/by-slug/${topicSlug}/${testSlug}`, fetcher)
-	const { data: questionTypesData } = useSWR<QuestionTypesResponse>(
-		testData?.test?.id ? `/api/tests/question-types?testId=${testData.test.id}&includeInactive=true` : null,
-		fetcher
+	} = useSWR(adminTestsKeys.bySlug(topicSlug, testSlug), testDetailFetcher, { revalidateOnFocus: false })
+	const { data: questionTypesData } = useSWR(
+		testData?.test?.id ? adminTestsKeys.questionTypes({ testId: testData.test.id, includeInactive: true }) : null,
+		questionTypesFetcher
 	)
-	const { data: topicsData } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
-	const { data: testsData } = useSWR<TestsResponse>('/api/tests', fetcher)
-	const { data: questionDraftData, error: questionDraftError } = useSWR<QuestionDraftDetailResponse>(
-		isDraftMode && testData?.test?.id ? `/api/tests/${testData.test.id}/question-drafts/${questionDraftId}` : null,
-		fetcher,
+	const { data: topicsData } = useSWR(adminTestsKeys.topics(), topicsListFetcher)
+	const { data: testsData } = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
+	const { data: questionDraftData, error: questionDraftError } = useSWR(
+		isDraftMode && testData?.test?.id && questionDraftId
+			? adminTestsKeys.questionDraft(testData.test.id, questionDraftId)
+			: null,
+		questionDraftDetailFetcher,
 		{ revalidateOnFocus: false }
 	)
 
@@ -360,27 +365,17 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 		setMoving(true)
 		try {
-			const payload = targetTestId ? { targetTestId } : { targetTopicId }
-			const res = await apiFetch(`/api/tests/${testData.test.id}/questions/${questionId}/move`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-			})
-
-			if (!res.ok) {
-				const data = await res.json().catch(() => null)
-				throw new Error(data?.error || 'Ошибка переноса вопроса')
-			}
-
-			const data = (await res.json()) as {
-				target: { topicSlug: string; testSlug: string }
-			}
+			const target = await moveTestQuestion(
+				testData.test.id,
+				questionId,
+				targetTestId ? { targetTestId } : { targetTopicId }
+			)
 
 			toast.success('Вопрос перенесен')
 			setMoveDialogOpen(false)
-			router.push(`/admin/tests/${data.target.topicSlug}/${data.target.testSlug}/questions/${questionId}`)
+			router.push(`/admin/tests/${target.topicSlug}/${target.testSlug}/questions/${questionId}`)
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка переноса вопроса')
+			toastActionError(err, 'Ошибка переноса вопроса')
 		} finally {
 			setMoving(false)
 		}
@@ -407,27 +402,13 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			if (isDraftMode) await autosave?.closeForSave()
 			let questionStored = false
 			try {
-				const endpoint = appendAsNew
-					? `/api/tests/${testData.test.id}/questions`
-					: `/api/tests/${testData.test.id}/questions/${questionId}`
-				const method = appendAsNew ? 'POST' : 'PATCH'
-				const res = await apiFetch(endpoint, {
-					method,
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(payloadQuestion),
-				})
-
-				if (!res.ok) {
-					const data = await res.json().catch(() => null)
-					throw new Error(data?.error || 'Ошибка сохранения вопроса')
-				}
+				await saveTestQuestion(testData.test.id, appendAsNew ? null : (questionId ?? null), payloadQuestion)
 				questionStored = true
 
 				if (isDraftMode && questionDraftId) {
-					const deleteRes = await apiFetch(`/api/tests/${testData.test.id}/question-drafts/${questionDraftId}`, {
-						method: 'DELETE',
-					})
-					if (!deleteRes.ok) {
+					try {
+						await deleteQuestionDraft(testData.test.id, questionDraftId)
+					} catch {
 						console.warn('Failed to delete question draft after save', questionDraftId)
 					}
 					autosave?.discardCopy()
@@ -443,7 +424,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				backToTestEditor()
 			} catch (err) {
 				if (isDraftMode && !questionStored) autosave?.reopen()
-				toast.error(err instanceof Error ? err.message : 'Ошибка сохранения вопроса')
+				toastActionError(err, 'Ошибка сохранения вопроса')
 			} finally {
 				setIsSaving(false)
 			}
@@ -464,7 +445,13 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		]
 	)
 
-	if (isLoading || (isDraftMode && !draftForm && !questionDraftError && !error)) {
+	const testFailed = error !== undefined && testData === undefined
+	const draftFailed = questionDraftError !== undefined && questionDraftData === undefined
+	const loadFailure = testFailed ? error : draftFailed ? questionDraftError : undefined
+	const loadText = loadFailure === undefined ? '' : loadFailureText(loadFailure)
+	const authPending = loadFailure !== undefined && !loadText
+
+	if (authPending || isLoading || (isDraftMode && !draftForm && !draftFailed && !testFailed)) {
 		return (
 			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
 				<Loader2 className="size-8 animate-spin text-primary" />
@@ -472,16 +459,10 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 		)
 	}
 
-	if (error || questionDraftError || !testData) {
+	if (loadFailure !== undefined || !testData) {
 		return (
 			<div className="rounded-4xl border border-border/80 bg-card/90 p-unit shadow-sm">
-				<p className="text-sm text-red-600">
-					{error instanceof Error
-						? error.message
-						: questionDraftError instanceof Error
-							? questionDraftError.message
-							: 'Не удалось загрузить данные'}
-				</p>
+				<p className="text-sm text-red-600">{loadText || 'Не удалось загрузить данные'}</p>
 				<Button variant="outline" onClick={backToTestEditor} className="rounded-full">
 					Назад к тесту
 				</Button>

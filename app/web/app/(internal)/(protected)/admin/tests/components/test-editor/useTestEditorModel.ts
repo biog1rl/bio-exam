@@ -9,31 +9,32 @@ import useSWR from 'swr'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
-import { apiFetch } from '@/lib/api-fetch'
+import { swrFetcher } from '@/lib/http/swr'
+import { adminTestsKeys, topicsListFetcher } from '@/lib/tests/admin-api'
 import { canManageCatalog, testTopicPickerState } from '@/lib/tests/bank-view'
+import { usersKeys } from '@/lib/users/api'
 
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
-import type {
-	QuestionDraft,
-	QuestionDraftsResponse,
-	QuestionTypesResponse,
-	TestDetailResponse,
-	TestFormData,
-	TopicsResponse,
-} from '../../types'
+import type { QuestionDraft, TestFormData } from '../../types'
 import { normalizeQuestionForSave } from '../../types'
 import {
+	actionErrorMessage,
 	assignStudentToTest,
 	createQuestionDraft,
 	createTest,
 	deleteQuestionDraft,
 	deleteTestQuestion,
-	exportTestArchive,
+	exportTestFromEditor,
+	questionDraftsFetcher,
+	questionTypesFetcher,
 	removeStudentFromTest,
 	reorderTestQuestions,
+	testAssignmentsFetcher,
+	testDetailFetcher,
+	testSummaryFetcher,
 	updateTestSettings,
 } from './test-editor-api'
-import type { StudentAssignment, UserItem } from './test-editor-types'
+import type { UserItem } from './test-editor-types'
 import {
 	createInitialTestForm,
 	getBaseValidationError,
@@ -42,10 +43,9 @@ import {
 	resolveQuestionDraftId,
 } from './test-editor-utils'
 
-const fetcher = async (url: string) => {
-	const response = await apiFetch(url)
-	if (!response.ok) throw new Error('Не удалось загрузить данные')
-	return response.json()
+function toastActionError(error: unknown, fallback: string) {
+	const message = actionErrorMessage(error, fallback)
+	if (message) toast.error(message)
 }
 
 interface UseTestEditorModelParams {
@@ -60,8 +60,6 @@ interface CreateTestPersistenceResult {
 	forcedDraft: boolean
 }
 
-type TestSummaryResponse = Pick<TestDetailResponse, 'test'> & { questionsCount: number }
-
 export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelParams) {
 	const router = useRouter()
 	const { confirm, alertDialog } = useUiAlertDialog()
@@ -75,33 +73,44 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		mutate: mutateTopics,
 		isLoading: topicsLoading,
 		error: topicsError,
-	} = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
+	} = useSWR(adminTestsKeys.topics(), topicsListFetcher)
 	const {
 		data: testData,
-		isLoading: testLoading,
+		mutate: mutateTest,
 		error: testError,
-	} = useSWR<TestSummaryResponse>(
-		isEditingExisting ? `/api/tests/by-slug/${topicSlug}/${testSlug}?view=summary` : null,
-		fetcher
+	} = useSWR(
+		isEditingExisting && topicSlug && testSlug ? adminTestsKeys.bySlug(topicSlug, testSlug, 'summary') : null,
+		testSummaryFetcher,
+		{ revalidateOnFocus: false }
 	)
 	const {
 		data: questionsData,
-		isLoading: questionsLoading,
+		mutate: mutateQuestions,
 		error: questionsError,
-	} = useSWR<TestDetailResponse>(isEditingExisting ? `/api/tests/by-slug/${topicSlug}/${testSlug}` : null, fetcher)
+	} = useSWR(
+		isEditingExisting && topicSlug && testSlug ? adminTestsKeys.bySlug(topicSlug, testSlug) : null,
+		testDetailFetcher,
+		{ revalidateOnFocus: false }
+	)
 	const testId = testData?.test?.id
-	const { data: questionDraftsData, mutate: mutateQuestionDrafts } = useSWR<QuestionDraftsResponse>(
-		testId ? `/api/tests/${testId}/question-drafts` : null,
-		fetcher
+	const { data: questionDraftsData, mutate: mutateQuestionDrafts } = useSWR(
+		testId ? adminTestsKeys.questionDrafts(testId) : null,
+		questionDraftsFetcher
 	)
-	const { data: studentAssignmentsData, mutate: mutateStudentAssignments } = useSWR<{
-		assignments: StudentAssignment[]
-	}>(testId ? `/api/tests/${testId}/assignments` : null, fetcher)
-	const { data: allUsersData } = useSWR<{ rows: UserItem[]; total: number }>(testId ? '/api/users' : null, fetcher)
-	const { data: questionTypesData } = useSWR<QuestionTypesResponse>(
-		isCreateMode ? '/api/tests/question-types?includeInactive=true' : null,
-		fetcher
+	const { data: studentAssignmentsData, mutate: mutateStudentAssignments } = useSWR(
+		testId ? adminTestsKeys.assignments(testId) : null,
+		testAssignmentsFetcher
 	)
+	const { data: allUsersData } = useSWR<{ rows: UserItem[]; total: number }>(
+		testId ? usersKeys.list() : null,
+		swrFetcher
+	)
+	const { data: questionTypesData } = useSWR(
+		isCreateMode ? adminTestsKeys.questionTypes({ includeInactive: true }) : null,
+		questionTypesFetcher
+	)
+	const testLoadFailed = isEditingExisting && testError !== undefined && testData === undefined
+	const questionsLoadFailed = isEditingExisting && questionsError !== undefined && questionsData === undefined
 
 	const [assigningUserId, setAssigningUserId] = useState<string | null>(null)
 	const [removingUserId, setRemovingUserId] = useState<string | null>(null)
@@ -171,7 +180,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				await mutateStudentAssignments()
 				toast.success('Студент добавлен')
 			} catch (err) {
-				toast.error(err instanceof Error ? err.message : 'Ошибка назначения студента')
+				toastActionError(err, 'Ошибка назначения студента')
 			} finally {
 				setAssigningUserId(null)
 			}
@@ -188,7 +197,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				await mutateStudentAssignments()
 				toast.success('Доступ удален')
 			} catch (err) {
-				toast.error(err instanceof Error ? err.message : 'Ошибка удаления студента')
+				toastActionError(err, 'Ошибка удаления студента')
 			} finally {
 				setRemovingUserId(null)
 			}
@@ -217,7 +226,9 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				...form,
 				isPublished: persistedPublicationState,
 			})
-		)
+		).catch((error: unknown) => {
+			throw new Error(actionErrorMessage(error, 'Ошибка сохранения'))
+		})
 		const createdTestId = data?.test?.id
 		const createdTopicSlug = data?.test?.topicSlug || topics.find((t) => t.id === form.topicId)?.slug
 		const createdTestSlug = data?.test?.slug || form.slug
@@ -268,7 +279,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			await reorderTestQuestions(testId, questionIds)
 		} catch (err) {
 			setForm((prev) => ({ ...prev, questions: previousQuestions }))
-			toast.error(err instanceof Error ? err.message : 'Ошибка сортировки вопросов')
+			toastActionError(err, 'Не удалось сохранить порядок вопросов')
 		} finally {
 			setReorderingQuestions(false)
 		}
@@ -305,7 +316,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			}
 			router.push(`/admin/tests/${resolvedTopicSlug}/${resolvedTestSlug}/questions/drafts/${draftId}`)
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Не удалось создать черновик вопроса')
+			toastActionError(err, 'Не удалось создать черновик вопроса')
 		} finally {
 			setCreatingQuestionDraft(false)
 		}
@@ -326,7 +337,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			await mutateQuestionDrafts()
 			toast.success('Черновик вопроса удален')
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления черновика вопроса')
+			toastActionError(err, 'Не удалось удалить черновик вопроса')
 		}
 	}
 
@@ -364,7 +375,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				}))
 				toast.success('Вопрос удален')
 			} catch (err) {
-				toast.error(err instanceof Error ? err.message : 'Ошибка удаления вопроса')
+				toastActionError(err, 'Не удалось удалить вопрос')
 			} finally {
 				setDeletingQuestionId(null)
 			}
@@ -416,7 +427,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				}
 			}
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка сохранения')
+			toastActionError(err, 'Ошибка сохранения')
 		} finally {
 			setSaving(false)
 		}
@@ -426,12 +437,9 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		const testId = testData?.test?.id
 		if (!testId) return
 
-		try {
-			await exportTestArchive(testId, form.slug, withAnswers)
-			toast.success('Тест экспортирован')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка экспорта')
-		}
+		const result = await exportTestFromEditor(testId, withAnswers)
+		if (result?.kind === 'success') toast.success(result.text)
+		else if (result) toast.error(result.text)
 	}
 
 	const handleTopicSaved = (topic?: { id?: string } | null) => {
@@ -525,10 +533,12 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		breadcrumbLabels,
 		headerProps,
 		isEditingExisting,
-		isLoading: isEditingExisting && testLoading,
-		testError,
-		questionsLoading,
-		questionsError,
+		isLoading: isEditingExisting && testData === undefined,
+		testError: testLoadFailed ? testError : undefined,
+		retryTest: () => mutateTest(),
+		questionsLoading: isEditingExisting && questionsData === undefined,
+		questionsError: questionsLoadFailed ? questionsError : undefined,
+		retryQuestions: () => mutateQuestions(),
 		questionsPanelProps,
 		settingsPanelProps,
 		studentAccessPanelProps,

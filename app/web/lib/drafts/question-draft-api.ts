@@ -1,4 +1,4 @@
-import { apiFetch } from '@/lib/api-fetch'
+import { MalformedBodyError, request } from '@/lib/http/request'
 import { KEEPALIVE_BODY_LIMIT_BYTES } from '@/lib/tests/api'
 
 import type { QuestionDraftAutosaveApi, QuestionDraftSaveResult } from './question-draft-autosave'
@@ -11,12 +11,13 @@ const STATUS_RESULT: Record<number, QuestionDraftSaveResult> = {
 	404: { kind: 'gone' },
 }
 
-function readDraftLockVersion(body: unknown): number | null {
-	if (!body || typeof body !== 'object') return null
+function parseDraftLockVersion(body: unknown): number {
+	if (!body || typeof body !== 'object') throw new MalformedBodyError()
 	const draft = (body as { draft?: unknown }).draft
-	if (!draft || typeof draft !== 'object') return null
+	if (!draft || typeof draft !== 'object') throw new MalformedBodyError()
 	const value = (draft as { lockVersion?: unknown }).lockVersion
-	return typeof value === 'number' && Number.isFinite(value) ? value : null
+	if (typeof value !== 'number' || !Number.isFinite(value)) throw new MalformedBodyError()
+	return value
 }
 
 export function questionDraftAutosaveApi(testId: string, draftId: string): QuestionDraftAutosaveApi {
@@ -24,30 +25,23 @@ export function questionDraftAutosaveApi(testId: string, draftId: string): Quest
 
 	return {
 		async save(payload, lockVersion, options) {
-			const json = JSON.stringify(lockVersion === null ? { payload } : { payload, lockVersion })
-			if (options.keepalive && new TextEncoder().encode(json).length > KEEPALIVE_BODY_LIMIT_BYTES) return FAILED
-			try {
-				const response = await apiFetch(url, {
-					method: 'PATCH',
-					headers: { 'Content-Type': 'application/json' },
-					body: json,
-					keepalive: options.keepalive,
-				})
-				if (!response.ok) return STATUS_RESULT[response.status] ?? FAILED
-				const confirmed = readDraftLockVersion(await response.json().catch(() => null))
-				return confirmed === null ? FAILED : { kind: 'ok', lockVersion: confirmed }
-			} catch {
+			const body = lockVersion === null ? { payload } : { payload, lockVersion }
+			if (options.keepalive && new TextEncoder().encode(JSON.stringify(body)).length > KEEPALIVE_BODY_LIMIT_BYTES) {
 				return FAILED
 			}
+			const outcome = await request(url, {
+				method: 'PATCH',
+				json: body,
+				keepalive: options.keepalive,
+				parse: parseDraftLockVersion,
+			})
+			if (outcome.ok) return { kind: 'ok', lockVersion: outcome.data }
+			if (outcome.kind === 'http' && outcome.status !== undefined) return STATUS_RESULT[outcome.status] ?? FAILED
+			return FAILED
 		},
 		async readLockVersion() {
-			try {
-				const response = await apiFetch(url, { cache: 'no-store' })
-				if (!response.ok) return null
-				return readDraftLockVersion(await response.json().catch(() => null))
-			} catch {
-				return null
-			}
+			const outcome = await request(url, { cache: 'no-store', parse: parseDraftLockVersion })
+			return outcome.ok ? outcome.data : null
 		},
 	}
 }
