@@ -10,11 +10,22 @@ import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
-import { apiFetch } from '@/lib/api-fetch'
+import { saveBlob } from '@/lib/http/download'
+import { exportFailureMessage, failureMessage } from '@/lib/http/errors'
+import {
+	adminTestsKeys,
+	adminTestsListFetcher,
+	deleteTest,
+	deleteTopic,
+	exportTestArchive,
+	exportTopicArchive,
+	topicsListFetcher,
+} from '@/lib/tests/admin-api'
 import {
 	TOPICS_BACK_LABEL,
 	TOPIC_DENIED_DESCRIPTION,
@@ -25,18 +36,21 @@ import {
 } from '@/lib/tests/bank-view'
 
 import { TopicFormDialog } from '../components/TopicFormDialog'
-import { readApiError } from '../components/test-editor/test-editor-api'
 import { TopicEmptyState } from '../components/topic-page/TopicEmptyState'
 import { TopicHero } from '../components/topic-page/TopicHero'
 import { TopicStatsPanel } from '../components/topic-page/TopicStatsPanel'
 import { TopicTestCard } from '../components/topic-page/TopicTestCard'
 import { getTopicStats, getTopicTests } from '../components/topic-page/topic-page-utils'
-import type { Test, Topic, TopicsResponse, TestsResponse } from '../types'
+import type { Test, Topic } from '../types'
 
-const fetcher = async (url: string) => {
-	const response = await apiFetch(url)
-	if (!response.ok) throw new Error('Не удалось загрузить данные')
-	return response.json()
+const exportOutcomeToast = (outcome: Awaited<ReturnType<typeof exportTestArchive>>, success: string) => {
+	if (outcome.ok) {
+		saveBlob(outcome.data.blob, outcome.data.filename)
+		toast.success(success)
+		return
+	}
+	const message = exportFailureMessage(outcome, 'Ошибка экспорта')
+	if (message) toast.error(message)
 }
 
 function LoadingTopicPage() {
@@ -66,15 +80,15 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 	const {
 		data: topicsData,
 		mutate: mutateTopics,
-		isLoading: topicsLoading,
 		error: topicsError,
-	} = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
+	} = useSWR(adminTestsKeys.topics(), topicsListFetcher, { revalidateOnFocus: false })
 	const {
 		data: testsData,
 		mutate: mutateTests,
-		isLoading: testsLoading,
 		error: testsError,
-	} = useSWR<TestsResponse>('/api/tests', fetcher)
+	} = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
+	const testsFailed = testsError !== undefined && testsData === undefined
+	const testsPending = testsData === undefined
 
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData?.topics])
 	const allTests = useMemo(() => testsData?.tests ?? [], [testsData?.tests])
@@ -83,43 +97,11 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 	const stats = useMemo(() => getTopicStats(topicTests), [topicTests])
 
 	const handleExportTopic = async (withAnswers: boolean) => {
-		try {
-			const res = await apiFetch(`/api/tests/topics/${topicSlug}/export?withAnswers=${withAnswers}`)
-
-			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
-
-			const blob = await res.blob()
-			const url = URL.createObjectURL(blob)
-			const a = document.createElement('a')
-			a.href = url
-			a.download = `${topicSlug}.zip`
-			a.click()
-			URL.revokeObjectURL(url)
-
-			toast.success('Тема экспортирована')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка экспорта')
-		}
+		exportOutcomeToast(await exportTopicArchive(topicSlug, withAnswers), 'Тема экспортирована')
 	}
 
 	const handleExportTest = async (test: Test, withAnswers: boolean) => {
-		try {
-			const res = await apiFetch(`/api/tests/${test.id}/export?withAnswers=${withAnswers}`)
-
-			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
-
-			const blob = await res.blob()
-			const url = URL.createObjectURL(blob)
-			const a = document.createElement('a')
-			a.href = url
-			a.download = res.headers.get('content-disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'test.zip'
-			a.click()
-			URL.revokeObjectURL(url)
-
-			toast.success('Тест экспортирован')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка экспорта')
-		}
+		exportOutcomeToast(await exportTestArchive(test.id, withAnswers), 'Тест экспортирован')
 	}
 
 	const handleDeleteTest = async (test: Test) => {
@@ -132,17 +114,10 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		})
 		if (!confirmed) return
 
-		let status = 0
-		let body: unknown = null
-		try {
-			const res = await apiFetch(`/api/tests/${test.id}`, { method: 'DELETE' })
-			status = res.status
-			if (!res.ok) body = await res.json().catch(() => null)
-		} catch {
-			status = 0
-		}
+		const outcome = await deleteTest(test.id)
+		if (!outcome.ok && (outcome.kind === 'auth' || outcome.kind === 'aborted')) return
 
-		const result = deleteTestToast(status, body)
+		const result = outcome.ok ? deleteTestToast(outcome.status) : deleteTestToast(outcome.status ?? 0, outcome.body)
 		if (result.kind === 'success') {
 			toast.success(result.message)
 			mutateTests()
@@ -161,25 +136,26 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 		})
 		if (!confirmed) return
 
-		try {
-			const res = await apiFetch(`/api/tests/topics/${topicToDelete.id}`, { method: 'DELETE' })
-
-			if (!res.ok) throw new Error('Ошибка удаления')
-
-			toast.success('Тема удалена')
-			await mutateTopics()
-			await mutateTests()
-			router.push('/admin/tests')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления темы')
+		const outcome = await deleteTopic(topicToDelete.id)
+		if (!outcome.ok) {
+			const message = failureMessage(outcome, 'Ошибка удаления темы')
+			if (message) toast.error(message)
+			return
 		}
+
+		toast.success('Тема удалена')
+		await mutateTopics()
+		await mutateTests()
+		router.push('/admin/tests')
 	}
 
-	if (topicsLoading || authLoading) {
+	if (topicsError !== undefined && topicsData === undefined) {
+		return <LoadErrorAlert title="Не удалось загрузить тему" error={topicsError} onRetry={() => mutateTopics()} />
+	}
+
+	if (topicsData === undefined || authLoading) {
 		return <LoadingTopicPage />
 	}
-
-	if (topicsError) return <p role="alert">Не удалось загрузить тему</p>
 
 	const pageState = topicPageState({ topicFound: Boolean(topic), zoneAll: can('zone', 'all') })
 
@@ -221,7 +197,7 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 
 			<TopicHero
 				topic={topic}
-				stats={testsLoading || testsError ? null : stats}
+				stats={testsPending ? null : stats}
 				canManageCatalog={catalog}
 				onEditTopic={() => setTopicDialogOpen(true)}
 				onExportTopic={handleExportTopic}
@@ -229,10 +205,10 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 			/>
 
 			<section aria-label="Статистика темы">
-				{testsLoading ? (
+				{testsFailed ? (
+					<LoadErrorAlert title="Не удалось загрузить статистику" error={testsError} onRetry={() => mutateTests()} />
+				) : testsPending ? (
 					<Skeleton className="h-32 w-full" />
-				) : testsError ? (
-					<p role="alert">Не удалось загрузить статистику</p>
 				) : (
 					<TopicStatsPanel stats={stats} />
 				)}
@@ -245,14 +221,14 @@ export default function TopicTestsClient({ topicSlug }: { topicSlug: string }) {
 						<h2 className="mt-2 font-serif text-3xl">Материалы</h2>
 					</div>
 					<div className="inline-flex w-fit rounded-full bg-secondary px-4 py-2 text-sm text-muted-foreground">
-						{testsLoading || testsError ? '…' : topicTests.length} тестов
+						{testsPending ? '…' : topicTests.length} тестов
 					</div>
 				</div>
 
-				{testsLoading ? (
+				{testsFailed ? (
+					<LoadErrorAlert title="Не удалось загрузить тесты" error={testsError} onRetry={() => mutateTests()} />
+				) : testsPending ? (
 					<Skeleton className="h-40 w-full" />
-				) : testsError ? (
-					<p role="alert">Не удалось загрузить тесты</p>
 				) : topicTests.length === 0 ? (
 					<TopicEmptyState
 						title="В теме пока нет тестов"

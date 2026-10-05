@@ -22,7 +22,8 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { apiFetch } from '@/lib/api-fetch'
+import { failureMessage } from '@/lib/http/errors'
+import { fetchTopicTeacherOptions, saveTopic, setTopicTeachers } from '@/lib/tests/admin-api'
 import {
 	TEACHERS_EMPTY,
 	TEACHERS_FIELD_LABEL,
@@ -111,17 +112,9 @@ export function TopicFormDialog({
 	useEffect(() => {
 		if (!open || !catalog) return
 		let cancelled = false
-		apiFetch('/api/tests/topics/teacher-options')
-			.then(async (res) => {
-				if (!res.ok) return null
-				return (await res.json()) as { teachers?: TopicTeacher[] }
-			})
-			.then((data) => {
-				if (!cancelled) setTeacherOptions(data?.teachers ?? [])
-			})
-			.catch(() => {
-				if (!cancelled) setTeacherOptions([])
-			})
+		fetchTopicTeacherOptions().then((outcome) => {
+			if (!cancelled) setTeacherOptions(outcome.ok ? outcome.data.teachers : [])
+		})
 		return () => {
 			cancelled = true
 		}
@@ -160,19 +153,6 @@ export function TopicFormDialog({
 		setForm((prev) => ({ ...prev, slug }))
 	}
 
-	const saveTeachers = async (topicId: string): Promise<number> => {
-		try {
-			const res = await apiFetch(`/api/tests/topics/${topicId}/teachers`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ teacherIds }),
-			})
-			return res.status
-		} catch {
-			return 0
-		}
-	}
-
 	const handleSave = async () => {
 		if (saving) return
 		if (!form.title) {
@@ -187,31 +167,26 @@ export function TopicFormDialog({
 
 		setSaving(true)
 		try {
-			const url = isEditing ? `/api/tests/topics/${editingTopic!.id}` : '/api/tests/topics'
-			const method = isEditing ? 'PATCH' : 'POST'
-
-			const res = await apiFetch(url, {
-				method,
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(form),
-			})
-
-			if (!res.ok) {
-				const data = await res.json()
-				throw new Error(data.error || 'Ошибка сохранения')
+			const saved = await saveTopic({ id: isEditing ? editingTopic!.id : undefined, body: form })
+			if (!saved.ok) {
+				const message = failureMessage(saved, 'Ошибка сохранения')
+				if (message) toast.error(message)
+				return
 			}
 
-			const data = await res.json()
-			const topicId: string | undefined = isEditing ? editingTopic!.id : data.topic?.id
-			const teachersStatus =
-				catalog && topicId && teachersSetChanged(initialTeacherIds, teacherIds) ? await saveTeachers(topicId) : null
+			const topicId = isEditing ? editingTopic!.id : saved.data.topic.id
+			const teachers =
+				catalog && teachersSetChanged(initialTeacherIds, teacherIds)
+					? await setTopicTeachers(topicId, teacherIds)
+					: null
+			const teachersSilent =
+				teachers !== null && !teachers.ok && (teachers.kind === 'auth' || teachers.kind === 'aborted')
+			const teachersStatus = teachers === null ? null : teachers.ok ? teachers.status : (teachers.status ?? 0)
 			const outcome = topicSaveOutcome({ isEditing, teachersStatus })
 			if (outcome.kind === 'success') toast.success(outcome.message)
-			else toast.error(outcome.message)
+			else if (!teachersSilent) toast.error(outcome.message)
 			onOpenChange(false)
-			onSaved(data.topic)
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка сохранения')
+			onSaved(saved.data.topic)
 		} finally {
 			setSaving(false)
 		}

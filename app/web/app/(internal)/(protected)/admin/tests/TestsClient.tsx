@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import {
 	BookOpen,
@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,7 +39,17 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
-import { apiFetch } from '@/lib/api-fetch'
+import { saveBlob } from '@/lib/http/download'
+import { exportFailureMessage, failureMessage } from '@/lib/http/errors'
+import {
+	adminTestsKeys,
+	adminTestsListFetcher,
+	deleteTest,
+	deleteTopic,
+	exportTestArchive,
+	exportTopicArchive,
+	topicsListFetcher,
+} from '@/lib/tests/admin-api'
 import {
 	NO_TOPICS_DESCRIPTION,
 	NO_TOPICS_KICKER,
@@ -51,14 +62,7 @@ import {
 import { cn } from '@/lib/utils/cn'
 
 import { TopicFormDialog } from './components/TopicFormDialog'
-import { readApiError } from './components/test-editor/test-editor-api'
-import type { Test, Topic, TopicsResponse, TestsResponse } from './types'
-
-const fetcher = async (url: string) => {
-	const response = await apiFetch(url)
-	if (!response.ok) throw new Error('Не удалось загрузить данные')
-	return response.json()
-}
+import type { Test, Topic } from './types'
 
 const interactiveClass =
 	'transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
@@ -95,15 +99,15 @@ export default function TestsClient() {
 	const {
 		data: topicsData,
 		mutate: mutateTopics,
-		isLoading: topicsLoading,
 		error: topicsError,
-	} = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
+	} = useSWR(adminTestsKeys.topics(), topicsListFetcher)
 	const {
 		data: testsData,
 		mutate: mutateTests,
-		isLoading: testsLoading,
 		error: testsError,
-	} = useSWR<TestsResponse>('/api/tests', fetcher)
+	} = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
+	const topicsTitleRef = useRef<HTMLHeadingElement>(null)
+	const testsTitleRef = useRef<HTMLHeadingElement>(null)
 
 	const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
@@ -116,8 +120,11 @@ export default function TestsClient() {
 	const publishedCount = allTests.filter((test) => test.isPublished).length
 	const draftCount = allTests.length - publishedCount
 	const totalQuestions = allTests.reduce((sum, test) => sum + (test.questionsCount ?? 0), 0)
+	const topicsFailed = topicsError !== undefined && topicsData === undefined
+	const testsFailed = testsError !== undefined && testsData === undefined
+	const testsPending = testsData === undefined
 	const bankState =
-		topicsLoading || topicsError || authLoading
+		topicsData === undefined || authLoading
 			? null
 			: emptyBankState({ topics: topics.length, zoneAll: can('zone', 'all') })
 	const teacherWithoutTopics = bankState === 'teacher-no-topics'
@@ -146,20 +153,17 @@ export default function TestsClient() {
 		})
 		if (!confirmed) return
 
-		try {
-			const res = await apiFetch(`/api/tests/topics/${topic.id}`, {
-				method: 'DELETE',
-			})
-
-			if (!res.ok) throw new Error('Ошибка удаления')
-
-			toast.success('Тема удалена')
-			if (selectedTopic === topic.id) setSelectedTopic(null)
-			mutateTopics()
-			mutateTests()
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка удаления темы')
+		const outcome = await deleteTopic(topic.id)
+		if (!outcome.ok) {
+			const message = failureMessage(outcome, 'Ошибка удаления темы')
+			if (message) toast.error(message)
+			return
 		}
+
+		toast.success('Тема удалена')
+		if (selectedTopic === topic.id) setSelectedTopic(null)
+		mutateTopics()
+		mutateTests()
 	}
 
 	const handleDeleteTest = async (test: Test) => {
@@ -172,19 +176,10 @@ export default function TestsClient() {
 		})
 		if (!confirmed) return
 
-		let status = 0
-		let body: unknown = null
-		try {
-			const res = await apiFetch(`/api/tests/${test.id}`, {
-				method: 'DELETE',
-			})
-			status = res.status
-			if (!res.ok) body = await res.json().catch(() => null)
-		} catch {
-			status = 0
-		}
+		const outcome = await deleteTest(test.id)
+		if (!outcome.ok && (outcome.kind === 'auth' || outcome.kind === 'aborted')) return
 
-		const result = deleteTestToast(status, body)
+		const result = outcome.ok ? deleteTestToast(outcome.status) : deleteTestToast(outcome.status ?? 0, outcome.body)
 		if (result.kind === 'success') {
 			toast.success(result.message)
 			mutateTests()
@@ -194,43 +189,25 @@ export default function TestsClient() {
 	}
 
 	const handleExport = async (testId: string, withAnswers: boolean) => {
-		try {
-			const res = await apiFetch(`/api/tests/${testId}/export?withAnswers=${withAnswers}`)
-
-			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
-
-			const blob = await res.blob()
-			const url = URL.createObjectURL(blob)
-			const a = document.createElement('a')
-			a.href = url
-			a.download = res.headers.get('content-disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'test.zip'
-			a.click()
-			URL.revokeObjectURL(url)
-
+		const outcome = await exportTestArchive(testId, withAnswers)
+		if (outcome.ok) {
+			saveBlob(outcome.data.blob, outcome.data.filename)
 			toast.success('Тест экспортирован')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка экспорта')
+			return
 		}
+		const message = exportFailureMessage(outcome, 'Ошибка экспорта')
+		if (message) toast.error(message)
 	}
 
 	const handleExportTopic = async (topicSlug: string, withAnswers: boolean) => {
-		try {
-			const res = await apiFetch(`/api/tests/topics/${topicSlug}/export?withAnswers=${withAnswers}`)
-
-			if (!res.ok) throw new Error(await readApiError(res, 'Ошибка экспорта'))
-
-			const blob = await res.blob()
-			const url = URL.createObjectURL(blob)
-			const a = document.createElement('a')
-			a.href = url
-			a.download = `${topicSlug}.zip`
-			a.click()
-			URL.revokeObjectURL(url)
-
+		const outcome = await exportTopicArchive(topicSlug, withAnswers)
+		if (outcome.ok) {
+			saveBlob(outcome.data.blob, outcome.data.filename)
 			toast.success('Тема экспортирована')
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Ошибка экспорта')
+			return
 		}
+		const message = exportFailureMessage(outcome, 'Ошибка экспорта')
+		if (message) toast.error(message)
 	}
 
 	return (
@@ -291,14 +268,10 @@ export default function TestsClient() {
 
 				{teacherWithoutTopics ? null : (
 					<div className="mt-8 grid gap-3 tab-sm:grid-cols-2 tab:grid-cols-4">
-						<StatTile label="всего тестов" value={testsLoading || testsError ? '…' : allTests.length} icon={BookOpen} />
-						<StatTile
-							label="опубликовано"
-							value={testsLoading || testsError ? '…' : publishedCount}
-							icon={CheckCircle2}
-						/>
-						<StatTile label="черновики" value={testsLoading || testsError ? '…' : draftCount} icon={FileText} />
-						<StatTile label="вопросов" value={testsLoading || testsError ? '…' : totalQuestions} icon={Layers3} />
+						<StatTile label="всего тестов" value={testsPending ? '…' : allTests.length} icon={BookOpen} />
+						<StatTile label="опубликовано" value={testsPending ? '…' : publishedCount} icon={CheckCircle2} />
+						<StatTile label="черновики" value={testsPending ? '…' : draftCount} icon={FileText} />
+						<StatTile label="вопросов" value={testsPending ? '…' : totalQuestions} icon={Layers3} />
 					</div>
 				)}
 			</section>
@@ -316,7 +289,9 @@ export default function TestsClient() {
 						<div className="flex items-start justify-between gap-3">
 							<div>
 								<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">темы</p>
-								<h2 className="mt-2 font-serif text-2xl">Навигация</h2>
+								<h2 ref={topicsTitleRef} tabIndex={-1} className="mt-2 font-serif text-2xl">
+									Навигация
+								</h2>
 							</div>
 							{catalog ? (
 								<Button variant="outline" size="icon" onClick={handleCreateTopic} className="rounded-full bg-card">
@@ -326,10 +301,15 @@ export default function TestsClient() {
 						</div>
 
 						<div className="mt-6 space-y-2">
-							{topicsLoading ? (
+							{topicsFailed ? (
+								<LoadErrorAlert
+									title="Не удалось загрузить темы"
+									error={topicsError}
+									onRetry={() => mutateTopics()}
+									focusTarget={topicsTitleRef}
+								/>
+							) : topicsData === undefined ? (
 								<Skeleton className="h-40 w-full" />
-							) : topicsError ? (
-								<p role="alert">Не удалось загрузить темы</p>
 							) : (
 								topicRows.map((topic) => {
 									const isAll = topic.id === null
@@ -358,7 +338,7 @@ export default function TestsClient() {
 													<EyeOff className="size-3.5 text-muted-foreground" />
 												) : null}
 												<span className="shrink-0 rounded-full bg-card px-3 py-1 text-xs text-muted-foreground">
-													{isAll && (testsLoading || testsError) ? '…' : (topic.testsCount ?? 0)}
+													{isAll && testsPending ? '…' : (topic.testsCount ?? 0)}
 												</span>
 											</button>
 											{isAll ? null : (
@@ -421,7 +401,9 @@ export default function TestsClient() {
 								<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
 									{selectedTopicData ? selectedTopicData.slug : 'все темы'}
 								</p>
-								<h2 className="mt-2 font-serif text-3xl">{selectedTopicData?.title ?? 'Все тесты'}</h2>
+								<h2 ref={testsTitleRef} tabIndex={-1} className="mt-2 font-serif text-3xl">
+									{selectedTopicData?.title ?? 'Все тесты'}
+								</h2>
 							</div>
 							<div className="rounded-full bg-secondary px-4 py-2 text-sm text-muted-foreground">
 								{filteredTests.length} из {allTests.length}
@@ -430,10 +412,15 @@ export default function TestsClient() {
 
 						<ScrollArea>
 							<div className="mt-3 h-full max-h-[calc(100dvh-34rem)] space-y-3">
-								{testsLoading ? (
+								{testsFailed ? (
+									<LoadErrorAlert
+										title="Не удалось загрузить тесты"
+										error={testsError}
+										onRetry={() => mutateTests()}
+										focusTarget={testsTitleRef}
+									/>
+								) : testsPending ? (
 									<LoadingState />
-								) : testsError ? (
-									<p role="alert">Не удалось загрузить тесты</p>
 								) : filteredTests.length === 0 ? (
 									<div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">
 										{selectedTopic ? 'В этой теме пока нет тестов.' : 'Создайте первый тест.'}
