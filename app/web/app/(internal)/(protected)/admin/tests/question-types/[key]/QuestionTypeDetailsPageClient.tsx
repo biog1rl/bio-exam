@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowLeft, RotateCcw, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -16,26 +17,52 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
-import { apiFetch } from '@/lib/api-fetch'
+import { failureMessage } from '@/lib/http/errors'
+import {
+	adminTestsKeys,
+	adminTestsListFetcher,
+	deleteQuestionType,
+	deleteTestQuestionTypeOverride,
+	questionTypeFetcher,
+	questionTypesFetcher,
+	saveQuestionType,
+	saveTestQuestionTypeOverride,
+	topicsListFetcher,
+} from '@/lib/tests/admin-api'
 
 import QuestionTypeScoringRuleEditor from '../../components/QuestionTypeScoringRuleEditor'
-import type {
-	QuestionTypeDefinition,
-	QuestionTypeScoringRule,
-	QuestionTypesResponse,
-	QuestionUiTemplate,
-	TestsResponse,
-	TopicsResponse,
-} from '../../types'
+import type { QuestionTypeDefinition, QuestionTypeScoringRule, QuestionUiTemplate } from '../../types'
 import { TEMPLATE_META, createDefaultQuestionTypeScoringRule } from '../../types'
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-	const res = await fetch(url, { credentials: 'include' })
-	if (!res.ok) {
-		const data = await res.json().catch(() => null)
-		throw new Error(data?.error || 'Ошибка загрузки')
+const FORM_SWR_OPTIONS = { revalidateOnFocus: false, revalidateOnReconnect: false }
+
+const TYPE_SWR_OPTIONS = { ...FORM_SWR_OPTIONS, revalidateOnMount: false }
+
+type GlobalForm = {
+	title: string
+	description: string
+	uiTemplate: QuestionUiTemplate
+	isActive: boolean
+	scoringRule: QuestionTypeScoringRule
+	validationMinOptions: string
+	validationMaxOptions: string
+	validationExactChoiceCount: string
+}
+
+function toGlobalForm(questionType: QuestionTypeDefinition): GlobalForm {
+	return {
+		title: questionType.title,
+		description: questionType.description || '',
+		uiTemplate: questionType.uiTemplate,
+		isActive: questionType.isActive,
+		scoringRule: questionType.scoringRule,
+		...toValidationFields(questionType.validationSchema),
 	}
-	return (await res.json()) as T
+}
+
+function toastFailure(outcome: Parameters<typeof failureMessage>[0], fallback: string) {
+	const message = failureMessage(outcome, fallback)
+	if (message) toast.error(message)
 }
 
 type Props = {
@@ -73,36 +100,31 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 
 	const {
 		data: typeData,
+		error: typeError,
 		mutate: mutateType,
 		isLoading: typeLoading,
-	} = useSWR<{ questionType: QuestionTypeDefinition }>(`/api/tests/question-types/${typeKey}`, fetcher)
-	const { data: topicsData } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
-	const { data: testsData } = useSWR<TestsResponse>('/api/tests', fetcher)
+	} = useSWR(adminTestsKeys.questionType(typeKey), questionTypeFetcher, TYPE_SWR_OPTIONS)
+	const typeLoadFailed = typeError !== undefined && typeData === undefined
+	const { data: topicsData } = useSWR(adminTestsKeys.topics(), topicsListFetcher)
+	const { data: testsData } = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
 
 	const testsForTopic = useMemo(
 		() => (testsData?.tests ?? []).filter((test) => test.topicId === selectedTopicId),
 		[testsData?.tests, selectedTopicId]
 	)
 
-	const { data: testScopedData, mutate: mutateTestScoped } = useSWR<QuestionTypesResponse>(
-		selectedTestId ? `/api/tests/question-types?testId=${selectedTestId}&includeInactive=true` : null,
-		fetcher
+	const { data: testScopedData, mutate: mutateTestScoped } = useSWR(
+		selectedTestId ? adminTestsKeys.scoringTest(selectedTestId) : null,
+		questionTypesFetcher,
+		FORM_SWR_OPTIONS
 	)
 	const testScopedType = useMemo(
 		() => testScopedData?.questionTypes.find((item) => item.key === typeKey) ?? null,
 		[testScopedData?.questionTypes, typeKey]
 	)
 
-	const [globalForm, setGlobalForm] = useState<{
-		title: string
-		description: string
-		uiTemplate: QuestionUiTemplate
-		isActive: boolean
-		scoringRule: QuestionTypeScoringRule
-		validationMinOptions: string
-		validationMaxOptions: string
-		validationExactChoiceCount: string
-	} | null>(null)
+	const [globalForm, setGlobalForm] = useState<GlobalForm | null>(null)
+	const activeTypeKeyRef = useRef(typeKey)
 
 	const [overrideForm, setOverrideForm] = useState<{
 		titleOverride: string
@@ -118,18 +140,21 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 		}
 	}, [globalForm?.title, typeData?.questionType?.title, typeKey])
 
+	const loadType = useCallback(
+		async (key: string) => {
+			const fresh = await mutateType()
+			if (!fresh?.questionType || activeTypeKeyRef.current !== key) return
+			setGlobalForm(toGlobalForm(fresh.questionType))
+		},
+		[mutateType]
+	)
+
 	useEffect(() => {
-		if (!typeData?.questionType) return
-		const validation = toValidationFields(typeData.questionType.validationSchema)
-		setGlobalForm({
-			title: typeData.questionType.title,
-			description: typeData.questionType.description || '',
-			uiTemplate: typeData.questionType.uiTemplate,
-			isActive: typeData.questionType.isActive,
-			scoringRule: typeData.questionType.scoringRule,
-			...validation,
-		})
-	}, [typeData?.questionType])
+		activeTypeKeyRef.current = typeKey
+		void loadType(typeKey)
+	}, [typeKey, loadType])
+
+	const reseedGlobalForm = () => loadType(typeKey)
 
 	useEffect(() => {
 		if (!testScopedType) return
@@ -143,32 +168,26 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 	const saveGlobal = async () => {
 		if (!globalForm) return
 		setSavingGlobal(true)
-		try {
-			const payload = {
+		const outcome = await saveQuestionType({
+			key: typeKey,
+			body: {
 				title: globalForm.title.trim(),
 				description: globalForm.description.trim() || null,
 				uiTemplate: globalForm.uiTemplate,
 				isActive: globalForm.isActive,
 				scoringRule: globalForm.scoringRule,
 				validationSchema: toValidationPayload(globalForm),
-			}
-			const res = await apiFetch(`/api/tests/question-types/${typeKey}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-			})
-			if (!res.ok) {
-				const data = await res.json().catch(() => null)
-				throw new Error(data?.error || 'Не удалось сохранить тип вопроса')
-			}
-			toast.success('Тип вопроса обновлен')
-			await mutateType()
-			await mutateTestScoped()
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка сохранения')
-		} finally {
+			},
+		})
+		if (!outcome.ok) {
 			setSavingGlobal(false)
+			toastFailure(outcome, 'Не удалось сохранить тип вопроса')
+			return
 		}
+		toast.success('Тип вопроса обновлен')
+		await reseedGlobalForm()
+		await mutateTestScoped()
+		setSavingGlobal(false)
 	}
 
 	const removeType = async () => {
@@ -181,68 +200,47 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 		})
 		if (!confirmed) return
 		setSavingGlobal(true)
-		try {
-			const res = await apiFetch(`/api/tests/question-types/${typeKey}`, {
-				method: 'DELETE',
-			})
-			if (!res.ok) {
-				const data = await res.json().catch(() => null)
-				throw new Error(data?.error || 'Не удалось отключить тип')
-			}
-			toast.success('Тип вопроса отключен')
-			await mutateType()
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка удаления')
-		} finally {
+		const outcome = await deleteQuestionType(typeKey)
+		if (!outcome.ok) {
 			setSavingGlobal(false)
+			toastFailure(outcome, 'Не удалось отключить тип')
+			return
 		}
+		toast.success('Тип вопроса отключен')
+		await reseedGlobalForm()
+		setSavingGlobal(false)
 	}
 
 	const saveOverride = async () => {
 		if (!selectedTestId || !overrideForm) return
 		setSavingOverride(true)
-		try {
-			const payload = {
-				titleOverride: overrideForm.titleOverride.trim() || null,
-				scoringRuleOverride: overrideForm.scoringRuleOverride,
-				isDisabled: overrideForm.isDisabled,
-			}
-			const res = await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${typeKey}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-			})
-			if (!res.ok) {
-				const data = await res.json().catch(() => null)
-				throw new Error(data?.error || 'Не удалось сохранить override')
-			}
-			toast.success('Override для теста сохранен')
-			await mutateTestScoped()
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка сохранения override')
-		} finally {
+		const outcome = await saveTestQuestionTypeOverride(selectedTestId, typeKey, {
+			titleOverride: overrideForm.titleOverride.trim() || null,
+			scoringRuleOverride: overrideForm.scoringRuleOverride,
+			isDisabled: overrideForm.isDisabled,
+		})
+		if (!outcome.ok) {
 			setSavingOverride(false)
+			toastFailure(outcome, 'Не удалось сохранить override')
+			return
 		}
+		toast.success('Override для теста сохранен')
+		await mutateTestScoped()
+		setSavingOverride(false)
 	}
 
 	const clearOverride = async () => {
 		if (!selectedTestId) return
 		setSavingOverride(true)
-		try {
-			const res = await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${typeKey}`, {
-				method: 'DELETE',
-			})
-			if (!res.ok) {
-				const data = await res.json().catch(() => null)
-				throw new Error(data?.error || 'Не удалось удалить override')
-			}
-			toast.success('Override удален')
-			await mutateTestScoped()
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка удаления override')
-		} finally {
+		const outcome = await deleteTestQuestionTypeOverride(selectedTestId, typeKey)
+		if (!outcome.ok) {
 			setSavingOverride(false)
+			toastFailure(outcome, 'Не удалось удалить override')
+			return
 		}
+		toast.success('Override удален')
+		await mutateTestScoped()
+		setSavingOverride(false)
 	}
 
 	if (typeLoading || !globalForm || !typeData?.questionType) {
@@ -254,9 +252,13 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: Props) {
 						<ArrowLeft className="mr-2 h-4 w-4" />К типам вопросов
 					</Link>
 				</Button>
-				<Card>
-					<CardContent className="py-8 text-sm">Загрузка...</CardContent>
-				</Card>
+				{typeLoadFailed ? (
+					<LoadErrorAlert title="Не удалось загрузить тип вопроса" error={typeError} onRetry={reseedGlobalForm} />
+				) : (
+					<Card>
+						<CardContent className="py-8 text-sm">Загрузка...</CardContent>
+					</Card>
+				)}
 			</div>
 		)
 	}

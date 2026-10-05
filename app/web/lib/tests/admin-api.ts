@@ -1,4 +1,14 @@
-import type { Test, Topic, TopicFormData, TopicsResponse } from '@/app/(internal)/(protected)/admin/tests/types'
+import type {
+	QuestionTypeDefinition,
+	QuestionTypeScoringRule,
+	QuestionTypesResponse,
+	QuestionTypeValidationSchema,
+	QuestionUiTemplate,
+	Test,
+	Topic,
+	TopicFormData,
+	TopicsResponse,
+} from '@/app/(internal)/(protected)/admin/tests/types'
 import { hasZipEndOfCentralDirectory } from '@/lib/http/download'
 import { exportFailureMessage } from '@/lib/http/errors'
 import { MalformedBodyError, request, requestBlob, type RequestFailure, type RequestOutcome } from '@/lib/http/request'
@@ -15,6 +25,30 @@ export type TopicPayload = TopicFormData
 export type TeacherOption = TopicTeacher
 
 export type QuestionTypesQuery = { testId?: string; includeInactive?: boolean }
+
+export type QuestionTypeResponse = { questionType: QuestionTypeDefinition }
+
+export type QuestionTypePayload = {
+	key?: string
+	title?: string
+	description?: string | null
+	uiTemplate?: QuestionUiTemplate
+	validationSchema?: QuestionTypeValidationSchema | null
+	scoringRule?: QuestionTypeScoringRule
+	isActive?: boolean
+}
+
+export type QuestionTypeOverridePayload = {
+	titleOverride: string | null
+	scoringRuleOverride: QuestionTypeScoringRule | null
+	isDisabled: boolean
+}
+
+export type ScoringRulesResponse = QuestionTypesResponse
+
+export type ScoringRuleEntry = { key: string; scoringRule: QuestionTypeScoringRule }
+
+export type TestScoringRuleEntry = ScoringRuleEntry & { override: boolean }
 
 export type ArchiveDownload = { blob: Blob; filename: string }
 
@@ -34,6 +68,7 @@ export const adminTestsKeys = {
 	bySlug: (topicSlug: string, testSlug: string, view?: 'summary') =>
 		`/api/tests/by-slug/${topicSlug}/${testSlug}${view ? `?view=${view}` : ''}`,
 	questionTypes: (query?: QuestionTypesQuery) => questionTypesKey(query),
+	questionType: (key: string) => `${questionTypesKey()}/${key}`,
 	questionDrafts: (testId: string) => `/api/tests/${testId}/question-drafts`,
 	questionDraft: (testId: string, draftId: string) => `/api/tests/${testId}/question-drafts/${draftId}`,
 	assignments: (testId: string) => `/api/tests/${testId}/assignments`,
@@ -95,6 +130,101 @@ export function setTopicTeachers(topicId: string, teacherIds: string[]): Promise
 
 export function fetchTopicTeacherOptions(): Promise<RequestOutcome<{ teachers: TeacherOption[] }>> {
 	return request(`${adminTestsKeys.topics()}/teacher-options`, { parse: parseTeacherOptions })
+}
+
+function testOverridePath(testId: string, key: string): string {
+	return `${adminTestsKeys.questionTypes()}/tests/${testId}/overrides/${key}`
+}
+
+export function parseQuestionTypes(body: unknown): QuestionTypesResponse {
+	if (!Array.isArray(asRecord(body).questionTypes)) throw new MalformedBodyError()
+	return body as QuestionTypesResponse
+}
+
+export function parseScoringRules(body: unknown): ScoringRulesResponse {
+	return parseQuestionTypes(body)
+}
+
+export function parseQuestionType(body: unknown): QuestionTypeResponse {
+	if (typeof asRecord(asRecord(body).questionType).key !== 'string') throw new MalformedBodyError()
+	return body as QuestionTypeResponse
+}
+
+export const questionTypesFetcher = fetcherWith(parseQuestionTypes)
+
+export const questionTypeFetcher = fetcherWith(parseQuestionType)
+
+export const scoringRulesFetcher = fetcherWith(parseScoringRules)
+
+export function saveQuestionType(input: { key?: string; body: QuestionTypePayload }): Promise<RequestOutcome<unknown>> {
+	if (input.key) {
+		return request(adminTestsKeys.questionType(input.key), {
+			method: 'PATCH',
+			json: input.body,
+			fallbackMessage: 'Не удалось сохранить тип вопроса',
+		})
+	}
+	return request(adminTestsKeys.questionTypes(), {
+		method: 'POST',
+		json: input.body,
+		fallbackMessage: 'Не удалось создать тип',
+	})
+}
+
+export function deleteQuestionType(key: string): Promise<RequestOutcome<unknown>> {
+	return request(adminTestsKeys.questionType(key), { method: 'DELETE', fallbackMessage: 'Не удалось отключить тип' })
+}
+
+export function saveTestQuestionTypeOverride(
+	testId: string,
+	key: string,
+	body: QuestionTypeOverridePayload
+): Promise<RequestOutcome<unknown>> {
+	return request(testOverridePath(testId, key), {
+		method: 'PUT',
+		json: body,
+		fallbackMessage: 'Не удалось сохранить override',
+	})
+}
+
+export function deleteTestQuestionTypeOverride(testId: string, key: string): Promise<RequestOutcome<unknown>> {
+	return request(testOverridePath(testId, key), { method: 'DELETE', fallbackMessage: 'Не удалось удалить override' })
+}
+
+async function runInOrder(steps: Array<() => Promise<RequestOutcome<unknown>>>): Promise<RequestOutcome<unknown>> {
+	let last: RequestOutcome<unknown> = { ok: true, status: 204, data: null }
+	for (const step of steps) {
+		last = await step()
+		if (!last.ok) return last
+	}
+	return last
+}
+
+export function saveGlobalScoringRules(rules: ScoringRuleEntry[]): Promise<RequestOutcome<unknown>> {
+	return runInOrder(
+		rules.map(
+			(rule) => () =>
+				request(adminTestsKeys.questionType(rule.key), {
+					method: 'PATCH',
+					json: { scoringRule: rule.scoringRule },
+					fallbackMessage: `Не удалось сохранить тип ${rule.key}`,
+				})
+		)
+	)
+}
+
+export function saveTestScoringRules(testId: string, rules: TestScoringRuleEntry[]): Promise<RequestOutcome<unknown>> {
+	return runInOrder(
+		rules.map((rule) => () => {
+			const fallbackMessage = `Не удалось сохранить override для ${rule.key}`
+			if (!rule.override) return request(testOverridePath(testId, rule.key), { method: 'DELETE', fallbackMessage })
+			return request(testOverridePath(testId, rule.key), {
+				method: 'PUT',
+				json: { scoringRuleOverride: rule.scoringRule, isDisabled: false },
+				fallbackMessage,
+			})
+		})
+	)
 }
 
 function truncatedArchive(status: number): RequestFailure {

@@ -1,12 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { ArrowLeft, Plus, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,25 +16,16 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { apiFetch } from '@/lib/api-fetch'
+import { failureMessage } from '@/lib/http/errors'
+import { adminTestsKeys, questionTypesFetcher, saveQuestionType } from '@/lib/tests/admin-api'
 
 import QuestionTypeScoringRuleEditor from '../components/QuestionTypeScoringRuleEditor'
 import {
 	TEMPLATE_META,
 	createDefaultQuestionTypeScoringRule,
 	type QuestionTypeScoringRule,
-	type QuestionTypesResponse,
 	type QuestionUiTemplate,
 } from '../types'
-
-const fetcher = async (url: string) => {
-	const res = await fetch(url, { credentials: 'include' })
-	if (!res.ok) {
-		const data = await res.json().catch(() => null)
-		throw new Error(data?.error || 'Ошибка загрузки')
-	}
-	return (await res.json()) as QuestionTypesResponse
-}
 
 type CreateState = {
 	key: string
@@ -66,11 +58,14 @@ export default function QuestionTypesPageClient() {
 	const [saving, setSaving] = useState(false)
 	const [form, setForm] = useState<CreateState>(createInitialState())
 
-	const { data, mutate, isLoading } = useSWR<QuestionTypesResponse>(
-		'/api/tests/question-types?includeInactive=true',
-		fetcher
+	const titleRef = useRef<HTMLHeadingElement>(null)
+
+	const { data, error, mutate, isLoading } = useSWR(
+		adminTestsKeys.questionTypes({ includeInactive: true }),
+		questionTypesFetcher
 	)
 	const types = useMemo(() => data?.questionTypes ?? [], [data])
+	const loadFailed = error !== undefined && data === undefined
 
 	const handleCreate = async () => {
 		if (!form.key.trim() || !form.title.trim()) {
@@ -78,16 +73,16 @@ export default function QuestionTypesPageClient() {
 			return
 		}
 		setSaving(true)
-		try {
-			const validationSchema =
-				form.validationMinOptions || form.validationMaxOptions || form.validationExactChoiceCount
-					? {
-							minOptions: form.validationMinOptions ? Number(form.validationMinOptions) : undefined,
-							maxOptions: form.validationMaxOptions ? Number(form.validationMaxOptions) : undefined,
-							exactChoiceCount: form.validationExactChoiceCount ? Number(form.validationExactChoiceCount) : undefined,
-						}
-					: null
-			const payload = {
+		const validationSchema =
+			form.validationMinOptions || form.validationMaxOptions || form.validationExactChoiceCount
+				? {
+						minOptions: form.validationMinOptions ? Number(form.validationMinOptions) : undefined,
+						maxOptions: form.validationMaxOptions ? Number(form.validationMaxOptions) : undefined,
+						exactChoiceCount: form.validationExactChoiceCount ? Number(form.validationExactChoiceCount) : undefined,
+					}
+				: null
+		const outcome = await saveQuestionType({
+			body: {
 				key: form.key.trim(),
 				title: form.title.trim(),
 				description: form.description.trim() || null,
@@ -95,32 +90,27 @@ export default function QuestionTypesPageClient() {
 				validationSchema,
 				scoringRule: form.scoringRule,
 				isActive: form.isActive,
-			}
-			const res = await apiFetch('/api/tests/question-types', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-			})
-			if (!res.ok) {
-				const data = await res.json().catch(() => null)
-				throw new Error(data?.error || 'Не удалось создать тип')
-			}
-			toast.success('Тип вопроса создан')
-			setDialogOpen(false)
-			setForm(createInitialState())
-			await mutate()
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка сохранения')
-		} finally {
-			setSaving(false)
+			},
+		})
+		setSaving(false)
+		if (!outcome.ok) {
+			const message = failureMessage(outcome, 'Не удалось создать тип')
+			if (message) toast.error(message)
+			return
 		}
+		toast.success('Тип вопроса создан')
+		setDialogOpen(false)
+		setForm(createInitialState())
+		await mutate()
 	}
 
 	return (
 		<div className="space-y-6">
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div>
-					<h1 className="text-2xl font-semibold">Типы вопросов</h1>
+					<h1 ref={titleRef} tabIndex={-1} className="text-2xl font-semibold">
+						Типы вопросов
+					</h1>
 					<p className="text-sm text-muted-foreground">Настройка шаблонов, названий и формул начисления баллов</p>
 				</div>
 				<div className="flex gap-2">
@@ -141,7 +131,14 @@ export default function QuestionTypesPageClient() {
 				</div>
 			</div>
 
-			{isLoading ? (
+			{loadFailed ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить типы вопросов"
+					error={error}
+					onRetry={() => mutate()}
+					focusTarget={titleRef}
+				/>
+			) : isLoading ? (
 				<Card>
 					<CardContent className="py-8 text-sm">Загрузка...</CardContent>
 				</Card>

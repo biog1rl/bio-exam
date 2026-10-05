@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowLeft, Loader2, Save, Settings } from 'lucide-react'
 import Link from 'next/link'
@@ -8,34 +8,29 @@ import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { apiFetch } from '@/lib/api-fetch'
+import { failureMessage } from '@/lib/http/errors'
+import {
+	adminTestsKeys,
+	adminTestsListFetcher,
+	saveGlobalScoringRules,
+	saveTestScoringRules,
+	scoringRulesFetcher,
+	topicsListFetcher,
+} from '@/lib/tests/admin-api'
 
 import { QuestionTypeScoringRuleEditorFields } from '../components/QuestionTypeScoringRuleEditor'
-import {
-	TEMPLATE_META,
-	isMetricAllowedForTemplate,
-	type QuestionTypeDefinition,
-	type QuestionTypesResponse,
-	type TestsResponse,
-	type TopicsResponse,
-} from '../types'
+import { TEMPLATE_META, isMetricAllowedForTemplate, type QuestionTypeDefinition } from '../types'
 
 type Scope = 'global' | 'test'
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-	const res = await fetch(url, { credentials: 'include' })
-	if (!res.ok) {
-		const data = await res.json().catch(() => null)
-		throw new Error(data?.error || 'Ошибка загрузки')
-	}
-	return (await res.json()) as T
-}
+const RULES_SWR_OPTIONS = { revalidateOnFocus: false, revalidateOnReconnect: false, revalidateOnMount: false }
 
 function validateScoring(type: QuestionTypeDefinition): string | null {
 	const rule = type.scoringRule
@@ -75,12 +70,17 @@ export default function ScoringSettingsPageClient() {
 	const [selectedTestId, setSelectedTestId] = useState('')
 	const [types, setTypes] = useState<QuestionTypeDefinition[]>([])
 	const [overrideEnabled, setOverrideEnabled] = useState<Record<string, boolean>>({})
-	const [loadingRules, setLoadingRules] = useState(false)
+	const [seededKey, setSeededKey] = useState<string | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [didResolveQuerySelection, setDidResolveQuerySelection] = useState(false)
+	const rulesTitleRef = useRef<HTMLDivElement>(null)
 
-	const { data: topicsData } = useSWR<TopicsResponse>('/api/tests/topics', fetcher)
-	const { data: testsData } = useSWR<TestsResponse>('/api/tests', fetcher)
+	const topicsQuery = useSWR(adminTestsKeys.topics(), topicsListFetcher)
+	const testsQuery = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
+	const topicsData = topicsQuery.data
+	const testsData = testsQuery.data
+	const topicsFailed = topicsQuery.error !== undefined && topicsData === undefined
+	const testsFailed = testsQuery.error !== undefined && testsData === undefined
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData])
 	const tests = useMemo(() => testsData?.tests ?? [], [testsData])
 	const testsForTopic = useMemo(
@@ -88,6 +88,39 @@ export default function ScoringSettingsPageClient() {
 		[tests, selectedTopicId]
 	)
 	const selectedTest = useMemo(() => tests.find((test) => test.id === selectedTestId), [tests, selectedTestId])
+
+	const rulesKey =
+		scope === 'global'
+			? adminTestsKeys.scoringGlobal()
+			: selectedTestId
+				? adminTestsKeys.scoringTest(selectedTestId)
+				: null
+	const rulesQuery = useSWR(rulesKey, scoringRulesFetcher, RULES_SWR_OPTIONS)
+	const { mutate: mutateRules } = rulesQuery
+	const rulesFailed = rulesQuery.error !== undefined && rulesQuery.data === undefined
+	const rulesReady = rulesKey !== null && seededKey === rulesKey
+	const loadingRules = rulesKey !== null && !rulesReady && !rulesFailed
+	const activeRulesKeyRef = useRef(rulesKey)
+
+	const loadRules = useCallback(
+		async (key: string) => {
+			const fresh = await mutateRules()
+			if (!fresh || activeRulesKeyRef.current !== key) return
+			setTypes(fresh.questionTypes)
+			const initialOverrides: Record<string, boolean> = {}
+			for (const item of fresh.questionTypes) {
+				initialOverrides[item.key] = Boolean(item.hasOverride)
+			}
+			setOverrideEnabled(initialOverrides)
+			setSeededKey(key)
+		},
+		[mutateRules]
+	)
+
+	useEffect(() => {
+		activeRulesKeyRef.current = rulesKey
+		if (rulesKey) void loadRules(rulesKey)
+	}, [rulesKey, loadRules])
 
 	useEffect(() => {
 		if (didResolveQuerySelection || tests.length === 0 || topics.length === 0) return
@@ -107,38 +140,6 @@ export default function ScoringSettingsPageClient() {
 		setDidResolveQuerySelection(true)
 	}, [didResolveQuerySelection, searchParams, tests, topics])
 
-	useEffect(() => {
-		if (scope === 'test' && !selectedTestId) return
-
-		let cancelled = false
-		const load = async () => {
-			setLoadingRules(true)
-			try {
-				const url =
-					scope === 'global'
-						? '/api/tests/question-types?includeInactive=true'
-						: `/api/tests/question-types?testId=${selectedTestId}&includeInactive=true`
-				const data = await fetcher<QuestionTypesResponse>(url)
-				if (cancelled) return
-				setTypes(data.questionTypes)
-				const initialOverrides: Record<string, boolean> = {}
-				for (const item of data.questionTypes) {
-					initialOverrides[item.key] = Boolean(item.hasOverride)
-				}
-				setOverrideEnabled(initialOverrides)
-			} catch (error) {
-				if (!cancelled) toast.error(error instanceof Error ? error.message : 'Ошибка загрузки')
-			} finally {
-				if (!cancelled) setLoadingRules(false)
-			}
-		}
-
-		load()
-		return () => {
-			cancelled = true
-		}
-	}, [scope, selectedTestId])
-
 	const handleSave = async () => {
 		if (scope === 'test' && !selectedTestId) {
 			toast.error('Выберите тест')
@@ -155,51 +156,29 @@ export default function ScoringSettingsPageClient() {
 		}
 
 		setSaving(true)
-		try {
-			if (scope === 'global') {
-				for (const type of types) {
-					const res = await apiFetch(`/api/tests/question-types/${type.key}`, {
-						method: 'PATCH',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ scoringRule: type.scoringRule }),
-					})
-					if (!res.ok) {
-						const data = await res.json().catch(() => null)
-						throw new Error(data?.error || `Не удалось сохранить тип ${type.key}`)
-					}
-				}
-				toast.success('Глобальные правила сохранены')
-				return
-			}
-
-			for (const type of types) {
-				if (overrideEnabled[type.key]) {
-					const res = await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${type.key}`, {
-						method: 'PUT',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							scoringRuleOverride: type.scoringRule,
-							isDisabled: false,
-						}),
-					})
-					if (!res.ok) {
-						const data = await res.json().catch(() => null)
-						throw new Error(data?.error || `Не удалось сохранить override для ${type.key}`)
-					}
-				} else {
-					await apiFetch(`/api/tests/question-types/tests/${selectedTestId}/overrides/${type.key}`, {
-						method: 'DELETE',
-					})
-				}
-			}
-
-			toast.success('Override правил для теста сохранены')
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Ошибка сохранения')
-		} finally {
-			setSaving(false)
+		const outcome =
+			scope === 'global'
+				? await saveGlobalScoringRules(types.map((type) => ({ key: type.key, scoringRule: type.scoringRule })))
+				: await saveTestScoringRules(
+						selectedTestId,
+						types.map((type) => ({
+							key: type.key,
+							scoringRule: type.scoringRule,
+							override: Boolean(overrideEnabled[type.key]),
+						}))
+					)
+		setSaving(false)
+		if (!outcome.ok) {
+			const message = outcome.message || failureMessage(outcome, 'Ошибка сохранения')
+			if (message) toast.error(message)
+			return
 		}
+		toast.success(scope === 'global' ? 'Глобальные правила сохранены' : 'Override правил для теста сохранены')
+		void mutateRules()
 	}
+
+	const retryTopicsAndTests = () =>
+		Promise.all([topicsFailed ? topicsQuery.mutate() : null, testsFailed ? testsQuery.mutate() : null])
 
 	return (
 		<div className="space-y-6">
@@ -233,6 +212,13 @@ export default function ScoringSettingsPageClient() {
 					<CardTitle>Параметры</CardTitle>
 				</CardHeader>
 				<CardContent className="space-y-4">
+					{topicsFailed || testsFailed ? (
+						<LoadErrorAlert
+							title="Не удалось загрузить темы и тесты"
+							error={topicsQuery.error ?? testsQuery.error}
+							onRetry={retryTopicsAndTests}
+						/>
+					) : null}
 					<div className="space-y-2">
 						<Label>Режим</Label>
 						<Select value={scope} onValueChange={(value) => setScope(value as Scope)}>
@@ -298,19 +284,28 @@ export default function ScoringSettingsPageClient() {
 
 			<Card>
 				<CardHeader className="flex flex-row items-center justify-between">
-					<CardTitle>Правила начисления</CardTitle>
-					<Button onClick={handleSave} disabled={saving || loadingRules || (scope === 'test' && !selectedTestId)}>
+					<CardTitle ref={rulesTitleRef} tabIndex={-1}>
+						Правила начисления
+					</CardTitle>
+					<Button onClick={handleSave} disabled={saving || !rulesReady}>
 						{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
 						Сохранить
 					</Button>
 				</CardHeader>
 				<CardContent className="space-y-3">
-					{loadingRules ? (
+					{rulesFailed ? (
+						<LoadErrorAlert
+							title="Не удалось загрузить правила"
+							error={rulesQuery.error}
+							onRetry={() => (rulesKey ? loadRules(rulesKey) : undefined)}
+							focusTarget={rulesTitleRef}
+						/>
+					) : loadingRules ? (
 						<div className="flex items-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
 							Загрузка правил...
 						</div>
-					) : scope === 'test' && !selectedTestId ? (
+					) : rulesKey === null ? (
 						<p className="text-sm text-muted-foreground">Выберите тест, чтобы настроить override.</p>
 					) : (
 						<Accordion type="multiple" className="space-y-2">
