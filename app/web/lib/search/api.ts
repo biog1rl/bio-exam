@@ -1,16 +1,22 @@
-import { apiFetch } from '@/lib/api-fetch'
+import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
 import type { SearchResponse, SearchScope } from '@/types/search'
 
-export async function searchAll(query: string, scope: SearchScope = 'all', limit = 10): Promise<SearchResponse> {
+export function parseSearchResponse(body: unknown): SearchResponse {
+	if (!body || typeof body !== 'object' || Array.isArray(body)) throw new MalformedBodyError()
+	if (!Array.isArray((body as Record<string, unknown>).categories)) throw new MalformedBodyError()
+	return body as SearchResponse
+}
+
+export function searchAll(
+	query: string,
+	scope: SearchScope = 'all',
+	limit = 10,
+	signal?: AbortSignal
+): Promise<RequestOutcome<SearchResponse>> {
 	const params = new URLSearchParams({
 		q: query,
 		scope,
 		limit: String(limit),
 	})
-	const response = await apiFetch(`/api/search?${params.toString()}`)
-	if (!response.ok) {
-		const data = await response.json().catch(() => null)
-		throw new Error(data?.error || 'Не удалось выполнить поиск')
-	}
-	return response.json()
+	return request(`/api/search?${params.toString()}`, { parse: parseSearchResponse, signal })
 }

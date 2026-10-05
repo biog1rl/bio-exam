@@ -2,14 +2,16 @@
 
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { BookOpen, ClipboardCheck, FileQuestion, FolderOpen, UserIcon, UsersIcon } from 'lucide-react'
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { useRouter } from 'next/navigation'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { DialogTitle, DialogDescription, Dialog, DialogContent } from '@/components/ui/dialog'
+import { RequestError } from '@/lib/http/request'
 import { searchAll } from '@/lib/search/api'
 import { makeSearchValue } from '@/lib/search/query'
 import type { SearchCategory, SearchResponse, SearchResultItem, SearchScope } from '@/types/search'
@@ -148,6 +150,9 @@ export default function SearchDialog() {
 	const [query, setQuery] = useState('')
 	const [results, setResults] = useState<SearchResponse | null>(null)
 	const [loading, setLoading] = useState(false)
+	const [searchError, setSearchError] = useState<RequestError | null>(null)
+	const controllerRef = useRef<AbortController | null>(null)
+	const inputRef = useRef<HTMLInputElement>(null)
 
 	const blur = useMotionValue(0)
 	const blurSpring = useSpring(blur, { stiffness: 300, damping: 30 })
@@ -158,46 +163,66 @@ export default function SearchDialog() {
 		openRef.current = open
 	}, [open])
 
+	const abortSearch = useCallback(() => {
+		controllerRef.current?.abort()
+		controllerRef.current = null
+	}, [])
+
+	const runSearch = useCallback(async (q: string) => {
+		controllerRef.current?.abort()
+		const controller = new AbortController()
+		controllerRef.current = controller
+		setLoading(true)
+		const outcome = await searchAll(q, 'all', 10, controller.signal)
+		if (controllerRef.current !== controller) return
+		if (!outcome.ok) {
+			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
+			setResults(null)
+			setSearchError(new RequestError(outcome))
+			setTab('all')
+			setLoading(false)
+			return
+		}
+		const response = outcome.data
+		setSearchError(null)
+		setResults(response)
+		const visibleScopes = response.categories.filter((category) => category.available).map((category) => category.scope)
+		setTab((currentTab) => (currentTab !== 'all' && !visibleScopes.includes(currentTab) ? 'all' : currentTab))
+		setLoading(false)
+	}, [])
+
+	useEffect(() => abortSearch, [abortSearch])
+
 	useEffect(() => {
 		if (!open) {
+			abortSearch()
 			setQuery('')
 			setResults(null)
+			setSearchError(null)
 			setTab('all')
 		}
-	}, [open])
+	}, [open, abortSearch])
 
 	useEffect(() => {
 		const q = query.trim()
 		if (q.length < 2) {
+			abortSearch()
 			setResults(null)
+			setSearchError(null)
 			setLoading(false)
 			return
 		}
 
-		let cancelled = false
-		const timer = setTimeout(async () => {
+		const timer = setTimeout(() => {
 			if (!openRef.current) return
-			setLoading(true)
-			try {
-				const response = await searchAll(q, 'all', 10)
-				if (cancelled) return
-				setResults(response)
-				const visibleScopes = response.categories
-					.filter((category) => category.available)
-					.map((category) => category.scope)
-				setTab((currentTab) => (currentTab !== 'all' && !visibleScopes.includes(currentTab) ? 'all' : currentTab))
-			} catch {
-				if (!cancelled) setResults({ query: q, categories: [], total: 0 })
-			} finally {
-				if (!cancelled) setLoading(false)
-			}
+			void runSearch(q)
 		}, 300)
 
 		return () => {
-			cancelled = true
 			clearTimeout(timer)
+			abortSearch()
 		}
-	}, [query])
+	}, [query, abortSearch, runSearch])
 
 	useEffect(() => {
 		blur.set(8)
@@ -210,8 +235,8 @@ export default function SearchDialog() {
 		[results]
 	)
 	const visibleTabs = useMemo<TabScope[]>(
-		() => ['all', ...availableCategories.map((category) => category.scope)],
-		[availableCategories]
+		() => (searchError ? ['all'] : ['all', ...availableCategories.map((category) => category.scope)]),
+		[availableCategories, searchError]
 	)
 	const countsByScope = useMemo(() => {
 		const counts = new Map<TabScope, number>()
@@ -266,7 +291,7 @@ export default function SearchDialog() {
 							{loading && <div className="animate-pulse text-xs text-muted-foreground">Ищем…</div>}
 						</div>
 						<div className="[&_[cmdk-input-wrapper]]:rounded-xl [&_[cmdk-input-wrapper]]:border [&_[cmdk-input-wrapper]]:bg-white/70 [&_[cmdk-input-wrapper]]:shadow-inner [&_[cmdk-input]]:h-11">
-							<CommandInput placeholder="Введите запрос" value={query} onValueChange={setQuery} />
+							<CommandInput ref={inputRef} placeholder="Введите запрос" value={query} onValueChange={setQuery} />
 						</div>
 					</div>
 
@@ -305,28 +330,37 @@ export default function SearchDialog() {
 
 						<div className="min-h-0 overflow-hidden">
 							<CommandList className="h-full max-h-none min-h-0">
-								{!loading && !hasResults && query.trim().length >= 2 && (
+								{!loading && !searchError && !hasResults && query.trim().length >= 2 && (
 									<CommandEmpty>Ничего не найдено в разделе &quot;{TAB_LABELS[tab]}&quot;</CommandEmpty>
 								)}
 								{query.trim().length < 2 && <CommandEmpty>Введите минимум 2 символа для поиска</CommandEmpty>}
 
 								<div className="min-h-full px-2 py-3 sm:px-3">
-									<AnimatePresence initial={false} mode="wait">
-										<motion.div
-											key={tab}
-											variants={fadeVariants}
-											initial="enter"
-											animate="center"
-											exit="exit"
-											transition={{ duration: 0.18, ease: 'easeInOut' }}
-											style={{ filter: blurFilter }}
-											className="space-y-2"
-										>
-											{selectedCategories.map((category) => (
-												<CategoryResults key={category.scope} category={category} onSelect={onSelect} />
-											))}
-										</motion.div>
-									</AnimatePresence>
+									{searchError ? (
+										<LoadErrorAlert
+											title="Не удалось выполнить поиск"
+											error={searchError}
+											onRetry={() => runSearch(query.trim())}
+											focusTarget={inputRef}
+										/>
+									) : (
+										<AnimatePresence initial={false} mode="wait">
+											<motion.div
+												key={tab}
+												variants={fadeVariants}
+												initial="enter"
+												animate="center"
+												exit="exit"
+												transition={{ duration: 0.18, ease: 'easeInOut' }}
+												style={{ filter: blurFilter }}
+												className="space-y-2"
+											>
+												{selectedCategories.map((category) => (
+													<CategoryResults key={category.scope} category={category} onSelect={onSelect} />
+												))}
+											</motion.div>
+										</AnimatePresence>
+									)}
 								</div>
 							</CommandList>
 						</div>

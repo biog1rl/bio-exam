@@ -40,7 +40,8 @@ import { DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { UploadAssetResponse } from '@/types/assets'
+import { UPLOAD_FAILED_MESSAGE, uploadAsset } from '@/lib/assets/api'
+import { failureMessage } from '@/lib/http/errors'
 
 export type InsertImagePayload = Readonly<ImagePayload>
 
@@ -111,22 +112,16 @@ export function InsertImageUploadedDialogBody({ onClick }: { onClick: (payload: 
 			return
 		}
 		setIsUploading(true)
-		try {
-			const formData = new FormData()
-			formData.append('file', selectedFile)
-			const response = await fetch('/api/docs/assets', { method: 'POST', body: formData })
-			if (!response.ok) {
-				const data = await response.json().catch(() => ({ error: 'Upload failed' }))
-				toast.error(data.error || 'Не удалось загрузить изображение')
-				return
-			}
-			const data: UploadAssetResponse = await response.json()
-			onClick({ altText: altText || data.filename, src: data.path })
-		} catch {
-			toast.error('Не удалось загрузить изображение')
-		} finally {
-			setIsUploading(false)
+		const formData = new FormData()
+		formData.append('file', selectedFile)
+		const outcome = await uploadAsset(formData)
+		setIsUploading(false)
+		if (!outcome.ok) {
+			const message = failureMessage(outcome, UPLOAD_FAILED_MESSAGE)
+			if (message) toast.error(message)
+			return
 		}
+		onClick({ altText: altText || outcome.data.filename, src: outcome.data.path })
 	}
 
 	return (

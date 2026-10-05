@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { $getRoot, LexicalEditor, LexicalNode } from 'lexical'
 import { ImageIcon, Trash2, UploadIcon } from 'lucide-react'
@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 import { $isImageNode } from '@/components/editor/nodes/image-node'
 import { INSERT_IMAGE_COMMAND } from '@/components/editor/plugins/images-plugin'
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { useAuth } from '@/components/providers/AuthProvider'
 import {
 	AlertDialog,
@@ -24,8 +25,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { deleteAsset, listAssets, UPLOAD_FAILED_MESSAGE, uploadAsset } from '@/lib/assets/api'
 import { deleteErrorMessage } from '@/lib/assets/delete-error'
-import type { AssetFile, AssetsListResponse, UploadAssetResponse } from '@/types/assets'
+import { failureMessage } from '@/lib/http/errors'
+import { RequestError } from '@/lib/http/request'
+import type { AssetFile } from '@/types/assets'
 
 const PAGE_SIZE = 20
 
@@ -41,6 +45,8 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 	const [total, setTotal] = useState(0)
 	const [isLoading, setIsLoading] = useState(false)
 	const [isLoadingMore, setIsLoadingMore] = useState(false)
+	const [loadError, setLoadError] = useState<RequestError | null>(null)
+	const loadedRef = useRef(false)
 	const [offset, setOffset] = useState(0)
 	const [deleteTarget, setDeleteTarget] = useState<AssetFile | null>(null)
 	const [isUsedInDoc, setIsUsedInDoc] = useState(false)
@@ -60,18 +66,24 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 		} else {
 			setIsLoading(true)
 		}
-		try {
-			const response = await fetch(`/api/docs/assets?limit=${PAGE_SIZE}&offset=${currentOffset}`)
-			if (!response.ok) throw new Error('Failed to load assets')
-			const data: AssetsListResponse = await response.json()
-			setAssets((prev) => (append ? [...prev, ...data.assets] : data.assets))
-			setTotal(data.total)
-		} catch {
-			toast.error('Не удалось загрузить изображения')
-		} finally {
-			setIsLoading(false)
-			setIsLoadingMore(false)
+		const outcome = await listAssets(PAGE_SIZE, currentOffset)
+		if (!outcome.ok) {
+			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
+			if (append || loadedRef.current) {
+				toast.error('Не удалось загрузить изображения')
+			} else {
+				setLoadError(new RequestError(outcome))
+			}
+		} else {
+			const page = outcome.data
+			setAssets((prev) => (append ? [...prev, ...page.assets] : page.assets))
+			setTotal(page.total)
+			setOffset(currentOffset)
+			loadedRef.current = true
+			setLoadError(null)
 		}
+		setIsLoading(false)
+		setIsLoadingMore(false)
 	}, [])
 
 	useEffect(() => {
@@ -80,9 +92,7 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 	}, [canWrite, loadAssets])
 
 	const handleLoadMore = () => {
-		const newOffset = offset + PAGE_SIZE
-		setOffset(newOffset)
-		loadAssets(newOffset, true)
+		void loadAssets(offset + PAGE_SIZE, true)
 	}
 
 	const handleSelect = (asset: AssetFile) => {
@@ -126,26 +136,17 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 		if (!deleteTarget || isDeleting) return
 		const target = deleteTarget
 		setIsDeleting(true)
-		try {
-			const response = await fetch('/api/docs/assets', {
-				method: 'DELETE',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path: target.path }),
-			})
-			if (!response.ok) {
-				const body: unknown = await response.json().catch(() => null)
-				setDeleteError(deleteErrorMessage(response.status, body))
-				return
-			}
-			setAssets((prev) => prev.filter((a) => a.path !== target.path))
-			setTotal((prev) => prev - 1)
-			toast.success('Изображение удалено')
-			setDeleteTarget(null)
-		} catch {
-			setDeleteError(deleteErrorMessage(0, null))
-		} finally {
-			setIsDeleting(false)
+		const outcome = await deleteAsset({ path: target.path })
+		setIsDeleting(false)
+		if (!outcome.ok) {
+			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
+			setDeleteError(deleteErrorMessage(outcome.status ?? 0, outcome.body))
+			return
 		}
+		setAssets((prev) => prev.filter((a) => a.path !== target.path))
+		setTotal((prev) => prev - 1)
+		toast.success('Изображение удалено')
+		setDeleteTarget(null)
 	}
 
 	// Upload handlers
@@ -166,38 +167,23 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 		}
 
 		setIsUploading(true)
-		try {
-			const formData = new FormData()
-			formData.append('file', selectedFile)
-
-			const response = await fetch('/api/docs/assets', {
-				method: 'POST',
-				body: formData,
-			})
-
-			if (!response.ok) {
-				const data = await response.json().catch(() => ({ error: 'Upload failed' }))
-				toast.error(data.error || 'Не удалось загрузить изображение')
-				return
-			}
-
-			const data: UploadAssetResponse = await response.json()
-
-			if (data.success) {
-				toast.success('Изображение загружено')
-				// Refresh the full list
-				setOffset(0)
-				await loadAssets(0, false)
-				// Reset form and switch to library tab
-				setSelectedFile(null)
-				setAltText('')
-				setActiveTab('library')
-			}
-		} catch {
-			toast.error('Не удалось загрузить изображение')
-		} finally {
+		const formData = new FormData()
+		formData.append('file', selectedFile)
+		const outcome = await uploadAsset(formData)
+		if (!outcome.ok) {
 			setIsUploading(false)
+			const message = failureMessage(outcome, UPLOAD_FAILED_MESSAGE)
+			if (message) toast.error(message)
+			return
 		}
+		if (outcome.data.success) {
+			toast.success('Изображение загружено')
+			await loadAssets(0, false)
+			setSelectedFile(null)
+			setAltText('')
+			setActiveTab('library')
+		}
+		setIsUploading(false)
 	}
 
 	const handleDragEnter = (e: React.DragEvent) => {
@@ -248,7 +234,13 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 
 				<TabsContent value="library" className="mt-4">
 					<ScrollArea className="h-100 w-full">
-						{isLoading ? (
+						{loadError ? (
+							<LoadErrorAlert
+								title="Не удалось загрузить изображения"
+								error={loadError}
+								onRetry={() => loadAssets(0, false)}
+							/>
+						) : isLoading ? (
 							<div className="flex h-full items-center justify-center">
 								<p className="text-muted-foreground">Загрузка...</p>
 							</div>

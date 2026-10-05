@@ -18,37 +18,28 @@ import { toast } from 'sonner'
 
 import { useDocPath } from '@/components/editor/context/doc-path-context'
 import { INSERT_IMAGE_COMMAND } from '@/components/editor/plugins/images-plugin'
-import type { UploadAssetResponse } from '@/types/assets'
+import { UPLOAD_FAILED_MESSAGE, uploadAsset } from '@/lib/assets/api'
+import { failureMessage } from '@/lib/http/errors'
 
 const ACCEPTABLE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 async function uploadImageToAPI(file: File, docPath?: string): Promise<string | null> {
-	try {
-		if (file.size > 5 * 1024 * 1024) {
-			toast.error('Файл слишком большой. Максимум 5 MB')
-			return null
-		}
-		const formData = new FormData()
-		formData.append('file', file)
-		if (docPath) {
-			formData.append('docPath', docPath)
-		}
-		const response = await fetch('/api/docs/assets', {
-			method: 'POST',
-			body: formData,
-		})
-		if (!response.ok) {
-			const data = await response.json().catch(() => ({ error: 'Upload failed' }))
-			toast.error(data.error || 'Не удалось загрузить изображение')
-			return null
-		}
-		const data: UploadAssetResponse = await response.json()
-		return data.path
-	} catch (error) {
-		console.error('Error uploading image:', error)
-		toast.error('Не удалось загрузить изображение')
+	if (file.size > 5 * 1024 * 1024) {
+		toast.error('Файл слишком большой. Максимум 5 MB')
 		return null
 	}
+	const formData = new FormData()
+	formData.append('file', file)
+	if (docPath) {
+		formData.append('docPath', docPath)
+	}
+	const outcome = await uploadAsset(formData)
+	if (!outcome.ok) {
+		const message = failureMessage(outcome, UPLOAD_FAILED_MESSAGE)
+		if (message) toast.error(message)
+		return null
+	}
+	return outcome.data.path
 }
 
 export function DragDropPastePlugin(): null {

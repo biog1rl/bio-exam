@@ -1,3 +1,5 @@
+import { fetchSignedUrl } from '@/lib/assets/api'
+
 type CacheEntry = {
 	signedUrl: string
 	expiresAt: number
@@ -18,18 +20,14 @@ export async function getSignedUrl(src: string): Promise<string> {
 		return cached.signedUrl
 	}
 
-	const response = await fetch(`/api/docs/assets/signed?path=${encodeURIComponent(src)}`)
-	if (!response.ok) {
-		throw new Error(`Failed to get signed URL for ${src}`)
-	}
-	const data: { signedUrl: string } = await response.json()
+	const signedUrl = await fetchSignedUrl(src)
 
 	cache.set(src, {
-		signedUrl: data.signedUrl,
+		signedUrl,
 		expiresAt: now + CACHE_TTL_MS,
 	})
 
-	return data.signedUrl
+	return signedUrl
 }
 
 export async function prefetchSignedUrls(srcs: string[]): Promise<void> {
