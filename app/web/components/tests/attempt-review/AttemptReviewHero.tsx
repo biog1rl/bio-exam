@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/page/PageHeader'
 import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
+import { formatPercent } from '@/lib/tests/format'
 import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 import { formatDateTime } from '@/lib/utils/dates'
 
@@ -54,7 +55,7 @@ export function AttemptReviewHero({
 							) : (
 								<XCircle className="size-4 text-red-600" aria-hidden="true" />
 							)}
-							<span className="font-medium text-foreground tabular-nums">{Math.round(view.percent)}%</span>
+							<span className="font-medium text-foreground tabular-nums">{formatPercent(view.percent)}</span>
 							<span className="text-muted-foreground">{view.passed ? 'порог пройден' : 'порог не пройден'}</span>
 						</li>
 						{view.teacherChecked ? (

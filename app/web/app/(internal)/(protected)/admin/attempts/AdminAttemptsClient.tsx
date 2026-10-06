@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { DateRange } from 'react-day-picker'
 
 import { ru } from 'date-fns/locale'
-import { CalendarRange, CheckCircle2, Clock3, Loader2, XCircle } from 'lucide-react'
+import { CalendarRange, Clock3, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -19,8 +19,7 @@ import { ColumnFilterMenu, type ColumnFilterOption } from '@/components/table/Co
 import { SortableHead } from '@/components/table/SortableHead'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -133,41 +132,9 @@ function emptyAttemptsContent({
 }
 
 function AttemptResultCell({ attempt }: { attempt: AdminAttemptListItem }) {
-	const view = attemptResultView(attempt)
-	if (view.kind === 'pending') {
-		return (
-			<TableCell className="py-3 pr-4 text-right">
-				<span className="inline-flex justify-end">
-					<ReviewStatusChip />
-				</span>
-				{view.auto ? (
-					<p className="mt-1 text-xs text-muted-foreground tabular-nums">
-						авто {view.auto.earned} из {view.auto.total}
-					</p>
-				) : null}
-			</TableCell>
-		)
-	}
-	const Icon = view.passed ? CheckCircle2 : XCircle
-	const label = view.passed ? 'Пройден' : 'Не пройден'
 	return (
 		<TableCell className="py-3 pr-4 text-right">
-			<span className="inline-flex items-center justify-end gap-1.5" title={label}>
-				<Icon
-					className={cn('size-3.5', view.passed ? 'text-green-700 dark:text-green-400' : 'text-destructive')}
-					aria-hidden="true"
-				/>
-				<span className="font-medium text-foreground tabular-nums">{Math.round(view.percent)}%</span>
-				<span className="sr-only">{label}</span>
-			</span>
-			<p className="text-xs text-muted-foreground tabular-nums">
-				{view.points.earned}/{view.points.total}
-			</p>
-			{view.teacherChecked ? (
-				<span className="mt-1 inline-flex justify-end">
-					<TeacherCheckedMark />
-				</span>
-			) : null}
+			<AttemptScore view={attemptResultView(attempt)} audience="staff" />
 		</TableCell>
 	)
 }

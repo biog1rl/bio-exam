@@ -13,8 +13,8 @@ import { StudentProgressSection } from '@/components/progress/StudentProgressSec
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { AttemptReviewLine, type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -191,24 +191,9 @@ function AvailableTestsTable({ tests }: { tests: PublicTestListItem[] }) {
 }
 
 function ResultCell({ attempt, audience }: { attempt: AttemptResultFields; audience: AttemptReviewAudience }) {
-	const view = attemptResultView(attempt)
-	if (view.kind === 'pending') {
-		return (
-			<TableCell className="py-3 pr-4 text-right">
-				<span className="inline-flex justify-end">
-					<AttemptReviewLine view={view} audience={audience} />
-				</span>
-			</TableCell>
-		)
-	}
 	return (
-		<TableCell className="py-3 pr-4 text-right whitespace-nowrap tabular-nums">
-			{formatPercent(view.percent)}
-			{view.teacherChecked ? (
-				<span className="mt-1 flex justify-end">
-					<TeacherCheckedMark />
-				</span>
-			) : null}
+		<TableCell className="py-3 pr-4 text-right">
+			<AttemptScore view={attemptResultView(attempt)} audience={audience} />
 		</TableCell>
 	)
 }

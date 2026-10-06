@@ -11,8 +11,7 @@ import { EmptyState } from '@/components/page/EmptyState'
 import { PageHeader } from '@/components/page/PageHeader'
 import { TableCard } from '@/components/table/TableCard'
 import { TestMissingState } from '@/components/tests/TestMissingState'
-import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,7 +19,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { failureOf } from '@/lib/http/errors'
 import { fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
-import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
 import { formatDateTime } from '@/lib/utils/dates'
 
@@ -142,16 +140,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 												{final ? `${final.points.earned} / ${final.points.total}` : '—'}
 											</TableCell>
 											<TableCell className="py-3 text-right">
-												{final ? (
-													<span className="inline-flex flex-col items-end gap-1">
-														<span className="tabular-nums">{formatPercent(final.percent)}</span>
-														{final.teacherChecked ? <TeacherCheckedMark /> : null}
-													</span>
-												) : view.kind === 'pending' ? (
-													<span className="inline-flex justify-end">
-														<AttemptReviewLine view={view} audience="student" />
-													</span>
-												) : null}
+												<AttemptScore view={view} audience="student" showPoints={false} />
 											</TableCell>
 											<TableCell className="hidden pr-4 tab-sm:table-cell">
 												{final ? (

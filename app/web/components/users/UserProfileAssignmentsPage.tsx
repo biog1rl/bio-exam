@@ -10,8 +10,6 @@ import {
 	CalendarIcon,
 	Check,
 	ChevronDown,
-	CircleCheck,
-	CircleX,
 	Loader2,
 	LockKeyholeOpen,
 	LogOut,
@@ -33,8 +31,7 @@ import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -210,31 +207,7 @@ function AttemptsTable({
 									{submitted}
 								</TableCell>
 								<TableCell className="py-3 pr-4 text-right">
-									{view.kind === 'pending' ? (
-										<span className="inline-flex justify-end">
-											<AttemptReviewLine view={view} audience="staff" />
-										</span>
-									) : (
-										<>
-											<span className="inline-flex items-center gap-1.5 font-medium tabular-nums">
-												{view.passed ? (
-													<CircleCheck className="size-4 text-primary" aria-hidden="true" />
-												) : (
-													<CircleX className="size-4 text-muted-foreground" aria-hidden="true" />
-												)}
-												{Math.round(view.percent)}%
-												<span className="sr-only">{view.passed ? 'Пройден' : 'Не пройден'}</span>
-											</span>
-											<p className="text-xs text-muted-foreground tabular-nums">
-												{view.points.earned} из {view.points.total}
-											</p>
-											{view.teacherChecked ? (
-												<span className="mt-1 inline-flex">
-													<TeacherCheckedMark />
-												</span>
-											) : null}
-										</>
-									)}
+									<AttemptScore view={view} audience="staff" />
 								</TableCell>
 							</TableRow>
 						)

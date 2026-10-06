@@ -68,7 +68,7 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 ## Результат попытки
 
 - Что показывать, решает только `attemptResultView` в `app/web/lib/tests/attempt-result-view.ts`: результат с итогом или «на проверке». Процент и баллы - `number | null`, запасного нуля нет, `null` показывается как «—» или меткой.
-- Метки результата - только компоненты `app/web/components/tests/attempt-result/`: `ReviewStatusChip`, `TeacherCheckedMark`, `AttemptReviewLine`. Экран не рисует процент, вердикт или «на проверке» мимо них.
+- Метки результата - только компоненты `app/web/components/tests/attempt-result/`: `ReviewStatusChip`, `TeacherCheckedMark`, `AttemptReviewLine`. Ячейка результата в таблице - `AttemptScore` (процент со значком вердикта, баллы «x из y» через `formatPoints`, отметка учителя или строка «на проверке»). Экран не рисует процент, вердикт или «на проверке» мимо них.
 - Фильтр `review` (`all`, `pending`, `graded`) списка попыток живёт в адресе: `app/web/lib/tests/attempts-url.ts`.
 
 ## Уведомления
