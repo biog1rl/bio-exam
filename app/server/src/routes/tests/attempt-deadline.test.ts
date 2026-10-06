@@ -1,4 +1,4 @@
-import { AttemptSessionSchema, AttemptViewSchema, computeAttemptOutcome } from '@bio-exam/exam-core'
+import { AttemptSessionSchema, AttemptViewSchema, computeAttemptOutcome, SessionFateSchema } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
@@ -19,7 +19,7 @@ import {
 	submitAttempt,
 	type AttemptWorld,
 } from '../../test-support/attempt-world.js'
-import { startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
+import { call, startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 
 type Student = { id: string; cookie: string }
 
@@ -670,5 +670,144 @@ describe('тела ответов 200 и 409', () => {
 		})
 		assert.deepEqual(outcome, { kind: 'conflict', attemptId })
 		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
+	})
+})
+
+function readFate(cookie: string, testId: string, sessionId: string) {
+	return call(ctx, 'GET', `/api/tests/public/tests/${testId}/sessions/${sessionId}`, { cookies: cookie })
+}
+
+async function fateOk(prepared: DeadlineSession): Promise<Record<string, unknown>> {
+	const reply = await readFate(prepared.owner.cookie, prepared.testId, prepared.sessionId)
+	assert.equal(reply.status, 200, JSON.stringify(reply.body))
+	assert.equal(SessionFateSchema.safeParse(reply.body).success, true, JSON.stringify(reply.body))
+	assertIsoNow(reply.body.serverNow, 'serverNow')
+	return reply.body
+}
+
+describe('судьба сессии GET /sessions/:sessionId', () => {
+	test('просроченная сессия с черновиком финализируется лениво: submitted deadline с видом попытки', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		const body = await fateOk(prepared)
+
+		assert.equal(body.state, 'submitted')
+		assert.equal(body.submitSource, 'deadline')
+		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
+		assert.equal(body.attemptId, (await sessionStateOf(prepared.sessionId)).attempt_id)
+		const attempt = body.attempt as AttemptBody
+		assert.equal(attempt.attemptId, body.attemptId)
+		assert.equal(userAnswerOf(attempt, prepared.questionIds[0]!), 'Митоз 0')
+		assert.equal(body.uploadClosesAt, null)
+	})
+
+	test.each([
+		{ name: 'лимит 10, в пределах лимита', timeLimitMinutes: 10, startedAgo: undefined },
+		{ name: 'тест без лимита, старт 10 дней назад', timeLimitMinutes: null, startedAgo: '10 days' },
+	])('$name: open, база не меняется', async ({ timeLimitMinutes, startedAgo }) => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes, startedAgo })
+		const before = await sessionStateOf(prepared.sessionId)
+		const body = await fateOk(prepared)
+
+		assert.equal(body.state, 'open')
+		assert.equal(body.sessionId, prepared.sessionId)
+		assert.equal(Date.parse(body.startedAt as string), (await startedAtOf(prepared.sessionId)).getTime())
+		assert.deepEqual(await sessionStateOf(prepared.sessionId), before)
+		assert.equal(await attemptsOfSession(prepared.sessionId), 0)
+	})
+
+	test('D-04: просроченная сессия с пустым черновиком — expired, попытки нет', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered: [], startedAgo: '13 minutes' })
+		const body = await fateOk(prepared)
+		assert.equal(body.state, 'expired')
+		await assertClosedWithoutAttempt(prepared, null)
+	})
+
+	test.each([
+		{ name: 'D-21: дедлайн плюс льгота больше 24 ч назад', startedAgo: '25 hours 12 minutes', brokenData: false },
+		{ name: 'R3: ошибка данных финализации', startedAgo: '13 minutes', brokenData: true },
+	])('$name — expired, черновик в строке, попытки нет', async ({ startedAgo, brokenData }) => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo })
+		if (brokenData) {
+			await ctx.pgPool.query(
+				`INSERT INTO questions (test_id, type, "order", points, prompt_path) VALUES ($1, 'phantom_type', 5, 1, NULL)`,
+				[prepared.testId]
+			)
+		}
+		const draftBefore = (await sessionStateOf(prepared.sessionId)).draft_answers
+		const body = await fateOk(prepared)
+		assert.equal(body.state, 'expired')
+		await assertClosedWithoutAttempt(prepared, draftBefore)
+	})
+
+	test('сданная вручную сессия — submitted client с той же попыткой', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10 })
+		const reply = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+			sessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [prepared.questionIds[0]!]: 'Митоз' },
+		})
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+
+		const body = await fateOk(prepared)
+		assert.equal(body.state, 'submitted')
+		assert.equal(body.submitSource, 'client')
+		assert.equal(body.attemptId, reply.body.attemptId)
+		assert.equal((body.attempt as AttemptBody).attemptId, reply.body.attemptId)
+	})
+
+	test('тест с открытым вопросом: uploadClosesAt — конец таймера плюс 15 минут', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, withOpen: true, startedAgo: '13 minutes' })
+		const body = await fateOk(prepared)
+		assert.equal(body.state, 'submitted')
+		const startedAt = (await startedAtOf(prepared.sessionId)).getTime()
+		assertSameMoment(new Date(body.uploadClosesAt as string), new Date(startedAt + 25 * MINUTE_MS), 'uploadClosesAt')
+	})
+
+	test('три параллельных чтения и повторное чтение дают одну попытку с одним attemptId', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		const bodies = await Promise.all(Array.from({ length: 3 }, () => fateOk(prepared)))
+		const ids = new Set(bodies.map((body) => body.attemptId))
+		assert.equal(ids.size, 1)
+		assert.equal(bodies[0]!.state, 'submitted')
+
+		const again = await fateOk(prepared)
+		assert.equal(again.attemptId, bodies[0]!.attemptId)
+		assert.equal(again.submitSource, 'deadline')
+		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
+	})
+
+	test('чужая, несуществующая и закрытая superseded сессия — одинаковый 404, чужая не финализируется', async () => {
+		const foreign = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		await assignTest(world, foreign.testId, student.id)
+		const before = await sessionStateOf(foreign.sessionId)
+
+		const foreignReply = await readFate(student.cookie, foreign.testId, foreign.sessionId)
+		const missingReply = await readFate(student.cookie, foreign.testId, crypto.randomUUID())
+		assert.equal(foreignReply.status, 404)
+		assert.equal(missingReply.status, 404)
+		assert.deepEqual(foreignReply.body, { error: 'Session not found' })
+		assert.deepEqual(foreignReply.body, missingReply.body)
+		assert.deepEqual(await sessionStateOf(foreign.sessionId), before)
+		assert.equal(await attemptsOfSession(foreign.sessionId), 0)
+
+		const superseded = await prepareDeadlineSession({ timeLimitMinutes: 10 })
+		await ctx.pgPool.query(`UPDATE test_sessions SET closed_at = now(), close_reason = 'superseded' WHERE id = $1`, [
+			superseded.sessionId,
+		])
+		const supersededReply = await readFate(superseded.owner.cookie, superseded.testId, superseded.sessionId)
+		assert.equal(supersededReply.status, 404)
+		assert.deepEqual(supersededReply.body, missingReply.body)
+	})
+
+	test('ученик без назначения получает 403, sessionId не UUID — 400', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		const outsider = await seedStudent(world, 'deadline_fate_outsider')
+
+		const denied = await readFate(outsider.cookie, prepared.testId, prepared.sessionId)
+		assert.equal(denied.status, 403, JSON.stringify(denied.body))
+		assert.equal(await attemptsOfSession(prepared.sessionId), 0)
+
+		const invalid = await readFate(prepared.owner.cookie, prepared.testId, 'not-a-uuid')
+		assert.equal(invalid.status, 400, JSON.stringify(invalid.body))
 	})
 })

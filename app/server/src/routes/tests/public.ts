@@ -26,6 +26,7 @@ import {
 	finalizeSessionByDeadline,
 	isAssignedOrPrivileged,
 	precheckSubmit,
+	readSessionFate,
 	saveSessionDraft,
 	SessionNeedsFinalizationError,
 	startAttemptSession,
@@ -367,6 +368,50 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 		next(e)
 	}
 })
+
+router.get(
+	'/tests/:id/sessions/:sessionId',
+	validateUUID('id'),
+	validateUUID('sessionId'),
+	sessionRequired(),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const sessionId = req.params.sessionId as string
+			const userId = req.authUser!.id
+
+			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+			if (!access.ok) return denyAttemptAccess(res, access.status)
+
+			const fate = await readSessionFate({ sessionId, testId, userId })
+			if (fate.state === 'missing') return sessionNotFound(res)
+			if (fate.state === 'open') {
+				return res.json({
+					state: 'open',
+					sessionId: fate.sessionId,
+					startedAt: fate.startedAt,
+					serverNow: await databaseNow(),
+				})
+			}
+			if (fate.state === 'expired') return res.json({ state: 'expired', serverNow: await databaseNow() })
+
+			const view = await readAttemptView(fate.attemptId, {
+				kind: 'student',
+				showCorrectAnswer: access.test.showCorrectAnswer,
+			})
+			res.json({
+				state: 'submitted',
+				attemptId: fate.attemptId,
+				submitSource: view.submitSource ?? 'client',
+				uploadClosesAt: view.uploadClosesAt ?? null,
+				serverNow: await databaseNow(),
+				attempt: view,
+			})
+		} catch (e) {
+			next(e)
+		}
+	}
+)
 
 // PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers - промежуточное сохранение черновика ответов в БД
 router.patch(

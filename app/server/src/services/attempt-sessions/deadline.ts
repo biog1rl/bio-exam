@@ -22,6 +22,12 @@ export type FinalizeOutcome =
 	| { kind: 'superseded' }
 	| { kind: 'not_found' }
 
+export type SessionFateRead =
+	| { state: 'open'; sessionId: string; startedAt: string }
+	| { state: 'submitted'; attemptId: string }
+	| { state: 'expired' }
+	| { state: 'missing' }
+
 export const DEADLINE_CLIENT_ATTEMPT_PREFIX = 'deadline:'
 
 const MAX_DRAFT_ROUNDS = 3
@@ -211,6 +217,39 @@ export async function finalizeSessionByDeadline(sessionId: string, owner?: Deadl
 		if (outcome !== DRAFT_CHANGED) return outcome
 	}
 	throw new Error('finalizeSessionByDeadline: draft kept changing')
+}
+
+export async function readSessionFate({
+	sessionId,
+	testId,
+	userId,
+}: {
+	sessionId: string
+	testId: string
+	userId: string
+}): Promise<SessionFateRead> {
+	const owner = { testId, userId }
+	const outcome = await finalizeSessionByDeadline(sessionId, owner)
+	switch (outcome.kind) {
+		case 'finalized':
+			return { state: 'submitted', attemptId: outcome.attemptId }
+		case 'submitted':
+			return outcome.attemptId ? { state: 'submitted', attemptId: outcome.attemptId } : { state: 'missing' }
+		case 'expired':
+			return { state: 'expired' }
+		case 'superseded':
+		case 'not_found':
+			return { state: 'missing' }
+		case 'open': {
+			const [row] = await db
+				.select({ startedAt: testSessions.startedAt })
+				.from(testSessions)
+				.where(sessionWhere(sessionId, owner))
+				.limit(1)
+			if (!row) return { state: 'missing' }
+			return { state: 'open', sessionId, startedAt: row.startedAt.toISOString() }
+		}
+	}
 }
 
 export async function finalizeExpiredOpenSession({

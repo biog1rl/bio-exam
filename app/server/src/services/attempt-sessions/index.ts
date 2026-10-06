@@ -42,8 +42,10 @@ export {
 	deadlineClientAttemptId,
 	finalizeExpiredOpenSession,
 	finalizeSessionByDeadline,
+	readSessionFate,
 	type DeadlineOwner,
 	type FinalizeOutcome,
+	type SessionFateRead,
 } from './deadline.js'
 export { explanationReaderFor } from './explanations.js'
 export { DEADLINE_FINALIZE_MAX_AGE_HOURS } from './sessions.js'
