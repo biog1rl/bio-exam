@@ -171,7 +171,7 @@ Plans:
 
 **Folded-in work**: CR-03 (bfcache) and CR-05 (repeated start without a session) from the v1.0 deferred findings, because they touch the client attempt-lifecycle module changed here (part of DEBT-08, which is mapped to Phase 18). PLAT-04 is v1.0 SEC-02, a release precondition.
 **User steps (outside the repository)**: confirm on the server that the container stop timeout (Compose `stop_grace_period`; the Compose file is on the server) is at least the API's drain time; release this phase when no timed attempt is running (existing deploy protection).
-**Plans**: 3/18 plans executed in 10 waves
+**Plans**: 4/18 plans executed in 10 waves
 Plans:
 **Wave 1**
 - [x] 11-01-PLAN.md — exam-core contract: `serverNow`, optional `uploadClosesAt`/`submitSource`, 409 body, `SessionFateSchema`, upload-window codes; `serverNow` on `/start` (wave 1)
@@ -183,7 +183,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 11-04-PLAN.md — `finalizeSessionByDeadline`: draft finalisation with source `deadline`, D-04, idempotency (wave 3)
-- [ ] 11-05-PLAN.md — one upload-window rule on database time with refusal body (wave 3)
+- [x] 11-05-PLAN.md — one upload-window rule on database time with refusal body (wave 3)
 - [ ] 11-10-PLAN.md — upload-window field in the test settings editor (wave 3)
 - [ ] 11-12-PLAN.md — «Ответ принят» outcome, upload-window line with server-time countdown, fallback panel, focus (wave 3)
 
@@ -359,7 +359,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 15 →
 |-------|----------------|--------|-----------|
 | 9. Result foundation and readers | 19/19 | Complete    | 2026-10-06 |
 | 10. Notification journal and bell | 9/9 | Complete    | 2026-10-06 |
-| 11. Deadline finalisation, upload window and background jobs | 3/18 | In Progress|  |
+| 11. Deadline finalisation, upload window and background jobs | 4/18 | In Progress|  |
 | 12. Photos on session authentication | 0/TBD | Not started | - |
 | 13. Token, QR and phone page | 0/TBD | Not started | - |
 | 14. Authoring and submitting open questions | 0/TBD | Not started | - |

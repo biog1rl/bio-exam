@@ -17,6 +17,14 @@ export {
 	type StartAttemptSessionParams,
 } from './sessions.js'
 export {
+	photoUploadWindow,
+	uploadWindowRefusal,
+	uploadWindowState,
+	type UploadWindowExecutor,
+	type UploadWindowInput,
+	type UploadWindowState,
+} from './upload-window.js'
+export {
 	closeExpiredSession,
 	precheckSubmit,
 	submitAttempt,
