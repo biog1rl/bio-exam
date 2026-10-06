@@ -1,6 +1,6 @@
 import { AnswerValueSchema, findAnswerViolation, type AnswerValue } from '@bio-exam/exam-core'
 
-import { and, desc, eq, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull, not, notInArray, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { questions, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
@@ -29,6 +29,8 @@ export type SessionFateRead =
 	| { state: 'missing' }
 
 export const DEADLINE_CLIENT_ATTEMPT_PREFIX = 'deadline:'
+
+export const FINALIZE_SETTLE_SECONDS = 60
 
 const MAX_DRAFT_ROUNDS = 3
 
@@ -270,4 +272,51 @@ export async function finalizeExpiredOpenSession({
 		.limit(1)
 	if (!open) return null
 	return finalizeSessionByDeadline(open.id, { testId, userId })
+}
+
+export async function findSessionsDueForFinalization(
+	limit: number,
+	excludeIds: readonly string[] = []
+): Promise<string[]> {
+	const rows = await db
+		.select({ id: testSessions.id })
+		.from(testSessions)
+		.innerJoin(tests, eq(tests.id, testSessions.testId))
+		.where(
+			and(
+				isNull(testSessions.submittedAt),
+				isNull(testSessions.closedAt),
+				isNotNull(tests.timeLimitMinutes),
+				sessionExpired(tests.timeLimitMinutes, FINALIZE_SETTLE_SECONDS),
+				not(sessionExpired(tests.timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600)),
+				excludeIds.length > 0 ? notInArray(testSessions.id, [...excludeIds]) : undefined
+			)
+		)
+		.orderBy(asc(testSessions.startedAt))
+		.limit(limit)
+	return rows.map((row) => row.id)
+}
+
+export async function closeStaleOpenSessions(): Promise<number> {
+	const closed = await db
+		.update(testSessions)
+		.set({ closedAt: sql`now()`, closeReason: 'expired' })
+		.from(tests)
+		.where(
+			and(
+				eq(tests.id, testSessions.testId),
+				isNull(testSessions.submittedAt),
+				isNull(testSessions.closedAt),
+				isNotNull(tests.timeLimitMinutes),
+				sessionExpired(tests.timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600)
+			)
+		)
+		.returning({ id: testSessions.id })
+	if (closed.length > 0) {
+		logger.info(
+			{ count: closed.length, maxAgeHours: DEADLINE_FINALIZE_MAX_AGE_HOURS },
+			'deadline finalize closed stale sessions'
+		)
+	}
+	return closed.length
 }

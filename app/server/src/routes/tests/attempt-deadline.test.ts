@@ -24,17 +24,20 @@ import { call, startAuthApp, type AuthApp } from '../../test-support/auth-app.js
 type Student = { id: string; cookie: string }
 
 type AttemptSessionsModule = typeof import('../../services/attempt-sessions/index.js')
+type BackgroundJobsModule = typeof import('../../services/background-jobs/index.js')
 
 let ctx: AuthApp
 let world: AttemptWorld
 let student: Student
 let attemptSessions: AttemptSessionsModule
+let backgroundJobs: BackgroundJobsModule
 
 beforeAll(async () => {
 	ctx = await startAuthApp('test_attempt_deadline', { env: { PG_POOL_MAX: '12' } })
 	world = await seedAttemptWorld(ctx, 'deadline')
 	student = await seedStudent(world, 'deadline_student')
 	attemptSessions = await import('../../services/attempt-sessions/index.js')
+	backgroundJobs = await import('../../services/background-jobs/index.js')
 }, 60_000)
 
 afterAll(async () => {
@@ -809,5 +812,38 @@ describe('судьба сессии GET /sessions/:sessionId', () => {
 
 		const invalid = await readFate(prepared.owner.cookie, prepared.testId, 'not-a-uuid')
 		assert.equal(invalid.status, 400, JSON.stringify(invalid.body))
+	})
+})
+
+describe('гонка трёх путей финализации', () => {
+	test('GET судьбы, runNow finalize-deadlines и POST /submit в пяти раундах дают одну попытку deadline', async () => {
+		const jobs = backgroundJobs.createBackgroundJobs({ log: { info: () => {}, warn: () => {}, error: () => {} } })
+
+		for (let round = 0; round < 5; round++) {
+			const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '20 minutes' })
+			const [fate, report, submitted] = await Promise.all([
+				readFate(prepared.owner.cookie, prepared.testId, prepared.sessionId),
+				jobs.runNow(backgroundJobs.FINALIZE_DEADLINES_JOB),
+				submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+					sessionId: prepared.sessionId,
+					clientAttemptId: crypto.randomUUID(),
+					answers: { [prepared.questionIds[0]!]: 'тело' },
+				}),
+			])
+
+			assert.equal(await attemptsOfSession(prepared.sessionId), 1, `round ${round}`)
+			const attemptId = (await sessionStateOf(prepared.sessionId)).attempt_id
+			assert.ok(attemptId, `round ${round}`)
+			assert.equal((await attemptRowOf(ctx, attemptId)).submitSource, 'deadline', `round ${round}`)
+			assert.equal('skipped' in report, false, `round ${round}: ${JSON.stringify(report)}`)
+
+			assert.equal(fate.status, 200, `round ${round}: ${JSON.stringify(fate.body)}`)
+			assert.equal(fate.body.state, 'submitted', `round ${round}`)
+			assert.equal(fate.body.attemptId, attemptId, `round ${round}`)
+
+			assert.equal(submitted.status, 409, `round ${round}: ${JSON.stringify(submitted.body)}`)
+			assert.equal(submitted.body.attemptId, attemptId, `round ${round}`)
+			assert.equal(submitted.body.submitSource, 'deadline', `round ${round}`)
+		}
 	})
 })

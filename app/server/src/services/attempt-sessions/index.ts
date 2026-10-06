@@ -38,9 +38,12 @@ export {
 	type SubmitAttemptParams,
 } from './submit.js'
 export {
+	closeStaleOpenSessions,
 	DEADLINE_CLIENT_ATTEMPT_PREFIX,
 	deadlineClientAttemptId,
+	FINALIZE_SETTLE_SECONDS,
 	finalizeExpiredOpenSession,
+	findSessionsDueForFinalization,
 	finalizeSessionByDeadline,
 	readSessionFate,
 	type DeadlineOwner,
