@@ -7,6 +7,7 @@ import authRouter from './auth/index.js'
 import refreshRouter from './auth/refresh.js'
 import docsAssetsRouter from './docs/assets.js'
 import groupsRouter from './groups/index.js'
+import notificationsRouter from './notifications.js'
 import rbacRouter from './rbac/index.js'
 import searchRouter from './search.js'
 import settingsRouter from './settings.js'
@@ -22,6 +23,7 @@ router.use('/auth', authRouter)
 router.use('/auth/refresh', refreshRouter)
 router.use('/rbac', rbacRouter)
 router.use('/search', searchRouter)
+router.use('/notifications', notificationsRouter)
 router.use('/sidebar', sidebarRouter)
 router.use('/tests', testsRouter)
 router.use('/tests/public', publicTestsRouter)
