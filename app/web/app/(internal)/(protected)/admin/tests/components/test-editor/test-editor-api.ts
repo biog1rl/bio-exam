@@ -15,6 +15,7 @@ import { adminTestsKeys, exportTestArchive, type ArchiveDownload } from '@/lib/t
 import type { QuestionDraftDetailResponse, QuestionDraftsResponse, TestDetailResponse, TestFormData } from '../../types'
 import { PHOTO_WINDOW_INVALID } from './photo-window'
 import type { StudentAssignment } from './test-editor-types'
+import { createTestBody, updateSettingsBody } from './test-settings-form'
 
 export type TestSummaryResponse = Pick<TestDetailResponse, 'test'> & { questionsCount: number }
 
@@ -142,10 +143,10 @@ export async function removeStudentFromTest(testId: string, userId: string): Pro
 	await send(`${adminTestsKeys.assignments(testId)}/${userId}`, 'Ошибка удаления студента', { method: 'DELETE' })
 }
 
-export function createTest(payload: TestFormData): Promise<CreatedTestResponse> {
+export function createTest(form: TestFormData): Promise<CreatedTestResponse> {
 	return send(`${adminTestsKeys.list()}/save`, 'Ошибка сохранения', {
 		method: 'POST',
-		json: payload,
+		json: createTestBody(form),
 		parse: parseCreatedTest,
 	})
 }
@@ -179,21 +180,7 @@ export async function deleteTestQuestion(testId: string, questionId: string): Pr
 export function updateTestSettings(testId: string, form: TestFormData): Promise<UpdatedTestResponse> {
 	return send(`${testPath(testId)}/settings`, 'Ошибка сохранения', {
 		method: 'PATCH',
-		json: {
-			topicId: form.topicId,
-			title: form.title,
-			slug: form.slug,
-			description: form.description,
-			isPublished: form.isPublished,
-			showCorrectAnswer: form.showCorrectAnswer,
-			scoringRules: form.scoringRules,
-			timeLimitMinutes: form.timeLimitMinutes,
-			redThresholdMinutes: form.redThresholdMinutes,
-			warningThresholdMinutes: form.warningThresholdMinutes,
-			passingScore: form.passingScore,
-			photoUploadWindowMinutes: form.photoUploadWindowMinutes,
-			order: form.order,
-		},
+		json: updateSettingsBody(form),
 		parse: parseUpdatedTest,
 	})
 }

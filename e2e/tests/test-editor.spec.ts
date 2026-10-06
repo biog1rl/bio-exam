@@ -1,4 +1,4 @@
-import { loginAccount, seedTest, sessionAccount } from '../fixtures/accounts'
+import { loginAccount, seedTest, seedTopic, sessionAccount } from '../fixtures/accounts'
 import { expect, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 import { horizontalOverflow, lowContrastTexts } from '../fixtures/page-checks'
 
@@ -211,5 +211,27 @@ test.describe('test editor: question table, settings panel and student access', 
 		await expect(sheet.getByText('Укажите число минут от 0 до 120', { exact: true })).toBeVisible()
 		await field.fill('12.5')
 		await expect(sheet.getByText(PHOTO_WINDOW_INVALID, { exact: true })).toBeVisible()
+	})
+
+	test('«Добавить вопрос» in a new test without a title explains it and creates nothing @test-editor', async ({
+		adminPage: page,
+	}) => {
+		await page.goto(`/admin/tests/new?topic=${TOPIC_SLUG}`)
+		const topicSelect = page.getByText('Тема', { exact: true }).locator('xpath=..').getByRole('combobox')
+		await expect(topicSelect).toContainText(seedTopic(TOPIC_SLUG).title)
+		await expect(page.getByPlaceholder('Тест по теме...')).toHaveValue('')
+
+		let creates = 0
+		page.on('request', (request) => {
+			if (request.method() === 'POST' && request.url().includes('/api/tests/save')) creates++
+		})
+
+		await page.keyboard.press('Escape')
+		await expect(page.getByRole('dialog', { name: SETTINGS })).toHaveCount(0)
+		await page.getByRole('button', { name: 'Добавить вопрос' }).first().click()
+
+		await expect(page.getByText('Введите название теста', { exact: true })).toBeVisible()
+		await expect(page).toHaveURL(/\/admin\/tests\/new(\?|$)/)
+		expect(creates).toBe(0)
 	})
 })

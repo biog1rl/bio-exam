@@ -1,4 +1,3 @@
-import { PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES } from '@bio-exam/exam-core'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 
@@ -19,7 +18,6 @@ import { isStudentOnly } from '@/lib/users/student-card'
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type { QuestionDraft, TestFormData } from '../../types'
 import { normalizeQuestionForSave } from '../../types'
-import { hasOpenQuestion, PHOTO_WINDOW_SAVE_TOAST, photoWindowSaveError } from './photo-window'
 import {
 	actionErrorMessage,
 	assignStudentToTest,
@@ -38,14 +36,9 @@ import {
 	updateTestSettings,
 } from './test-editor-api'
 import type { UserItem } from './test-editor-types'
-import {
-	createInitialTestForm,
-	getBaseValidationError,
-	getCreateQuestionsValidationError,
-	normalizeFormPayload,
-	resolveQuestionDraftId,
-} from './test-editor-utils'
-import { presetTopicSlug, savedSettings, settingsDirty, totalPoints } from './test-editor-view'
+import { getCreateQuestionsValidationError, resolveQuestionDraftId } from './test-editor-utils'
+import { presetTopicSlug, totalPoints } from './test-editor-view'
+import { initialTestForm, settingsChanged, settingsSaveError, withSavedSettings } from './test-settings-form'
 
 const CANDIDATES_LIMIT = 500
 
@@ -128,7 +121,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	const [reorderingQuestions, setReorderingQuestions] = useState(false)
 	const [topicDialogOpen, setTopicDialogOpen] = useState(false)
 	const [settingsOpen, setSettingsOpen] = useState(isCreateMode)
-	const [form, setForm] = useState<TestFormData>(() => createInitialTestForm())
+	const [form, setForm] = useState<TestFormData>(() => initialTestForm())
 
 	const topics = useMemo(() => topicsData?.topics ?? [], [topicsData])
 	const questionDrafts = useMemo(() => questionDraftsData?.drafts ?? [], [questionDraftsData])
@@ -141,23 +134,8 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 
 	useEffect(() => {
 		if (!isEditingExisting) return
-		if (testData?.test) {
-			setForm((prev) => ({
-				...prev,
-				topicId: testData.test.topicId,
-				title: testData.test.title,
-				slug: testData.test.slug,
-				description: testData.test.description || '',
-				isPublished: testData.test.isPublished,
-				showCorrectAnswer: testData.test.showCorrectAnswer ?? true,
-				timeLimitMinutes: testData.test.timeLimitMinutes,
-				redThresholdMinutes: testData.test.redThresholdMinutes ?? null,
-				warningThresholdMinutes: testData.test.warningThresholdMinutes ?? null,
-				passingScore: testData.test.passingScore,
-				photoUploadWindowMinutes: testData.test.photoUploadWindowMinutes ?? PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES,
-				order: testData.test.order,
-			}))
-		}
+		const saved = testData?.test
+		if (saved) setForm((prev) => withSavedSettings(prev, saved))
 	}, [isEditingExisting, testData])
 
 	useEffect(() => {
@@ -172,14 +150,14 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	}, [isEditingExisting, questionsData])
 
 	const questionCount = questionsData ? form.questions.length : (testData?.questionsCount ?? form.questions.length)
-	const saved = useMemo(() => (testData?.test ? savedSettings(testData.test) : null), [testData])
-	const dirty = isEditingExisting && settingsDirty(form, saved)
+	const dirty = isEditingExisting && settingsChanged(form, testData?.test ?? null)
 
 	const discardChanges = () => {
+		const saved = testData?.test
 		if (!saved) return
 		setTestSlugError(null)
 		setPhotoWindowServerError(null)
-		setForm((prev) => ({ ...prev, ...saved }))
+		setForm((prev) => withSavedSettings(prev, saved))
 	}
 
 	const presetTopic = presetTopicSlug(useSearchParams())
@@ -240,9 +218,9 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	}, [])
 
 	const persistNewTest = useCallback(async (): Promise<CreateTestPersistenceResult> => {
-		const baseValidationError = getBaseValidationError(form)
-		if (baseValidationError) {
-			throw new Error(baseValidationError)
+		const settingsError = settingsSaveError(form, { mode: 'create', questionCount: form.questions.length })
+		if (settingsError) {
+			throw new Error(settingsError.message)
 		}
 
 		const questionsValidationError = getCreateQuestionsValidationError(form.questions, questionTypesData?.questionTypes)
@@ -255,12 +233,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			requestedPublicationState: form.isPublished,
 		})
 
-		const data = await createTest(
-			normalizeFormPayload({
-				...form,
-				isPublished: persistedPublicationState,
-			})
-		).catch((error: unknown) => {
+		const data = await createTest({ ...form, isPublished: persistedPublicationState }).catch((error: unknown) => {
 			throw new Error(applySaveFailure(error))
 		})
 		const createdTestId = data?.test?.id
@@ -424,19 +397,13 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	}
 
 	const handleSave = async () => {
-		const baseValidationError = getBaseValidationError(form)
-		if (baseValidationError) {
-			toast.error(baseValidationError)
-			return
-		}
-		if (isEditingExisting && form.isPublished && questionCount === 0) {
-			toast.error('Для публикации добавьте хотя бы один вопрос')
-			return
-		}
-		if (photoWindowSaveError(form.photoUploadWindowMinutes, hasOpenQuestion(form.questions))) {
-			toast.error(PHOTO_WINDOW_SAVE_TOAST)
-			setSettingsOpen(true)
-			window.setTimeout(() => document.getElementById('test-settings-photo-window')?.focus(), settingsOpen ? 0 : 150)
+		const settingsError = settingsSaveError(form, { mode: isEditingExisting ? 'edit' : 'create', questionCount })
+		if (settingsError) {
+			toast.error(settingsError.message)
+			if (settingsError.field === 'photoUploadWindowMinutes') {
+				setSettingsOpen(true)
+				window.setTimeout(() => document.getElementById('test-settings-photo-window')?.focus(), settingsOpen ? 0 : 150)
+			}
 			return
 		}
 

@@ -17,8 +17,9 @@ import { cn } from '@/lib/utils/cn'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import type { TestFormData, Topic } from '../../types'
-import { hasOpenQuestion, photoWindowHint, photoWindowSaveError } from './photo-window'
+import { photoWindowHint } from './photo-window'
 import type { TestFormSetter } from './test-editor-types'
+import { photoWindowField } from './test-settings-form'
 
 export interface TestSettingsPanelProps {
 	form: TestFormData
@@ -100,9 +101,7 @@ export function TestSettingsPanel({
 	canManageCatalog,
 	onCreateTopic,
 }: TestSettingsPanelProps) {
-	const photoWindowVisible = hasOpenQuestion(form.questions)
-	const photoWindowFieldError =
-		photoWindowSaveError(form.photoUploadWindowMinutes, photoWindowVisible) ?? photoWindowServerError
+	const { visible: photoWindowVisible, error: photoWindowFieldError } = photoWindowField(form, photoWindowServerError)
 	const topicPicker = testTopicPickerState({ topics: topics.length, canManage: canManageCatalog })
 	return (
 		<div className="space-y-5">

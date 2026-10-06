@@ -1,10 +1,8 @@
-import { PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES } from '@bio-exam/exam-core'
-
 import { questionPreview } from '@/lib/tests/question-preview'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cycleSort, type TableSort, matchesNeedle, searchNeedle, sortRows } from '@/lib/utils/table-sort'
 
-import type { Question, TestFormData } from '../../types'
+import type { Question } from '../../types'
 
 export type EditorTab = 'questions' | 'access'
 
@@ -13,35 +11,6 @@ export type QuestionSortKey = 'order' | 'text' | 'type' | 'points'
 export type QuestionSort = TableSort<QuestionSortKey>
 
 export const DEFAULT_SORT: QuestionSort = { key: 'order', direction: 'asc' }
-
-export type SettingsFields = Pick<
-	TestFormData,
-	| 'topicId'
-	| 'title'
-	| 'slug'
-	| 'description'
-	| 'isPublished'
-	| 'showCorrectAnswer'
-	| 'timeLimitMinutes'
-	| 'redThresholdMinutes'
-	| 'warningThresholdMinutes'
-	| 'passingScore'
-	| 'photoUploadWindowMinutes'
->
-
-export type SavedTestSettings = {
-	topicId: string
-	title: string
-	slug: string
-	description?: string | null
-	isPublished: boolean
-	showCorrectAnswer?: boolean | null
-	timeLimitMinutes: number | null
-	redThresholdMinutes?: number | null
-	warningThresholdMinutes?: number | null
-	passingScore: number | null
-	photoUploadWindowMinutes?: number | null
-}
 
 export type QuestionListEntry = { question: Question; index: number }
 
@@ -62,45 +31,6 @@ export function parseEditorTab(value: string | null | undefined, isCreateMode: b
 
 export function editorTabSearch(tab: EditorTab): string {
 	return tab === 'questions' ? '' : `?tab=${tab}`
-}
-
-export function savedSettings(test: SavedTestSettings): SettingsFields {
-	return {
-		topicId: test.topicId,
-		title: test.title,
-		slug: test.slug,
-		description: test.description || '',
-		isPublished: test.isPublished,
-		showCorrectAnswer: test.showCorrectAnswer ?? true,
-		timeLimitMinutes: test.timeLimitMinutes,
-		redThresholdMinutes: test.redThresholdMinutes ?? null,
-		warningThresholdMinutes: test.warningThresholdMinutes ?? null,
-		passingScore: test.passingScore,
-		photoUploadWindowMinutes: test.photoUploadWindowMinutes ?? PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES,
-	}
-}
-
-function settingsOf(form: SettingsFields): SettingsFields {
-	return {
-		topicId: form.topicId,
-		title: form.title,
-		slug: form.slug,
-		description: form.description,
-		isPublished: form.isPublished,
-		showCorrectAnswer: form.showCorrectAnswer,
-		timeLimitMinutes: form.timeLimitMinutes,
-		redThresholdMinutes: form.redThresholdMinutes,
-		warningThresholdMinutes: form.warningThresholdMinutes,
-		passingScore: form.passingScore,
-		photoUploadWindowMinutes: form.photoUploadWindowMinutes,
-	}
-}
-
-export function settingsDirty(form: SettingsFields, saved: SettingsFields | null): boolean {
-	if (!saved) return false
-	const current = settingsOf(form)
-	const base = settingsOf(saved)
-	return (Object.keys(base) as (keyof SettingsFields)[]).some((key) => current[key] !== base[key])
 }
 
 const LEGACY_TYPE_TITLES: Record<string, string> = {

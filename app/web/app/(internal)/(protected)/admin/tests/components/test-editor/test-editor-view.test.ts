@@ -16,8 +16,6 @@ import {
 	presetTopicSlug,
 	questionsCountLabel,
 	questionTypeTitle,
-	savedSettings,
-	settingsDirty,
 	sortEntries,
 	totalPoints,
 } from './test-editor-view'
@@ -32,17 +30,6 @@ const QUESTIONS = [
 	question('c', 'Краткий ответ', 'Был ли придаточный корень?', 1),
 ]
 
-const SAVED = savedSettings({
-	topicId: 't1',
-	title: 'Видоизменения',
-	slug: 'vidoizmeneniya',
-	description: null,
-	isPublished: false,
-	showCorrectAnswer: null,
-	timeLimitMinutes: null,
-	passingScore: null,
-})
-
 const ids = (entries: { question: Question }[]) => entries.map((entry) => entry.question.id)
 
 describe('вкладки редактора', () => {
@@ -56,25 +43,6 @@ describe('вкладки редактора', () => {
 	it('вкладка вопросов не пишется в адрес', () => {
 		expect(editorTabSearch('questions')).toBe('')
 		expect(editorTabSearch('access')).toBe('?tab=access')
-	})
-})
-
-describe('несохранённые настройки', () => {
-	it('сохранённые значения приводятся к форме формы', () => {
-		expect(SAVED.description).toBe('')
-		expect(SAVED.showCorrectAnswer).toBe(true)
-		expect(SAVED.redThresholdMinutes).toBeNull()
-	})
-
-	it('совпадение с сохранённым — нет изменений, любое поле — есть', () => {
-		expect(settingsDirty({ ...SAVED }, SAVED)).toBe(false)
-		expect(settingsDirty({ ...SAVED, title: 'Другое' }, SAVED)).toBe(true)
-		expect(settingsDirty({ ...SAVED, isPublished: true }, SAVED)).toBe(true)
-		expect(settingsDirty({ ...SAVED, passingScore: 60 }, SAVED)).toBe(true)
-	})
-
-	it('без сохранённой версии изменений нет', () => {
-		expect(settingsDirty({ ...SAVED, title: 'x' }, null)).toBe(false)
 	})
 })
 
