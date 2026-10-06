@@ -10,6 +10,7 @@ import { useSWRConfig } from 'swr'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import { SortableHead } from '@/components/table/SortableHead'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
@@ -212,9 +213,7 @@ export function UsersTable({
 												{groupsCell(user.groups)}
 											</TableCell>
 											<TableCell className="hidden tab-sm:table-cell">
-												<Badge variant={active ? 'default' : 'outline'} className="rounded-full">
-													{statusText}
-												</Badge>
+												<StatusBadge on={active}>{statusText}</StatusBadge>
 											</TableCell>
 											<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums xl:table-cell">
 												{formatDay(user.createdAt)}

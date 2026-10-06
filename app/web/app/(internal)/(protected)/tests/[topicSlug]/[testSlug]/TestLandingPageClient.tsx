@@ -9,10 +9,10 @@ import useSWR from 'swr'
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { EmptyState } from '@/components/page/EmptyState'
 import { PageHeader } from '@/components/page/PageHeader'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { TestMissingState } from '@/components/tests/TestMissingState'
 import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -144,9 +144,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 											</TableCell>
 											<TableCell className="hidden pr-4 tab-sm:table-cell">
 												{final ? (
-													<Badge variant={final.passed ? 'default' : 'secondary'} className="rounded-full">
-														{final.passed ? 'Пройден' : 'Не пройден'}
-													</Badge>
+													<StatusBadge on={final.passed}>{final.passed ? 'Пройден' : 'Не пройден'}</StatusBadge>
 												) : (
 													<span className="text-muted-foreground">—</span>
 												)}

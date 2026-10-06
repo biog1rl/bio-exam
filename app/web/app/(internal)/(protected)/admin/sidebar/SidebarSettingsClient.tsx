@@ -36,8 +36,8 @@ import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { EmptyState } from '@/components/page/EmptyState'
 import { PageHeader } from '@/components/page/PageHeader'
 import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
 	Dialog,
@@ -146,9 +146,7 @@ function SidebarLinkRow({
 			</TableCell>
 			<TableCell className="hidden truncate text-muted-foreground tab-sm:table-cell">{item.url}</TableCell>
 			<TableCell className="hidden mob:table-cell">
-				<Badge variant={item.isActive ? 'default' : 'secondary'} className="rounded-full">
-					{visibility}
-				</Badge>
+				<StatusBadge on={item.isActive}>{visibility}</StatusBadge>
 			</TableCell>
 			<TableCell className="pr-3">
 				<DropdownMenu>

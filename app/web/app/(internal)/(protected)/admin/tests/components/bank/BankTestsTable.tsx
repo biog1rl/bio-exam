@@ -4,9 +4,9 @@ import { Download, Edit, Eye, MoreHorizontal, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 import { SortableHead } from '@/components/table/SortableHead'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
 	DropdownMenu,
@@ -34,14 +34,6 @@ interface BankTestsTableProps {
 
 function editorHref(test: Test): string {
 	return `/admin/tests/${test.topicSlug}/${test.slug}`
-}
-
-function StatusBadge({ published }: { published: boolean }) {
-	return (
-		<Badge variant={published ? 'default' : 'secondary'} className="rounded-full">
-			{published ? 'Опубликован' : 'Черновик'}
-		</Badge>
-	)
 }
 
 export function BankTestsTable({
@@ -112,7 +104,7 @@ export function BankTestsTable({
 								</TableCell>
 							) : null}
 							<TableCell className="hidden tab-sm:table-cell">
-								<StatusBadge published={test.isPublished} />
+								<StatusBadge on={test.isPublished}>{test.isPublished ? 'Опубликован' : 'Черновик'}</StatusBadge>
 							</TableCell>
 							<TableCell className="hidden text-right tabular-nums mob:table-cell">
 								{test.questionsCount ?? 0}
