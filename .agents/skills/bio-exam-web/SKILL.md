@@ -47,6 +47,12 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 - Ответы и телеметрия уходят через очередь `createSaveQueue` (`app/web/lib/drafts/save-queue.ts`) с паузой `ATTEMPT_SAVE_DEBOUNCE_MS` и пределом ожидания `ATTEMPT_SAVE_MAX_WAIT_MS`; при `pagehide` очередь досылается с `keepalive`.
 - Схемы ответов и сессии попытки берутся из `@bio-exam/exam-core`.
 
+## Результат попытки
+
+- Что показывать, решает только `attemptResultView` в `app/web/lib/tests/attempt-result-view.ts`: результат с итогом или «на проверке». Процент и баллы - `number | null`, запасного нуля нет, `null` показывается как «—» или меткой.
+- Метки результата - только компоненты `app/web/components/tests/attempt-result/`: `ReviewStatusChip`, `TeacherCheckedMark`, `AttemptReviewLine`. Экран не рисует процент, вердикт или «на проверке» мимо них.
+- Фильтр `review` (`all`, `pending`, `graded`) списка попыток живёт в адресе: `app/web/lib/tests/attempts-url.ts`.
+
 ## Черновик вопроса
 
 - Автосохранение: `createQuestionDraftAutosave` (`app/web/lib/drafts/question-draft-autosave.ts`) поверх `createSaveQueue` с `lockVersion` сервера.

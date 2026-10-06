@@ -37,7 +37,12 @@ Express владеет данными и политикой доступа (`doc
 ## Попытка теста
 
 - `app/server/src/services/attempt-sessions`: доступ к попытке (`checkAttemptAccess`, `findVisibleTest`), старт и черновик сессии (`startAttemptSession`, `saveSessionDraft`), сдача (`precheckSubmit`, `submitAttempt`, `closeExpiredSession`).
-- `app/server/src/services/scored-attempt`: оценка (`scoreSubmission`), хранимые факты, чтение результата (`readAttemptView`, `readAdminAttemptView`) и вид попытки (`buildAttemptView`).
+- `app/server/src/services/scored-attempt`: оценка (`scoreSubmission`), хранимые факты, чтение результата (`readAttemptView`, `readAdminAttemptView`) и вид попытки (`buildAttemptView`); он же отвечает за итог попытки.
+- Итог считает `computeAttemptOutcome` и `projectionOf` из `packages/exam-core/src/outcome.ts`: статус проверки `none`, `pending` (есть открытый вопрос без оценки, итог `NULL`) или `graded`. Проекцию пишет единственный писатель `materializeAttemptOutcome` (`app/server/src/services/scored-attempt/outcome.ts`), хранение проекции сверяет с пересчётом `reconcileOutcomes` там же.
+- Читатели берут поля результата только через `attemptResultColumns` (Drizzle) и `attemptResultSql` (сырой SQL с алиасом) из `app/server/src/services/scored-attempt/columns.ts`, не из фактовых столбцов. Агрегаты (средний балл, «пройдено», график) условием `review_status <> 'pending'` явно исключают попытки на проверке.
+- Сдача и черновик отвечают `ANSWERS_INVALID`: на сдаче 422, на черновике 400, тело несёт `reason` (`foreign_question`, `short_text_too_long`, `open_text_too_long`, `unknown_question_type`) и `limit`. Пределы ответов - `packages/exam-core/src/answer-limits.ts`.
+- Вопрос ученику собирает `studentQuestionView` (`app/server/src/routes/tests/student-question-view.ts`) по белому списку полей: ключ и пояснение в ответ ученику не попадают.
+- Шесть шаблонов вопросов: `single_choice`, `multi_choice`, `matching`, `short_text`, `sequence_digits`, `open`. Тип `open` засеян неактивным, оценивает его учитель (0-3 балла); сервер запрещает включить его, переписать его правило и создать кастомный тип с шаблоном `open`. Запрет живёт в `app/server/src/routes/tests/admin/question-types.ts`, запрет правила для теста - в `validateScoringRuleTemplateCompatibility` из `app/server/src/routes/tests/admin/shared.ts`; их снимают при включении открытых вопросов (фаза 17).
 - `testAttempts.results` читается только в `app/server/src/services/scored-attempt`; маршруты попытки не читают `answer_keys` и назначения напрямую: это держит `scripts/attempt-integrity-guards.test.mjs`.
 - Маршруты: `app/server/src/routes/tests/public.ts` (ученик); дашборд, список попыток и разбор попытки у персонала - `app/server/src/routes/tests/admin/attempts.ts`.
 

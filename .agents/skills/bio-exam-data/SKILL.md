@@ -8,7 +8,7 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 ## Схема и миграции
 
 - Схема: `app/server/src/db/schema.ts` (Drizzle, `drizzle-orm/pg-core`); клиент базы: `app/server/src/db/index.ts`.
-- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0025_teacher_zones.sql`.
+- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0026_attempt_result_projection.sql`.
 - Применённая миграция не редактируется: изменение схемы идёт новым файлом из `yarn workspace @bio-exam/server drizzle:generate` после правки `schema.ts`.
 - `app/server/drizzle/migrations-manifest.json` фиксирует каждую миграцию: `idx`, `tag`, `file`, `sha256`, `when`, `breakpoints` (`checksumAlgorithm: sha256`). Новая миграция получает в нём новую запись, совпадающую с журналом и файлом.
 - `scripts/check-migrations.mjs` (шаг `migrations` в `yarn verify`) на временных базах сверяет манифест с журналом и файлами, цепочку с пустой базы против `schema.ts`, повторный прогон без изменений, отсутствие разницы у `drizzle-kit generate` и `drizzle-kit check`.
@@ -21,6 +21,13 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 - `student_groups.owner_id`: владелец группы, FK на `users` с `ON DELETE set null`, индекс `idx_student_groups_owner_id`. `NULL` - группа без владельца.
 - Обе создаёт миграция `0025_teacher_zones`; тест миграции: `app/server/src/db/teacher-zone-migration.test.ts`.
 - Читают и пишут таблицы зоны только `app/server/src/services/access-policy/zone-loader.ts` и `app/server/src/services/access-policy/zone-store.ts`; кроме них имена таблиц допустимы в `app/server/src/db/schema.ts` и `app/server/src/test-support`. Это держит `scripts/teacher-zone-guards.test.mjs`.
+
+## Результат попытки
+
+- Факты сдачи `answers`, `results`, `results_version`, `earned_points`, `total_points`, `score_percentage`, `passed` после вставки строки `test_attempts` не меняются: это держит триггер `test_attempts_facts_immutable` (ошибка `23001`).
+- Проекция результата: `review_status` (`none`, `pending`, `graded`), `final_earned_points`, `final_score_percentage`, `final_passed`, `graded_at`, `passing_score`, `auto_total_points`, `submit_source`. Согласованность держат CHECK `test_attempts_review_status_check`, `test_attempts_submit_source_check`, `test_attempts_review_projection_check` (итог `NULL` ровно при `pending`) и `test_attempts_graded_at_check`. Миграция `0026_attempt_result_projection` создаёт их и заполняет проекцию существующих попыток; тест миграции: `app/server/src/db/attempt-result-migration.test.ts`.
+- Баллы и проценты хранятся как `real` (float4): значение, прочитанное из базы, с пересчётом сравнивается через `Math.fround`.
+- Прямая вставка попытки в тесте идёт только через `insertAttemptFixture` (`app/server/src/test-support/attempt-fixture.ts`): режим `outcomeFacts` считает факты и проекцию тем же `computeAttemptOutcome`, режим с готовыми фактами пишет их как есть.
 
 ## Удаление пользователя
 
