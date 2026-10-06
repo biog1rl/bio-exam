@@ -29,7 +29,7 @@ import { attemptResultColumns } from '../../services/scored-attempt/index.js'
 import { revokeUserSessions } from '../../services/session/index.js'
 import { avatarUrl } from '../../services/storage/links.js'
 import type { UserRow } from '../../types/db/users.js'
-import { removeAssignment } from '../tests/assignments.js'
+import { addAssignments, removeAssignment } from '../tests/assignments.js'
 import avatarRouter from './avatar.js'
 import loginThrottleRouter from './login-throttle.js'
 import profileRouter from './profile.js'
@@ -421,7 +421,7 @@ router.post('/:userId/test-assignments', validateUUID('userId'), sessionRequired
 			return
 		}
 		const adminId = req.authUser!.id
-		await db.insert(testAssignments).values({ testId, userId, assignedBy: adminId }).onConflictDoNothing()
+		await addAssignments(testId, [userId], adminId)
 		res.json({ ok: true })
 	} catch (err) {
 		next(err)

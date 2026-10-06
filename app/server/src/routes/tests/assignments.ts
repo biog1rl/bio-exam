@@ -16,6 +16,7 @@ import {
 	hasPermission,
 	userScope,
 } from '../../services/access-policy/index.js'
+import { recordTestAssigned } from '../../services/notifications/index.js'
 
 export const assignmentsRouter = Router({ mergeParams: true })
 
@@ -40,6 +41,25 @@ export async function removeAssignment(req: Request, testId: string, userId: str
 			)
 		)
 	return true
+}
+
+export async function addAssignments(
+	testId: string,
+	userIds: readonly string[],
+	assignedBy: string
+): Promise<string[]> {
+	if (userIds.length === 0) return []
+	const ids = [...new Set(userIds)].sort()
+	return db.transaction(async (tx) => {
+		const rows = await tx
+			.insert(testAssignments)
+			.values(ids.map((userId) => ({ testId, userId, assignedBy })))
+			.onConflictDoNothing()
+			.returning({ userId: testAssignments.userId })
+		const inserted = rows.map((row) => row.userId)
+		await recordTestAssigned(tx, { testId, actorId: assignedBy, recipientIds: inserted })
+		return inserted
+	})
 }
 
 async function memberIdsInScope(req: Request, userIds: string[]): Promise<(userId: string) => boolean> {
@@ -111,7 +131,7 @@ assignmentsRouter.post('/', validateUUID('testId'), sessionRequired(), async (re
 			return
 		}
 		const adminId = req.authUser!.id
-		await db.insert(testAssignments).values({ testId, userId, assignedBy: adminId }).onConflictDoNothing()
+		await addAssignments(testId, [userId], adminId)
 		res.json({ ok: true })
 	} catch (err) {
 		next(err)
@@ -150,11 +170,7 @@ assignmentsRouter.post(
 				return
 			}
 
-			const inserted = await db
-				.insert(testAssignments)
-				.values(assignees.map((userId) => ({ testId, userId, assignedBy: adminId })))
-				.onConflictDoNothing()
-				.returning({ id: testAssignments.userId })
+			const inserted = await addAssignments(testId, assignees, adminId)
 
 			res.json({ ok: true, assigned: inserted.length })
 		} catch (err) {
