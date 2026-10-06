@@ -47,12 +47,17 @@ export function browserVisibility(): AttemptVisibility {
 			const onVisibilityChange = () => listener(document.visibilityState === 'hidden' ? 'hidden' : 'visible')
 			const onPageHide = () => listener('pagehide')
 			const onOnline = () => listener('online')
+			const onPageShow = (event: PageTransitionEvent) => {
+				if (event.persisted) listener('visible')
+			}
 			document.addEventListener('visibilitychange', onVisibilityChange)
 			window.addEventListener('pagehide', onPageHide)
+			window.addEventListener('pageshow', onPageShow)
 			window.addEventListener('online', onOnline)
 			return () => {
 				document.removeEventListener('visibilitychange', onVisibilityChange)
 				window.removeEventListener('pagehide', onPageHide)
+				window.removeEventListener('pageshow', onPageShow)
 				window.removeEventListener('online', onOnline)
 			}
 		},

@@ -524,3 +524,50 @@ test('onChange вызывается при каждой смене состоя�
 	assert.equal(queue.getState().inFlight, null)
 	queue.dispose()
 })
+
+test.each(
+	[
+		{ name: 'CR-03: ответ на предварительную досылку приходит раньше ответа старой версии', order: ['late', 'old'] },
+		{ name: 'CR-03: ответ старой версии приходит раньше ответа на предварительную досылку', order: ['old', 'late'] },
+	].map((row): [string, { order: string[] }] => [row.name, row])
+)('%s', async (_name, { order }) => {
+	const old = deferred()
+	const late = deferred()
+	const { queue, send } = setup([old, late])
+	queue.set('q1', 'ab')
+	await vi.advanceTimersByTimeAsync(600)
+	queue.set('q1', 'abc')
+	queue.drain({ keepalive: true })
+	assert.deepEqual(
+		send.mock.calls.map((call) => [call[1], call[2]]),
+		[
+			['ab', { keepalive: false }],
+			['abc', { keepalive: true, provisional: true }],
+		]
+	)
+	const gates: Record<string, Deferred> = { old, late }
+	const [firstGate, secondGate] = order.map((name) => gates[name] as Deferred)
+	firstGate?.resolve({ kind: 'ok' })
+	await settle()
+	assert.deepEqual(queue.getState().pending, ['q1'])
+	secondGate?.resolve({ kind: 'ok' })
+	await settle()
+	assert.deepEqual(send.mock.calls[2], ['q1', 'abc', { keepalive: false }])
+	await settle()
+	assert.deepEqual(queue.getState().pending, [])
+	assert.equal(send.mock.calls.length, 3)
+	queue.dispose()
+})
+
+test('CR-03: досылка ключа с той же версией в полёте и ключа без запроса идёт без provisional', async () => {
+	const { queue, send } = setup([deferred(), deferred(), deferred()])
+	queue.set('q1', 'a')
+	await vi.advanceTimersByTimeAsync(600)
+	queue.set('q2', 'b')
+	queue.drain({ keepalive: true })
+	assert.deepEqual(
+		send.mock.calls.map((call) => call[2]),
+		[{ keepalive: false }, { keepalive: true }, { keepalive: true }]
+	)
+	queue.dispose()
+})

@@ -9,7 +9,13 @@ import {
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
-import { createSaveQueue, type SaveOutcome, type SaveQueue, type SaveQueueState } from '@/lib/drafts/save-queue'
+import {
+	createSaveQueue,
+	SAVE_RETRY_DELAYS_MS,
+	type SaveOutcome,
+	type SaveQueue,
+	type SaveQueueState,
+} from '@/lib/drafts/save-queue'
 import type { AttemptDraftSaveResult } from '@/lib/tests/api'
 
 import {
@@ -220,6 +226,9 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let warned = false
 	let autoFired = false
 	let deadlinePassed = false
+	let startRetryTimer: unknown = null
+	let startRetryCount = 0
+	let startRetryInFlight = false
 
 	function indicatorInput(): SaveIndicatorInput {
 		return {
@@ -259,7 +268,11 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		onNotice?.(value)
 	}
 
-	async function send(key: string, value: QueueValue, sendOptions: { keepalive: boolean }): Promise<SaveOutcome> {
+	async function send(
+		key: string,
+		value: QueueValue,
+		{ keepalive, provisional = false }: { keepalive: boolean; provisional?: boolean }
+	): Promise<SaveOutcome> {
 		const gen = generation
 		const current = session
 		if (!current) return { kind: 'retry' }
@@ -267,9 +280,9 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			key === TELEMETRY_QUEUE_KEY
 				? { telemetry: value as TelemetryMap }
 				: { questionId: key, value: value as AnswerValue }
-		const result = await api.saveDraft(testId, current.sessionId, body, sendOptions)
+		const result = await api.saveDraft(testId, current.sessionId, body, { keepalive })
 		const outcome = toSaveOutcome(result)
-		if (outcome.kind === 'ok' && gen === generation && session?.sessionId === current.sessionId) {
+		if (outcome.kind === 'ok' && !provisional && gen === generation && session?.sessionId === current.sessionId) {
 			confirm(key, value, current.sessionId)
 		}
 		return outcome
@@ -484,6 +497,69 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		blockReason = 'start-not-assigned'
 	}
 
+	function needsStartRetry(): boolean {
+		return initialized && phase === 'active' && session === null && !timeLimitMinutes
+	}
+
+	function clearStartRetryTimer(): void {
+		if (startRetryTimer === null) return
+		clock.clearTimer(startRetryTimer)
+		startRetryTimer = null
+	}
+
+	function stopStartRetry(): void {
+		clearStartRetryTimer()
+		startRetryCount = 0
+		startRetryInFlight = false
+	}
+
+	function scheduleStartRetry(): void {
+		clearStartRetryTimer()
+		if (!needsStartRetry()) return
+		const delay = SAVE_RETRY_DELAYS_MS[Math.min(startRetryCount, SAVE_RETRY_DELAYS_MS.length - 1)] ?? 0
+		startRetryCount += 1
+		startRetryTimer = clock.setTimer(() => {
+			startRetryTimer = null
+			void retryStart()
+		}, delay)
+	}
+
+	async function retryStart(): Promise<void> {
+		if (startRetryInFlight || !needsStartRetry()) return
+		clearStartRetryTimer()
+		const gen = generation
+		startRetryInFlight = true
+		let server: AttemptSession
+		try {
+			server = await api.start(testId)
+		} catch (error) {
+			if (gen !== generation) return
+			startRetryInFlight = false
+			if (!needsStartRetry()) return
+			if (classifyStartFailure(error) === 'not-assigned') {
+				stopStartRetry()
+				blockStart(null)
+				emit()
+				return
+			}
+			scheduleStartRetry()
+			return
+		}
+		if (gen !== generation) return
+		startRetryInFlight = false
+		if (!needsStartRetry()) return
+		stopStartRetry()
+		serverClock.observe(server.serverNow)
+		const current = position
+		applyServerSession(server, null)
+		if (current !== null && knownQuestions.has(current) && position !== current) {
+			position = current
+			recordPosition(storage, keys.wal, { sessionId: server.sessionId, position })
+		}
+		enqueuePending()
+		emit()
+	}
+
 	type StartMode = { retake?: boolean; candidate?: boolean; frozen?: boolean }
 
 	async function runStart(cached: CachedSession | null, mode: StartMode = {}): Promise<void> {
@@ -506,6 +582,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			} else {
 				enterActive(true)
 				if (mode.retake) notice({ kind: 'retake-start-failed' })
+				scheduleStartRetry()
 			}
 			emit()
 			return
@@ -893,6 +970,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		restoreCandidate = session ?? closedSession
 		closedSession = null
 		generation += 1
+		stopStartRetry()
 		queue?.discard()
 		cancelTimeUpPause()
 		clearIndicatorTimer()
@@ -947,6 +1025,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			queue.drain({ keepalive: true })
 		} else {
 			if (event === 'visible') openSegment()
+			if (needsStartRetry()) void retryStart()
 			queue.retryNow()
 			if (deadlinePassed && submitFailed) void runSubmit(true)
 		}
@@ -980,6 +1059,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			if (initialized) return
 			initialized = true
 			generation += 1
+			stopStartRetry()
 			blockReason = null
 			alreadySubmittedAttemptId = null
 			submitFailed = false
@@ -1086,6 +1166,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			unsubscribeVisibility = null
 			clearIndicatorTimer()
 			stopTick()
+			stopStartRetry()
 			generation += 1
 			cancelTimeUpPause()
 		},
