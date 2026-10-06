@@ -1,3 +1,4 @@
+import { PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES } from '@bio-exam/exam-core'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 
@@ -18,6 +19,7 @@ import { isStudentOnly } from '@/lib/users/student-card'
 import { resolveInitialCreateModePersistence } from '../../lifecycle'
 import type { QuestionDraft, TestFormData } from '../../types'
 import { normalizeQuestionForSave } from '../../types'
+import { hasOpenQuestion, PHOTO_WINDOW_SAVE_TOAST, photoWindowSaveError } from './photo-window'
 import {
 	actionErrorMessage,
 	assignStudentToTest,
@@ -119,6 +121,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	const [assigningUserId, setAssigningUserId] = useState<string | null>(null)
 	const [removingUserId, setRemovingUserId] = useState<string | null>(null)
 	const [testSlugError, setTestSlugError] = useState<string | null>(null)
+	const [photoWindowServerError, setPhotoWindowServerError] = useState<string | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [creatingQuestionDraft, setCreatingQuestionDraft] = useState(false)
 	const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null)
@@ -151,6 +154,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 				redThresholdMinutes: testData.test.redThresholdMinutes ?? null,
 				warningThresholdMinutes: testData.test.warningThresholdMinutes ?? null,
 				passingScore: testData.test.passingScore,
+				photoUploadWindowMinutes: testData.test.photoUploadWindowMinutes ?? PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES,
 				order: testData.test.order,
 			}))
 		}
@@ -174,6 +178,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 	const discardChanges = () => {
 		if (!saved) return
 		setTestSlugError(null)
+		setPhotoWindowServerError(null)
 		setForm((prev) => ({ ...prev, ...saved }))
 	}
 
@@ -225,6 +230,10 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		const failure = testSaveFailure(error, 'Ошибка сохранения')
 		if (failure.slugError) {
 			setTestSlugError(failure.slugError)
+			setSettingsOpen(true)
+		}
+		if (failure.photoWindowError) {
+			setPhotoWindowServerError(failure.photoWindowError)
 			setSettingsOpen(true)
 		}
 		return failure.toast
@@ -424,6 +433,12 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			toast.error('Для публикации добавьте хотя бы один вопрос')
 			return
 		}
+		if (photoWindowSaveError(form.photoUploadWindowMinutes, hasOpenQuestion(form.questions))) {
+			toast.error(PHOTO_WINDOW_SAVE_TOAST)
+			setSettingsOpen(true)
+			window.setTimeout(() => document.getElementById('test-settings-photo-window')?.focus(), settingsOpen ? 0 : 150)
+			return
+		}
 
 		setSaving(true)
 		try {
@@ -534,6 +549,8 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 			testSlug,
 			testSlugError,
 			setTestSlugError,
+			photoWindowServerError,
+			setPhotoWindowServerError,
 			canManageCatalog: catalog,
 			onCreateTopic: handleCreateTopic,
 		},

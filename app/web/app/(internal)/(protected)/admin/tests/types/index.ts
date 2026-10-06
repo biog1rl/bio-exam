@@ -144,6 +144,7 @@ export interface Test {
 	redThresholdMinutes: number | null
 	warningThresholdMinutes: number | null
 	passingScore: number | null
+	photoUploadWindowMinutes?: number
 	order: number
 	createdAt: string
 	updatedAt: string
@@ -191,6 +192,7 @@ export interface TestFormData {
 	redThresholdMinutes: number | null
 	warningThresholdMinutes: number | null
 	passingScore: number | null
+	photoUploadWindowMinutes: number | null
 	order: number
 	questions: Question[]
 }

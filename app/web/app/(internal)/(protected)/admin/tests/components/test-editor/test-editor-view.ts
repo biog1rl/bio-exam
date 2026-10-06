@@ -1,3 +1,5 @@
+import { PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES } from '@bio-exam/exam-core'
+
 import { questionPreview } from '@/lib/tests/question-preview'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cycleSort, type TableSort, matchesNeedle, searchNeedle, sortRows } from '@/lib/utils/table-sort'
@@ -24,6 +26,7 @@ export type SettingsFields = Pick<
 	| 'redThresholdMinutes'
 	| 'warningThresholdMinutes'
 	| 'passingScore'
+	| 'photoUploadWindowMinutes'
 >
 
 export type SavedTestSettings = {
@@ -37,6 +40,7 @@ export type SavedTestSettings = {
 	redThresholdMinutes?: number | null
 	warningThresholdMinutes?: number | null
 	passingScore: number | null
+	photoUploadWindowMinutes?: number | null
 }
 
 export type QuestionListEntry = { question: Question; index: number }
@@ -72,6 +76,7 @@ export function savedSettings(test: SavedTestSettings): SettingsFields {
 		redThresholdMinutes: test.redThresholdMinutes ?? null,
 		warningThresholdMinutes: test.warningThresholdMinutes ?? null,
 		passingScore: test.passingScore,
+		photoUploadWindowMinutes: test.photoUploadWindowMinutes ?? PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES,
 	}
 }
 
@@ -87,6 +92,7 @@ function settingsOf(form: SettingsFields): SettingsFields {
 		redThresholdMinutes: form.redThresholdMinutes,
 		warningThresholdMinutes: form.warningThresholdMinutes,
 		passingScore: form.passingScore,
+		photoUploadWindowMinutes: form.photoUploadWindowMinutes,
 	}
 }
 

@@ -38,6 +38,11 @@
 			"slug": "e2e-notif",
 			"title": "E2E: уведомления",
 			"description": "Тема для сквозной проверки уведомлений"
+		},
+		{
+			"slug": "e2e-deadline",
+			"title": "E2E: дедлайн и окно для фото",
+			"description": "Тема для сквозной проверки дедлайна и окна для фото"
 		}
 	],
 	"bulkUsers": { "prefix": "bulk-user", "count": 110, "name": "Массовый пользователь" },
@@ -525,6 +530,28 @@
 								}
 							],
 							"correct": "1"
+						}
+					]
+				},
+				{
+					"slug": "photo-window-desktop",
+					"title": "Окно для фото (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "pw-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется органоид, в котором происходит фотосинтез?",
+							"correct": "хлоропласт"
+						},
+						{
+							"key": "pw-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Опишите, как свет превращается в химическую энергию."
 						}
 					]
 				}
@@ -1071,6 +1098,28 @@
 								}
 							],
 							"correct": "1"
+						}
+					]
+				},
+				{
+					"slug": "photo-window-mobile",
+					"title": "Окно для фото (mobile)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "pw-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется органоид, в котором происходит фотосинтез?",
+							"correct": "хлоропласт"
+						},
+						{
+							"key": "pw-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Опишите, как свет превращается в химическую энергию."
 						}
 					]
 				}

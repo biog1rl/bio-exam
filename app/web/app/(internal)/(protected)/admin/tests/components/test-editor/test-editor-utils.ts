@@ -1,3 +1,5 @@
+import { PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES } from '@bio-exam/exam-core'
+
 import { validateQuestion } from '../../question-validation'
 import type { Question, QuestionDraft, QuestionTypeDefinition, TestFormData } from '../../types'
 import { normalizeQuestionForSave } from '../../types'
@@ -14,6 +16,7 @@ export function createInitialTestForm(): TestFormData {
 		redThresholdMinutes: null,
 		warningThresholdMinutes: null,
 		passingScore: null,
+		photoUploadWindowMinutes: PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES,
 		order: 0,
 		questions: [],
 	}

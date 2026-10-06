@@ -106,6 +106,7 @@ const FORM: TestFormData = {
 	redThresholdMinutes: 5,
 	warningThresholdMinutes: 10,
 	passingScore: 60,
+	photoUploadWindowMinutes: 15,
 	order: 2,
 	questions: [],
 }
@@ -252,32 +253,53 @@ describe('testSaveFailure', () => {
 				arrange: () =>
 					apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Test with this slug already exists in this topic' })),
 				run: () => createTest(FORM),
-				expected: { slugError: 'Тест с таким адресом уже есть в этой теме', toast: '' },
+				expected: { slugError: 'Тест с таким адресом уже есть в этой теме', photoWindowError: null, toast: '' },
 			},
 			{
 				name: 'настройки: 409 о занятом адресе — ошибка у поля адреса',
 				arrange: () =>
 					apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Test with this slug already exists in this topic' })),
 				run: () => updateTestSettings(TEST_ID, FORM),
-				expected: { slugError: 'Тест с таким адресом уже есть в этой теме', toast: '' },
+				expected: { slugError: 'Тест с таким адресом уже есть в этой теме', photoWindowError: null, toast: '' },
 			},
 			{
 				name: 'настройки: 409 с русским текстом сервера — тост с этим текстом, поле не трогается',
 				arrange: () => apiFetchMock.mockResolvedValueOnce(json(409, { error: 'Содержимое изменилось, повторите' })),
 				run: () => updateTestSettings(TEST_ID, FORM),
-				expected: { slugError: null, toast: 'Содержимое изменилось, повторите' },
+				expected: { slugError: null, photoWindowError: null, toast: 'Содержимое изменилось, повторите' },
 			},
 			{
 				name: 'создание: 500 — запасной текст в тосте',
 				arrange: () => apiFetchMock.mockResolvedValueOnce(json(500, { error: 'Internal Server Error' })),
 				run: () => createTest(FORM),
-				expected: { slugError: null, toast: 'Ошибка сохранения' },
+				expected: { slugError: null, photoWindowError: null, toast: 'Ошибка сохранения' },
 			},
 			{
 				name: 'создание: истёкшая сессия — без тоста',
 				arrange: () => apiFetchMock.mockRejectedValueOnce(new AuthExpiredError()),
 				run: () => createTest(FORM),
-				expected: { slugError: null, toast: '' },
+				expected: { slugError: null, photoWindowError: null, toast: '' },
+			},
+			{
+				name: 'настройки: 400 с ошибкой поля окна для фото — сообщение у поля, без тоста',
+				arrange: () =>
+					apiFetchMock.mockResolvedValueOnce(
+						json(400, {
+							error: 'Validation error',
+							details: { fieldErrors: { photoUploadWindowMinutes: ['Too big'] } },
+						})
+					),
+				run: () => updateTestSettings(TEST_ID, FORM),
+				expected: { slugError: null, photoWindowError: 'Введите целое число минут от 0 до 120', toast: '' },
+			},
+			{
+				name: 'настройки: 400 с ошибкой другого поля — запасной текст, поле окна не трогается',
+				arrange: () =>
+					apiFetchMock.mockResolvedValueOnce(
+						json(400, { error: 'Validation error', details: { fieldErrors: { title: ['Required'] } } })
+					),
+				run: () => updateTestSettings(TEST_ID, FORM),
+				expected: { slugError: null, photoWindowError: null, toast: 'Ошибка сохранения' },
 			},
 		].map((row): [string, typeof row] => [row.name, row])
 	)('%s', async (_name, { arrange, run, expected }) => {
@@ -347,6 +369,7 @@ describe('запросы слоя редактора', () => {
 			redThresholdMinutes: 5,
 			warningThresholdMinutes: 10,
 			passingScore: 60,
+			photoUploadWindowMinutes: 15,
 			order: 2,
 		})
 	})

@@ -13,6 +13,7 @@ import { fetcherWith } from '@/lib/http/swr'
 import { adminTestsKeys, exportTestArchive, type ArchiveDownload } from '@/lib/tests/admin-api'
 
 import type { QuestionDraftDetailResponse, QuestionDraftsResponse, TestDetailResponse, TestFormData } from '../../types'
+import { PHOTO_WINDOW_INVALID } from './photo-window'
 import type { StudentAssignment } from './test-editor-types'
 
 export type TestSummaryResponse = Pick<TestDetailResponse, 'test'> & { questionsCount: number }
@@ -101,16 +102,28 @@ export function actionErrorMessage(error: unknown, fallback: string): string {
 
 export const TEST_SLUG_TAKEN = 'Тест с таким адресом уже есть в этой теме'
 
-export function testSaveFailure(error: unknown, fallback: string): { slugError: string | null; toast: string } {
-	if (
-		error instanceof RequestError &&
-		error.kind === 'http' &&
-		error.status === 409 &&
-		readApiError(error.body) === null
-	) {
-		return { slugError: TEST_SLUG_TAKEN, toast: '' }
+function hasPhotoWindowFieldError(body: unknown): boolean {
+	if (!body || typeof body !== 'object') return false
+	const details = (body as Record<string, unknown>).details
+	if (!details || typeof details !== 'object') return false
+	const fieldErrors = (details as Record<string, unknown>).fieldErrors
+	if (!fieldErrors || typeof fieldErrors !== 'object') return false
+	const messages = (fieldErrors as Record<string, unknown>).photoUploadWindowMinutes
+	return Array.isArray(messages) && messages.length > 0
+}
+
+export type TestSaveFailure = { slugError: string | null; photoWindowError: string | null; toast: string }
+
+export function testSaveFailure(error: unknown, fallback: string): TestSaveFailure {
+	if (error instanceof RequestError && error.kind === 'http') {
+		if (error.status === 409 && readApiError(error.body) === null) {
+			return { slugError: TEST_SLUG_TAKEN, photoWindowError: null, toast: '' }
+		}
+		if (error.status === 400 && hasPhotoWindowFieldError(error.body)) {
+			return { slugError: null, photoWindowError: PHOTO_WINDOW_INVALID, toast: '' }
+		}
 	}
-	return { slugError: null, toast: actionErrorMessage(error, fallback) }
+	return { slugError: null, photoWindowError: null, toast: actionErrorMessage(error, fallback) }
 }
 
 function send<T = unknown>(url: string, fallbackMessage: string, options: RequestOptions<T> = {}): Promise<T> {
@@ -178,6 +191,7 @@ export function updateTestSettings(testId: string, form: TestFormData): Promise<
 			redThresholdMinutes: form.redThresholdMinutes,
 			warningThresholdMinutes: form.warningThresholdMinutes,
 			passingScore: form.passingScore,
+			photoUploadWindowMinutes: form.photoUploadWindowMinutes,
 			order: form.order,
 		},
 		parse: parseUpdatedTest,
