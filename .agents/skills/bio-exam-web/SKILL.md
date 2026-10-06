@@ -35,7 +35,7 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 - Страницы прокручиваются не окном, а внутренним блоком `app/web/components/AppLayout/MainScrollArea.tsx` (у `<html>` `overflow: hidden`): он открывает новую страницу сверху и восстанавливает положение при «Назад»; `window.scrollTo` и `scrollRestoration` до контента не доходят.
 - Банк заданий `/admin/tests` и `/admin/tests/[topic]` — один компонент `app/web/app/(internal)/(protected)/admin/tests/components/bank/BankExplorer.tsx` (темы слева, таблица тестов справа); фильтры, поиск и сортировка — в адресе (`app/web/lib/tests/bank-table.ts`).
 - Диалоги и боковые панели из `components/ui` (`dialog`, `alert-dialog`, `sheet`) сами возвращают фокус на элемент, который их открыл (`components/ui/use-return-focus.ts`); у Radix без этого фокус возвращается только на `*Trigger`.
-- Настройки типа вопроса для одного теста — одна строка `test_question_type_overrides`, PUT заменяет её целиком: страница баллов меняет только формулу, страница типа — только название и отключение, каждая отправляет чужие поля как есть (`testOverrideSteps` в `app/web/lib/tests/admin-api.ts`).
+- Настройки типа вопроса для одного теста — одна строка `test_question_type_overrides`; её владелец — сервер. Сейчас PUT заменяет строку целиком, и web досылает чужие поля сам (`testOverrideSteps` в `app/web/lib/tests/admin-api.ts`) — это долг: `docs/adr/0008-question-type-catalog-module.md` переводит запись на частичный PATCH (фаза 11.1), после чего каждая страница отправляет только своё поле.
 - Цвета оболочки — токены `app/web/styles/globals.css`; контраст пар токенов держит `app/web/styles/token-contrast.test.ts`, контраст и переполнение страниц — `e2e/tests/navigation.spec.ts`.
 
 ## Страница: шапка и таблица

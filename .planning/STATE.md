@@ -5,17 +5,17 @@ milestone_name: Открытые задания с фото и ручной пр
 current_phase: 11
 current_phase_name: Deadline finalisation, upload window and background jobs
 status: executing
-stopped_at: Completed 11-15-PLAN.md
-last_updated: "2026-10-06T15:00:45.912Z"
+stopped_at: Completed 11-17-PLAN.md
+last_updated: "2026-10-06T15:34:38.795Z"
 last_activity: 2026-10-06
 last_activity_desc: Phase 11 execution started
-state_head: e3e1a75b769ec3db2164c5d51713588c00df4b75
+state_head: d0ee3e642198809153b226e5ae6e739ee5f4a57d
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 2
   total_plans: 46
-  completed_plans: 43
-  percent: 18
+  completed_plans: 45
+  percent: 17
 ---
 
 # Project State
@@ -30,11 +30,11 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 ## Current Position
 
 Phase: 11 (Deadline finalisation, upload window and background jobs) — EXECUTING
-Plan: 16 of 18
+Plan: 18 of 18
 Status: Ready to execute
 Last activity: 2026-10-06 — Phase 11 execution started
 
-Progress: [██░░░░░░░░] 18%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
@@ -101,6 +101,8 @@ Progress: [██░░░░░░░░] 18%
 | Phase 11 P09 | 10min | 3 tasks | 7 files |
 | Phase 11 P14 | 16min | 3 tasks | 5 files |
 | Phase 11 P15 | 15min | 2 tasks | 5 files |
+| Phase 11 P16 | 16min | 3 tasks | 6 files |
+| Phase 11 P17 | 16min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -187,6 +189,7 @@ Locked ADR decisions D-01...D-05 and resolved sequencing decisions D-06...D-14 a
 
 - 2026-10-05: future milestone v4.0 «Чаты учителя и ученика» added after v3.0 and before PWA (now v5.0); not part of v1.0. Research and decisions: `.planning/research/chat/SUMMARY.md`; requirements CHAT-01...CHAT-12. The v3.0 cabinet notification store is a shared notification-event journal.
 - 2026-10-06: v3.0 roadmap created: Phases 9–19 (result foundation, notification journal, deadline finalisation and background jobs, photos, QR and phone page, open question authoring and submit, review, retention, enabling and acceptance, remaining v1.0 tech debt, Supabase and Vercel removal). Traceability filled in `REQUIREMENTS.md` (74/74).
+- Phase 11.1 inserted after Phase 11: Question type catalog: one module and one scoring rule (ADR-0008, architecture review 2026-10-06); plan after Phase 11 closes
 
 ### Pending Todos
 
@@ -242,8 +245,8 @@ Items acknowledged and deferred at milestone close, most recent first. In v3.0 t
 
 ## Session Continuity
 
-Last session: 2026-10-06T15:00:45.880Z
-Stopped at: Completed 11-15-PLAN.md
+Last session: 2026-10-06T15:34:38.764Z
+Stopped at: Completed 11-17-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

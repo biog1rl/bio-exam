@@ -45,6 +45,7 @@
 - [x] **Phase 9: Result foundation and readers** - Stored result = immutable auto facts + appended reviews; one shared function; every reader handles "на проверке" (completed 2026-10-06)
 - [x] **Phase 10: Notification journal and bell** - General notification-event journal, header bell with unread count and deep links, first real producer (completed 2026-10-06)
 - [ ] **Phase 11: Deadline finalisation, upload window and background jobs** - Server closes a timed attempt at the deadline without losing text; one rule for the photo window; background jobs, clean shutdown, one refresh per browser (research phase)
+- [ ] **Phase 11.1: Question type catalog: one module and one scoring rule** (INSERTED) - One server module owns the question type catalog and the per-test override; the unused second scoring rule is removed (ADR-0008)
 - [ ] **Phase 12: Photos on session authentication** - Up to 5 processed photos per open answer from the computer, private delivery, bounded memory (research phase)
 - [ ] **Phase 13: Token, QR and phone page** - Sign-in-free phone upload page through a scoped link and a QR code in the runner (research phase)
 - [ ] **Phase 14: Authoring and submitting open questions** - Open question editor, text and photo answers, "на проверке" after submit
@@ -171,7 +172,7 @@ Plans:
 
 **Folded-in work**: CR-03 (bfcache) and CR-05 (repeated start without a session) from the v1.0 deferred findings, because they touch the client attempt-lifecycle module changed here (part of DEBT-08, which is mapped to Phase 18). PLAT-04 is v1.0 SEC-02, a release precondition.
 **User steps (outside the repository)**: confirm on the server that the container stop timeout (Compose `stop_grace_period`; the Compose file is on the server) is at least the API's drain time; release this phase when no timed attempt is running (existing deploy protection).
-**Plans**: 15/18 plans executed in 10 waves
+**Plans**: 17/18 plans executed in 10 waves
 Plans:
 **Wave 1**
 - [x] 11-01-PLAN.md — exam-core contract: `serverNow`, optional `uploadClosesAt`/`submitSource`, 409 body, `SessionFateSchema`, upload-window codes; `serverNow` on `/start` (wave 1)
@@ -203,15 +204,35 @@ Plans:
 - [x] 11-15-PLAN.md — CR-03 (drain with a request in flight, bfcache) and CR-05 (repeated start without a session) (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 11-16-PLAN.md — one session refresh per browser with Web Locks (wave 8)
+- [x] 11-16-PLAN.md — one session refresh per browser with Web Locks (wave 8)
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 11-17-PLAN.md — logout clears the user's draft keys (wave 9)
+- [x] 11-17-PLAN.md — logout clears the user's draft keys (wave 9)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 11-18-PLAN.md — e2e of criteria 1–3, docs and skills, user steps, phase gates (wave 10)
 
 **UI hint**: yes
+
+### Phase 11.1: Question type catalog: one module and one scoring rule (INSERTED)
+
+**Goal**: Scoring has one source of rules (the question type catalog with its per-test override), and one server module owns the catalog, its invariants, the per-test override and the recomputation of question points, so the web pages send only the field they edit.
+**Depends on**: Phase 11
+**Requirements**: none (architecture work recorded in `docs/adr/0008-question-type-catalog-module.md`)
+**Success Criteria** (what must be TRUE):
+  1. `TestScoringRules`, the `/scoring-rules/*` routes, `scoringRules` in the test settings PATCH and `scoringRules`/`useGlobalScoringRules` in the topic export are gone; a new migration drops `tests.scoring_rules` and `test_scoring_settings`; scores of existing attempts and questions do not change (characterization test written before the change).
+  2. `services/question-type-catalog/` owns creating, editing and disabling a type, the catalog invariants, template/metric compatibility (400 on write, default rule on read), the per-test type resolver and the per-test override; route handlers only parse the request and map the outcome to HTTP.
+  3. The per-test override is written with PATCH: an absent field keeps its value, `null` clears it, a row with no values is deleted by the server; DELETE resets the override; PUT is removed. The question type page sends only title and disabled flag, the scoring page only the formula, and an edit on one page no longer overwrites a field saved by the other.
+  4. A catalog or override change and the recomputation of `questions.points` run in one transaction with one UPDATE, limited to the affected tests (a type edit: tests with questions of that type; an override: one test).
+  5. The scoring page address is built and parsed by one module in the style of `app/web/lib/tests/attempts-url.ts`, with encoded segments and a table-driven unit test.
+
+**Folded-in work**: candidate 2 of the 2026-10-06 architecture review (removal of the unused scoring rules) is done first, inside this phase, because it removes two of the six recomputation callers the module would otherwise absorb.
+**Planning**: `/gsd-plan-phase 11.1 --tdd` — the catalog module is built test-first through its interface: one test per behaviour in the success criteria and ADR-0008, edge cases only when they already happened, are a stated invariant, or guard data or access.
+**User steps (outside the repository)**: the release carries a migration, so the server does not update by itself (`AUTO_MIGRATIONS=0`); run `deploy.sh` by hand outside an exam window, with the pre-deploy dump.
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 11.1 to break down)
 
 ### Phase 12: Photos on session authentication
 
@@ -359,7 +380,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 15 →
 |-------|----------------|--------|-----------|
 | 9. Result foundation and readers | 19/19 | Complete    | 2026-10-06 |
 | 10. Notification journal and bell | 9/9 | Complete    | 2026-10-06 |
-| 11. Deadline finalisation, upload window and background jobs | 15/18 | In Progress|  |
+| 11. Deadline finalisation, upload window and background jobs | 17/18 | In Progress|  |
 | 12. Photos on session authentication | 0/TBD | Not started | - |
 | 13. Token, QR and phone page | 0/TBD | Not started | - |
 | 14. Authoring and submitting open questions | 0/TBD | Not started | - |
