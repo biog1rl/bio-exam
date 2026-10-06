@@ -4,12 +4,9 @@ import { Component, useEffect, useMemo, useState, type ImgHTMLAttributes, type R
 
 import { Loader2 } from 'lucide-react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
-import { serialize } from 'next-mdx-remote/serialize'
 
 import { getSignedUrl, resolvesViaApi } from '@/lib/image-signed-url-cache'
-import { normalizeMdxSource } from '@/lib/mdx/normalizeSource'
-import { buildMdxOptions } from '@/lib/mdx/options'
-import { withoutInlineImages } from '@/lib/mdx/withoutInlineImages'
+import { compileMdx, mdxFallbackText, prepareMdxSource } from '@/lib/mdx/compile'
 
 type Props = {
 	source?: string | null
@@ -132,8 +129,8 @@ class MdxErrorBoundary extends Component<MdxErrorBoundaryProps, { failed: boolea
 }
 
 export default function MdxRenderer({ source, className }: Props) {
-	const normalized = useMemo(() => normalizeMdxSource((source ?? '').trim()), [source])
-	const fallbackText = useMemo(() => withoutInlineImages(normalized), [normalized])
+	const normalized = useMemo(() => prepareMdxSource(source), [source])
+	const fallbackText = useMemo(() => mdxFallbackText(normalized), [normalized])
 	const [compiled, setCompiled] = useState<MDXRemoteSerializeResult | null>(null)
 	const [hasError, setHasError] = useState(false)
 	const components = useMemo(() => ({ img: MdxImage }), [])
@@ -156,7 +153,7 @@ export default function MdxRenderer({ source, className }: Props) {
 			}
 
 			try {
-				const result = await serialize(normalized, buildMdxOptions())
+				const result = await compileMdx(normalized)
 				if (cancelled) return
 				mdxCache.set(normalized, result)
 				setCompiled(result)
