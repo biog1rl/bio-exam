@@ -1,6 +1,6 @@
 # Аудит зависимостей
 
-Дата аудита: 2026-10-04
+Дата аудита: 2026-10-06
 
 Команда: `yarn npm audit --all --recursive --severity high --json`
 
