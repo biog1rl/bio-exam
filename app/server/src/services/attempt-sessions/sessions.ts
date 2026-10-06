@@ -67,8 +67,16 @@ function draftAnswersOf(value: unknown): Record<string, unknown> | null {
 	return null
 }
 
-function toSessionInfo(row: SessionRow): SessionInfo {
+async function readServerNow(tx: Pick<typeof db, 'execute'>): Promise<string> {
+	const result = await tx.execute<{ now: Date | string }>(sql`SELECT clock_timestamp() AS now`)
+	const row = result.rows[0]
+	if (!row) throw new Error('readServerNow: clock_timestamp() returned no rows')
+	return new Date(row.now).toISOString()
+}
+
+function toSessionInfo(row: SessionRow, serverNow: string): SessionInfo {
 	return {
+		serverNow,
 		sessionId: row.id,
 		startedAt: row.startedAt.toISOString(),
 		draftAnswers: draftAnswersOf(row.draftAnswers),
@@ -91,7 +99,7 @@ export async function startAttemptSession({
 			.limit(1)
 			.for('update')
 
-		if (open && !open.expired) return toSessionInfo(open)
+		if (open && !open.expired) return toSessionInfo(open, await readServerNow(tx))
 
 		if (open) {
 			await tx
@@ -108,7 +116,7 @@ export async function startAttemptSession({
 				where: sql`${testSessions.submittedAt} IS NULL AND ${testSessions.closedAt} IS NULL`,
 			})
 			.returning(sessionColumns)
-		if (created) return toSessionInfo(created)
+		if (created) return toSessionInfo(created, await readServerNow(tx))
 
 		const [existing] = await tx
 			.select(sessionColumns)
@@ -117,7 +125,7 @@ export async function startAttemptSession({
 			.orderBy(desc(testSessions.startedAt))
 			.limit(1)
 		if (!existing) throw new Error('startAttemptSession: open session vanished after insert conflict')
-		return toSessionInfo(existing)
+		return toSessionInfo(existing, await readServerNow(tx))
 	})
 }
 

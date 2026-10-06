@@ -43,6 +43,7 @@ export {
 	AdminAttemptViewSchema,
 	AnswerValueSchema,
 	ATTEMPT_GRACE_PERIOD_MINUTES,
+	ATTEMPT_SUBMIT_SOURCES,
 	AttemptFactsSchema,
 	AttemptQuestionViewSchema,
 	AttemptViewSchema,
@@ -61,6 +62,7 @@ export type {
 	AnswerValue,
 	AttemptFacts,
 	AttemptQuestionView,
+	AttemptSubmitSource,
 	AttemptView,
 	LegacyAttemptResultItem,
 	QuestionStatus,
@@ -68,8 +70,8 @@ export type {
 	SubmitAttemptError,
 	SubmitAttemptRequest,
 } from './attempt-result'
-export { AttemptSessionSchema, SaveAttemptDraftRequestSchema } from './attempt-session'
-export type { AttemptSession, SaveAttemptDraftRequest } from './attempt-session'
+export { AttemptSessionSchema, SaveAttemptDraftRequestSchema, SessionFateSchema } from './attempt-session'
+export type { AttemptSession, SaveAttemptDraftRequest, SessionFate } from './attempt-session'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
 export type { QuestionKeyPayload, QuestionMatchingPairs, QuestionOption } from './content'
 export {
@@ -145,3 +147,11 @@ export type {
 } from './scoring'
 export { mergeTelemetryMaps, QuestionTelemetrySchema, TelemetryMapSchema } from './telemetry'
 export type { QuestionTelemetry, TelemetryMap } from './telemetry'
+export {
+	PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES,
+	PHOTO_UPLOAD_WINDOW_MAX_MINUTES,
+	UPLOAD_WINDOW_ERROR_CODES,
+	UPLOAD_WINDOW_REFUSAL_STATUS,
+	UploadWindowRefusalSchema,
+} from './upload-window'
+export type { UploadWindowErrorCode, UploadWindowRefusal } from './upload-window'

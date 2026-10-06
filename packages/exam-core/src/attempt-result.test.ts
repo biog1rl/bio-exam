@@ -397,3 +397,62 @@ test('AdminAttemptViewSchema: вид попытки плюс testId, userId, ans
 	assert.equal(AdminAttemptViewSchema.safeParse({ ...view, telemetry: undefined }).success, false)
 	assert.equal(AdminAttemptViewSchema.safeParse({ ...view, answers: [] }).success, false)
 })
+
+const ISO = '2026-10-06T10:00:00.000Z'
+
+test.each([
+	{ name: 'прежний вид без новых полей', patch: {}, ok: true },
+	{ name: 'uploadClosesAt null', patch: { uploadClosesAt: null }, ok: true },
+	{ name: 'uploadClosesAt строкой', patch: { uploadClosesAt: ISO }, ok: true },
+	{ name: 'submitSource deadline', patch: { submitSource: 'deadline' }, ok: true },
+	{ name: 'submitSource client', patch: { submitSource: 'client' }, ok: true },
+	{ name: 'submitSource server', patch: { submitSource: 'server' }, ok: false },
+	{ name: 'uploadClosesAt числом', patch: { uploadClosesAt: 1 }, ok: false },
+])('AttemptViewSchema: поля фазы 11, $name', ({ patch, ok }) => {
+	const view = { ...validResult, ...validReview, results: [validQuestionView], ...patch }
+	const parsed = AttemptViewSchema.safeParse(view)
+	assert.equal(parsed.success, ok)
+	if (ok) assert.deepEqual(parsed.data, view)
+})
+
+const deadlineAttempt = { ...validResult, ...validReview, results: [validQuestionView], submitSource: 'deadline' }
+
+test.each([
+	{ name: 'прежнее тело 409', body: { error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId: ATTEMPT }, ok: true },
+	{
+		name: 'тело 409 серверной финализации',
+		body: {
+			error: 'ATTEMPT_ALREADY_SUBMITTED',
+			attemptId: ATTEMPT,
+			submitSource: 'deadline',
+			uploadClosesAt: ISO,
+			serverNow: ISO,
+			attempt: deadlineAttempt,
+		},
+		ok: true,
+	},
+	{
+		name: 'uploadClosesAt null',
+		body: { error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId: ATTEMPT, uploadClosesAt: null },
+		ok: true,
+	},
+	{
+		name: 'невалидный attempt',
+		body: { error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId: ATTEMPT, attempt: { attemptId: 'x' } },
+		ok: false,
+	},
+	{
+		name: 'чужой submitSource',
+		body: { error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId: ATTEMPT, submitSource: 'server' },
+		ok: false,
+	},
+])('SubmitAttemptErrorSchema: тело 409 фазы 11, $name', ({ body, ok }) => {
+	assert.equal(SubmitAttemptErrorSchema.safeParse(body).success, ok)
+})
+
+test.each([
+	{ name: 'uuid', clientAttemptId: CLIENT_ATTEMPT, ok: true },
+	{ name: 'ключ серверной финализации', clientAttemptId: `deadline:${SESSION}`, ok: false },
+])('SubmitAttemptRequestSchema: clientAttemptId, $name', ({ clientAttemptId, ok }) => {
+	assert.equal(SubmitAttemptRequestSchema.safeParse({ ...validEnvelope, clientAttemptId }).success, ok)
+})
