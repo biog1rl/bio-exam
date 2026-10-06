@@ -11,6 +11,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
@@ -145,6 +146,14 @@ function AttemptRunner({
 	const secondsLeft = snapshot.secondsLeft
 	const submitting = snapshot.phase === 'submitting' || snapshot.phase === 'autoSubmitting'
 	const interactionDisabled = snapshot.interactionDisabled
+	const deadlinePassed = snapshot.deadlinePassed
+	const navigationDisabled = interactionDisabled && !deadlinePassed
+	const deadlinePanelState =
+		deadlinePassed && !submitResult && snapshot.phase !== 'blocked'
+			? snapshot.submitFailed && snapshot.phase === 'active'
+				? 'failed'
+				: 'sending'
+			: null
 	const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT
 	const showHours = (test.timeLimitMinutes ?? 0) > 60
 
@@ -243,7 +252,7 @@ function AttemptRunner({
 				? alreadySubmittedClosed
 					? 'already-submitted'
 					: null
-				: snapshot.submitFailed
+				: snapshot.submitFailed && !deadlinePassed
 					? 'retry'
 					: null
 	const bannerView = snapshot.submitRejection
@@ -267,6 +276,10 @@ function AttemptRunner({
 						{test.passingScore != null ? <span>Проходной балл: {formatPercent(test.passingScore)}</span> : null}
 					</div>
 				</div>
+
+				{deadlinePanelState ? (
+					<DeadlinePanel state={deadlinePanelState} onRetry={() => void lifecycle.submit({ auto: true })} />
+				) : null}
 
 				{submitResult ? (
 					<section
@@ -321,15 +334,6 @@ function AttemptRunner({
 					</section>
 				) : null}
 
-				{snapshot.showTimeUp ? (
-					<section className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-						<div className="mx-4 rounded-lg bg-white p-6 text-center shadow-xl tab-sm:p-8">
-							<p className="text-2xl font-semibold">Время вышло</p>
-							<p className="mt-2 text-sm text-muted-foreground">Отправка ответов...</p>
-						</div>
-					</section>
-				) : null}
-
 				{(() => {
 					const question = orderedQuestions[currentIndex]
 					if (!question) return null
@@ -354,6 +358,7 @@ function AttemptRunner({
 										question={question}
 										answer={answers[question.id]}
 										disabled={interactionDisabled}
+										readOnly={deadlinePassed}
 										onSelectRadio={onSelectRadio}
 										onToggleCheckbox={onToggleCheckbox}
 										onInputTextAnswer={onInputTextAnswer}
@@ -389,16 +394,16 @@ function AttemptRunner({
 
 							{/* Navigation buttons */}
 							<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || interactionDisabled}>
+								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || navigationDisabled}>
 									Назад
 								</Button>
 								{currentIndex < orderedQuestions.length - 1 ? (
-									<Button variant="outline" onClick={goNext} disabled={interactionDisabled}>
+									<Button variant="outline" onClick={goNext} disabled={navigationDisabled}>
 										Далее
 									</Button>
 								) : (
 									<Button onClick={handleSubmit} disabled={submitting || interactionDisabled}>
-										{submitting ? 'Отправка...' : 'Завершить'}
+										{submitting ? 'Отправка…' : 'Завершить'}
 									</Button>
 								)}
 							</div>
@@ -451,11 +456,13 @@ function AttemptRunner({
 			<section className="h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4 tab:sticky tab:top-4 tab:w-48">
 				{secondsLeft !== null && !submitResult && (
 					<div
+						role="timer"
 						className={cn(
 							'text-right font-mono text-sm font-medium',
 							secondsLeft < redThresholdSeconds ? 'text-red-600' : 'text-muted-foreground'
 						)}
 					>
+						<span className="sr-only">{'Осталось времени: '}</span>
 						{formatTime(secondsLeft, showHours)}
 					</div>
 				)}
@@ -510,7 +517,7 @@ function AttemptRunner({
 				</div>
 
 				<Button type="button" onClick={handleSubmit} disabled={submitting || interactionDisabled} className="w-full">
-					{submitting ? 'Отправка...' : 'Завершить'}
+					{submitting ? 'Отправка…' : 'Завершить'}
 				</Button>
 			</section>
 

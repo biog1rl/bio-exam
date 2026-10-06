@@ -211,22 +211,77 @@ describe('таймер экзамена, предупреждение и авт�
 		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
 	})
 
-	test('характеризация: автосдача по дедлайну без связи возвращает ввод (до D-12)', async () => {
-		const { lifecycle, fakeApi, storage } = await activeWithLimit()
-		lifecycle.answer(Q1, 'a')
-		fakeApi.queueSubmit(new Error('network'))
+	async function failedAutoSubmit() {
+		const setup = await activeWithLimit()
+		setup.lifecycle.answer(Q1, 'a')
+		setup.fakeApi.queueSubmit(new Error('network'))
 		await vi.advanceTimersByTimeAsync(600_000)
 		await settle()
+		return setup
+	}
+
+	test('автосдача по дедлайну без связи: ответы только для чтения, answer() не меняет снимок и WAL', async () => {
+		const { lifecycle, fakeApi, storage } = await failedAutoSubmit()
 		assert.equal(fakeApi.submit.mock.calls.length, 1)
 		const snapshot = lifecycle.getSnapshot()
 		assert.equal(snapshot.phase, 'active')
 		assert.equal(snapshot.submitFailed, true)
-		assert.equal(snapshot.interactionDisabled, false)
+		assert.equal(snapshot.deadlinePassed, true)
+		assert.equal(snapshot.interactionDisabled, true)
 		assert.equal(snapshot.secondsLeft, 0)
+		const walBefore = storage.data.get(KEYS.wal)
 		lifecycle.answer(Q2, 'b')
-		assert.equal(lifecycle.getSnapshot().answers[Q2], 'b')
+		assert.equal(lifecycle.getSnapshot().answers[Q2], undefined)
+		assert.equal(storage.data.get(KEYS.wal), walBefore)
 		const wal = readJson(storage, KEYS.wal) as { answers: Record<string, unknown> }
-		assert.equal(wal.answers[Q2], 'b')
+		assert.equal(wal.answers[Q2], undefined)
+	})
+
+	test('submit({ auto: true }) после сбоя автосдачи уходит с прежним clientAttemptId', async () => {
+		const { lifecycle, fakeApi } = await failedAutoSubmit()
+		fakeApi.queueSubmit(attemptViewOf())
+		const done = lifecycle.submit({ auto: true })
+		await vi.advanceTimersByTimeAsync(1_500)
+		await done
+		const [first, second] = fakeApi.submitRequests()
+		assert.equal(fakeApi.submit.mock.calls.length, 2)
+		assert.equal(second?.clientAttemptId, first?.clientAttemptId)
+		assert.equal(second?.sessionId, first?.sessionId)
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+	})
+
+	test.each(['online', 'visible'] as const)(
+		'после сбоя автосдачи событие %s само повторяет её, 200 → submitted',
+		async (event) => {
+			const { lifecycle, fakeApi, page } = await failedAutoSubmit()
+			fakeApi.queueSubmit(attemptViewOf())
+			page.emit(event)
+			await settle()
+			assert.equal(fakeApi.submit.mock.calls.length, 2)
+			const [first, second] = fakeApi.submitRequests()
+			assert.equal(second?.clientAttemptId, first?.clientAttemptId)
+			await vi.advanceTimersByTimeAsync(1_500)
+			assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+		}
+	)
+
+	test.each(['online', 'visible'] as const)('событие %s до дедлайна автосдачу не запускает', async (event) => {
+		const { lifecycle, fakeApi, page } = await activeWithLimit()
+		lifecycle.answer(Q1, 'a')
+		await vi.advanceTimersByTimeAsync(10_000)
+		page.emit(event)
+		await settle()
+		assert.equal(fakeApi.submit.mock.calls.length, 0)
+		assert.equal(lifecycle.getSnapshot().deadlinePassed, false)
+		assert.equal(lifecycle.getSnapshot().interactionDisabled, false)
+	})
+
+	test('после дедлайна навигация меняет текущий вопрос', async () => {
+		const { lifecycle } = await failedAutoSubmit()
+		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q1)
+		lifecycle.navigate(Q2)
+		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q2)
+		assert.equal(lifecycle.getSnapshot().deadlinePassed, true)
 	})
 
 	test('тест без лимита: secondsLeft null, тиков нет', async () => {
@@ -238,6 +293,30 @@ describe('таймер экзамена, предупреждение и авт�
 		await vi.advanceTimersByTimeAsync(3_600_000)
 		assert.equal(lifecycle.getSnapshot().secondsLeft, null)
 		assert.equal(minuteNotices(onNotice), 0)
+	})
+})
+
+describe('серверное время', () => {
+	test.each([
+		['часы устройства на 5 минут впереди сервера', -300_000],
+		['часы устройства на 5 минут позади сервера', 300_000],
+	])('%s: таймер и автосдача идут по серверу', async (_label, shiftMs) => {
+		const serverStart = new Date(START + shiftMs).toISOString()
+		const fakeApi = fakeAttemptApi([{ ...sessionOf('s1', serverStart), serverNow: serverStart }])
+		fakeApi.queueSubmit(attemptViewOf())
+		const { lifecycle } = await activeWithLimit({ api: fakeApi })
+		assert.equal(lifecycle.getSnapshot().secondsLeft, 600)
+		assert.equal(lifecycle.getSnapshot().deadlinePassed, false)
+		await vi.advanceTimersByTimeAsync(300_000)
+		assert.equal(lifecycle.getSnapshot().secondsLeft, 300)
+		assert.equal(fakeApi.submit.mock.calls.length, 0)
+		await vi.advanceTimersByTimeAsync(299_000)
+		assert.equal(fakeApi.submit.mock.calls.length, 0)
+		assert.equal(lifecycle.getSnapshot().deadlinePassed, false)
+		await vi.advanceTimersByTimeAsync(1_000)
+		assert.equal(fakeApi.submit.mock.calls.length, 1)
+		assert.equal(lifecycle.getSnapshot().deadlinePassed, true)
+		assert.equal(lifecycle.getSnapshot().secondsLeft, 0)
 	})
 })
 

@@ -1,6 +1,7 @@
 import { SHORT_TEXT_MAX_LENGTH } from '@bio-exam/exam-core'
 
 import type { PublicTestQuestion, TestAnswerValue } from '@/lib/tests/types'
+import { cn } from '@/lib/utils/cn'
 
 import { Checkbox } from '../ui/checkbox'
 import { Input } from '../ui/input'
@@ -12,6 +13,7 @@ type Props = {
 	question: PublicTestQuestion
 	answer: TestAnswerValue | undefined
 	disabled: boolean
+	readOnly?: boolean
 	onSelectRadio: (questionId: string, optionId: string) => void
 	onToggleCheckbox: (questionId: string, optionId: string) => void
 	onInputTextAnswer: (questionId: string, value: string) => void
@@ -22,6 +24,7 @@ export function QuestionInput({
 	question,
 	answer,
 	disabled,
+	readOnly = false,
 	onSelectRadio,
 	onToggleCheckbox,
 	onInputTextAnswer,
@@ -35,7 +38,7 @@ export function QuestionInput({
 				className="w-fit space-y-2"
 				value={typeof answer === 'string' ? answer : ''}
 				onValueChange={(value) => onSelectRadio(question.id, value)}
-				disabled={disabled}
+				disabled={disabled || readOnly}
 			>
 				{question.options.map((option) => {
 					const inputId = `q-${question.id}-opt-${option.id}`
@@ -64,7 +67,7 @@ export function QuestionInput({
 								id={inputId}
 								checked={selected}
 								onCheckedChange={() => onToggleCheckbox(question.id, option.id)}
-								disabled={disabled}
+								disabled={disabled || readOnly}
 							/>
 							<Label htmlFor={inputId} className="cursor-pointer font-normal">
 								{option.text}
@@ -84,10 +87,13 @@ export function QuestionInput({
 					inputMode={template === 'sequence_digits' ? 'numeric' : 'text'}
 					value={typeof answer === 'string' ? answer : ''}
 					onChange={(event) => onInputTextAnswer(question.id, event.target.value)}
-					placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
+					placeholder={
+						readOnly ? undefined : template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'
+					}
 					maxLength={SHORT_TEXT_MAX_LENGTH}
-					disabled={disabled}
-					className="bg-white"
+					readOnly={readOnly}
+					disabled={disabled && !readOnly}
+					className={cn('bg-white', readOnly && 'read-only:bg-muted')}
 				/>
 				{template === 'sequence_digits' ? (
 					<p className="text-xs text-muted-foreground">Последовательность вводится цифрами без пробелов.</p>
@@ -106,7 +112,7 @@ export function QuestionInput({
 						<Select
 							value={selected[left.id] || undefined}
 							onValueChange={(value) => onSelectMatching(question.id, left.id, value)}
-							disabled={disabled}
+							disabled={disabled || readOnly}
 						>
 							<SelectTrigger className="w-full tab-sm:w-55">
 								<SelectValue placeholder="Выберите вариант" />

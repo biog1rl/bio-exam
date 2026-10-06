@@ -21,6 +21,7 @@ import { resolveClientAttemptId, storedClientAttemptId, type ClientAttemptStorag
 import { appendQuestionTime, incrementQuestionFocusLoss, incrementQuestionVisit } from '../telemetry'
 import { resolveRestoredDraft, type RestoredDraft } from './restore'
 import { saveIndicatorDueAt, saveIndicatorKind, type SaveIndicatorInput } from './save-indicator'
+import { createServerClock } from './server-clock'
 import {
 	attemptStorageKeys,
 	clearAttemptKeys,
@@ -77,6 +78,7 @@ export type AttemptSnapshot = {
 	showTimeUp: boolean
 	saveIndicator: SaveIndicatorKind | null
 	interactionDisabled: boolean
+	deadlinePassed: boolean
 }
 export type AttemptLifecycleApi = {
 	start(testId: string): Promise<AttemptSession>
@@ -164,6 +166,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		clearTimer = (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 	}: Partial<AttemptClock> = options.clock ?? {}
 	const clock: AttemptClock = { now, setTimer, clearTimer }
+	const serverClock = createServerClock(clock.now)
 	const keys = attemptStorageKeys(testId, userId)
 	let questionIds: readonly string[] = [...options.questionIds]
 	let knownQuestions = new Set(questionIds)
@@ -195,6 +198,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let tickTimer: unknown = null
 	let warned = false
 	let autoFired = false
+	let deadlinePassed = false
 
 	function indicatorInput(): SaveIndicatorInput {
 		return {
@@ -321,7 +325,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	function secondsLeft(): number | null {
 		const deadline = deadlineMs()
 		if (deadline === null) return null
-		return Math.max(0, Math.floor((deadline - clock.now()) / 1000))
+		return Math.max(0, Math.floor((deadline - serverClock.now()) / 1000))
 	}
 
 	function stopTick(): void {
@@ -334,7 +338,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		stopTick()
 		const deadline = deadlineMs()
 		if (!initialized || phase !== 'active' || deadline === null) return
-		const remaining = deadline - clock.now()
+		const remaining = deadline - serverClock.now()
 		const delay = remaining > 0 ? remaining % 1000 || 1000 : 0
 		tickTimer = clock.setTimer(onTick, delay)
 	}
@@ -346,6 +350,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		if (left === null) return
 		if (left <= 0) {
 			warned = true
+			deadlinePassed = true
 			if (autoFired) {
 				emit()
 				return
@@ -407,6 +412,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 
 	function applyServerSession(server: AttemptSession, cached: CachedSession | null): void {
 		const cachedSessionId = cached?.sessionId ?? null
+		if (session?.sessionId !== server.sessionId) deadlinePassed = false
 		if (cached && cached.sessionId !== server.sessionId) {
 			clearAttemptKeys(storage, keys, 'session-replaced')
 			notice({ kind: 'session-replaced' })
@@ -482,6 +488,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			return
 		}
 		if (gen !== generation) return
+		serverClock.observe(server.serverNow)
 		if (mode.candidate) restoreCandidate = null
 		const known = mode.candidate && cached?.sessionId !== server.sessionId ? null : cached
 		applyServerSession(server, known)
@@ -518,7 +525,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		if (!timeLimitMinutes) return false
 		const startedMs = Date.parse(cached.startedAt)
 		if (Number.isNaN(startedMs)) return false
-		return clock.now() > startedMs + (timeLimitMinutes + ATTEMPT_GRACE_PERIOD_MINUTES) * 60_000
+		return serverClock.now() > startedMs + (timeLimitMinutes + ATTEMPT_GRACE_PERIOD_MINUTES) * 60_000
 	}
 
 	function clearDraftState(): void {
@@ -600,6 +607,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			return null
 		}
 		if (gen !== generation) return null
+		serverClock.observe(server.serverNow)
 		mergeServerDraft(server)
 		session = { sessionId: server.sessionId, startedAt: server.startedAt }
 		writeCachedSession(storage, keys.session, session)
@@ -699,6 +707,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		segmentStartedAt = null
 		warned = false
 		autoFired = false
+		deadlinePassed = false
 		clearAttemptKeys(storage, keys, 'success')
 		session = null
 		blockReason = null
@@ -743,6 +752,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		} else {
 			if (event === 'visible') openSegment()
 			queue.retryNow()
+			if (deadlinePassed && submitFailed) void runSubmit(true)
 		}
 	}
 
@@ -756,11 +766,12 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			answers,
 			currentQuestionId: position,
 			startedAt: session?.startedAt ?? null,
-			secondsLeft: secondsLeft(),
+			secondsLeft: deadlinePassed ? 0 : secondsLeft(),
 			result,
 			showTimeUp,
 			saveIndicator: saveIndicatorKind(indicatorInput()),
-			interactionDisabled: DISABLED_PHASES.has(phase),
+			interactionDisabled: DISABLED_PHASES.has(phase) || deadlinePassed,
+			deadlinePassed,
 		}
 	}
 
@@ -778,6 +789,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			segmentStartedAt = null
 			warned = false
 			autoFired = false
+			deadlinePassed = false
 			queue = createQueue()
 			unsubscribeVisibility = visibility.subscribe(onVisibility)
 			const cached = readCachedSession(storage, keys.session)
@@ -817,7 +829,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			await runStart(restoreCandidate, { candidate: true })
 		},
 		answer(questionId, value) {
-			if (!initialized || phase !== 'active' || !knownQuestions.has(questionId)) return
+			if (!initialized || phase !== 'active' || deadlinePassed || !knownQuestions.has(questionId)) return
 			answers = { ...answers, [questionId]: value }
 			submitRejection = null
 			pending.add(questionId)
