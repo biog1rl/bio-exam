@@ -322,6 +322,21 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.equal(fakeApi.start.mock.calls.length, 1)
 	})
 
+	test('характеризация: 409 ATTEMPT_ALREADY_SUBMITTED на автосдачу теста с лимитом — blocked already-submitted, удалены все четыре ключа (до D-13/D-14)', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10 })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q1, 'a')
+		fakeApi.queueSubmit(requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID))
+		await lifecycle.submit({ auto: true })
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'blocked')
+		assert.equal(snapshot.blockReason, 'already-submitted')
+		assert.equal(snapshot.alreadySubmittedAttemptId, ATTEMPT_ID)
+		assert.deepEqual(presentKeys(storage), [])
+	})
+
 	test('404 на отправку: blocked not-found, удалены session и clientAttemptId, WAL без сессии; новый модуль досылает ответы в s3', async () => {
 		const storage = memoryStorage()
 		const fakeApi = fakeAttemptApi([sessionOf('s1', undefined, { answers: { [Q2]: 'server' } })])

@@ -211,6 +211,24 @@ describe('таймер экзамена, предупреждение и авт�
 		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
 	})
 
+	test('характеризация: автосдача по дедлайну без связи возвращает ввод (до D-12)', async () => {
+		const { lifecycle, fakeApi, storage } = await activeWithLimit()
+		lifecycle.answer(Q1, 'a')
+		fakeApi.queueSubmit(new Error('network'))
+		await vi.advanceTimersByTimeAsync(600_000)
+		await settle()
+		assert.equal(fakeApi.submit.mock.calls.length, 1)
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'active')
+		assert.equal(snapshot.submitFailed, true)
+		assert.equal(snapshot.interactionDisabled, false)
+		assert.equal(snapshot.secondsLeft, 0)
+		lifecycle.answer(Q2, 'b')
+		assert.equal(lifecycle.getSnapshot().answers[Q2], 'b')
+		const wal = readJson(storage, KEYS.wal) as { answers: Record<string, unknown> }
+		assert.equal(wal.answers[Q2], 'b')
+	})
+
 	test('тест без лимита: secondsLeft null, тиков нет', async () => {
 		const { lifecycle, onNotice } = setupLifecycle()
 		lifecycle.init()
