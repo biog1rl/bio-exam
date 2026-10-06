@@ -13,7 +13,7 @@ export type AttemptChartRow = {
 	title: string
 	subtitle: string
 	name: string
-	fill: string | null
+	pointColor: string | null
 	gap: boolean
 	count: number
 	earned: number | null
@@ -146,7 +146,7 @@ function bucketTexts(bucket: string, x: 'day' | 'week' | 'month'): { tick: strin
 }
 
 function baseRow(key: string, tick: string, title: string, subtitle: string, name: string): AttemptChartRow {
-	return { key, tick, title, subtitle, name, fill: null, gap: false, count: 0, earned: null, total: null }
+	return { key, tick, title, subtitle, name, pointColor: null, gap: false, count: 0, earned: null, total: null }
 }
 
 function attemptsWord(count: number): string {
@@ -227,7 +227,7 @@ export function buildAttemptChart(
 						format(date, 'd MMMM yyyy, HH:mm', { locale: ru }),
 						attempt.testTitle
 					),
-					fill: colorOf(attempt)?.color ?? null,
+					pointColor: colorOf(attempt)?.color ?? null,
 					count: 1,
 					earned: attempt.earnedPoints,
 					total: attempt.totalPoints,
@@ -258,7 +258,7 @@ export function buildAttemptChart(
 			const label = categories.get(id)?.label ?? id
 			return {
 				...baseRow(id, short(label), label, `${group.length} ${attemptsWord(group.length)}`, label),
-				fill: fillOf(id, group)?.color ?? null,
+				pointColor: fillOf(id, group)?.color ?? null,
 				count: group.length,
 				[VALUE_KEY]: metricOf(group, config.y),
 			}

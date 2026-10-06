@@ -125,7 +125,7 @@ describe('каждая попытка', () => {
 		const failed = attempt({ submittedAt: local(2026, 9, 4, 10) })
 		const chart = buildAttemptChart([failed, passed], config({ color }))
 		assert.deepEqual(
-			chart.rows.map((row) => row.fill),
+			chart.rows.map((row) => row.pointColor),
 			fills
 		)
 		assert.deepEqual(
@@ -233,7 +233,7 @@ describe('группировка по категориям', () => {
 	test('по темам с цветом темы — цвет у каждой категории, доля пройденных', () => {
 		const { rows } = buildAttemptChart(attempts, config({ x: 'topic', y: 'passRate', color: 'topic' }))
 		assert.deepEqual(
-			rows.map((row) => [row.title, row[VALUE_KEY], row.fill]),
+			rows.map((row) => [row.title, row[VALUE_KEY], row.pointColor]),
 			[
 				['Ботаника', 0, 'var(--chart-1)'],
 				['Цитология', 67, 'var(--chart-2)'],

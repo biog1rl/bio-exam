@@ -30,7 +30,7 @@ export type SeriesChartRow = {
 	tick: string
 	title: string
 	subtitle: string
-	fill?: string | null
+	pointColor?: string | null
 	name?: string
 	gap?: boolean
 	earned?: number | null
@@ -185,7 +185,7 @@ export function SeriesChart({
 					isAnimationActive={false}
 				>
 					{singleSeries
-						? data.map((row) => <Cell key={row.key} fill={row.fill ?? `var(--color-${item.key})`} />)
+						? data.map((row) => <Cell key={row.key} fill={row.pointColor ?? `var(--color-${item.key})`} />)
 						: null}
 					{valueLabels}
 					{labels === 'name' && singleSeries ? (
@@ -203,7 +203,7 @@ export function SeriesChart({
 							cx={props.cx}
 							cy={props.cy}
 							r={3.5}
-							fill={props.payload?.fill ?? `var(--color-${item.key})`}
+							fill={props.payload?.pointColor ?? `var(--color-${item.key})`}
 							stroke="var(--card)"
 							strokeWidth={1.5}
 						/>
@@ -328,7 +328,7 @@ export function SeriesChart({
 								const row = rowOf(item.payload)
 								const meta = series.find((entry) => entry.key === name)
 								if (!row || !meta || value === null || value === undefined) return null
-								const color = singleSeries ? (row.fill ?? meta.color) : meta.color
+								const color = singleSeries ? (row.pointColor ?? meta.color) : meta.color
 								const points =
 									singleSeries && typeof row.earned === 'number' && typeof row.total === 'number'
 										? ` · ${row.earned}/${row.total}`
