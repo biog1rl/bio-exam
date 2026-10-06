@@ -162,6 +162,7 @@ export function createSessionClient({
 		try {
 			const response = await transport.logout()
 			discard(response)
+			navigated = true
 			return true
 		} catch {
 			return false

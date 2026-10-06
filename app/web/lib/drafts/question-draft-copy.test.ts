@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
 import {
+	forgetUserQuestionDraftCopies,
 	forgetQuestionDraftCopies,
 	readQuestionDraftCopy,
 	removeQuestionDraftCopy,
@@ -69,6 +70,22 @@ test.each(
 	}
 })
 
+test.each([
+	['question-draft-wal-d1-u1', false],
+	['question-draft-wal-d1-u12', true],
+	['question-draft-wal-d1-u2', true],
+	['test-session-t1-u1', true],
+])('forgetUserQuestionDraftCopies(u1): %s остаётся — %s', (key, kept) => {
+	const { map, storage } = memoryStorage({
+		'question-draft-wal-d1-u1': '{}',
+		'question-draft-wal-d1-u12': '{}',
+		'question-draft-wal-d1-u2': '{}',
+		'test-session-t1-u1': '{}',
+	})
+	forgetUserQuestionDraftCopies(storage, 'u1')
+	assert.equal(map.has(key), kept)
+})
+
 test('чтение, запись и удаление при исключениях хранилища не бросают', () => {
 	const storage = {
 		getItem: () => {
@@ -94,6 +111,18 @@ test('чтение, запись и удаление при исключения
 				removeItem: () => undefined,
 			},
 			'd1'
+		)
+	)
+	assert.doesNotThrow(() =>
+		forgetUserQuestionDraftCopies(
+			{
+				length: 1,
+				key: () => {
+					throw new Error('denied')
+				},
+				removeItem: () => undefined,
+			},
+			'u1'
 		)
 	)
 })

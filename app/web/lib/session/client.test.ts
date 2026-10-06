@@ -390,6 +390,21 @@ describe('logout', () => {
 		const { client } = scenario({ logout: [new TypeError('Failed to fetch')] })
 		assert.equal(await client.logout(), false)
 	})
+
+	test.each([
+		['после выхода 401 запроса не уводит на логин', [status(200, { ok: true })], []],
+		[
+			'после неудачного выхода 401 запроса уводит на логин',
+			[new TypeError('Failed to fetch')],
+			[['/login?callbackUrl=%2Fadmin%2Ftests%3Fq%3D1']],
+		],
+	] as [string, Reply[], string[][]][])('%s', async (_name, logout, expected) => {
+		const { client, navigate } = scenario({ logout, request: [status(401)], refresh: [status(401)] })
+		await client.logout()
+		const result = await settle(client.fetchWithSession('/a'))
+		assert.ok(result.error instanceof AuthExpiredError)
+		assert.deepEqual(navigate.mock.calls, expected)
+	})
 })
 
 describe('модуль по умолчанию', () => {
