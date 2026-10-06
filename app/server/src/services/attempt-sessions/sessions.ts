@@ -1,9 +1,7 @@
 import {
 	ATTEMPT_GRACE_PERIOD_MINUTES,
-	findAnswerViolation,
 	mergeTelemetryMaps,
 	type AnswerValue,
-	type AnswerViolation,
 	type AttemptSession,
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
@@ -11,37 +9,10 @@ import {
 import { and, desc, eq, isNull, not, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
-import { questions, testSessions } from '../../db/schema.js'
-import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
+import { testSessions } from '../../db/schema.js'
+import type { SessionOutcomeOf, SessionOwner } from './outcome.js'
 
 export type SessionInfo = AttemptSession
-
-export type StartAttemptSessionParams = {
-	testId: string
-	userId: string
-	timeLimitMinutes: number | null
-}
-
-export type SaveSessionDraftParams = {
-	testId: string
-	userId: string
-	testSessionId: string
-	timeLimitMinutes: number | null
-	questionId?: string
-	value?: AnswerValue
-	telemetry?: TelemetryMap
-}
-
-export type SaveSessionDraftResult =
-	| { kind: 'saved'; serverNow: string }
-	| { kind: 'not_found' }
-	| { kind: 'invalid'; violation: AnswerViolation }
-
-export class SessionNeedsFinalizationError extends Error {
-	constructor(readonly sessionId: string) {
-		super(`session ${sessionId} needs deadline finalization`)
-	}
-}
 
 type SessionRow = {
 	id: string
@@ -66,13 +37,34 @@ export function sessionExpired(timeLimitMinutes: number | null | SQLWrapper, mar
 	return sql<boolean>`(${limit} IS NOT NULL AND now() > ${testSessions.startedAt} + make_interval(mins => ${limit} + ${ATTEMPT_GRACE_PERIOD_MINUTES}::int) + make_interval(secs => ${marginSeconds}::int))`
 }
 
-export function openSessionOf(testId: string, userId: string): SQL | undefined {
+export function sessionFilter({
+	sessionId,
+	owner,
+	open = false,
+}: {
+	sessionId?: string
+	owner?: SessionOwner
+	open?: boolean
+}): SQL | undefined {
 	return and(
-		eq(testSessions.testId, testId),
-		eq(testSessions.userId, userId),
-		isNull(testSessions.submittedAt),
-		isNull(testSessions.closedAt)
+		sessionId === undefined ? undefined : eq(testSessions.id, sessionId),
+		owner ? eq(testSessions.testId, owner.testId) : undefined,
+		owner ? eq(testSessions.userId, owner.userId) : undefined,
+		open ? isNull(testSessions.submittedAt) : undefined,
+		open ? isNull(testSessions.closedAt) : undefined
 	)
+}
+
+export async function closeSessionsAsExpired(
+	executor: Pick<typeof db, 'update'>,
+	where: SQL | undefined
+): Promise<string[]> {
+	const closed = await executor
+		.update(testSessions)
+		.set({ closedAt: sql`now()`, closeReason: 'expired' })
+		.where(and(where, isNull(testSessions.submittedAt), isNull(testSessions.closedAt)))
+		.returning({ id: testSessions.id })
+	return closed.map((row) => row.id)
 }
 
 function draftAnswersOf(value: unknown): Record<string, unknown> | null {
@@ -95,7 +87,7 @@ export function databaseNow(): Promise<string> {
 	return readServerNow(db)
 }
 
-function toSessionInfo(row: SessionRow, serverNow: string): SessionInfo {
+export function toSessionInfo(row: SessionRow, serverNow: string): SessionInfo {
 	return {
 		serverNow,
 		sessionId: row.id,
@@ -106,12 +98,13 @@ function toSessionInfo(row: SessionRow, serverNow: string): SessionInfo {
 	}
 }
 
-export async function startAttemptSession({
-	testId,
-	userId,
-	timeLimitMinutes,
-}: StartAttemptSessionParams): Promise<SessionInfo> {
-	return db.transaction(async (tx) => {
+export type OpenOrStartResult = SessionOutcomeOf<'open'> | { kind: 'needs_finalization'; sessionId: string }
+
+export async function openOrStartSession(
+	owner: SessionOwner,
+	timeLimitMinutes: number | null
+): Promise<OpenOrStartResult> {
+	return db.transaction(async (tx): Promise<OpenOrStartResult> => {
 		const [open] = await tx
 			.select({
 				...sessionColumns,
@@ -119,75 +112,57 @@ export async function startAttemptSession({
 				stale: sessionExpired(timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600),
 			})
 			.from(testSessions)
-			.where(openSessionOf(testId, userId))
+			.where(sessionFilter({ owner, open: true }))
 			.orderBy(desc(testSessions.startedAt))
 			.limit(1)
 			.for('update')
 
-		if (open && !open.expired) return toSessionInfo(open, await readServerNow(tx))
+		if (open && !open.expired) return { kind: 'open', session: toSessionInfo(open, await readServerNow(tx)) }
 
 		if (open) {
-			if (hasDraftAnswers(open.draftAnswers) && !open.stale) throw new SessionNeedsFinalizationError(open.id)
-			await tx
-				.update(testSessions)
-				.set({ closedAt: sql`now()`, closeReason: 'expired' })
-				.where(and(eq(testSessions.id, open.id), isNull(testSessions.closedAt)))
+			if (hasDraftAnswers(open.draftAnswers) && !open.stale) return { kind: 'needs_finalization', sessionId: open.id }
+			await closeSessionsAsExpired(tx, sessionFilter({ sessionId: open.id }))
 		}
 
 		const [created] = await tx
 			.insert(testSessions)
-			.values({ testId, userId })
+			.values({ testId: owner.testId, userId: owner.userId })
 			.onConflictDoNothing({
 				target: [testSessions.testId, testSessions.userId],
 				where: sql`${testSessions.submittedAt} IS NULL AND ${testSessions.closedAt} IS NULL`,
 			})
 			.returning(sessionColumns)
-		if (created) return toSessionInfo(created, await readServerNow(tx))
+		if (created) return { kind: 'open', session: toSessionInfo(created, await readServerNow(tx)) }
 
 		const [existing] = await tx
 			.select(sessionColumns)
 			.from(testSessions)
-			.where(openSessionOf(testId, userId))
+			.where(sessionFilter({ owner, open: true }))
 			.orderBy(desc(testSessions.startedAt))
 			.limit(1)
 		if (!existing) throw new Error('startAttemptSession: open session vanished after insert conflict')
-		return toSessionInfo(existing, await readServerNow(tx))
+		return { kind: 'open', session: toSessionInfo(existing, await readServerNow(tx)) }
 	})
 }
 
-export async function saveSessionDraft({
-	testId,
-	userId,
-	testSessionId,
-	timeLimitMinutes,
-	questionId,
-	value,
-	telemetry,
-}: SaveSessionDraftParams): Promise<SaveSessionDraftResult> {
-	if (questionId !== undefined && value !== undefined) {
-		const [question] = await db
-			.select({ type: questions.type })
-			.from(questions)
-			.where(and(eq(questions.id, questionId), eq(questions.testId, testId)))
-		const template = question
-			? ((await getQuestionTypeMapForTest({ testId, includeInactive: true }))[question.type]?.uiTemplate ?? null)
-			: null
-		const violation = findAnswerViolation({
-			answers: { [questionId]: value },
-			questions: question ? [{ id: questionId, template }] : [],
-		})
-		if (violation) return { kind: 'invalid' as const, violation }
-	}
+export type WriteDraftResult = SessionOutcomeOf<'saved'> | { kind: 'not_written' }
 
-	return db.transaction(async (tx): Promise<SaveSessionDraftResult> => {
+export async function writeSessionDraft(params: {
+	owner: SessionOwner
+	sessionId: string
+	timeLimitMinutes: number | null
+	questionId?: string
+	value?: AnswerValue
+	telemetry?: TelemetryMap
+}): Promise<WriteDraftResult> {
+	const { owner, sessionId, timeLimitMinutes, questionId, value, telemetry } = params
+	return db.transaction(async (tx): Promise<WriteDraftResult> => {
 		const [session] = await tx
 			.select({ draftAnswers: testSessions.draftAnswers, draftTelemetry: testSessions.draftTelemetry })
 			.from(testSessions)
-			.where(
-				and(eq(testSessions.id, testSessionId), openSessionOf(testId, userId), not(sessionExpired(timeLimitMinutes)))
-			)
+			.where(and(sessionFilter({ sessionId, owner, open: true }), not(sessionExpired(timeLimitMinutes))))
 			.for('update')
-		if (!session) return { kind: 'not_found' }
+		if (!session) return { kind: 'not_written' }
 
 		const existingDraft = draftAnswersOf(session.draftAnswers) ?? {}
 		const nextDraft =
@@ -201,7 +176,7 @@ export async function saveSessionDraft({
 				...(telemetry !== undefined ? { draftTelemetry: nextTelemetry } : {}),
 				draftUpdatedAt: sql`now()`,
 			})
-			.where(eq(testSessions.id, testSessionId))
+			.where(eq(testSessions.id, sessionId))
 		return { kind: 'saved', serverNow: await readServerNow(tx) }
 	})
 }

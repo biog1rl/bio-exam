@@ -8,16 +8,8 @@ export {
 	type AttemptAccessParams,
 	type AttemptTest,
 } from './access.js'
-export {
-	databaseNow,
-	saveSessionDraft,
-	SessionNeedsFinalizationError,
-	startAttemptSession,
-	type SaveSessionDraftParams,
-	type SaveSessionDraftResult,
-	type SessionInfo,
-	type StartAttemptSessionParams,
-} from './sessions.js'
+export { databaseNow, DEADLINE_FINALIZE_MAX_AGE_HOURS, type SessionInfo } from './sessions.js'
+export { saveSessionDraft, startAttemptSession } from './commands.js'
 export {
 	photoUploadWindow,
 	uploadWindowRefusal,
@@ -27,7 +19,6 @@ export {
 	type UploadWindowState,
 } from './upload-window.js'
 export {
-	closeExpiredSession,
 	precheckSubmit,
 	submitAttempt,
 	type PrecheckSubmitParams,
@@ -42,13 +33,15 @@ export {
 	DEADLINE_CLIENT_ATTEMPT_PREFIX,
 	deadlineClientAttemptId,
 	FINALIZE_SETTLE_SECONDS,
-	finalizeExpiredOpenSession,
 	findSessionsDueForFinalization,
 	finalizeSessionByDeadline,
-	readSessionFate,
-	type DeadlineOwner,
-	type FinalizeOutcome,
-	type SessionFateRead,
 } from './deadline.js'
+export type {
+	AttemptPair,
+	SessionOutcome,
+	SessionOutcomeOf,
+	SessionOwner,
+	SessionTest,
+	SettledOutcome,
+} from './outcome.js'
 export { explanationReaderFor } from './explanations.js'
-export { DEADLINE_FINALIZE_MAX_AGE_HOURS } from './sessions.js'

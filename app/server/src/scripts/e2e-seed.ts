@@ -17,6 +17,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 
 import { isIsolatedEnv } from '../config/test-database-url.js'
+import type { SessionTest } from '../services/attempt-sessions/index.js'
 
 type SeedAccount = { login: string; role: string; name: string; storageState: boolean }
 
@@ -218,7 +219,7 @@ async function main(): Promise<void> {
 				}
 			}
 
-			const testRows = new Map<string, { id: string; passingScore: number | null }>()
+			const testRows = new Map<string, SessionTest>()
 			let questionCount = 0
 			let testCount = 0
 			let order = 0
@@ -244,7 +245,14 @@ async function main(): Promise<void> {
 						})
 						.returning()
 					testCount++
-					testRows.set(seedTestItem.slug, { id: test.id, passingScore: test.passingScore })
+					testRows.set(seedTestItem.slug, {
+						id: test.id,
+						slug: test.slug,
+						topicSlug: topicSlugOf(seedTestItem),
+						timeLimitMinutes: test.timeLimitMinutes,
+						photoUploadWindowMinutes: test.photoUploadWindowMinutes,
+						passingScore: test.passingScore,
+					})
 
 					for (const [index, item] of seedTestItem.questions.entries()) {
 						const builtin = getBuiltinQuestionTypeByKey(item.type)
@@ -324,7 +332,7 @@ async function main(): Promise<void> {
 					Object.entries(seedAttempt.answers).map(([key, value]) => [questionIdOf(seedAttempt.test, key), value])
 				)
 
-				const session = await startAttemptSession({ testId: testRow.id, userId, timeLimitMinutes: null })
+				const { session } = await startAttemptSession({ test: testRow, userId })
 				const scored = await scoreSubmission({
 					testId: testRow.id,
 					answers,

@@ -1,32 +1,23 @@
-import { AnswerValueSchema, findAnswerViolation, type AnswerValue } from '@bio-exam/exam-core'
+import type { AnswerValue, AttemptSubmitSource } from '@bio-exam/exam-core'
 
-import { and, asc, desc, eq, isNotNull, isNull, not, notInArray, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, exists, isNotNull, isNull, not, notInArray, sql } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
-import { questions, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
+import { testAttempts, testSessions, tests, topics } from '../../db/schema.js'
 import { isTransientDbError } from '../../lib/db-errors.js'
 import { logger } from '../../lib/logger.js'
-import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { scoreSubmission } from '../scored-attempt/index.js'
+import { draftAnswerRule } from './draft-answers.js'
 import { explanationReaderFor } from './explanations.js'
-import { DEADLINE_FINALIZE_MAX_AGE_HOURS, openSessionOf, sessionExpired } from './sessions.js'
-import { closeExpiredSession, submitAttempt, type SubmitAttemptOutcome } from './submit.js'
-
-export type DeadlineOwner = { testId: string; userId: string }
-
-export type FinalizeOutcome =
-	| { kind: 'open' }
-	| { kind: 'finalized'; attemptId: string }
-	| { kind: 'submitted'; attemptId: string | null }
-	| { kind: 'expired' }
-	| { kind: 'superseded' }
-	| { kind: 'not_found' }
-
-export type SessionFateRead =
-	| { state: 'open'; sessionId: string; startedAt: string }
-	| { state: 'submitted'; attemptId: string }
-	| { state: 'expired' }
-	| { state: 'missing' }
+import { classifySubmitted, type SessionOwner, type SettledOutcome } from './outcome.js'
+import {
+	closeSessionsAsExpired,
+	DEADLINE_FINALIZE_MAX_AGE_HOURS,
+	sessionExpired,
+	sessionFilter,
+	toSessionInfo,
+} from './sessions.js'
+import { closeSessionAsExpired, submitAttempt, type SubmitAttemptOutcome } from './submit.js'
 
 export const DEADLINE_CLIENT_ATTEMPT_PREFIX = 'deadline:'
 
@@ -34,7 +25,11 @@ export const FINALIZE_SETTLE_SECONDS = 60
 
 const MAX_DRAFT_ROUNDS = 3
 
-const DRAFT_CHANGED = Symbol('draft_changed')
+type DraftChanged = { kind: 'draft_changed' }
+
+function isDraftChanged(value: unknown): value is DraftChanged {
+	return typeof value === 'object' && value !== null && (value as { kind?: unknown }).kind === 'draft_changed'
+}
 
 type DeadlineSession = {
 	testId: string
@@ -51,50 +46,33 @@ export function deadlineClientAttemptId(sessionId: string): string {
 	return `${DEADLINE_CLIENT_ATTEMPT_PREFIX}${sessionId}`
 }
 
-function sessionWhere(sessionId: string, owner: DeadlineOwner | undefined): SQL | undefined {
-	if (!owner) return eq(testSessions.id, sessionId)
-	return and(
-		eq(testSessions.id, sessionId),
-		eq(testSessions.testId, owner.testId),
-		eq(testSessions.userId, owner.userId)
-	)
-}
-
 function draftEntriesOf(value: unknown): [string, unknown][] {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return []
 	return Object.entries(value as Record<string, unknown>)
 }
 
-async function scorableDraft(sessionId: string, testId: string, draft: unknown): Promise<Record<string, AnswerValue>> {
+async function scorableAnswers(
+	sessionId: string,
+	testId: string,
+	draft: unknown
+): Promise<Record<string, AnswerValue>> {
 	const entries = draftEntriesOf(draft)
 	if (entries.length === 0) return {}
 
-	const rows = await db
-		.select({ id: questions.id, type: questions.type })
-		.from(questions)
-		.where(eq(questions.testId, testId))
-	const typeMap = await getQuestionTypeMapForTest({ testId, includeInactive: true })
-	const templates = new Map(rows.map((row) => [row.id, typeMap[row.type]?.uiTemplate ?? null]))
-
+	const rule = await draftAnswerRule(testId)
 	const kept: Record<string, AnswerValue> = {}
 	for (const [questionId, raw] of entries) {
-		const parsed = AnswerValueSchema.safeParse(raw)
-		const reason = !parsed.success
-			? 'invalid_value'
-			: findAnswerViolation({
-					answers: { [questionId]: parsed.data },
-					questions: templates.has(questionId) ? [{ id: questionId, template: templates.get(questionId) ?? null }] : [],
-				})?.reason
-		if (parsed.success && !reason) {
-			kept[questionId] = parsed.data
+		const verdict = rule(questionId, raw)
+		if (verdict.ok) {
+			kept[questionId] = verdict.value
 			continue
 		}
-		logger.warn({ sessionId, questionId, reason }, 'deadline finalize dropped draft answer')
+		logger.warn({ sessionId, questionId, reason: verdict.violation.reason }, 'deadline finalize dropped draft answer')
 	}
 	return kept
 }
 
-function outcomeOfSubmit(outcome: Exclude<SubmitAttemptOutcome, { kind: 'draft_changed' }>): FinalizeOutcome {
+function outcomeOfSubmit(outcome: Exclude<SubmitAttemptOutcome, { kind: 'draft_changed' }>): SettledOutcome {
 	switch (outcome.kind) {
 		case 'created':
 		case 'replayed':
@@ -108,13 +86,10 @@ function outcomeOfSubmit(outcome: Exclude<SubmitAttemptOutcome, { kind: 'draft_c
 	}
 }
 
-async function finalizeDraft(
-	sessionId: string,
-	session: DeadlineSession
-): Promise<FinalizeOutcome | typeof DRAFT_CHANGED> {
-	const answers = await scorableDraft(sessionId, session.testId, session.draftAnswers)
+async function finalizeDraft(sessionId: string, session: DeadlineSession): Promise<SettledOutcome | DraftChanged> {
+	const answers = await scorableAnswers(sessionId, session.testId, session.draftAnswers)
 	if (Object.keys(answers).length === 0) {
-		await closeExpiredSession(sessionId)
+		await closeSessionAsExpired(sessionId)
 		return { kind: 'expired' }
 	}
 
@@ -126,7 +101,7 @@ async function finalizeDraft(
 	})
 	if (!scored.ok) {
 		if (scored.reason === 'no_questions') {
-			await closeExpiredSession(sessionId)
+			await closeSessionAsExpired(sessionId)
 			return { kind: 'expired' }
 		}
 		throw new Error(`finalizeSessionByDeadline: answers invalid after filter in session ${sessionId}`)
@@ -154,16 +129,21 @@ async function finalizeDraft(
 		hasOpenQuestion: scored.facts.some((fact) => fact.template === 'open'),
 		expectedDraft: session.draftAnswers,
 	})
-	if (outcome.kind === 'draft_changed') return DRAFT_CHANGED
+	if (outcome.kind === 'draft_changed') return outcome
 	return outcomeOfSubmit(outcome)
 }
 
 async function finalizeOnce(
 	sessionId: string,
-	owner: DeadlineOwner | undefined
-): Promise<FinalizeOutcome | typeof DRAFT_CHANGED> {
+	owner: SessionOwner | undefined
+): Promise<SettledOutcome | DraftChanged> {
 	const [row] = await db
 		.select({
+			id: testSessions.id,
+			startedAt: testSessions.startedAt,
+			draftLastQuestionId: testSessions.draftLastQuestionId,
+			draftTelemetry: testSessions.draftTelemetry,
+			serverNow: sql<Date | string>`clock_timestamp()`,
 			testId: testSessions.testId,
 			userId: testSessions.userId,
 			submittedAt: testSessions.submittedAt,
@@ -178,27 +158,27 @@ async function finalizeOnce(
 			topicSlug: topics.slug,
 			expired: sessionExpired(tests.timeLimitMinutes),
 			stale: sessionExpired(tests.timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600),
-			attemptClientId: testAttempts.clientAttemptId,
+			attemptSubmitSource: testAttempts.submitSource,
 		})
 		.from(testSessions)
 		.innerJoin(tests, eq(tests.id, testSessions.testId))
 		.innerJoin(topics, eq(topics.id, tests.topicId))
 		.leftJoin(testAttempts, eq(testAttempts.id, testSessions.attemptId))
-		.where(sessionWhere(sessionId, owner))
+		.where(sessionFilter({ sessionId, owner }))
 		.limit(1)
 
 	if (!row) return { kind: 'not_found' }
 	if (row.submittedAt) {
-		if (row.attemptId && row.attemptClientId === deadlineClientAttemptId(sessionId)) {
-			return { kind: 'finalized', attemptId: row.attemptId }
-		}
-		return { kind: 'submitted', attemptId: row.attemptId }
+		return classifySubmitted({
+			id: row.attemptId,
+			submitSource: row.attemptSubmitSource as AttemptSubmitSource | null,
+		})
 	}
 	if (row.closedAt) return row.closeReason === 'superseded' ? { kind: 'superseded' } : { kind: 'expired' }
-	if (!row.expired) return { kind: 'open' }
+	if (!row.expired) return { kind: 'open', session: toSessionInfo(row, new Date(row.serverNow).toISOString()) }
 
 	if (row.stale) {
-		await closeExpiredSession(sessionId)
+		await closeSessionAsExpired(sessionId)
 		logger.info({ sessionId, maxAgeHours: DEADLINE_FINALIZE_MAX_AGE_HOURS }, 'deadline finalize skipped stale session')
 		return { kind: 'expired' }
 	}
@@ -208,70 +188,24 @@ async function finalizeOnce(
 	} catch (error) {
 		if (isTransientDbError(error)) throw error
 		logger.error({ sessionId, err: error }, 'deadline finalize failed, session closed as expired')
-		await closeExpiredSession(sessionId)
+		await closeSessionAsExpired(sessionId)
 		return { kind: 'expired' }
 	}
 }
 
-export async function finalizeSessionByDeadline(sessionId: string, owner?: DeadlineOwner): Promise<FinalizeOutcome> {
-	for (let round = 0; round < MAX_DRAFT_ROUNDS; round++) {
-		const outcome = await finalizeOnce(sessionId, owner)
-		if (outcome !== DRAFT_CHANGED) return outcome
+export async function untilDraftSettles<T>(
+	step: () => Promise<T | DraftChanged>,
+	rounds = MAX_DRAFT_ROUNDS
+): Promise<T> {
+	for (let round = 0; round < rounds; round++) {
+		const outcome = await step()
+		if (!isDraftChanged(outcome)) return outcome
 	}
 	throw new Error('finalizeSessionByDeadline: draft kept changing')
 }
 
-export async function readSessionFate({
-	sessionId,
-	testId,
-	userId,
-}: {
-	sessionId: string
-	testId: string
-	userId: string
-}): Promise<SessionFateRead> {
-	const owner = { testId, userId }
-	const outcome = await finalizeSessionByDeadline(sessionId, owner)
-	switch (outcome.kind) {
-		case 'finalized':
-			return { state: 'submitted', attemptId: outcome.attemptId }
-		case 'submitted':
-			return outcome.attemptId ? { state: 'submitted', attemptId: outcome.attemptId } : { state: 'missing' }
-		case 'expired':
-			return { state: 'expired' }
-		case 'superseded':
-		case 'not_found':
-			return { state: 'missing' }
-		case 'open': {
-			const [row] = await db
-				.select({ startedAt: testSessions.startedAt })
-				.from(testSessions)
-				.where(sessionWhere(sessionId, owner))
-				.limit(1)
-			if (!row) return { state: 'missing' }
-			return { state: 'open', sessionId, startedAt: row.startedAt.toISOString() }
-		}
-	}
-}
-
-export async function finalizeExpiredOpenSession({
-	testId,
-	userId,
-	timeLimitMinutes,
-}: {
-	testId: string
-	userId: string
-	timeLimitMinutes: number | null
-}): Promise<FinalizeOutcome | null> {
-	if (timeLimitMinutes == null) return null
-	const [open] = await db
-		.select({ id: testSessions.id })
-		.from(testSessions)
-		.where(and(openSessionOf(testId, userId), sessionExpired(timeLimitMinutes)))
-		.orderBy(desc(testSessions.startedAt))
-		.limit(1)
-	if (!open) return null
-	return finalizeSessionByDeadline(open.id, { testId, userId })
+export function finalizeSessionByDeadline(sessionId: string, owner?: SessionOwner): Promise<SettledOutcome> {
+	return untilDraftSettles(() => finalizeOnce(sessionId, owner))
 }
 
 export async function findSessionsDueForFinalization(
@@ -298,20 +232,21 @@ export async function findSessionsDueForFinalization(
 }
 
 export async function closeStaleOpenSessions(): Promise<number> {
-	const closed = await db
-		.update(testSessions)
-		.set({ closedAt: sql`now()`, closeReason: 'expired' })
-		.from(tests)
-		.where(
-			and(
-				eq(tests.id, testSessions.testId),
-				isNull(testSessions.submittedAt),
-				isNull(testSessions.closedAt),
-				isNotNull(tests.timeLimitMinutes),
-				sessionExpired(tests.timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600)
-			)
+	const closed = await closeSessionsAsExpired(
+		db,
+		exists(
+			db
+				.select({ one: sql`1` })
+				.from(tests)
+				.where(
+					and(
+						eq(tests.id, testSessions.testId),
+						isNotNull(tests.timeLimitMinutes),
+						sessionExpired(tests.timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600)
+					)
+				)
 		)
-		.returning({ id: testSessions.id })
+	)
 	if (closed.length > 0) {
 		logger.info(
 			{ count: closed.length, maxAgeHours: DEADLINE_FINALIZE_MAX_AGE_HOURS },

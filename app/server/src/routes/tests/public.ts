@@ -22,17 +22,15 @@ import {
 	databaseNow,
 	findVisibleTestBySlug,
 	explanationReaderFor,
-	finalizeExpiredOpenSession,
 	finalizeSessionByDeadline,
 	isAssignedOrPrivileged,
 	precheckSubmit,
-	readSessionFate,
 	saveSessionDraft,
-	SessionNeedsFinalizationError,
 	startAttemptSession,
 	submitAttempt,
 	visibleTestsFilter,
 	type SessionCloseReason,
+	type SessionOutcome,
 } from '../../services/attempt-sessions/index.js'
 import {
 	attemptResultColumns,
@@ -71,20 +69,72 @@ function sessionNotFound(res: Response) {
 	return res.status(404).json({ error: 'Session not found' })
 }
 
-async function sendAlreadySubmitted(res: Response, attemptId: string | null, viewer: AttemptViewer) {
-	if (attemptId === null) return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
+async function submittedBody(attemptId: string, viewer: AttemptViewer) {
 	const view = await readAttemptView(attemptId, viewer)
-	if (view.submitSource !== 'deadline') {
-		return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
-	}
-	return res.status(409).json({
-		error: SUBMIT_ERROR_CODES.alreadySubmitted,
+	return {
 		attemptId,
-		submitSource: 'deadline',
+		submitSource: view.submitSource ?? 'client',
 		uploadClosesAt: view.uploadClosesAt ?? null,
 		serverNow: await databaseNow(),
 		attempt: view,
-	})
+	}
+}
+
+async function sendAlreadySubmitted(res: Response, attemptId: string | null, viewer: AttemptViewer) {
+	if (attemptId === null) return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
+	const body = await submittedBody(attemptId, viewer)
+	if (body.submitSource !== 'deadline') {
+		return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
+	}
+	return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, ...body })
+}
+
+function studentViewer(test: { showCorrectAnswer: boolean }): AttemptViewer {
+	return { kind: 'student', showCorrectAnswer: test.showCorrectAnswer }
+}
+
+function draftNotSaved(res: Response) {
+	return res.status(404).json({ error: 'Session not found or already submitted' })
+}
+
+type OutcomeRoute = 'start' | 'draft' | 'fate'
+
+async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: SessionOutcome, viewer: AttemptViewer) {
+	switch (outcome.kind) {
+		case 'open':
+			if (route === 'start') return res.json(outcome.session)
+			if (route === 'draft') return draftNotSaved(res)
+			return res.json({
+				state: 'open',
+				sessionId: outcome.session.sessionId,
+				startedAt: outcome.session.startedAt,
+				serverNow: outcome.session.serverNow,
+			})
+		case 'saved':
+			if (route === 'draft') return res.json({ ok: true, serverNow: outcome.serverNow })
+			break
+		case 'finalized':
+		case 'submitted':
+			if (route === 'draft') return draftNotSaved(res)
+			if (route === 'fate') {
+				if (outcome.attemptId === null) return sessionNotFound(res)
+				return res.json({ state: 'submitted', ...(await submittedBody(outcome.attemptId, viewer)) })
+			}
+			break
+		case 'expired':
+			if (route === 'draft') return draftNotSaved(res)
+			if (route === 'fate') return res.json({ state: 'expired', serverNow: await databaseNow() })
+			break
+		case 'superseded':
+		case 'not_found':
+			if (route === 'draft') return draftNotSaved(res)
+			if (route === 'fate') return sessionNotFound(res)
+			break
+		case 'answers_invalid':
+			if (route === 'draft') return res.status(400).json(answersInvalidBody(outcome.violation))
+			break
+	}
+	throw new Error(`sendSessionOutcome: outcome ${outcome.kind} is not expected on ${route}`)
 }
 
 function timeExpired(res: Response) {
@@ -94,16 +144,6 @@ function timeExpired(res: Response) {
 function rejectClosedSession(res: Response, reason: SessionCloseReason) {
 	if (reason === 'superseded') return sessionNotFound(res)
 	return timeExpired(res)
-}
-
-async function startAfterFinalization(params: { testId: string; userId: string; timeLimitMinutes: number | null }) {
-	try {
-		return await startAttemptSession(params)
-	} catch (error) {
-		if (!(error instanceof SessionNeedsFinalizationError)) throw error
-		await finalizeSessionByDeadline(error.sessionId, { testId: params.testId, userId: params.userId })
-		return startAttemptSession(params)
-	}
 }
 
 async function withTransientDbRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
@@ -361,9 +401,8 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 
-		const params = { testId, userId, timeLimitMinutes: access.test.timeLimitMinutes }
-		await finalizeExpiredOpenSession(params)
-		res.json(await startAfterFinalization(params))
+		const outcome = await startAttemptSession({ test: access.test, userId })
+		return sendSessionOutcome(res, 'start', outcome, studentViewer(access.test))
 	} catch (e) {
 		next(e)
 	}
@@ -383,30 +422,8 @@ router.get(
 			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 			if (!access.ok) return denyAttemptAccess(res, access.status)
 
-			const fate = await readSessionFate({ sessionId, testId, userId })
-			if (fate.state === 'missing') return sessionNotFound(res)
-			if (fate.state === 'open') {
-				return res.json({
-					state: 'open',
-					sessionId: fate.sessionId,
-					startedAt: fate.startedAt,
-					serverNow: await databaseNow(),
-				})
-			}
-			if (fate.state === 'expired') return res.json({ state: 'expired', serverNow: await databaseNow() })
-
-			const view = await readAttemptView(fate.attemptId, {
-				kind: 'student',
-				showCorrectAnswer: access.test.showCorrectAnswer,
-			})
-			res.json({
-				state: 'submitted',
-				attemptId: fate.attemptId,
-				submitSource: view.submitSource ?? 'client',
-				uploadClosesAt: view.uploadClosesAt ?? null,
-				serverNow: await databaseNow(),
-				attempt: view,
-			})
+			const outcome = await finalizeSessionByDeadline(sessionId, { testId, userId })
+			return sendSessionOutcome(res, 'fate', outcome, studentViewer(access.test))
 		} catch (e) {
 			next(e)
 		}
@@ -429,29 +446,11 @@ router.patch(
 			if (!parsed.success) {
 				return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 			}
-			const { questionId, value, telemetry } = parsed.data
-
 			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 			if (!access.ok) return denyAttemptAccess(res, access.status)
 
-			const saved = await saveSessionDraft({
-				testId,
-				userId,
-				testSessionId: sessionId,
-				timeLimitMinutes: access.test.timeLimitMinutes,
-				questionId,
-				value,
-				telemetry,
-			})
-			if (saved.kind === 'not_found') {
-				if (access.test.timeLimitMinutes != null) {
-					await finalizeSessionByDeadline(sessionId, { testId, userId })
-				}
-				return res.status(404).json({ error: 'Session not found or already submitted' })
-			}
-			if (saved.kind === 'invalid') return res.status(400).json(answersInvalidBody(saved.violation))
-
-			res.json({ ok: true, serverNow: saved.serverNow })
+			const outcome = await saveSessionDraft({ test: access.test, userId }, sessionId, parsed.data)
+			return sendSessionOutcome(res, 'draft', outcome, studentViewer(access.test))
 		} catch (e) {
 			next(e)
 		}
@@ -475,7 +474,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 		const test = access.test
-		const viewer = { kind: 'student' as const, showCorrectAnswer: test.showCorrectAnswer }
+		const viewer = studentViewer(test)
 
 		const precheck = await precheckSubmit({
 			testId,

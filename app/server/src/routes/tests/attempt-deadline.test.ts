@@ -365,7 +365,7 @@ describe('финализация по дедлайну', () => {
 	])('$name: open, база не меняется', async ({ timeLimitMinutes, startedAgo }) => {
 		const prepared = await prepareDeadlineSession({ timeLimitMinutes, startedAgo })
 		const before = await sessionStateOf(prepared.sessionId)
-		assert.deepEqual(await attemptSessions.finalizeSessionByDeadline(prepared.sessionId), { kind: 'open' })
+		assert.equal((await attemptSessions.finalizeSessionByDeadline(prepared.sessionId)).kind, 'open')
 		assert.deepEqual(await sessionStateOf(prepared.sessionId), before)
 		assert.equal(await attemptsOfSession(prepared.sessionId), 0)
 	})
@@ -555,34 +555,41 @@ describe('ленивая финализация на /start и PATCH', () => {
 
 	test.each([
 		{
-			name: 'черновик, 13 минут — SessionNeedsFinalizationError, база не меняется',
+			name: 'черновик, 13 минут — новая сессия, у прежней попытка deadline',
 			startedAgo: '13 minutes',
 			answered: [0],
-			throws: true,
+			finalized: true,
 		},
 		{
-			name: 'черновик, 25 hours 12 minutes — закрыта expired',
+			name: 'черновик, 25 hours 12 minutes — новая сессия, прежняя expired с черновиком',
 			startedAgo: '25 hours 12 minutes',
 			answered: [0],
-			throws: false,
+			finalized: false,
 		},
-		{ name: 'пустой черновик, 13 минут — закрыта expired', startedAgo: '13 minutes', answered: [], throws: false },
-	])('startAttemptSession на просроченной сессии: $name', async ({ startedAgo, answered, throws }) => {
+		{
+			name: 'пустой черновик, 13 минут — новая сессия, прежняя expired',
+			startedAgo: '13 minutes',
+			answered: [],
+			finalized: false,
+		},
+	])('startAttemptSession на просроченной сессии: $name', async ({ startedAgo, answered, finalized }) => {
 		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered, startedAgo })
 		const before = await sessionStateOf(prepared.sessionId)
-		const params = { testId: prepared.testId, userId: prepared.owner.id, timeLimitMinutes: 10 }
+		const test = await attemptSessions.findVisibleTest(prepared.testId)
+		assert.ok(test)
 
-		if (throws) {
-			await assert.rejects(attemptSessions.startAttemptSession(params), (error: unknown) => {
-				assert.ok(error instanceof attemptSessions.SessionNeedsFinalizationError)
-				assert.equal(error.sessionId, prepared.sessionId)
-				return true
-			})
-			assert.deepEqual(await sessionStateOf(prepared.sessionId), before)
+		const outcome = await attemptSessions.startAttemptSession({ test, userId: prepared.owner.id })
+		assert.equal(outcome.kind, 'open')
+		assert.notEqual(outcome.session.sessionId, prepared.sessionId)
+		assert.equal((await sessionStateOf(outcome.session.sessionId)).closed_at, null)
+
+		if (finalized) {
+			const state = await sessionStateOf(prepared.sessionId)
+			assert.ok(state.attempt_id)
+			assert.equal((await attemptRowOf(ctx, state.attempt_id)).submitSource, 'deadline')
+			assert.equal(await attemptsOfSession(prepared.sessionId), 1)
 			return
 		}
-		const started = await attemptSessions.startAttemptSession(params)
-		assert.notEqual(started.sessionId, prepared.sessionId)
 		await assertClosedWithoutAttempt(prepared, before.draft_answers)
 	})
 })

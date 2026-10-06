@@ -7,11 +7,11 @@ import {
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
-import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, eq, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { testAttempts, testSessions } from '../../db/schema.js'
-import { sessionExpired } from './sessions.js'
+import { closeSessionsAsExpired, sessionExpired, sessionFilter } from './sessions.js'
 
 export type SessionCloseReason = 'expired' | 'superseded'
 
@@ -105,10 +105,6 @@ function draftMatchesOf(expectedDraft: unknown): SQL<boolean> {
 	return sql<boolean>`${testSessions.draftAnswers} IS NOT DISTINCT FROM ${JSON.stringify(expectedDraft)}::jsonb`
 }
 
-function sessionOfPair(testSessionId: string, testId: string, userId: string): SQL | undefined {
-	return and(eq(testSessions.id, testSessionId), eq(testSessions.testId, testId), eq(testSessions.userId, userId))
-}
-
 export async function precheckSubmit({
 	testId,
 	userId,
@@ -127,7 +123,7 @@ export async function precheckSubmit({
 		})
 		.from(testSessions)
 		.leftJoin(testAttempts, eq(testAttempts.id, testSessions.attemptId))
-		.where(sessionOfPair(testSessionId, testId, userId))
+		.where(sessionFilter({ sessionId: testSessionId, owner: { testId, userId } }))
 		.limit(1)
 	if (!row) return { kind: 'not_found' }
 	if (row.submittedAt) {
@@ -142,11 +138,8 @@ export async function precheckSubmit({
 	return { kind: 'open' }
 }
 
-export async function closeExpiredSession(testSessionId: string): Promise<void> {
-	await db
-		.update(testSessions)
-		.set({ closedAt: sql`now()`, closeReason: 'expired' })
-		.where(and(eq(testSessions.id, testSessionId), isNull(testSessions.submittedAt), isNull(testSessions.closedAt)))
+export function closeSessionAsExpired(testSessionId: string): Promise<string[]> {
+	return closeSessionsAsExpired(db, sessionFilter({ sessionId: testSessionId }))
 }
 
 export async function submitAttempt({
@@ -176,7 +169,7 @@ export async function submitAttempt({
 					draftMatches: draftMatchesOf(expectedDraft),
 				})
 				.from(testSessions)
-				.where(sessionOfPair(testSessionId, testId, userId))
+				.where(sessionFilter({ sessionId: testSessionId, owner: { testId, userId } }))
 				.for('update')
 			if (!session) return { kind: 'not_found' }
 
