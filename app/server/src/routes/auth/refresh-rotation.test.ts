@@ -128,6 +128,7 @@ beforeAll(async () => {
 		'rot_parallel',
 		'rot_replay_log',
 		'rot_parallel_replay',
+		'rot_parallel_regrant',
 		'rot_replay_vs_rotation',
 		'rot_replay_other_session',
 	]) {
@@ -347,6 +348,13 @@ async function shiftUsedAt(raw: string, seconds: number): Promise<void> {
 	assert.equal(result.rowCount, 1)
 }
 
+async function ageSessionTokens(sessionId: string, seconds: number): Promise<void> {
+	await ctx.pgPool.query(
+		'UPDATE refresh_tokens SET created_at = created_at - make_interval(secs => $2), used_at = used_at - make_interval(secs => $2) WHERE session_id = $1',
+		[sessionId, seconds]
+	)
+}
+
 async function rotate(raw: string): Promise<Reply> {
 	return call(ctx, 'POST', '/api/auth/refresh', { cookies: `${REFRESH}=${raw}` })
 }
@@ -377,27 +385,59 @@ describe('refresh: окно гонки и replay', () => {
 		assert.equal(me.status, 200)
 	})
 
-	test('повтор позже 30 с: 401, сессия отозвана с replay, преемник отозван; затем refresh преемником и access сессии 401', async () => {
+	test('ответ ротации потерян: повтор позже 30 с выдаёт новый refresh, потерянный преемник отозван; предъявленный отозванный преемник закрывает сессию с replay', async () => {
 		const jar = await signIn('rot_replay_late')
 		const sid = sessionIdOf(jar)
 		const t0 = jar.get(REFRESH)
 		assert.ok(t0)
 		const first = await rotate(t0)
 		assert.equal(first.status, 200)
-		const t1 = refreshOf(first)
-		const current = mergeCookies(jar, first.setCookies)
+		const lost = refreshOf(first)
+		await ageSessionTokens(sid, 900)
+		const regrant = await rotate(t0)
+		assert.equal(regrant.status, 200)
+		const t2 = refreshOf(regrant)
+		assert.notEqual(t2, lost)
+		assert.equal(claimsOf(regrant.setCookies.get(ACCESS)?.value).sid, sid)
+		assert.equal((await sessionRow(sid))?.revoked_at, null)
+		assert.ok((await tokenRow(lost))?.revoked_at, 'lost successor is not revoked')
+		assert.equal(await countSessionTokens(sid), 3)
+		const current = mergeCookies(jar, regrant.setCookies)
 		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: current })).status, 200)
-		await shiftUsedAt(t0, 31)
-		const replay = await rotate(t0)
-		assert.equal(replay.status, 401)
-		assert.equal(replay.setCookies.size, 0)
+		const next = await rotate(t2)
+		assert.equal(next.status, 200)
+		refreshOf(next)
+		const stolen = await rotate(lost)
+		assert.equal(stolen.status, 401)
 		const session = await sessionRow(sid)
 		assert.ok(session?.revoked_at, 'session is not revoked')
 		assert.equal(session.revoke_reason, 'replay')
-		assert.ok((await tokenRow(t1))?.revoked_at, 'successor is not revoked')
-		assert.equal(await countSessionTokens(sid), 2)
-		assert.equal((await rotate(t1)).status, 401)
-		assert.equal((await call(ctx, 'GET', '/api/auth/me', { cookies: current })).status, 401)
+		assert.equal(
+			(await call(ctx, 'GET', '/api/auth/me', { cookies: mergeCookies(current, next.setCookies) })).status,
+			401
+		)
+	})
+
+	test('пять параллельных повторов после потерянного ответа: все 200, новый refresh ровно в одном ответе, сессия жива', async () => {
+		const jar = await signIn('rot_parallel_regrant')
+		const sid = sessionIdOf(jar)
+		const t0 = jar.get(REFRESH)
+		assert.ok(t0)
+		const first = await rotate(t0)
+		assert.equal(first.status, 200)
+		const lost = refreshOf(first)
+		await ageSessionTokens(sid, 900)
+		const replies = await Promise.all(Array.from({ length: 5 }, () => rotate(t0)))
+		assert.deepEqual(
+			replies.map((reply) => reply.status),
+			[200, 200, 200, 200, 200]
+		)
+		const issued = replies.filter((reply) => (reply.setCookies.get(REFRESH)?.value ?? '') !== '')
+		assert.equal(issued.length, 1)
+		assert.equal(await countSessionTokens(sid), 3)
+		assert.ok((await tokenRow(lost))?.revoked_at, 'lost successor is not revoked')
+		assert.equal((await sessionRow(sid))?.revoked_at, null)
+		assert.equal((await rotate(refreshOf(issued[0] as Reply))).status, 200)
 	})
 
 	test('повтор токена, у которого преемник уже использован: 401 и отзыв сессии с replay', async () => {
@@ -461,6 +501,9 @@ describe('refresh: окно гонки и replay', () => {
 		const first = await rotate(t0)
 		assert.equal(first.status, 200)
 		const t1 = refreshOf(first)
+		const second = await rotate(t1)
+		assert.equal(second.status, 200)
+		const t2 = refreshOf(second)
 		await shiftUsedAt(t0, 31)
 		const warn = vi.spyOn(logger, 'warn')
 		try {
@@ -473,20 +516,23 @@ describe('refresh: окно гонки и replay', () => {
 			const [payload] = events[0] ?? []
 			assert.deepEqual(payload, { userId: userId('rot_replay_log'), sessionId: sid, event: 'refresh_replay' })
 			const logged = JSON.stringify(warn.mock.calls)
-			for (const secret of [t0, t1, hashOf(t0), hashOf(t1)]) assert.equal(logged.includes(secret), false)
+			for (const secret of [t0, t1, t2, hashOf(t0), hashOf(t1), hashOf(t2)])
+				assert.equal(logged.includes(secret), false)
 		} finally {
 			warn.mockRestore()
 		}
 	})
 
-	test('пять параллельных replay после окна: все 401, сессия отозвана один раз с replay, без 500', async () => {
+	test('пять параллельных replay токена с использованным преемником: все 401, сессия отозвана один раз с replay, без 500', async () => {
 		const jar = await signIn('rot_parallel_replay')
 		const sid = sessionIdOf(jar)
 		const t0 = jar.get(REFRESH)
 		assert.ok(t0)
 		const first = await rotate(t0)
 		assert.equal(first.status, 200)
-		const t1 = refreshOf(first)
+		const second = await rotate(refreshOf(first))
+		assert.equal(second.status, 200)
+		const t2 = refreshOf(second)
 		await shiftUsedAt(t0, 31)
 		const replies = await Promise.all(Array.from({ length: 5 }, () => rotate(t0)))
 		assert.deepEqual(
@@ -497,7 +543,7 @@ describe('refresh: окно гонки и replay', () => {
 		assert.ok(session?.revoked_at, 'session is not revoked')
 		assert.equal(session.revoke_reason, 'replay')
 		assert.ok((await sessionTokens(sid)).every((token) => token.revoked_at !== null))
-		assert.equal((await rotate(t1)).status, 401)
+		assert.equal((await rotate(t2)).status, 401)
 	})
 
 	test('replay старого токена параллельно с ротацией преемника: без 500 и deadlock, сессия отозвана с replay', async () => {
@@ -549,6 +595,7 @@ describe('refresh: окно гонки и replay', () => {
 		assert.ok(a0)
 		const first = await rotate(a0)
 		assert.equal(first.status, 200)
+		assert.equal((await rotate(refreshOf(first))).status, 200)
 		await shiftUsedAt(a0, 31)
 		assert.equal((await rotate(a0)).status, 401)
 		assert.equal((await sessionRow(sidA))?.revoke_reason, 'replay')

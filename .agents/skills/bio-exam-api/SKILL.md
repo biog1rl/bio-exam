@@ -31,6 +31,7 @@ Express владеет данными и политикой доступа (`doc
 ## Вход и сессии
 
 - Сессии входа: `app/server/src/services/session/index.ts` - `openSession`, `rotateRefreshToken` (исходы `rotated`, `reused` в окне `REFRESH_REUSE_WINDOW_MS`, `replay` с отзывом сессии, `rejected`), `revokeSession`, `revokeUserSessions`, `endSession`, `loadSessionUser`.
+- Повтор израсходованного refresh-токена разбирает `classifyRepeat` под блокировкой строк преемников и сессии: преемник уже использован или предъявлен отозванный токен живой сессии → `replay`; повтор в окне или повторная выдача в окне → `reused` (только access); иначе ответ ротации считается потерянным: неиспользованные преемники отзываются, выдаётся новый refresh (`rotated` с `regranted: true`, событие `refresh_regrant` в журнале).
 - Куки: `app/server/src/services/session/cookies.ts`; токены: `app/server/src/services/session/tokens.ts`; разбор сессии в запросе: `app/server/src/middleware/auth/session.ts`; маршруты: `app/server/src/routes/auth`.
 - Ограничение попыток входа: `app/server/src/services/login-throttle`.
 
