@@ -8,7 +8,7 @@ import {
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
-import { and, desc, eq, isNull, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
+import { and, desc, eq, isNull, not, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { questions, testSessions } from '../../db/schema.js'
@@ -26,12 +26,22 @@ export type SaveSessionDraftParams = {
 	testId: string
 	userId: string
 	testSessionId: string
+	timeLimitMinutes: number | null
 	questionId?: string
 	value?: AnswerValue
 	telemetry?: TelemetryMap
 }
 
-export type SaveSessionDraftResult = 'saved' | 'not_found' | { kind: 'invalid'; violation: AnswerViolation }
+export type SaveSessionDraftResult =
+	| { kind: 'saved'; serverNow: string }
+	| { kind: 'not_found' }
+	| { kind: 'invalid'; violation: AnswerViolation }
+
+export class SessionNeedsFinalizationError extends Error {
+	constructor(readonly sessionId: string) {
+		super(`session ${sessionId} needs deadline finalization`)
+	}
+}
 
 type SessionRow = {
 	id: string
@@ -56,7 +66,7 @@ export function sessionExpired(timeLimitMinutes: number | null | SQLWrapper, mar
 	return sql<boolean>`(${limit} IS NOT NULL AND now() > ${testSessions.startedAt} + make_interval(mins => ${limit} + ${ATTEMPT_GRACE_PERIOD_MINUTES}::int) + make_interval(secs => ${marginSeconds}::int))`
 }
 
-function openSessionOf(testId: string, userId: string): SQL | undefined {
+export function openSessionOf(testId: string, userId: string): SQL | undefined {
 	return and(
 		eq(testSessions.testId, testId),
 		eq(testSessions.userId, userId),
@@ -70,11 +80,19 @@ function draftAnswersOf(value: unknown): Record<string, unknown> | null {
 	return null
 }
 
+function hasDraftAnswers(value: unknown): boolean {
+	return Object.keys(draftAnswersOf(value) ?? {}).length > 0
+}
+
 async function readServerNow(tx: Pick<typeof db, 'execute'>): Promise<string> {
 	const result = await tx.execute<{ now: Date | string }>(sql`SELECT clock_timestamp() AS now`)
 	const row = result.rows[0]
 	if (!row) throw new Error('readServerNow: clock_timestamp() returned no rows')
 	return new Date(row.now).toISOString()
+}
+
+export function databaseNow(): Promise<string> {
+	return readServerNow(db)
 }
 
 function toSessionInfo(row: SessionRow, serverNow: string): SessionInfo {
@@ -95,7 +113,11 @@ export async function startAttemptSession({
 }: StartAttemptSessionParams): Promise<SessionInfo> {
 	return db.transaction(async (tx) => {
 		const [open] = await tx
-			.select({ ...sessionColumns, expired: sessionExpired(timeLimitMinutes) })
+			.select({
+				...sessionColumns,
+				expired: sessionExpired(timeLimitMinutes),
+				stale: sessionExpired(timeLimitMinutes, DEADLINE_FINALIZE_MAX_AGE_HOURS * 3600),
+			})
 			.from(testSessions)
 			.where(openSessionOf(testId, userId))
 			.orderBy(desc(testSessions.startedAt))
@@ -105,6 +127,7 @@ export async function startAttemptSession({
 		if (open && !open.expired) return toSessionInfo(open, await readServerNow(tx))
 
 		if (open) {
+			if (hasDraftAnswers(open.draftAnswers) && !open.stale) throw new SessionNeedsFinalizationError(open.id)
 			await tx
 				.update(testSessions)
 				.set({ closedAt: sql`now()`, closeReason: 'expired' })
@@ -136,6 +159,7 @@ export async function saveSessionDraft({
 	testId,
 	userId,
 	testSessionId,
+	timeLimitMinutes,
 	questionId,
 	value,
 	telemetry,
@@ -152,16 +176,18 @@ export async function saveSessionDraft({
 			answers: { [questionId]: value },
 			questions: question ? [{ id: questionId, template }] : [],
 		})
-		if (violation) return { kind: 'invalid', violation }
+		if (violation) return { kind: 'invalid' as const, violation }
 	}
 
-	return db.transaction(async (tx) => {
+	return db.transaction(async (tx): Promise<SaveSessionDraftResult> => {
 		const [session] = await tx
 			.select({ draftAnswers: testSessions.draftAnswers, draftTelemetry: testSessions.draftTelemetry })
 			.from(testSessions)
-			.where(and(eq(testSessions.id, testSessionId), openSessionOf(testId, userId)))
+			.where(
+				and(eq(testSessions.id, testSessionId), openSessionOf(testId, userId), not(sessionExpired(timeLimitMinutes)))
+			)
 			.for('update')
-		if (!session) return 'not_found'
+		if (!session) return { kind: 'not_found' }
 
 		const existingDraft = draftAnswersOf(session.draftAnswers) ?? {}
 		const nextDraft =
@@ -176,6 +202,6 @@ export async function saveSessionDraft({
 				draftUpdatedAt: sql`now()`,
 			})
 			.where(eq(testSessions.id, testSessionId))
-		return 'saved'
+		return { kind: 'saved', serverNow: await readServerNow(tx) }
 	})
 }

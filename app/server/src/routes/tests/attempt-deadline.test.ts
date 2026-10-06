@@ -1,4 +1,4 @@
-import { AttemptSessionSchema, computeAttemptOutcome } from '@bio-exam/exam-core'
+import { AttemptSessionSchema, AttemptViewSchema, computeAttemptOutcome } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
@@ -434,6 +434,241 @@ describe('финализация по дедлайну', () => {
 		)
 		const ids = new Set(outcomes.map(finalizedId))
 		assert.equal(ids.size, 1)
+		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
+	})
+})
+
+type AttemptBody = { attemptId: string; results: { questionId: string; userAnswer: unknown }[] }
+
+function userAnswerOf(attempt: AttemptBody, questionId: string): unknown {
+	return attempt.results.find((result) => result.questionId === questionId)?.userAnswer
+}
+
+function assertIsoNow(value: unknown, label: string): void {
+	assert.equal(typeof value, 'string', label)
+	assert.ok(!Number.isNaN(Date.parse(value as string)), label)
+}
+
+describe('ленивая финализация на /submit', () => {
+	test('сдача после льготы с черновиком: 409 с видом попытки deadline по сохранённому черновику', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered: [] })
+		const questionId = prepared.questionIds[0]!
+		const draft = await saveDraft(world, prepared.owner.cookie, prepared.testId, prepared.sessionId, {
+			questionId,
+			value: 'черновик',
+		})
+		assert.equal(draft.status, 200, JSON.stringify(draft.body))
+		await shiftStartedAt(ctx, prepared.sessionId, '13 minutes')
+
+		const reply = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+			sessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [questionId]: 'тело' },
+		})
+		assert.equal(reply.status, 409, JSON.stringify(reply.body))
+		assert.equal(reply.body.error, 'ATTEMPT_ALREADY_SUBMITTED')
+		assert.equal(reply.body.submitSource, 'deadline')
+		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
+		assert.equal(reply.body.attemptId, (await sessionStateOf(prepared.sessionId)).attempt_id)
+		assert.equal(AttemptViewSchema.safeParse(reply.body.attempt).success, true, JSON.stringify(reply.body.attempt))
+		assert.equal(userAnswerOf(reply.body.attempt as AttemptBody, questionId), 'черновик')
+		assert.equal(reply.body.uploadClosesAt, null)
+		assertIsoNow(reply.body.serverNow, 'serverNow')
+	})
+})
+
+async function startAgain(prepared: DeadlineSession): Promise<string> {
+	const reply = await startSession(world, prepared.owner.cookie, prepared.testId)
+	assert.equal(reply.status, 200, JSON.stringify(reply.body))
+	const sessionId = reply.body.sessionId as string
+	assert.notEqual(sessionId, prepared.sessionId)
+	assert.equal((await sessionStateOf(sessionId)).closed_at, null)
+	return sessionId
+}
+
+describe('ленивая финализация на /start и PATCH', () => {
+	test('/start за льготой с пустым черновиком закрывает сессию expired без попытки и открывает новую', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered: [], startedAgo: '13 minutes' })
+		await startAgain(prepared)
+		await assertClosedWithoutAttempt(prepared, null)
+	})
+
+	test('PATCH в пределах льготы после конца таймера отвечает 200 и сохраняет ответ', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered: [], startedAgo: '11 minutes' })
+		const questionId = prepared.questionIds[0]!
+		const reply = await saveDraft(world, prepared.owner.cookie, prepared.testId, prepared.sessionId, {
+			questionId,
+			value: 'Мейоз',
+		})
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		const state = await sessionStateOf(prepared.sessionId)
+		assert.deepEqual(state.draft_answers, { [questionId]: 'Мейоз' })
+		assert.equal(state.closed_at, null)
+		assert.equal(state.submitted_at, null)
+	})
+
+	test('тест без лимита, старт 10 дней назад: PATCH 200, /start отдаёт ту же сессию, попыток нет', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: null, startedAgo: '10 days' })
+		const questionId = prepared.questionIds[0]!
+		const reply = await saveDraft(world, prepared.owner.cookie, prepared.testId, prepared.sessionId, {
+			questionId,
+			value: 'Мейоз',
+		})
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		const again = await startSession(world, prepared.owner.cookie, prepared.testId)
+		assert.equal(again.status, 200, JSON.stringify(again.body))
+		assert.equal(again.body.sessionId, prepared.sessionId)
+		assert.deepEqual(again.body.draftAnswers, { [questionId]: 'Мейоз' })
+		assert.equal(await attemptsOfSession(prepared.sessionId), 0)
+	})
+
+	test('D-21: давняя сессия (25 hours 12 minutes) на /start закрывается expired без попытки, /submit в неё — 422', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '25 hours 12 minutes' })
+		const draftBefore = (await sessionStateOf(prepared.sessionId)).draft_answers
+		await startAgain(prepared)
+		await assertClosedWithoutAttempt(prepared, draftBefore)
+
+		const reply = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+			sessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [prepared.questionIds[0]!]: 'Митоз' },
+		})
+		assert.equal(reply.status, 422, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: 'TIME_EXPIRED' })
+		assert.equal(await attemptsOfSession(prepared.sessionId), 0)
+	})
+
+	test('R3: ошибка данных финализации на /start не даёт 500, прежняя сессия закрыта expired с черновиком', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10 })
+		await ctx.pgPool.query(
+			`INSERT INTO questions (test_id, type, "order", points, prompt_path) VALUES ($1, 'mystery', 5, 1, NULL)`,
+			[prepared.testId]
+		)
+		await shiftStartedAt(ctx, prepared.sessionId, '13 minutes')
+		const draftBefore = (await sessionStateOf(prepared.sessionId)).draft_answers
+		await startAgain(prepared)
+		await assertClosedWithoutAttempt(prepared, draftBefore)
+	})
+
+	test.each([
+		{
+			name: 'черновик, 13 минут — SessionNeedsFinalizationError, база не меняется',
+			startedAgo: '13 minutes',
+			answered: [0],
+			throws: true,
+		},
+		{
+			name: 'черновик, 25 hours 12 minutes — закрыта expired',
+			startedAgo: '25 hours 12 minutes',
+			answered: [0],
+			throws: false,
+		},
+		{ name: 'пустой черновик, 13 минут — закрыта expired', startedAgo: '13 minutes', answered: [], throws: false },
+	])('startAttemptSession на просроченной сессии: $name', async ({ startedAgo, answered, throws }) => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered, startedAgo })
+		const before = await sessionStateOf(prepared.sessionId)
+		const params = { testId: prepared.testId, userId: prepared.owner.id, timeLimitMinutes: 10 }
+
+		if (throws) {
+			await assert.rejects(attemptSessions.startAttemptSession(params), (error: unknown) => {
+				assert.ok(error instanceof attemptSessions.SessionNeedsFinalizationError)
+				assert.equal(error.sessionId, prepared.sessionId)
+				return true
+			})
+			assert.deepEqual(await sessionStateOf(prepared.sessionId), before)
+			return
+		}
+		const started = await attemptSessions.startAttemptSession(params)
+		assert.notEqual(started.sessionId, prepared.sessionId)
+		await assertClosedWithoutAttempt(prepared, before.draft_answers)
+	})
+})
+
+describe('тела ответов 200 и 409', () => {
+	test('PATCH 200 несёт serverNow, /submit 200 — вид попытки client без serverNow', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, answered: [] })
+		const questionId = prepared.questionIds[0]!
+		const draft = await saveDraft(world, prepared.owner.cookie, prepared.testId, prepared.sessionId, {
+			questionId,
+			value: 'Митоз',
+		})
+		assert.equal(draft.status, 200, JSON.stringify(draft.body))
+		assert.equal(draft.body.ok, true)
+		assertIsoNow(draft.body.serverNow, 'PATCH serverNow')
+		assert.ok(Math.abs((await databaseNowMs()) - Date.parse(draft.body.serverNow as string)) <= 5000)
+
+		const reply = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+			sessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [questionId]: 'Митоз' },
+		})
+		assert.equal(reply.status, 200, JSON.stringify(reply.body))
+		assert.equal(AttemptViewSchema.safeParse(reply.body).success, true, JSON.stringify(reply.body))
+		assert.equal(reply.body.submitSource, 'client')
+		assert.equal('serverNow' in reply.body, false)
+	})
+
+	test('сдача из другой вкладки после ручной сдачи получает прежнее тело 409', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10 })
+		const answers = { [prepared.questionIds[0]!]: 'Митоз' }
+		const first = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+			sessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers,
+		})
+		assert.equal(first.status, 200, JSON.stringify(first.body))
+
+		const second = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+			sessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers,
+		})
+		assert.equal(second.status, 409)
+		assert.deepEqual(second.body, { error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId: first.body.attemptId })
+	})
+
+	test('повторная сдача после серверной финализации новым clientAttemptId получает то же тело deadline', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		const attemptId = finalizedId(await attemptSessions.finalizeSessionByDeadline(prepared.sessionId))
+
+		for (const round of ['first', 'second']) {
+			const reply = await submitAttempt(world, prepared.owner.cookie, prepared.testId, {
+				sessionId: prepared.sessionId,
+				clientAttemptId: crypto.randomUUID(),
+				answers: { [prepared.questionIds[0]!]: 'тело' },
+			})
+			assert.equal(reply.status, 409, `${round}: ${JSON.stringify(reply.body)}`)
+			assert.equal(reply.body.error, 'ATTEMPT_ALREADY_SUBMITTED', round)
+			assert.equal(reply.body.attemptId, attemptId, round)
+			assert.equal(reply.body.submitSource, 'deadline', round)
+			assert.equal((reply.body.attempt as AttemptBody).attemptId, attemptId, round)
+			assertIsoNow(reply.body.serverNow, round)
+		}
+		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
+	})
+
+	test('клиентская сдача после финализации той же сессии получает conflict с попыткой deadline', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		const attemptId = finalizedId(await attemptSessions.finalizeSessionByDeadline(prepared.sessionId))
+		const outcome = await attemptSessions.submitAttempt({
+			testId: prepared.testId,
+			userId: prepared.owner.id,
+			testSessionId: prepared.sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: {},
+			scored: {
+				results: [],
+				resultsVersion: 2,
+				earnedPoints: 0,
+				totalPoints: 0,
+				scorePercentage: 0,
+				passed: false,
+				outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: null }),
+				passingScore: null,
+			},
+			timeLimitMinutes: 10,
+		})
+		assert.deepEqual(outcome, { kind: 'conflict', attemptId })
 		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
 	})
 })

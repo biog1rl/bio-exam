@@ -1,6 +1,6 @@
 import { AnswerValueSchema, findAnswerViolation, type AnswerValue } from '@bio-exam/exam-core'
 
-import { and, eq, type SQL } from 'drizzle-orm'
+import { and, desc, eq, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { questions, testAttempts, testSessions, tests, topics } from '../../db/schema.js'
@@ -9,7 +9,7 @@ import { logger } from '../../lib/logger.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { scoreSubmission } from '../scored-attempt/index.js'
 import { explanationReaderFor } from './explanations.js'
-import { DEADLINE_FINALIZE_MAX_AGE_HOURS, sessionExpired } from './sessions.js'
+import { DEADLINE_FINALIZE_MAX_AGE_HOURS, openSessionOf, sessionExpired } from './sessions.js'
 import { closeExpiredSession, submitAttempt, type SubmitAttemptOutcome } from './submit.js'
 
 export type DeadlineOwner = { testId: string; userId: string }
@@ -211,4 +211,24 @@ export async function finalizeSessionByDeadline(sessionId: string, owner?: Deadl
 		if (outcome !== DRAFT_CHANGED) return outcome
 	}
 	throw new Error('finalizeSessionByDeadline: draft kept changing')
+}
+
+export async function finalizeExpiredOpenSession({
+	testId,
+	userId,
+	timeLimitMinutes,
+}: {
+	testId: string
+	userId: string
+	timeLimitMinutes: number | null
+}): Promise<FinalizeOutcome | null> {
+	if (timeLimitMinutes == null) return null
+	const [open] = await db
+		.select({ id: testSessions.id })
+		.from(testSessions)
+		.where(and(openSessionOf(testId, userId), sessionExpired(timeLimitMinutes)))
+		.orderBy(desc(testSessions.startedAt))
+		.limit(1)
+	if (!open) return null
+	return finalizeSessionByDeadline(open.id, { testId, userId })
 }

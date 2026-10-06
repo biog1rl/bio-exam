@@ -59,6 +59,14 @@ async function sessionRow(sessionId: string): Promise<SessionRow> {
 	return row
 }
 
+async function deadlineAttemptsOf(sessionId: string): Promise<{ submit_source: string; answers: unknown }[]> {
+	const result = await ctx.pgPool.query<{ submit_source: string; answers: unknown }>(
+		'SELECT submit_source, answers FROM test_attempts WHERE session_id = $1',
+		[sessionId]
+	)
+	return result.rows
+}
+
 async function openSessionsOf(testId: string, userId: string): Promise<number> {
 	return countRows(
 		world,
@@ -79,7 +87,7 @@ afterAll(async () => {
 })
 
 describe('лимит времени на /start', () => {
-	test('в пределах льготы /start возвращает ту же сессию, за льготой закрывает её как expired и открывает новую', async () => {
+	test('в пределах льготы /start возвращает ту же сессию, за льготой сдаёт её по черновику и открывает новую', async () => {
 		const { testId, questionId } = await prepareTest('time-limit-start', 10)
 		const first = await startOk(testId)
 		const draft = await saveDraft(world, student.cookie, testId, first, { questionId, value: 'a' })
@@ -101,11 +109,10 @@ describe('лимит времени на /start', () => {
 		assert.equal(restarted.body.draftLastQuestionId, null)
 		assert.equal(restarted.body.draftTelemetry, null)
 
-		const closed = await sessionRow(first)
-		assert.notEqual(closed.closed_at, null)
-		assert.equal(closed.close_reason, 'expired')
-		assert.equal(closed.submitted_at, null)
-		assert.deepEqual(closed.draft_answers, { [questionId]: 'a' })
+		const finalized = await sessionRow(first)
+		assert.notEqual(finalized.submitted_at, null)
+		assert.equal(finalized.closed_at, null)
+		assert.deepEqual(await deadlineAttemptsOf(first), [{ submit_source: 'deadline', answers: { [questionId]: 'a' } }])
 
 		const fresh = await sessionRow(second)
 		assert.equal(fresh.closed_at, null)
@@ -124,7 +131,7 @@ describe('лимит времени на /start', () => {
 				testId,
 				student.id,
 			]),
-			0
+			1
 		)
 	})
 
@@ -142,23 +149,40 @@ describe('лимит времени на /start', () => {
 })
 
 describe('PATCH черновика и лимит времени', () => {
-	test('PATCH в просроченную, но не закрытую сессию отвечает 200 и сохраняет ответ', async () => {
-		const { testId, questionId } = await prepareTest('time-patch-expired-open', 10)
+	test.each([
+		{ name: 'с черновиком — попытка deadline по нему', withDraft: true },
+		{ name: 'без черновика — сессия закрыта expired', withDraft: false },
+	])('PATCH за льготой отвечает 404 и не пишет ответ, $name', async ({ withDraft }) => {
+		const { testId, questionId } = await prepareTest(`time-patch-expired-${withDraft ? 'draft' : 'empty'}`, 10)
 		const sessionId = await startOk(testId)
+		if (withDraft) {
+			const draft = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'a' })
+			assert.equal(draft.status, 200)
+		}
 		await shiftStartedAt(ctx, sessionId, '13 minutes')
+
 		const reply = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'b' })
-		assert.equal(reply.status, 200)
-		assert.deepEqual(reply.body, { ok: true })
+		assert.equal(reply.status, 404, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: 'Session not found or already submitted' })
+
 		const row = await sessionRow(sessionId)
-		assert.equal(row.closed_at, null)
-		assert.deepEqual(row.draft_answers, { [questionId]: 'b' })
+		if (withDraft) {
+			assert.notEqual(row.submitted_at, null)
+			assert.equal(row.closed_at, null)
+			assert.deepEqual(await deadlineAttemptsOf(sessionId), [
+				{ submit_source: 'deadline', answers: { [questionId]: 'a' } },
+			])
+			return
+		}
+		assert.equal(row.close_reason, 'expired')
+		assert.equal(row.submitted_at, null)
+		assert.equal(row.draft_answers, null)
+		assert.equal(await attemptsOf(testId), 0)
 	})
 
 	test('PATCH в сессию, закрытую как expired, отвечает 404 и черновик не меняется', async () => {
 		const { testId, questionId } = await prepareTest('time-patch-closed', 10)
 		const first = await startOk(testId)
-		const draft = await saveDraft(world, student.cookie, testId, first, { questionId, value: 'a' })
-		assert.equal(draft.status, 200)
 		await shiftStartedAt(ctx, first, '13 minutes')
 		const second = await startOk(testId)
 		assert.notEqual(second, first)
@@ -168,7 +192,26 @@ describe('PATCH черновика и лимит времени', () => {
 		assert.deepEqual(reply.body, { error: 'Session not found or already submitted' })
 		const row = await sessionRow(first)
 		assert.equal(row.close_reason, 'expired')
-		assert.deepEqual(row.draft_answers, { [questionId]: 'a' })
+		assert.equal(row.draft_answers, null)
+	})
+
+	test('PATCH в сессию, сданную сервером на /start за льготой, отвечает 404 и ответ никуда не пишется', async () => {
+		const { testId, questionId } = await prepareTest('time-patch-finalized', 10)
+		const first = await startOk(testId)
+		const draft = await saveDraft(world, student.cookie, testId, first, { questionId, value: 'a' })
+		assert.equal(draft.status, 200)
+		await shiftStartedAt(ctx, first, '13 minutes')
+		const second = await startOk(testId)
+		assert.notEqual(second, first)
+		assert.notEqual((await sessionRow(first)).submitted_at, null)
+
+		const reply = await saveDraft(world, student.cookie, testId, first, { questionId, value: 'c' })
+		assert.equal(reply.status, 404)
+		assert.deepEqual(reply.body, { error: 'Session not found or already submitted' })
+		assert.deepEqual(await deadlineAttemptsOf(first), [{ submit_source: 'deadline', answers: { [questionId]: 'a' } }])
+		assert.equal(await attemptsOf(testId), 1)
+		assert.equal((await sessionRow(first)).draft_answers, null)
+		assert.equal((await sessionRow(second)).draft_answers, null)
 	})
 
 	test('PATCH в сессию другого назначенного пользователя отвечает 404 и черновик не пишется', async () => {

@@ -9,7 +9,9 @@ export {
 	type AttemptTest,
 } from './access.js'
 export {
+	databaseNow,
 	saveSessionDraft,
+	SessionNeedsFinalizationError,
 	startAttemptSession,
 	type SaveSessionDraftParams,
 	type SaveSessionDraftResult,
@@ -38,6 +40,7 @@ export {
 export {
 	DEADLINE_CLIENT_ATTEMPT_PREFIX,
 	deadlineClientAttemptId,
+	finalizeExpiredOpenSession,
 	finalizeSessionByDeadline,
 	type DeadlineOwner,
 	type FinalizeOutcome,
