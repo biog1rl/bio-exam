@@ -1,6 +1,7 @@
 export {
 	checkAttemptAccess,
 	findVisibleTest,
+	findVisibleTestBySlug,
 	isAssignedOrPrivileged,
 	visibleTestsFilter,
 	type AttemptAccess,
