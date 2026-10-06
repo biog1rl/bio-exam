@@ -1,11 +1,13 @@
 import { storageKeysToClear, type AttemptStorageEvent } from '../attempt-submit-flow'
 import { clientAttemptIdKey, forgetClientAttemptId, type ClientAttemptStorage } from '../client-attempt-id'
+import type { UnsentRecord } from './wal-reconcile'
 
 export type AttemptStorageKeys = {
 	session: string
 	wal: string
 	frozen: string
 	clientAttemptId: string
+	unsent: string
 }
 
 export type CachedSession = {
@@ -19,6 +21,7 @@ export function attemptStorageKeys(testId: string, userId: string): AttemptStora
 		wal: `test-answers-wal-${testId}-${userId}`,
 		frozen: `test-frozen-${testId}-${userId}`,
 		clientAttemptId: clientAttemptIdKey(testId, userId),
+		unsent: `test-unsent-${testId}-${userId}`,
 	}
 }
 
@@ -60,5 +63,14 @@ export function writeCachedSession(storage: ClientAttemptStorage, key: string, s
 		storage.setItem(key, JSON.stringify({ sessionId: session.sessionId, startedAt: session.startedAt }))
 	} catch {
 		return
+	}
+}
+
+export function writeUnsent(storage: ClientAttemptStorage, key: string, record: UnsentRecord): boolean {
+	try {
+		storage.setItem(key, JSON.stringify(record))
+		return true
+	} catch {
+		return false
 	}
 }

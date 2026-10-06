@@ -1,4 +1,4 @@
-import { SUBMIT_ERROR_CODES } from '@bio-exam/exam-core'
+import { SUBMIT_ERROR_CODES, type AttemptView } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
@@ -24,6 +24,7 @@ import {
 	setupLifecycle,
 	START,
 	TEST_ID,
+	textResult,
 } from './testing'
 
 const CLOSES_AT = '2026-10-04T10:20:00.000Z'
@@ -287,14 +288,14 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.deepEqual(presentKeys(storage), [])
 	})
 
-	test('422 TIME_EXPIRED на ручную отправку: blocked time-expired, удалены все четыре ключа, retake без лимита — новый /start', async () => {
+	test('422 TIME_EXPIRED на ручную отправку: blocked time-expired, WAL остаётся до «Начать заново», остальные ключи удалены, retake без лимита — новый /start', async () => {
 		const { lifecycle, storage, fakeApi } = await activeWithAnswer()
 		fakeApi.queueSubmit(requestError(422, 'TIME_EXPIRED'))
 		await lifecycle.submit()
 		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
 		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
 		assert.equal(lifecycle.getSnapshot().interactionDisabled, true)
-		assert.deepEqual(presentKeys(storage), [])
+		assert.deepEqual(presentKeys(storage), ['wal'])
 		fakeApi.queueStart(sessionOf('s2'))
 		lifecycle.retake()
 		assert.equal(lifecycle.getSnapshot().phase, 'starting')
@@ -306,7 +307,7 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.deepEqual(readJson(storage, KEYS.session), { sessionId: 's2', startedAt: sessionOf('s2').startedAt })
 	})
 
-	test('422 TIME_EXPIRED на автосдачу теста с лимитом: blocked time-expired, ключи удалены, retake — awaitingStart', async () => {
+	test('422 TIME_EXPIRED на автосдачу теста с лимитом: blocked time-expired, остаётся только WAL, retake — awaitingStart и ключей нет', async () => {
 		const fakeApi = fakeAttemptApi([sessionOf('s1')])
 		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10 })
 		lifecycle.init()
@@ -317,11 +318,12 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
 		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
 		assert.equal(lifecycle.getSnapshot().showTimeUp, false)
-		assert.deepEqual(presentKeys(storage), [])
+		assert.deepEqual(presentKeys(storage), ['wal'])
 		lifecycle.retake()
 		await settle()
 		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
 		assert.equal(fakeApi.start.mock.calls.length, 1)
+		assert.deepEqual(presentKeys(storage), [])
 	})
 
 	test('характеризация: 409 ATTEMPT_ALREADY_SUBMITTED на автосдачу теста с лимитом — blocked already-submitted, удалены все четыре ключа (источник не deadline)', async () => {
@@ -396,6 +398,146 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 			onNotice.mock.calls.some(([value]) => value.kind === 'submitted'),
 			false
 		)
+	})
+
+	test('D-14 трассер: 409 deadline с видом, текст в WAL расходится с попыткой — запись unsent, WAL удалён, пометка в снимке', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		fakeApi.setSaveDefault(response(500))
+		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q1, 'полный текст')
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				attempt: attemptViewOf(ATTEMPT_ID, { results: [textResult(Q1, 'полн')] }),
+			})
+		)
+		await lifecycle.submit({ auto: true })
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'submitted')
+		assert.deepEqual(snapshot.unsent, {
+			certain: true,
+			entries: [{ questionId: Q1, number: 1, text: 'полный текст' }],
+		})
+		assert.deepEqual(presentKeys(storage), ['unsent'])
+		assert.deepEqual(readJson(storage, KEYS.unsent), {
+			v: 1,
+			testId: TEST_ID,
+			attemptId: ATTEMPT_ID,
+			certain: true,
+			entries: [{ questionId: Q1, number: 1, text: 'полный текст' }],
+		})
+	})
+
+	test('D-14: 409 deadline с видом и полным совпадением текста — WAL удалён, записи нет, пометки нет', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q1, 'текст ')
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				attempt: attemptViewOf(ATTEMPT_ID, { results: [textResult(Q1, 'текст')] }),
+			})
+		)
+		await lifecycle.submit({ auto: true })
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+		assert.deepEqual(presentKeys(storage), [])
+	})
+
+	test('D-14: 409 deadline без вида, неподтверждённый текст — пометка «могла» (certain false), запись есть, WAL удалён', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10, textQuestionIds: [Q1, Q2] })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q2, 'без связи')
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, { submitSource: 'deadline' })
+		)
+		await lifecycle.submit({ auto: true })
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.result, null)
+		assert.deepEqual(snapshot.unsent, {
+			certain: false,
+			entries: [{ questionId: Q2, number: 2, text: 'без связи' }],
+		})
+		assert.deepEqual(presentKeys(storage), ['unsent'])
+		assert.equal((readJson(storage, KEYS.unsent) as { certain: boolean }).certain, false)
+	})
+
+	test('R8: запись unsent не удалась — WAL остаётся, записи нет, пометка из памяти', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q1, 'полный текст')
+		const pendingSubmit = deferred<AttemptView | Error>()
+		fakeApi.queueSubmit(pendingSubmit)
+		const submitting = lifecycle.submit({ auto: true })
+		await settle()
+		storage.failWrites = true
+		pendingSubmit.resolve(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				attempt: attemptViewOf(ATTEMPT_ID, { results: [textResult(Q1, 'полн')] }),
+			})
+		)
+		await submitting
+		assert.deepEqual(presentKeys(storage), ['wal'])
+		assert.deepEqual(lifecycle.getSnapshot().unsent?.entries, [{ questionId: Q1, number: 1, text: 'полный текст' }])
+	})
+
+	test('D-04 и D-14: 422 TIME_EXPIRED с непустым текстом — остаётся только WAL, пометка в снимке; «Начать заново» стирает всё', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q1, 'текст')
+		lifecycle.answer(Q3, 'option-a')
+		fakeApi.queueSubmit(requestError(422, SUBMIT_ERROR_CODES.timeExpired))
+		await lifecycle.submit({ auto: true })
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.blockReason, 'time-expired')
+		assert.deepEqual(snapshot.unsent, { certain: true, entries: [{ questionId: Q1, number: 1, text: 'текст' }] })
+		assert.deepEqual(presentKeys(storage), ['wal'])
+		lifecycle.retake()
+		await settle()
+		assert.deepEqual(presentKeys(storage), [])
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+	})
+
+	test('запись unsent после «Ответ принят»: retake теста без лимита — новый /start, записи нет', async () => {
+		const { lifecycle, storage, fakeApi } = setupLifecycle({ textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		lifecycle.answer(Q1, 'полный текст')
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				attempt: attemptViewOf(ATTEMPT_ID, { results: [textResult(Q1, 'полн')] }),
+			})
+		)
+		await lifecycle.submit()
+		assert.deepEqual(presentKeys(storage), ['unsent'])
+		fakeApi.queueStart(sessionOf('s2'))
+		lifecycle.retake()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(storage.data.has(KEYS.unsent), false)
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+	})
+
+	test('запись unsent от прошлой попытки удаляется при следующем старте после перезагрузки', async () => {
+		const storage = memoryStorage({
+			[KEYS.unsent]: JSON.stringify({ v: 1, testId: TEST_ID, attemptId: ATTEMPT_ID, certain: true, entries: [] }),
+		})
+		const { lifecycle } = setupLifecycle({ storage })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(storage.data.has(KEYS.unsent), false)
 	})
 
 	test.each([

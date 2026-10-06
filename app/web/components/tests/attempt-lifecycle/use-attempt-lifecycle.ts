@@ -87,11 +87,22 @@ function orderedQuestionIds(questions: readonly PublicTestQuestion[]): string[] 
 	return [...questions].sort((a, b) => a.order - b.order).map((question) => question.id)
 }
 
+const TEXT_TEMPLATES: ReadonlySet<PublicTestQuestion['questionUiTemplate']> = new Set([
+	'short_text',
+	'sequence_digits',
+	'open',
+])
+
+function textQuestionIdsOf(questions: readonly PublicTestQuestion[]): string[] {
+	return questions.filter((question) => TEXT_TEMPLATES.has(question.questionUiTemplate)).map((question) => question.id)
+}
+
 function createBrowserAttemptLifecycle(input: UseAttemptLifecycleInput, channel: NoticeChannel): AttemptLifecycle {
 	return createAttemptLifecycle({
 		testId: input.test.id,
 		userId: input.userId,
 		questionIds: orderedQuestionIds(input.questions),
+		textQuestionIds: textQuestionIdsOf(input.questions),
 		timeLimitMinutes: input.test.timeLimitMinutes ?? null,
 		storage: browserAttemptStorage(),
 		visibility: browserVisibility(),
@@ -108,12 +119,13 @@ export function useAttemptLifecycle(input: UseAttemptLifecycleInput): {
 	const [lifecycle] = useState(() => createBrowserAttemptLifecycle(input, channel))
 	const { onNotice, questions } = input
 	const questionIds = useMemo(() => orderedQuestionIds(questions), [questions])
+	const textQuestionIds = useMemo(() => textQuestionIdsOf(questions), [questions])
 	useEffect(() => {
 		channel.setHandler(onNotice)
 	}, [channel, onNotice])
 	useEffect(() => {
-		lifecycle.setQuestionIds(questionIds)
-	}, [lifecycle, questionIds])
+		lifecycle.setQuestionIds(questionIds, textQuestionIds)
+	}, [lifecycle, questionIds, textQuestionIds])
 	useEffect(() => {
 		lifecycle.init()
 		return () => lifecycle.dispose()

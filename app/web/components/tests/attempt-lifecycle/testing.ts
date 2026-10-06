@@ -134,6 +134,22 @@ export function attemptViewOf(attemptId: string = ATTEMPT_ID, extra: Partial<Att
 	}
 }
 
+export function textResult(questionId: string, userAnswer: unknown): AttemptView['results'][number] {
+	return {
+		questionId,
+		isCorrect: false,
+		points: 1,
+		earnedPoints: 0,
+		userAnswer,
+		correctAnswer: null,
+		explanationText: null,
+		status: 'wrong',
+		keyVisible: false,
+		mistakes: null,
+		verdicts: null,
+	}
+}
+
 export function sequentialIds(prefix = 'client'): () => string {
 	let counter = 0
 	return () => {
@@ -225,6 +241,7 @@ export function setupLifecycle(
 		visibility?: ReturnType<typeof fakeVisibility>
 		timeLimitMinutes?: number | null
 		createId?: () => string
+		textQuestionIds?: readonly string[]
 	} = {}
 ) {
 	const storage = input.storage ?? memoryStorage()
@@ -235,6 +252,7 @@ export function setupLifecycle(
 		testId: TEST_ID,
 		userId: USER_ID,
 		questionIds: QUESTION_IDS,
+		textQuestionIds: input.textQuestionIds,
 		timeLimitMinutes: input.timeLimitMinutes ?? null,
 		storage,
 		api: fakeApi.api,
@@ -251,7 +269,7 @@ export async function settle(): Promise<void> {
 	await vi.advanceTimersByTimeAsync(0)
 }
 
-export type AttemptKeyName = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
+export type AttemptKeyName = 'session' | 'wal' | 'frozen' | 'clientAttemptId' | 'unsent'
 
 export function walTelemetry(storage: MemoryStorage): TelemetryMap | undefined {
 	const wal = readJson(storage, KEYS.wal) as { telemetry?: TelemetryMap } | undefined
@@ -264,7 +282,7 @@ export function walTelemetryPending(storage: MemoryStorage): boolean | undefined
 }
 
 export function presentKeys(storage: MemoryStorage): AttemptKeyName[] {
-	const names: AttemptKeyName[] = ['session', 'wal', 'frozen', 'clientAttemptId']
+	const names: AttemptKeyName[] = ['session', 'wal', 'frozen', 'clientAttemptId', 'unsent']
 	return names.filter((name) => storage.data.has(KEYS[name]))
 }
 

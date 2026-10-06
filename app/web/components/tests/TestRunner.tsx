@@ -13,6 +13,7 @@ import { QuestionInput } from '@/components/tests/QuestionInput'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { UnsentTextNote } from '@/components/tests/attempt-result/UnsentTextNote'
 import { UploadWindowLine } from '@/components/tests/attempt-result/UploadWindowLine'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
@@ -212,6 +213,23 @@ function AttemptRunner({
 		lifecycle.navigate(q.id)
 	}
 
+	const questionNumberRef = useRef<HTMLParagraphElement>(null)
+	const focusQuestionNumberRef = useRef(false)
+	useEffect(() => {
+		if (!focusQuestionNumberRef.current) return
+		focusQuestionNumberRef.current = false
+		questionNumberRef.current?.focus()
+	}, [currentQuestionId])
+
+	const goToUnsentQuestion = (questionId: string) => {
+		if (questionId === currentQuestionId) {
+			questionNumberRef.current?.focus()
+			return
+		}
+		focusQuestionNumberRef.current = true
+		lifecycle.navigate(questionId)
+	}
+
 	const goPrev = () => goToQuestion(currentIndex - 1)
 	const goNext = () => goToQuestion(currentIndex + 1)
 
@@ -303,6 +321,13 @@ function AttemptRunner({
 							<p className="text-sm">Время вышло, ответы приняты автоматически.</p>
 						) : null}
 						<UploadWindowLine uploadClosesAt={snapshot.uploadClosesAt} serverOffsetMs={snapshot.serverOffsetMs} />
+						{snapshot.unsent ? (
+							<UnsentTextNote
+								entries={snapshot.unsent.entries}
+								certain={snapshot.unsent.certain}
+								onGoToQuestion={goToUnsentQuestion}
+							/>
+						) : null}
 						{resultView?.kind === 'pending' ? (
 							<>
 								<AttemptReviewLine view={resultView} audience="student" chipClassName="bg-card" />
@@ -337,6 +362,9 @@ function AttemptRunner({
 							Ответ принят
 						</h2>
 						<p className="text-sm">Время вышло, ответы приняты автоматически.</p>
+						{snapshot.unsent ? (
+							<UnsentTextNote entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
+						) : null}
 						<p className="mt-2 text-sm">Результат появится в списке «Мои попытки» после обновления страницы.</p>
 						<Button type="button" variant="outline" className="mt-3" onClick={() => window.location.reload()}>
 							К результатам
@@ -374,7 +402,9 @@ function AttemptRunner({
 							id={`question-${question.id}`}
 							className="grid scroll-mt-24 gap-unit-mob tab:gap-unit"
 						>
-							<p className="text-lg font-medium">{currentIndex + 1}.</p>
+							<p ref={questionNumberRef} tabIndex={-1} className="text-lg font-medium outline-none">
+								{currentIndex + 1}.
+							</p>
 							<div className="flex-1 space-y-4 rounded-lg border bg-secondary p-4">
 								<div className="space-y-2">
 									<MdxRenderer source={question.promptText} className="prose max-w-none text-sm select-none" />
@@ -570,6 +600,9 @@ function AttemptRunner({
 						<AlertDialogTitle className="font-medium">{SUBMIT_FLOW_TEXT.timeExpiredTitle}</AlertDialogTitle>
 						<AlertDialogDescription>{SUBMIT_FLOW_TEXT.timeExpiredDescription}</AlertDialogDescription>
 					</AlertDialogHeader>
+					{snapshot.unsent ? (
+						<UnsentTextNote compact entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
+					) : null}
 					<AlertDialogFooter>
 						<AlertDialogAction onClick={handleRetake}>{SUBMIT_FLOW_TEXT.timeExpiredAction}</AlertDialogAction>
 					</AlertDialogFooter>

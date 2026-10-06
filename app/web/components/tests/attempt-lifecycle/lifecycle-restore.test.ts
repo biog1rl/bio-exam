@@ -77,11 +77,11 @@ describe('восстановление: сначала submit с сохранё�
 	test.each(
 		[
 			{
-				name: '422 TIME_EXPIRED: blocked time-expired, /start не вызывался',
+				name: '422 TIME_EXPIRED: blocked time-expired, /start не вызывался, WAL остаётся до «Начать заново»',
 				failure: () => requestError(422, SUBMIT_ERROR_CODES.timeExpired),
 				blockReason: 'time-expired',
 				attemptId: undefined as string | undefined,
-				keys: [] as string[],
+				keys: ['wal'] as string[],
 				detachedWal: false,
 			},
 			{

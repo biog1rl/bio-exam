@@ -28,6 +28,7 @@ import {
 	readCachedSession,
 	safeRemove,
 	writeCachedSession,
+	writeUnsent,
 	type CachedSession,
 } from './storage-keys'
 import {
@@ -41,6 +42,7 @@ import {
 	writeWal,
 	type WalRecord,
 } from './wal'
+import { unsentTexts, type UnsentEntry } from './wal-reconcile'
 
 export type AttemptPhase =
 	| 'awaitingStart'
@@ -64,6 +66,7 @@ export type AttemptNotice =
 	| { kind: 'retake-start-failed' }
 	| { kind: 'one-minute-left' }
 	| { kind: 'submitted'; result: AttemptView }
+export type AttemptUnsent = { certain: boolean; entries: readonly UnsentEntry[] }
 export type AttemptSnapshot = {
 	phase: AttemptPhase
 	blockReason: AttemptBlockReason | null
@@ -82,6 +85,7 @@ export type AttemptSnapshot = {
 	acceptedAutomatically: boolean
 	uploadClosesAt: string | null
 	serverOffsetMs: number
+	unsent: AttemptUnsent | null
 }
 export type AttemptLifecycleApi = {
 	start(testId: string): Promise<AttemptSession>
@@ -107,6 +111,7 @@ export type AttemptLifecycleOptions = {
 	testId: string
 	userId: string
 	questionIds: readonly string[]
+	textQuestionIds?: readonly string[]
 	timeLimitMinutes: number | null
 	storage: ClientAttemptStorage
 	api: AttemptLifecycleApi
@@ -120,7 +125,7 @@ export type AttemptLifecycle = {
 	confirmStart(): Promise<void>
 	answer(questionId: string, value: AnswerValue): void
 	navigate(questionId: string): void
-	setQuestionIds(questionIds: readonly string[]): void
+	setQuestionIds(questionIds: readonly string[], textQuestionIds?: readonly string[]): void
 	submit(options?: { auto?: boolean }): Promise<void>
 	retake(): void
 	dispose(): void
@@ -173,6 +178,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	const keys = attemptStorageKeys(testId, userId)
 	let questionIds: readonly string[] = [...options.questionIds]
 	let knownQuestions = new Set(questionIds)
+	let textQuestionIds: ReadonlySet<string> = new Set(options.textQuestionIds ?? [])
 	const listeners = new Set<() => void>()
 
 	let initialized = false
@@ -195,6 +201,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let result: AttemptView | null = null
 	let acceptedAutomatically = false
 	let uploadClosesAt: string | null = null
+	let unsent: AttemptUnsent | null = null
 	let showTimeUp = false
 	let timeUpPause: { handle: unknown; resolve: () => void } | null = null
 	let restoreCandidate: CachedSession | null = null
@@ -417,6 +424,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 
 	function applyServerSession(server: AttemptSession, cached: CachedSession | null): void {
 		const cachedSessionId = cached?.sessionId ?? null
+		removeStoredUnsent()
 		if (session?.sessionId !== server.sessionId) deadlinePassed = false
 		if (cached && cached.sessionId !== server.sessionId) {
 			clearAttemptKeys(storage, keys, 'session-replaced')
@@ -613,6 +621,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		}
 		if (gen !== generation) return null
 		serverClock.observe(server.serverNow)
+		removeStoredUnsent()
 		mergeServerDraft(server)
 		session = { sessionId: server.sessionId, startedAt: server.startedAt }
 		writeCachedSession(storage, keys.session, session)
@@ -662,6 +671,45 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		return 'settled'
 	}
 
+	function keepUnsent(attemptId: string | null, attempt: AttemptView | null): void {
+		const certain = attempt !== null
+		const entries = unsentTexts({
+			local: answers,
+			stored: attempt ? attempt.results : null,
+			textQuestionIds,
+			questionOrder: questionIds,
+			pending,
+		})
+		if (entries.length === 0) {
+			unsent = null
+			safeRemove(storage, keys.wal)
+			return
+		}
+		unsent = { certain, entries }
+		if (writeUnsent(storage, keys.unsent, { v: 1, testId, attemptId, certain, entries })) {
+			safeRemove(storage, keys.wal)
+		}
+	}
+
+	function removeStoredUnsent(): void {
+		try {
+			if (storage.getItem(keys.unsent) !== null) storage.removeItem(keys.unsent)
+		} catch {
+			return
+		}
+	}
+
+	function keepExpiredUnsent(): void {
+		const entries = unsentTexts({
+			local: answers,
+			stored: [],
+			textQuestionIds,
+			questionOrder: questionIds,
+			pending,
+		})
+		unsent = entries.length > 0 ? { certain: true, entries } : null
+	}
+
 	function applySubmitFailure(failure: SubmitFailure, current: CachedSession, auto: boolean): 'settled' | 'retry' {
 		if (failure.kind === 'retry') {
 			if (auto) removeFrozen()
@@ -677,6 +725,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		if (failure.kind === 'finalized') {
 			queue?.discard()
 			clearAttemptKeys(storage, keys, 'finalized')
+			keepUnsent(failure.attemptId, failure.attempt)
 			closedSession = current
 			session = null
 			pending = new Set()
@@ -692,6 +741,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			return 'settled'
 		}
 		if (failure.kind === 'already-submitted' || failure.kind === 'time-expired') {
+			if (failure.kind === 'time-expired') keepExpiredUnsent()
 			queue?.discard()
 			clearAttemptKeys(storage, keys, failure.kind)
 			closedSession = current
@@ -741,6 +791,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		result = null
 		acceptedAutomatically = false
 		uploadClosesAt = null
+		unsent = null
 		showTimeUp = false
 		clearDraftState()
 		if (timeLimitMinutes) {
@@ -801,6 +852,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			acceptedAutomatically,
 			uploadClosesAt,
 			serverOffsetMs: serverClock.offsetMs(),
+			unsent,
 		}
 	}
 
@@ -816,6 +868,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			result = null
 			acceptedAutomatically = false
 			uploadClosesAt = null
+			unsent = null
 			showTimeUp = false
 			segmentStartedAt = null
 			warned = false
@@ -886,7 +939,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			void queue?.flush()
 			emit()
 		},
-		setQuestionIds(ids) {
+		setQuestionIds(ids, textIds) {
+			if (textIds) textQuestionIds = new Set(textIds)
 			if (ids.length === questionIds.length && ids.every((id, index) => id === questionIds[index])) return
 			questionIds = [...ids]
 			knownQuestions = new Set(questionIds)

@@ -32,7 +32,7 @@ export type AttemptBanner = 'start-not-assigned' | 'submit-not-assigned' | 'alre
 
 export type AttemptBannerView = { message: string; action: 'retry' | 'reload' | null }
 
-export type AttemptStorageKey = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
+export type AttemptStorageKey = 'session' | 'wal' | 'frozen' | 'clientAttemptId' | 'unsent'
 
 export type AttemptStorageEvent =
 	| 'success'
@@ -101,10 +101,10 @@ const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> 
 const ALL_ATTEMPT_KEYS: readonly AttemptStorageKey[] = ['session', 'wal', 'frozen', 'clientAttemptId']
 
 const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorageKey[]> = {
-	success: ALL_ATTEMPT_KEYS,
-	finalized: ALL_ATTEMPT_KEYS,
+	success: [...ALL_ATTEMPT_KEYS, 'unsent'],
+	finalized: ['session', 'frozen', 'clientAttemptId'],
 	'already-submitted': ALL_ATTEMPT_KEYS,
-	'time-expired': ALL_ATTEMPT_KEYS,
+	'time-expired': ['session', 'frozen', 'clientAttemptId'],
 	'not-found': ['session', 'clientAttemptId'],
 	'start-not-assigned': ['session', 'clientAttemptId'],
 	'submit-not-assigned': [],
