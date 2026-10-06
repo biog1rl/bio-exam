@@ -35,3 +35,12 @@ export {
 	type SubmitAttemptOutcome,
 	type SubmitAttemptParams,
 } from './submit.js'
+export {
+	DEADLINE_CLIENT_ATTEMPT_PREFIX,
+	deadlineClientAttemptId,
+	finalizeSessionByDeadline,
+	type DeadlineOwner,
+	type FinalizeOutcome,
+} from './deadline.js'
+export { explanationReaderFor } from './explanations.js'
+export { DEADLINE_FINALIZE_MAX_AGE_HOURS } from './sessions.js'

@@ -13,6 +13,7 @@ import { Router, type Response } from 'express'
 
 import { db } from '../../db/index.js'
 import { questions, testAttempts, tests, topics } from '../../db/schema.js'
+import { isTransientDbError } from '../../lib/db-errors.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest, testScope } from '../../services/access-policy/index.js'
@@ -20,6 +21,7 @@ import {
 	checkAttemptAccess,
 	findVisibleTestBySlug,
 	closeExpiredSession,
+	explanationReaderFor,
 	isAssignedOrPrivileged,
 	precheckSubmit,
 	saveSessionDraft,
@@ -28,7 +30,6 @@ import {
 	visibleTestsFilter,
 	type SessionCloseReason,
 } from '../../services/attempt-sessions/index.js'
-import { readQuestionMarkdown } from '../../services/question-content/index.js'
 import { attemptResultColumns, readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
 import { readStudentQuestions } from './student-question-view.js'
 
@@ -43,27 +44,6 @@ const DB_RETRY_ENABLED = process.env.DB_QUERY_RETRY !== '0'
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function errorText(err: unknown): string {
-	if (err instanceof Error) {
-		const parts = [err.message]
-		const cause = (err as Error & { cause?: unknown }).cause
-		if (cause instanceof Error) parts.push(cause.message)
-		return parts.join(' | ')
-	}
-	return String(err)
-}
-
-function isTransientDbError(err: unknown): boolean {
-	const message = errorText(err).toLowerCase()
-	return (
-		message.includes('connection terminated unexpectedly') ||
-		message.includes('query read timeout') ||
-		message.includes('econnreset') ||
-		message.includes('etimedout') ||
-		message.includes('eai_again')
-	)
-}
 
 function answersInvalidBody(violation: AnswerViolation) {
 	return {
@@ -438,17 +418,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			testId,
 			answers: userAnswers,
 			passingScore: test.passingScore,
-			readExplanation: (q) =>
-				q.explanationPath
-					? readQuestionMarkdown({
-							storedPath: q.explanationPath,
-							topicSlug: test.topicSlug,
-							testSlug: test.slug,
-							testId,
-							questionId: q.id,
-							kind: 'explanation',
-						}).then((text) => text || null)
-					: Promise.resolve(null),
+			readExplanation: explanationReaderFor({ id: testId, slug: test.slug, topicSlug: test.topicSlug }),
 		})
 		if (!scored.ok) {
 			if (scored.reason === 'no_questions') return res.status(404).json({ error: 'Questions not found' })
@@ -480,6 +450,7 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		if (outcome.kind === 'not_found') return sessionNotFound(res)
 		if (outcome.kind === 'conflict') return attemptAlreadySubmitted(res, outcome.attemptId)
 		if (outcome.kind === 'closed') return rejectClosedSession(res, outcome.reason)
+		if (outcome.kind === 'draft_changed') throw new Error('submitAttempt: draft_changed without expectedDraft')
 		res.json(await readAttemptView(outcome.attemptId, viewer))
 	} catch (e) {
 		next(e)

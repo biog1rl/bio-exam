@@ -8,7 +8,7 @@ import {
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
-import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { questions, testSessions } from '../../db/schema.js'
@@ -49,8 +49,11 @@ const sessionColumns = {
 	draftTelemetry: testSessions.draftTelemetry,
 }
 
-export function sessionExpired(timeLimitMinutes: number | null): SQL<boolean> {
-	return sql<boolean>`(${timeLimitMinutes}::int IS NOT NULL AND now() > ${testSessions.startedAt} + make_interval(mins => ${timeLimitMinutes}::int + ${ATTEMPT_GRACE_PERIOD_MINUTES}::int))`
+export const DEADLINE_FINALIZE_MAX_AGE_HOURS = 24
+
+export function sessionExpired(timeLimitMinutes: number | null | SQLWrapper, marginSeconds = 0): SQL<boolean> {
+	const limit = sql`(${timeLimitMinutes})::int`
+	return sql<boolean>`(${limit} IS NOT NULL AND now() > ${testSessions.startedAt} + make_interval(mins => ${limit} + ${ATTEMPT_GRACE_PERIOD_MINUTES}::int) + make_interval(secs => ${marginSeconds}::int))`
 }
 
 function openSessionOf(testId: string, userId: string): SQL | undefined {

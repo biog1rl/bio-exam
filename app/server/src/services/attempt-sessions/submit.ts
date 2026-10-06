@@ -3,6 +3,7 @@ import {
 	projectionOf,
 	type AnswerValue,
 	type AttemptOutcome,
+	type AttemptSubmitSource,
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
@@ -51,6 +52,8 @@ export type SubmitAttemptParams = {
 	timeLimitMinutes?: number | null
 	uploadWindowMinutes?: number
 	hasOpenQuestion?: boolean
+	source?: AttemptSubmitSource
+	expectedDraft?: unknown
 }
 
 export type SubmitAttemptOutcome =
@@ -59,6 +62,7 @@ export type SubmitAttemptOutcome =
 	| { kind: 'conflict'; attemptId: string | null }
 	| { kind: 'closed'; reason: SessionCloseReason }
 	| { kind: 'not_found' }
+	| { kind: 'draft_changed' }
 
 class ClientAttemptConflict extends Error {
 	constructor(readonly attemptId: string) {
@@ -70,19 +74,35 @@ function closeReasonOf(value: string | null): SessionCloseReason {
 	return value === 'superseded' ? 'superseded' : 'expired'
 }
 
+function timerEndsAtOf(startedAt: Date, timeLimitMinutes: number | null): SQL {
+	return timeLimitMinutes == null
+		? sql`NULL`
+		: sql`${startedAt}::timestamptz + make_interval(mins => ${timeLimitMinutes}::int)`
+}
+
+function submittedAtOf(source: AttemptSubmitSource, startedAt: Date, timeLimitMinutes: number | null): SQL {
+	if (source === 'deadline' && timeLimitMinutes != null) {
+		return sql`(${timerEndsAtOf(startedAt, timeLimitMinutes)})::timestamptz`
+	}
+	return sql`now()`
+}
+
 function uploadClosesAtOf(params: {
+	submittedAt: SQL
 	startedAt: Date
 	timeLimitMinutes: number | null
 	uploadWindowMinutes: number
 	hasOpenQuestion: boolean
 }): SQL | null {
-	const { startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
+	const { submittedAt, startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
 	if (!hasOpenQuestion || uploadWindowMinutes <= 0) return null
-	const timerEndsAt =
-		timeLimitMinutes == null
-			? sql`NULL`
-			: sql`${startedAt}::timestamptz + make_interval(mins => ${timeLimitMinutes}::int)`
-	return sql`LEAST(now(), (${timerEndsAt})::timestamptz) + make_interval(mins => ${uploadWindowMinutes}::int)`
+	return sql`LEAST(${submittedAt}, (${timerEndsAtOf(startedAt, timeLimitMinutes)})::timestamptz) + make_interval(mins => ${uploadWindowMinutes}::int)`
+}
+
+function draftMatchesOf(expectedDraft: unknown): SQL<boolean> {
+	if (expectedDraft === undefined) return sql<boolean>`true`
+	if (expectedDraft === null) return sql<boolean>`${testSessions.draftAnswers} IS NULL`
+	return sql<boolean>`${testSessions.draftAnswers} IS NOT DISTINCT FROM ${JSON.stringify(expectedDraft)}::jsonb`
 }
 
 function sessionOfPair(testSessionId: string, testId: string, userId: string): SQL | undefined {
@@ -140,6 +160,8 @@ export async function submitAttempt({
 	timeLimitMinutes = null,
 	uploadWindowMinutes = 0,
 	hasOpenQuestion = false,
+	source = 'client',
+	expectedDraft,
 }: SubmitAttemptParams): Promise<SubmitAttemptOutcome> {
 	try {
 		return await db.transaction(async (tx): Promise<SubmitAttemptOutcome> => {
@@ -151,6 +173,7 @@ export async function submitAttempt({
 					attemptId: testSessions.attemptId,
 					draftTelemetry: testSessions.draftTelemetry,
 					startedAt: testSessions.startedAt,
+					draftMatches: draftMatchesOf(expectedDraft),
 				})
 				.from(testSessions)
 				.where(sessionOfPair(testSessionId, testId, userId))
@@ -169,6 +192,9 @@ export async function submitAttempt({
 
 			if (session.closedAt) return { kind: 'closed', reason: closeReasonOf(session.closeReason) }
 
+			if (!session.draftMatches) return { kind: 'draft_changed' }
+
+			const submittedAt = submittedAtOf(source, session.startedAt, timeLimitMinutes)
 			const mergedTelemetry = mergeTelemetryMaps(session.draftTelemetry, telemetry)
 			const [inserted] = await tx
 				.insert(testAttempts)
@@ -186,8 +212,10 @@ export async function submitAttempt({
 					passed: scored.outcome.submitted.passed,
 					...projectionOf(scored.outcome),
 					passingScore: scored.passingScore,
-					submitSource: 'client',
+					submittedAt,
+					submitSource: source,
 					uploadClosesAt: uploadClosesAtOf({
+						submittedAt,
 						startedAt: session.startedAt,
 						timeLimitMinutes,
 						uploadWindowMinutes,
@@ -212,7 +240,7 @@ export async function submitAttempt({
 			await tx
 				.update(testSessions)
 				.set({
-					submittedAt: sql`now()`,
+					submittedAt,
 					attemptId: inserted.id,
 					draftAnswers: null,
 					draftLastQuestionId: null,
