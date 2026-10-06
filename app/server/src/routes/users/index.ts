@@ -1,14 +1,13 @@
 import type { RoleKey } from '@bio-exam/rbac'
 import { ROLE_KEYS, STAFF_ROLE_KEYS } from '@bio-exam/rbac'
 
-import { and, asc, count, desc, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Router } from 'express'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import { testAssignments, testAttempts, tests, topics, userGroups, users, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
-import { escapeLike } from '../../lib/sql-like.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -28,13 +27,19 @@ import {
 } from '../../services/access-policy/index.js'
 import { attemptResultColumns } from '../../services/scored-attempt/index.js'
 import { revokeUserSessions } from '../../services/session/index.js'
-import { avatarUrl } from '../../services/storage/links.js'
 import type { UserRow } from '../../types/db/users.js'
 import { addAssignments, removeAssignment } from '../tests/assignments.js'
 import avatarRouter from './avatar.js'
 import profileRouter from './profile.js'
 import signInAssistRouter from './sign-in-assist.js'
-import { selectUserRows, serializeUserRow, userZoneFilter } from './user-rows.js'
+import {
+	peopleQuery,
+	PEOPLE_QUERY_TOO_SHORT,
+	searchPeople,
+	selectUserRows,
+	serializeUserRow,
+	userZoneFilter,
+} from './user-rows.js'
 
 const router = Router()
 
@@ -43,65 +48,18 @@ router.use('/profile', profileRouter)
 router.use('/avatar', avatarRouter)
 router.use('/', signInAssistRouter)
 
-const DIRECTORY_MIN_QUERY = 2
 const DIRECTORY_DEFAULT_LIMIT = 10
 const DIRECTORY_MAX_LIMIT = 20
 
 router.get('/directory', sessionRequired(), async (req, res, next) => {
 	try {
-		const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-		if (q.length < DIRECTORY_MIN_QUERY) {
-			return res.status(400).json({ error: 'Укажите не меньше 2 символов для поиска' })
-		}
+		const q = peopleQuery(req.query.q)
+		if (q === null) return res.status(400).json({ error: PEOPLE_QUERY_TOO_SHORT })
 		const limit = Math.min(
 			Math.max(Math.trunc(Number(req.query.limit)) || DIRECTORY_DEFAULT_LIMIT, 1),
 			DIRECTORY_MAX_LIMIT
 		)
-		const escaped = escapeLike(q)
-		const contains = `%${escaped}%`
-		const prefix = `${escaped}%`
-		const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
-
-		const rows = await db
-			.select({
-				id: users.id,
-				name: users.name,
-				firstName: users.firstName,
-				lastName: users.lastName,
-				initials: users.initials,
-				avatarColor: users.avatarColor,
-				avatarCropped: users.avatarCropped,
-			})
-			.from(users)
-			.where(
-				and(
-					eq(users.isActive, true),
-					or(
-						sql`${users.name} ilike ${contains} escape '\\'`,
-						sql`${users.firstName} ilike ${contains} escape '\\'`,
-						sql`${users.lastName} ilike ${contains} escape '\\'`,
-						sql`${fullName} ilike ${contains} escape '\\'`
-					)
-				)
-			)
-			.orderBy(
-				sql`case when lower(${users.name}) = lower(${q}) then 0 when ${users.name} ilike ${prefix} escape '\\' then 1 else 2 end`,
-				asc(users.name),
-				asc(users.id)
-			)
-			.limit(limit)
-
-		return res.json({
-			users: rows.map((row) => ({
-				id: row.id,
-				name: row.name,
-				firstName: row.firstName,
-				lastName: row.lastName,
-				initials: row.initials,
-				avatarColor: row.avatarColor,
-				avatarCropped: avatarUrl(row.avatarCropped),
-			})),
-		})
+		return res.json({ users: await searchPeople(q, { limit }) })
 	} catch (e) {
 		next(e)
 	}
