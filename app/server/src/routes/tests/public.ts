@@ -473,6 +473,9 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 				outcome: scoredOutcome,
 				passingScore,
 			},
+			timeLimitMinutes: test.timeLimitMinutes,
+			uploadWindowMinutes: test.photoUploadWindowMinutes,
+			hasOpenQuestion: facts.some((fact) => fact.template === 'open'),
 		})
 		if (outcome.kind === 'not_found') return sessionNotFound(res)
 		if (outcome.kind === 'conflict') return attemptAlreadySubmitted(res, outcome.attemptId)

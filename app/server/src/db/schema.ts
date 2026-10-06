@@ -269,6 +269,7 @@ export const tests = pgTable(
 		showCorrectAnswer: boolean('show_correct_answer').notNull().default(true),
 		scoringRules: jsonb('scoring_rules').$type<TestScoringRules>(),
 		timeLimitMinutes: integer('time_limit_minutes'),
+		photoUploadWindowMinutes: integer('photo_upload_window_minutes').notNull().default(15),
 		redThresholdMinutes: integer('red_threshold_minutes'),
 		warningThresholdMinutes: integer('warning_threshold_minutes'),
 		passingScore: real('passing_score'),
@@ -281,6 +282,10 @@ export const tests = pgTable(
 	(t) => ({
 		topicSlugUniq: uniqueIndex('tests_topic_slug_uniq').on(t.topicId, t.slug),
 		orderIdx: index('tests_order_idx').on(t.order),
+		photoUploadWindowCheck: check(
+			'tests_photo_upload_window_minutes_check',
+			sql`${t.photoUploadWindowMinutes} BETWEEN 0 AND 120`
+		),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()
@@ -501,6 +506,7 @@ export const testAttempts = pgTable(
 		passingScore: real('passing_score'),
 		autoTotalPoints: real('auto_total_points').notNull(),
 		submitSource: text('submit_source').notNull().default('client'),
+		uploadClosesAt: timestamp('upload_closes_at', { withTimezone: true }),
 	},
 	(t) => ({
 		testIdIdx: index('idx_test_attempts_test_id').on(t.testId),

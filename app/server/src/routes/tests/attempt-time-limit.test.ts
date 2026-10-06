@@ -12,6 +12,7 @@ import {
 	saveDraft,
 	seedAttemptWorld,
 	seedStudent,
+	shiftStartedAt,
 	startSession,
 	submitAttempt,
 	type AttemptWorld,
@@ -46,13 +47,6 @@ async function startOk(testId: string, cookie = student.cookie): Promise<string>
 	assert.equal(reply.status, 200, JSON.stringify(reply.body))
 	assert.equal(typeof reply.body.sessionId, 'string')
 	return reply.body.sessionId as string
-}
-
-async function shiftStartedAt(sessionId: string, interval: string): Promise<void> {
-	await ctx.pgPool.query('UPDATE test_sessions SET started_at = now() - $2::interval WHERE id = $1', [
-		sessionId,
-		interval,
-	])
 }
 
 async function sessionRow(sessionId: string): Promise<SessionRow> {
@@ -91,13 +85,13 @@ describe('лимит времени на /start', () => {
 		const draft = await saveDraft(world, student.cookie, testId, first, { questionId, value: 'a' })
 		assert.equal(draft.status, 200)
 
-		await shiftStartedAt(first, '11 minutes')
+		await shiftStartedAt(ctx, first, '11 minutes')
 		const withinGrace = await startSession(world, student.cookie, testId)
 		assert.equal(withinGrace.status, 200)
 		assert.equal(withinGrace.body.sessionId, first)
 		assert.deepEqual(withinGrace.body.draftAnswers, { [questionId]: 'a' })
 
-		await shiftStartedAt(first, '13 minutes')
+		await shiftStartedAt(ctx, first, '13 minutes')
 		const restarted = await startSession(world, student.cookie, testId)
 		assert.equal(restarted.status, 200)
 		const second = restarted.body.sessionId as string
@@ -137,7 +131,7 @@ describe('лимит времени на /start', () => {
 	test('тест без лимита: сессия десятидневной давности остаётся той же', async () => {
 		const { testId } = await prepareTest('time-no-limit', null)
 		const first = await startOk(testId)
-		await shiftStartedAt(first, '10 days')
+		await shiftStartedAt(ctx, first, '10 days')
 		const again = await startSession(world, student.cookie, testId)
 		assert.equal(again.status, 200)
 		assert.equal(again.body.sessionId, first)
@@ -151,7 +145,7 @@ describe('PATCH черновика и лимит времени', () => {
 	test('PATCH в просроченную, но не закрытую сессию отвечает 200 и сохраняет ответ', async () => {
 		const { testId, questionId } = await prepareTest('time-patch-expired-open', 10)
 		const sessionId = await startOk(testId)
-		await shiftStartedAt(sessionId, '13 minutes')
+		await shiftStartedAt(ctx, sessionId, '13 minutes')
 		const reply = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'b' })
 		assert.equal(reply.status, 200)
 		assert.deepEqual(reply.body, { ok: true })
@@ -165,7 +159,7 @@ describe('PATCH черновика и лимит времени', () => {
 		const first = await startOk(testId)
 		const draft = await saveDraft(world, student.cookie, testId, first, { questionId, value: 'a' })
 		assert.equal(draft.status, 200)
-		await shiftStartedAt(first, '13 minutes')
+		await shiftStartedAt(ctx, first, '13 minutes')
 		const second = await startOk(testId)
 		assert.notEqual(second, first)
 
@@ -278,7 +272,7 @@ describe('лимит времени на submit', () => {
 	test('лимит 10, started_at 11 минут назад: submit отвечает 200', async () => {
 		const { testId, questionId } = await prepareTest('time-submit-grace', 10)
 		const sessionId = await startOk(testId)
-		await shiftStartedAt(sessionId, '11 minutes')
+		await shiftStartedAt(ctx, sessionId, '11 minutes')
 		const reply = await submitAttempt(world, student.cookie, testId, submitEnvelope(sessionId, questionId))
 		assert.equal(reply.status, 200, JSON.stringify(reply.body))
 		assert.equal(await attemptsOf(testId), 1)
@@ -290,7 +284,7 @@ describe('лимит времени на submit', () => {
 	test('лимит 10, started_at 13 минут назад: 422, сессия закрыта как expired, попытки нет, /start открывает новую', async () => {
 		const { testId, questionId } = await prepareTest('time-submit-expired', 10)
 		const sessionId = await startOk(testId)
-		await shiftStartedAt(sessionId, '13 minutes')
+		await shiftStartedAt(ctx, sessionId, '13 minutes')
 		const reply = await submitAttempt(world, student.cookie, testId, submitEnvelope(sessionId, questionId))
 		assert.equal(reply.status, 422)
 		assert.deepEqual(reply.body, { error: 'TIME_EXPIRED' })
@@ -313,7 +307,7 @@ describe('лимит времени на submit', () => {
 	test('тест без лимита, started_at 10 дней назад: submit отвечает 200', async () => {
 		const { testId, questionId } = await prepareTest('time-submit-no-limit', null)
 		const sessionId = await startOk(testId)
-		await shiftStartedAt(sessionId, '10 days')
+		await shiftStartedAt(ctx, sessionId, '10 days')
 		const reply = await submitAttempt(world, student.cookie, testId, submitEnvelope(sessionId, questionId))
 		assert.equal(reply.status, 200, JSON.stringify(reply.body))
 		assert.equal(await attemptsOf(testId), 1)
@@ -324,7 +318,7 @@ describe('между предпроверкой и транзакцией submit
 	test('оценка дольше остатка льготы не даёт 422, если на входе срок не истёк', async () => {
 		const { testId } = await prepareTest('time-between-slow-scoring', 10)
 		const sessionId = await startOk(testId)
-		await shiftStartedAt(sessionId, '11 minutes')
+		await shiftStartedAt(ctx, sessionId, '11 minutes')
 		const clientAttemptId = crypto.randomUUID()
 
 		const precheck = await attemptSessions.precheckSubmit({
@@ -336,7 +330,7 @@ describe('между предпроверкой и транзакцией submit
 		})
 		assert.deepEqual(precheck, { kind: 'open' })
 
-		await shiftStartedAt(sessionId, '13 minutes')
+		await shiftStartedAt(ctx, sessionId, '13 minutes')
 		const outcome = await attemptSessions.submitAttempt({
 			testId,
 			userId: student.id,

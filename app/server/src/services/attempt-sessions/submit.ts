@@ -48,6 +48,9 @@ export type SubmitAttemptParams = {
 	answers: Record<string, AnswerValue>
 	telemetry?: TelemetryMap
 	scored: ScoredAttemptFacts
+	timeLimitMinutes?: number | null
+	uploadWindowMinutes?: number
+	hasOpenQuestion?: boolean
 }
 
 export type SubmitAttemptOutcome =
@@ -65,6 +68,21 @@ class ClientAttemptConflict extends Error {
 
 function closeReasonOf(value: string | null): SessionCloseReason {
 	return value === 'superseded' ? 'superseded' : 'expired'
+}
+
+function uploadClosesAtOf(params: {
+	startedAt: Date
+	timeLimitMinutes: number | null
+	uploadWindowMinutes: number
+	hasOpenQuestion: boolean
+}): SQL | null {
+	const { startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
+	if (!hasOpenQuestion || uploadWindowMinutes <= 0) return null
+	const timerEndsAt =
+		timeLimitMinutes == null
+			? sql`NULL`
+			: sql`${startedAt}::timestamptz + make_interval(mins => ${timeLimitMinutes}::int)`
+	return sql`LEAST(now(), (${timerEndsAt})::timestamptz) + make_interval(mins => ${uploadWindowMinutes}::int)`
 }
 
 function sessionOfPair(testSessionId: string, testId: string, userId: string): SQL | undefined {
@@ -119,6 +137,9 @@ export async function submitAttempt({
 	answers,
 	telemetry,
 	scored,
+	timeLimitMinutes = null,
+	uploadWindowMinutes = 0,
+	hasOpenQuestion = false,
 }: SubmitAttemptParams): Promise<SubmitAttemptOutcome> {
 	try {
 		return await db.transaction(async (tx): Promise<SubmitAttemptOutcome> => {
@@ -129,6 +150,7 @@ export async function submitAttempt({
 					closeReason: testSessions.closeReason,
 					attemptId: testSessions.attemptId,
 					draftTelemetry: testSessions.draftTelemetry,
+					startedAt: testSessions.startedAt,
 				})
 				.from(testSessions)
 				.where(sessionOfPair(testSessionId, testId, userId))
@@ -165,6 +187,12 @@ export async function submitAttempt({
 					...projectionOf(scored.outcome),
 					passingScore: scored.passingScore,
 					submitSource: 'client',
+					uploadClosesAt: uploadClosesAtOf({
+						startedAt: session.startedAt,
+						timeLimitMinutes,
+						uploadWindowMinutes,
+						hasOpenQuestion,
+					}),
 					gradedAt: null,
 					telemetry: Object.keys(mergedTelemetry).length > 0 ? mergedTelemetry : null,
 				})

@@ -4,6 +4,7 @@ import {
 	questionStatus,
 	type AnswerValue,
 	type AttemptQuestionView,
+	type AttemptSubmitSource,
 	type AttemptView,
 	type QuestionUiTemplate,
 	type QuestionVerdicts,
@@ -35,6 +36,8 @@ export type AttemptSummary = {
 	passed: boolean | null
 	autoEarnedPoints: number
 	autoTotalPoints: number
+	uploadClosesAt?: string | null
+	submitSource?: AttemptSubmitSource
 }
 
 type KeyDisclosure = Pick<AttemptQuestionView, 'keyVisible' | 'correctAnswer' | 'verdicts' | 'mistakes'>
@@ -89,6 +92,8 @@ export function buildAttemptView(params: {
 		passed: attempt.passed,
 		autoEarnedPoints: attempt.autoEarnedPoints,
 		autoTotalPoints: attempt.autoTotalPoints,
+		uploadClosesAt: attempt.uploadClosesAt ?? null,
+		submitSource: attempt.submitSource ?? 'client',
 		results: facts.map((fact) => buildQuestionView(fact, viewer)),
 	})
 }

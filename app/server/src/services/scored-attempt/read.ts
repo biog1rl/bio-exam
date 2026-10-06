@@ -3,6 +3,7 @@ import {
 	AttemptFactsSchema,
 	LegacyAttemptResultsSchema,
 	type AdminAttemptView,
+	type AttemptSubmitSource,
 	type AttemptView,
 	type LegacyAttemptResultItem,
 	type OutcomeFact,
@@ -94,6 +95,8 @@ async function readAttemptRow(attemptId: string) {
 			userId: testAttempts.userId,
 			answers: testAttempts.answers,
 			submittedAt: testAttempts.submittedAt,
+			uploadClosesAt: testAttempts.uploadClosesAt,
+			submitSource: testAttempts.submitSource,
 			...attemptResultColumns,
 			results: testAttempts.results,
 			resultsVersion: testAttempts.resultsVersion,
@@ -118,6 +121,8 @@ function summaryOf(row: AttemptRow): AttemptSummary {
 		passed: row.passed,
 		autoEarnedPoints: row.autoEarnedPoints,
 		autoTotalPoints: row.autoTotalPoints,
+		uploadClosesAt: row.uploadClosesAt?.toISOString() ?? null,
+		submitSource: row.submitSource as AttemptSubmitSource,
 	}
 }
 

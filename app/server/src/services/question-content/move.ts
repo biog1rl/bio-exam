@@ -103,6 +103,7 @@ async function createReceiver(tx: Tx, source: TestRow, topicId: string, slug: st
 			showCorrectAnswer: source.showCorrectAnswer,
 			scoringRules: source.scoringRules,
 			timeLimitMinutes: source.timeLimitMinutes,
+			photoUploadWindowMinutes: source.photoUploadWindowMinutes,
 			redThresholdMinutes: source.redThresholdMinutes,
 			warningThresholdMinutes: source.warningThresholdMinutes,
 			passingScore: source.passingScore,

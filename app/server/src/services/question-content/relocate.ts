@@ -472,6 +472,7 @@ export async function updateTestSettings(params: {
 		showCorrectAnswer: data.showCorrectAnswer,
 		scoringRules: nextScoringOverride ?? null,
 		timeLimitMinutes: data.timeLimitMinutes,
+		...(data.photoUploadWindowMinutes != null ? { photoUploadWindowMinutes: data.photoUploadWindowMinutes } : {}),
 		redThresholdMinutes: data.redThresholdMinutes ?? null,
 		warningThresholdMinutes: data.warningThresholdMinutes ?? null,
 		passingScore: data.passingScore,

@@ -1,3 +1,5 @@
+import { PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES, PHOTO_UPLOAD_WINDOW_MAX_MINUTES } from '@bio-exam/exam-core'
+
 import assert from 'node:assert/strict'
 import { afterAll, afterEach, beforeAll, describe, test, vi } from 'vitest'
 
@@ -729,5 +731,93 @@ describe('доступ к переименованию через scope.ts', () 
 		)
 		assert.deepEqual(after, before)
 		assert.deepEqual(mem.keys(), keysBefore)
+	})
+})
+
+describe('окно для фото в настройках теста', () => {
+	async function windowOf(testId: string): Promise<number> {
+		const { rows } = await ctx.pgPool.query<{ photo_upload_window_minutes: number }>(
+			'SELECT photo_upload_window_minutes FROM tests WHERE id = $1',
+			[testId]
+		)
+		assert.ok(rows[0], `test ${testId} not found`)
+		return rows[0].photo_upload_window_minutes
+	}
+
+	async function saveWithWindow(topicId: string, window: Json): Promise<string> {
+		const slug = nextSlug('window')
+		const reply = await call(ctx, 'POST', '/api/tests/save', {
+			cookies: adminJar,
+			body: {
+				topicId,
+				title: `Тест ${slug}`,
+				slug,
+				isPublished: true,
+				questions: [radio('Окно', { order: 0 })],
+				...window,
+			},
+		})
+		assert.equal(reply.status, 201, JSON.stringify(reply.body))
+		return (reply.body.test as Json).id as string
+	}
+
+	test.each([
+		{ name: 'значение 30', window: { photoUploadWindowMinutes: 30 }, expected: 30 },
+		{ name: 'без поля', window: {}, expected: PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES },
+		{ name: 'null', window: { photoUploadWindowMinutes: null }, expected: PHOTO_UPLOAD_WINDOW_DEFAULT_MINUTES },
+	])('создание теста: $name', async ({ window, expected }) => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const testId = await saveWithWindow(topicId, window)
+		assert.equal(await windowOf(testId), expected)
+	})
+
+	test('PATCH настроек: число меняет окно, тело без поля и null его не трогают, GET автора отдаёт поле', async () => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const testId = await saveWithWindow(topicId, {})
+		const slug = (await testSlugInDb(testId)) as string
+
+		const steps: Array<{ window: Json; expected: number }> = [
+			{ window: { photoUploadWindowMinutes: 0 }, expected: 0 },
+			{ window: {}, expected: 0 },
+			{ window: { photoUploadWindowMinutes: null }, expected: 0 },
+			{
+				window: { photoUploadWindowMinutes: PHOTO_UPLOAD_WINDOW_MAX_MINUTES },
+				expected: PHOTO_UPLOAD_WINDOW_MAX_MINUTES,
+			},
+		]
+		for (const { window, expected } of steps) {
+			const reply = await patchSettings(testId, settingsBody(topicId, slug, window))
+			assert.equal(reply.status, 200, JSON.stringify(reply.body))
+			assert.equal(await windowOf(testId), expected, JSON.stringify(window))
+		}
+
+		const read = await call(ctx, 'GET', `/api/tests/${testId}`, { cookies: adminJar })
+		assert.equal(read.status, 200, JSON.stringify(read.body))
+		assert.equal((read.body.test as Json).photoUploadWindowMinutes, PHOTO_UPLOAD_WINDOW_MAX_MINUTES)
+	})
+
+	test.each([PHOTO_UPLOAD_WINDOW_MAX_MINUTES + 1, -1, 12.5, '15'])(
+		'PATCH настроек с %j отклоняется 400, значение прежнее',
+		async (value) => {
+			const topicId = await createTopic(nextSlug('topic'))
+			const testId = await saveWithWindow(topicId, { photoUploadWindowMinutes: 30 })
+			const slug = (await testSlugInDb(testId)) as string
+
+			const reply = await patchSettings(testId, settingsBody(topicId, slug, { photoUploadWindowMinutes: value }))
+			assert.equal(reply.status, 400, JSON.stringify(reply.body))
+			const fieldErrors = (reply.body.details as { fieldErrors: Record<string, string[] | undefined> }).fieldErrors
+			assert.ok((fieldErrors.photoUploadWindowMinutes?.length ?? 0) > 0, JSON.stringify(reply.body))
+			assert.equal(await windowOf(testId), 30)
+		}
+	)
+
+	test('CHECK базы совпадает с пределом exam-core', async () => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const testId = await saveWithWindow(topicId, {})
+		const update = 'UPDATE tests SET photo_upload_window_minutes = $2 WHERE id = $1'
+
+		await assert.rejects(ctx.pgPool.query(update, [testId, PHOTO_UPLOAD_WINDOW_MAX_MINUTES + 1]), { code: '23514' })
+		await ctx.pgPool.query(update, [testId, PHOTO_UPLOAD_WINDOW_MAX_MINUTES])
+		assert.equal(await windowOf(testId), PHOTO_UPLOAD_WINDOW_MAX_MINUTES)
 	})
 })
