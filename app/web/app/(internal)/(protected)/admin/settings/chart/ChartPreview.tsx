@@ -6,6 +6,7 @@ import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
 import { ActivityChart, ContentChart } from '@/components/charts/DashboardCharts'
+import { EmptyState } from '@/components/page/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isAttemptChart, type ChartConfigs, type ChartId } from '@/lib/charts/config'
 import { demoActivity, demoAttempts, demoContent } from '@/lib/charts/demo'
@@ -15,14 +16,6 @@ import { adminDashboardFetcher, adminDashboardKey } from '@/lib/tests/dashboard-
 import { userAttemptToProgress, userAttemptsFetcher, usersKeys } from '@/lib/users/api'
 
 export type PreviewSource = 'demo' | 'real'
-
-function Message({ children }: { children: string }) {
-	return (
-		<div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
-			{children}
-		</div>
-	)
-}
 
 function busiestTest(attempts: readonly ProgressAttempt[]): ProgressAttempt[] {
 	const counts = new Map<string, number>()
@@ -71,10 +64,21 @@ export function ChartPreview({ chartId, configs, source, studentId, now }: Chart
 	}, [attemptConfig, chartId, demo.attempts, now, real, studentProgress])
 
 	if (attemptConfig) {
-		if (real && !studentId) return <Message>Выберите ученика, чтобы увидеть его попытки.</Message>
-		if (real && studentAttempts.error) return <Message>Не удалось загрузить попытки ученика.</Message>
+		if (real && !studentId)
+			return (
+				<EmptyState
+					size="sm"
+					className="h-72 justify-center"
+					description="Выберите ученика, чтобы увидеть его попытки."
+				/>
+			)
+		if (real && studentAttempts.error)
+			return (
+				<EmptyState size="sm" className="h-72 justify-center" description="Не удалось загрузить попытки ученика." />
+			)
 		if (real && !studentAttempts.data) return <Skeleton className="h-72 rounded-2xl" />
-		if (attempts.length === 0) return <Message>За выбранный период попыток нет.</Message>
+		if (attempts.length === 0)
+			return <EmptyState size="sm" className="h-72 justify-center" description="За выбранный период попыток нет." />
 		return (
 			<div className="space-y-2">
 				{chartId === 'testResults' ? (
@@ -86,14 +90,19 @@ export function ChartPreview({ chartId, configs, source, studentId, now }: Chart
 	}
 
 	if (chartId === 'content') {
-		if (real && (topics.error || tests.error)) return <Message>Не удалось загрузить темы и тесты.</Message>
+		if (real && (topics.error || tests.error))
+			return <EmptyState size="sm" className="h-72 justify-center" description="Не удалось загрузить темы и тесты." />
 		if (real && (!topics.data || !tests.data)) return <Skeleton className="h-72 rounded-2xl" />
 		const data = real ? { topics: topics.data?.topics ?? [], tests: tests.data?.tests ?? [] } : demo.content
-		if (data.topics.length === 0) return <Message>Тем пока нет.</Message>
+		if (data.topics.length === 0)
+			return <EmptyState size="sm" className="h-72 justify-center" description="Тем пока нет." />
 		return <ContentChart topics={data.topics} tests={data.tests} config={configs.content} />
 	}
 
-	if (real && activity.error) return <Message>Не удалось загрузить активность учеников.</Message>
+	if (real && activity.error)
+		return (
+			<EmptyState size="sm" className="h-72 justify-center" description="Не удалось загрузить активность учеников." />
+		)
 	if (real && !activity.data) return <Skeleton className="h-72 rounded-2xl" />
 	return (
 		<ActivityChart

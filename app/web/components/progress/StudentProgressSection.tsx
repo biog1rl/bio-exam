@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 
 import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { EmptyState } from '@/components/page/EmptyState'
 import { Panel } from '@/components/page/Panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChartConfigs } from '@/lib/charts/api'
@@ -12,14 +13,6 @@ import { ATTEMPT_PERIOD_OPTIONS } from '@/lib/charts/config'
 import { filterAttemptsByPeriod, resolvePeriodBounds } from '@/lib/progress/attempt-chart'
 import { loadMyProgressAttempts } from '@/lib/progress/my-attempts'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
-
-function Note({ children }: { children: ReactNode }) {
-	return (
-		<div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-			{children}
-		</div>
-	)
-}
 
 export function StudentProgressSection() {
 	const [now] = useState(() => new Date())
@@ -50,9 +43,9 @@ export function StudentProgressSection() {
 			) : loading ? (
 				<Skeleton className="h-72 rounded-2xl" />
 			) : attempts.length === 0 ? (
-				<Note>График появится после первой попытки.</Note>
+				<EmptyState size="sm" description="График появится после первой попытки." />
 			) : periodAttempts.length === 0 ? (
-				<Note>За этот период попыток нет.</Note>
+				<EmptyState size="sm" description="За этот период попыток нет." />
 			) : (
 				<AttemptChart attempts={periodAttempts} config={config} />
 			)}

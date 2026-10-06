@@ -25,6 +25,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { AttemptChart } from '@/components/charts/AttemptChart'
 import { ChartPeriodPicker } from '@/components/charts/ChartPeriodPicker'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
 import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
 import { Panel } from '@/components/page/Panel'
@@ -141,14 +142,6 @@ function ProfileSectionCard({
 				children
 			)}
 		</Panel>
-	)
-}
-
-function EmptyProfileState({ children }: { children: ReactNode }) {
-	return (
-		<div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-			{children}
-		</div>
 	)
 }
 
@@ -651,7 +644,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			<div className="grid gap-4 tab:grid-cols-2">
 				<ProfileSectionCard title="Контакты">
 					{contacts.length === 0 ? (
-						<EmptyProfileState>Контакты не указаны</EmptyProfileState>
+						<EmptyState size="sm" description="Контакты не указаны" />
 					) : (
 						<dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
 							{contacts.map((row) => (
@@ -877,9 +870,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					)}
 
 					{attempts.length === 0 ? (
-						<EmptyProfileState>Отправленных попыток пока нет</EmptyProfileState>
+						<EmptyState size="sm" description="Отправленных попыток пока нет" />
 					) : filteredAttempts.length === 0 ? (
-						<EmptyProfileState>Ничего не найдено</EmptyProfileState>
+						<EmptyState size="sm" description="Ничего не найдено" />
 					) : (
 						<div className="space-y-3">
 							<AttemptsTable attempts={visibleAttempts} colorBySlug={topicColorBySlug} />
@@ -894,7 +887,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			<div className="grid gap-4 lg:grid-cols-2">
 				<ProfileSectionCard title="Назначенные тесты" loading={assignmentsLoading} sources={[assignmentsSource]}>
 					{assignments.length === 0 ? (
-						<EmptyProfileState>Нет назначенных тестов</EmptyProfileState>
+						<EmptyState size="sm" description="Нет назначенных тестов" />
 					) : (
 						<AssignmentsTable assignments={assignments} removingTestId={removingTestId} onRemove={handleRemove} />
 					)}
@@ -906,9 +899,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					sources={[testsSource, assignmentsSource]}
 				>
 					{(testsData?.tests ?? []).length === 0 ? (
-						<EmptyProfileState>Нет доступных тестов</EmptyProfileState>
+						<EmptyState size="sm" description="Нет доступных тестов" />
 					) : availableTests.length === 0 ? (
-						<EmptyProfileState>Все тесты уже назначены</EmptyProfileState>
+						<EmptyState size="sm" description="Все тесты уже назначены" />
 					) : (
 						<AssignableTestsTable tests={availableTests} assigningTestId={assigningTestId} onAssign={handleAssign} />
 					)}

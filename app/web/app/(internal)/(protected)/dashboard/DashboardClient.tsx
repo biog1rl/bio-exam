@@ -82,10 +82,6 @@ function SectionHeading({ title, children }: { title: string; children?: ReactNo
 	)
 }
 
-function EmptyPanel({ children }: { children: ReactNode }) {
-	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
-}
-
 const mainLinkClass =
 	'font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none'
 
@@ -409,11 +405,14 @@ export default function DashboardClient() {
 						{adminTopicsQuery.isLoading || adminTestsQuery.isLoading ? (
 							<Skeleton className="h-72 rounded-2xl" />
 						) : topics.length === 0 ? (
-							<EmptyPanel>
-								{can('zone', 'all')
-									? 'Нет тем для отображения.'
-									: 'Вам ещё не закреплены темы. Обратитесь к администратору.'}
-							</EmptyPanel>
+							<EmptyState
+								size="sm"
+								description={
+									can('zone', 'all')
+										? 'Нет тем для отображения.'
+										: 'Вам ещё не закреплены темы. Обратитесь к администратору.'
+								}
+							/>
 						) : (
 							<ContentChart topics={topics} tests={adminTests} config={chartConfigs.content} />
 						)}
@@ -422,7 +421,7 @@ export default function DashboardClient() {
 						{adminDashboardQuery.isLoading ? (
 							<Skeleton className="h-72 rounded-2xl" />
 						) : !adminDashboard ? (
-							<EmptyPanel>Нет данных об активности.</EmptyPanel>
+							<EmptyState size="sm" description="Нет данных об активности." />
 						) : (
 							<ActivityChart days={adminDashboard.dailyActivity} config={chartConfigs.activity} now={now} />
 						)}

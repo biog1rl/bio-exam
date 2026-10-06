@@ -6,6 +6,7 @@ import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
 import { ChartPeriodPicker } from '@/components/charts/ChartPeriodPicker'
+import { EmptyState } from '@/components/page/EmptyState'
 import { Panel } from '@/components/page/Panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChartSettingsState } from '@/lib/charts/api'
@@ -72,9 +73,7 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 				) : !data ? (
 					<Skeleton className="h-72 rounded-2xl" />
 				) : attempts.length === 0 ? (
-					<div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-						Нет попыток за выбранный период
-					</div>
+					<EmptyState size="sm" className="h-40 justify-center" description="Нет попыток за выбранный период" />
 				) : (
 					<AttemptChart attempts={attempts} config={config} />
 				)}
