@@ -8,7 +8,14 @@ const CursorSchema = z.tuple([
 	z
 		.string()
 		.regex(TIMESTAMP_PATTERN)
-		.refine((value) => Number.isFinite(Date.parse(value))),
+		.refine((value) => {
+			const ms = Date.parse(value)
+			return (
+				Number.isFinite(ms) &&
+				!value.startsWith('0000') &&
+				new Date(ms).toISOString().slice(0, 23) === value.slice(0, 23)
+			)
+		}),
 	z.string().uuid(),
 ])
 

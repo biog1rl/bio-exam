@@ -1,7 +1,7 @@
 const BADGE_LIMIT = 9
 const TITLE_PREFIX = /^\(\d+\+?\) /
 
-const INTERNAL_HREF = /^\/(?![/\\])/
+const INTERNAL_HREF = /^\/(?![/\\])[^\u0000-\u001F\u007F]*$/
 
 const pluralRules = new Intl.PluralRules('ru')
 
