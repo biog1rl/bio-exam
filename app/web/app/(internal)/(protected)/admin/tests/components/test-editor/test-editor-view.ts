@@ -1,6 +1,6 @@
 import { questionPreview } from '@/lib/tests/question-preview'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
-import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
+import { cycleSort, type TableSort, matchesNeedle, searchNeedle, sortRows } from '@/lib/utils/table-sort'
 
 import type { Question, TestFormData } from '../../types'
 
@@ -118,7 +118,7 @@ export function questionText(question: Question): string {
 }
 
 export function filterQuestions(questions: readonly Question[], query: string): QuestionListEntry[] {
-	const needle = query.trim().toLocaleLowerCase('ru')
+	const needle = searchNeedle(query)
 	const byNumber = /^\d+$/.test(needle)
 	return questions
 		.map((question, index) => ({ question, index }))
@@ -137,8 +137,7 @@ function compareEntries(a: QuestionListEntry, b: QuestionListEntry, key: Questio
 }
 
 export function sortEntries(entries: readonly QuestionListEntry[], sort: QuestionSort): QuestionListEntry[] {
-	const sign = sort.direction === 'asc' ? 1 : -1
-	return [...entries].sort((a, b) => sign * compareEntries(a, b, sort.key) || a.index - b.index)
+	return sortRows(entries, sort, compareEntries)
 }
 
 export function nextSort(current: QuestionSort, key: QuestionSortKey): QuestionSort {
@@ -165,12 +164,8 @@ export function accessStatusCounts(rows: readonly { isActive: boolean }[]): Reco
 }
 
 export function filterAssignments<T extends AccessRow>(rows: readonly T[], query: string, status: UserStatus): T[] {
-	const needle = query.trim().toLocaleLowerCase('ru')
-	return rows.filter((row) => {
-		if (!matchesUserStatus(row.isActive, status)) return false
-		if (!needle) return true
-		return [row.name, row.login].some((value) => value?.toLocaleLowerCase('ru').includes(needle))
-	})
+	const needle = searchNeedle(query)
+	return rows.filter((row) => matchesUserStatus(row.isActive, status) && matchesNeedle(needle, [row.name, row.login]))
 }
 
 export function totalPoints(questions: readonly Question[]): number {

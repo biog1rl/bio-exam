@@ -36,7 +36,7 @@ import {
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import {
 	attemptsUrl,
-	formatDay,
+	dayParam,
 	nextAttemptsSort,
 	parseAttemptsUrl,
 	parseDay,
@@ -205,8 +205,8 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	}
 
 	const selectPeriod = (range: DateRange | undefined) => {
-		const from = range?.from ? formatDay(range.from) : null
-		const to = range?.to ? formatDay(range.to) : null
+		const from = range?.from ? dayParam(range.from) : null
+		const to = range?.to ? dayParam(range.to) : null
 		updateUrl({ from, to: to === from ? null : to })
 		if (from && to && to !== from) setPeriodOpen(false)
 	}
