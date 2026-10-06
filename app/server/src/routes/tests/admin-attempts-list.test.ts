@@ -72,6 +72,20 @@ function rowsOf(reply: Reply): AttemptRow[] {
 	return reply.body.rows as AttemptRow[]
 }
 
+async function allRows(profile: ZoneProfile, params: Record<string, string>): Promise<AttemptRow[]> {
+	const rows: AttemptRow[] = []
+	for (;;) {
+		const page = ok(await list(profile, { ...params, limit: '100', offset: String(rows.length) }))
+		const next = rowsOf(page)
+		rows.push(...next)
+		if (next.length === 0 || rows.length >= Number(page.body.total)) return rows
+	}
+}
+
+function attemptIdsOf(rows: AttemptRow[]): string[] {
+	return rows.map((row) => row.attemptId)
+}
+
 function facetsOf(reply: Reply): Facets {
 	const facets = reply.body.facets as Facets | undefined
 	assert.ok(facets && Array.isArray(facets.topics) && Array.isArray(facets.students), 'нет facets')
@@ -257,6 +271,72 @@ describe('GET /api/tests/admin/attempts: фильтры на сервере и �
 		assert.equal(reply.body.total, 3)
 	})
 
+	test('topic и student принимают списки через запятую', async () => {
+		const bothTopics = ok(await list('admin', { topic: `${w.topics.X.slug},${w.topics.Y.slug}`, limit: '1' }))
+		assert.equal(bothTopics.body.total, SEEDED_ALL + REVIEW_ADDED_ALL)
+		const withUnknown = ok(await list('admin', { topic: `${w.topics.Y.slug},нет-такой-темы` }))
+		assert.equal(withUnknown.body.total, 3)
+		assert.ok(rowsOf(withUnknown).every((row) => row.topicSlug === w.topics.Y.slug))
+
+		const students = ok(await list('admin', { student: `${oldStudent.id},${inactiveStudent.id}` }))
+		assert.deepEqual(
+			attemptIdsOf(rowsOf(students)).sort(),
+			[oldAttemptId, inactiveAttemptId, pendingInactiveAttemptId].sort()
+		)
+		assert.equal(students.body.total, 3)
+		const activeOnly = ok(await list('admin', { student: `${oldStudent.id},${inactiveStudent.id}`, status: 'active' }))
+		assert.deepEqual(attemptIdsOf(rowsOf(activeOnly)), [oldAttemptId])
+	})
+
+	test('result: один исход фильтрует строки и summary, оба исхода не фильтруют', async () => {
+		const all = ok(await list('admin', { limit: '1' }))
+		const passed = ok(await list('admin', { result: 'passed', limit: '100' }))
+		const failed = ok(await list('admin', { result: 'failed', limit: '100' }))
+		assert.ok(Number(passed.body.total) > 0 && Number(failed.body.total) > 0)
+		assert.ok(rowsOf(passed).every((row) => row.passed))
+		assert.ok(rowsOf(failed).every((row) => !row.passed))
+		const pending = (all.body.summary as { pendingTotal: number }).pendingTotal
+		assert.equal(Number(passed.body.total) + Number(failed.body.total) + pending, all.body.total)
+		assert.equal(passed.body.total, (all.body.summary as { passed: number }).passed)
+		assert.equal((failed.body.summary as { passed: number }).passed, 0)
+		const both = ok(await list('admin', { result: 'passed,failed', limit: '1' }))
+		assert.equal(both.body.total, all.body.total)
+	})
+
+	test('sort и dir: по баллу и по ученику в устойчивом порядке, дата по возрастанию начинается со старой', async () => {
+		const byScore = await allRows('admin', { sort: 'score', dir: 'asc' })
+		assert.equal(byScore.length, SEEDED_ALL + REVIEW_ADDED_ALL)
+		const graded = byScore.filter((row) => row.scorePercentage !== null)
+		const pendingLast = byScore.slice(graded.length)
+		assert.ok(
+			pendingLast.every((row) => row.scorePercentage === null),
+			'попытки на проверке в конце'
+		)
+		for (let index = 1; index < byScore.length; index += 1) {
+			assert.ok(
+				(byScore[index - 1].scorePercentage ?? Infinity) <= (byScore[index].scorePercentage ?? Infinity),
+				`балл на позиции ${index}`
+			)
+		}
+		const byScoreDesc = await allRows('admin', { sort: 'score', dir: 'desc' })
+		assert.deepEqual(attemptIdsOf(byScoreDesc.slice(0, graded.length)), attemptIdsOf(graded).reverse())
+		assert.deepEqual(attemptIdsOf(byScoreDesc.slice(graded.length)).sort(), attemptIdsOf(pendingLast).sort())
+
+		const byStudent = await allRows('admin', { sort: 'student', dir: 'asc' })
+		assert.equal(byStudent.length, SEEDED_ALL + REVIEW_ADDED_ALL)
+		const names = byStudent.map((row) => row.studentName)
+		const blocks = names.filter((name, index) => index === 0 || name !== names[index - 1])
+		assert.equal(new Set(blocks).size, blocks.length, 'попытки одного ученика идут подряд')
+		assert.deepEqual(attemptIdsOf(await allRows('admin', { sort: 'student', dir: 'asc' })), attemptIdsOf(byStudent))
+		assert.deepEqual(
+			attemptIdsOf(await allRows('admin', { sort: 'student', dir: 'desc' })),
+			attemptIdsOf(byStudent).reverse()
+		)
+
+		const oldestFirst = ok(await list('admin', { sort: 'date', dir: 'asc', limit: '1' }))
+		assert.deepEqual(attemptIdsOf(rowsOf(oldestFirst)), [oldAttemptId])
+	})
+
 	test('q ищет без учёта регистра по тесту, теме и имени и экранирует % _ \\', async () => {
 		const byTest = ok(await list('admin', { q: `${w.prefix.toUpperCase()}-TX2` }))
 		assert.deepEqual(
@@ -363,6 +443,11 @@ describe('GET /api/tests/admin/attempts: фильтры на сервере и �
 			{ review: 'PENDING' },
 			{ from: 'вчера' },
 			{ to: '2020-13-45' },
+			{ student: `${oldStudent.id},not-a-uuid` },
+			{ topic: 'a'.repeat(201) },
+			{ result: 'maybe' },
+			{ sort: 'topic' },
+			{ dir: 'up' },
 		]
 		for (const params of invalid) {
 			const reply = await list('admin', params)
@@ -519,5 +604,57 @@ describe('зона только из попыток на проверке', () =
 		assert.equal(daily.length, 1)
 		assert.equal(daily[0]?.attempts, 1)
 		assert.equal(daily[0]?.averageScore, null)
+	})
+})
+
+describe('GET /api/tests/public/tests/:id/chart-data', () => {
+	test('отдаёт только свои проверенные попытки внутри периода по возрастанию времени', async () => {
+		const testId = w.tests.tX.id
+		const admin = w.users.admin
+		const early = await insertAttempt({
+			testId,
+			userId: admin.id,
+			submittedAt: '2026-01-10T09:00:00.000Z',
+			score: 30,
+			passed: false,
+		})
+		const first = await insertAttempt({
+			testId,
+			userId: admin.id,
+			submittedAt: '2026-03-01T09:00:00.000Z',
+			score: 40,
+			passed: false,
+		})
+		const second = await insertAttempt({
+			testId,
+			userId: admin.id,
+			submittedAt: '2026-03-02T09:00:00.000Z',
+			score: 80,
+			passed: true,
+		})
+		await insertAttempt({
+			testId,
+			userId: w.users.teacherA.id,
+			submittedAt: '2026-03-01T10:00:00.000Z',
+			score: 90,
+			passed: true,
+		})
+		await insertReviewAttempt({ testId, userId: admin.id })
+
+		const reply = ok(
+			await call(ctx, 'GET', `/api/tests/public/tests/${testId}/chart-data?from=2026-02-01T00:00:00.000Z`, {
+				cookies: admin.cookie,
+			})
+		)
+		const attempts = reply.body.attempts as Json[]
+		assert.deepEqual(
+			attempts.map((row) => [row.id, row.scorePercentage, row.passed, row.earnedPoints, row.totalPoints]),
+			[
+				[first, 40, false, 40, 100],
+				[second, 80, true, 80, 100],
+			]
+		)
+		assert.ok(attempts.every((row) => typeof row.submittedAt === 'string'))
+		assert.ok(!attempts.some((row) => row.id === early))
 	})
 })

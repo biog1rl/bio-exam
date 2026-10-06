@@ -99,11 +99,14 @@ describe('AUTH-01-db-error: ошибка БД прав', () => {
 describe('AUTH-02-role-removed: снятие роли после входа', () => {
 	let adminJar: CookieJar | null = null
 
-	test('подготовка: admin вошёл, /api/rbac/roles и /api/settings/chart-default-range отвечают 200', async () => {
+	test('подготовка: admin вошёл, /api/rbac/roles и PUT /api/settings/charts отвечают 200', async () => {
 		const admin = await login(ctx, 'defect_role_admin', PASSWORD)
 		assert.equal(admin.status, 200)
 		assert.equal((await call(ctx, 'GET', '/api/rbac/roles', { cookies: admin.jar })).status, 200)
-		assert.equal((await call(ctx, 'GET', '/api/settings/chart-default-range', { cookies: admin.jar })).status, 200)
+		assert.equal(
+			(await call(ctx, 'PUT', '/api/settings/charts', { cookies: admin.jar, body: { configs: {} } })).status,
+			200
+		)
 		adminJar = admin.jar
 	})
 
@@ -115,7 +118,7 @@ describe('AUTH-02-role-removed: снятие роли после входа', ()
 			id,
 		])
 		const roles = await call(ctx, 'GET', '/api/rbac/roles', { cookies: jar })
-		const settings = await call(ctx, 'GET', '/api/settings/chart-default-range', { cookies: jar })
+		const settings = await call(ctx, 'PUT', '/api/settings/charts', { cookies: jar, body: { configs: {} } })
 		assert.deepEqual([roles.status, settings.status], [403, 403])
 	})
 })

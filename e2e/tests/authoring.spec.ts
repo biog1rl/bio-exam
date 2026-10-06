@@ -255,9 +255,11 @@ test.describe.serial('D-34: test export', () => {
 
 			await page.goto(testPageUrl(seeded.slug))
 			await expect(page.getByRole('heading', { level: 1, name: seeded.title })).toBeVisible()
-			await page.getByRole('button', { name: 'Экспорт', exact: true }).click()
+			await page.getByRole('button', { name: 'Действия с тестом', exact: true }).click()
 			const downloaded = page.waitForEvent('download')
-			await page.getByRole('menuitem', { name: withAnswers ? 'С ответами' : 'Без ответов', exact: true }).click()
+			await page
+				.getByRole('menuitem', { name: withAnswers ? 'Экспорт с ответами' : 'Экспорт без ответов', exact: true })
+				.click()
 			const download = await downloaded
 
 			expect(download.suggestedFilename()).toBe(`${TOPIC_SLUG}-${seeded.slug}.zip`)

@@ -6,10 +6,10 @@ import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { PageHeader } from '@/components/page/PageHeader'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AvatarEditor } from '@/components/users/AvatarEditor'
@@ -38,37 +38,19 @@ interface ProfileClientProps {
 	initialData: ProfileData
 }
 
-function ProfilePanel({
-	title,
-	kicker,
-	description,
-	children,
-	className = '',
-}: {
-	title: string
-	kicker: string
-	description?: string
-	children: ReactNode
-	className?: string
-}) {
+function ProfilePanel({ title, children }: { title: string; children: ReactNode }) {
 	return (
-		<Card className={`rounded-4xl border-border/80 bg-card/90 ${className}`}>
-			<CardHeader>
-				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
-				<CardTitle className="font-serif text-2xl leading-tight">{title}</CardTitle>
-				{description ? <CardDescription>{description}</CardDescription> : null}
-			</CardHeader>
-			<CardContent>{children}</CardContent>
-		</Card>
+		<section className="space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
+			<h2 className="text-lg font-semibold">{title}</h2>
+			{children}
+		</section>
 	)
 }
 
 function FormField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
 	return (
 		<div className="space-y-2">
-			<Label htmlFor={id} className="font-mono text-[0.6875rem] tracking-[0.16em] text-muted-foreground uppercase">
-				{label}
-			</Label>
+			<Label htmlFor={id}>{label}</Label>
 			{children}
 		</div>
 	)
@@ -205,23 +187,13 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 	}
 
 	return (
-		<div className="space-y-6">
-			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
-				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">профиль</p>
-				<h1 className="mt-2 font-serif text-3xl leading-none text-foreground mob:text-4xl tab-sm:text-5xl">Профиль</h1>
-				<p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-					Настройте публичные данные, аватар и параметры доступа к аккаунту.
-				</p>
-			</section>
+		<div className="space-y-4">
+			<PageHeader title="Профиль" />
 
-			<div className="grid gap-6 tab:grid-cols-2">
+			<div className="grid gap-4 tab:grid-cols-2">
 				{canEditAvatar && (
-					<div className="space-y-6">
-						<ProfilePanel
-							kicker="визуальный маркер"
-							title="Аватар"
-							description="Загрузите фото или настройте инициалы и цвет аватара"
-						>
+					<div className="space-y-4">
+						<ProfilePanel title="Аватар">
 							<div className="flex justify-center rounded-3xl bg-secondary/70 p-unit-mob tab-sm:p-unit">
 								<AvatarEditor
 									firstName={profileData.firstName}
@@ -246,8 +218,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 					</div>
 				)}
 
-				<div className={`space-y-6 ${!canEditAvatar ? 'max-w-xl tab:col-span-2' : ''}`}>
-					<ProfilePanel kicker="данные" title="Основная информация" description="Редактируйте свои данные">
+				<div className={`space-y-4 ${!canEditAvatar ? 'max-w-xl tab:col-span-2' : ''}`}>
+					<ProfilePanel title="Основная информация">
 						<div className="space-y-4">
 							<div className="grid gap-4 mob:grid-cols-2">
 								<FormField id="firstName" label="Имя">
@@ -276,10 +248,8 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 								/>
 							</FormField>
 							{myGroups.length > 0 && (
-								<div className="flex flex-wrap items-center gap-2 rounded-3xl bg-secondary/70 px-4 py-3">
-									<span className="font-mono text-[0.6875rem] tracking-[0.16em] text-muted-foreground uppercase">
-										Группы
-									</span>
+								<div className="flex flex-wrap items-center gap-2">
+									<span className="text-sm text-muted-foreground">Группы</span>
 									{myGroups.map((g) => (
 										<Badge key={g.id} variant="secondary" className="max-w-full rounded-full">
 											<span className="truncate">{g.name}</span>
@@ -293,7 +263,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 						</div>
 					</ProfilePanel>
 
-					<ProfilePanel kicker="доступ" title="Безопасность" description="Смена пароля">
+					<ProfilePanel title="Смена пароля">
 						<div className="space-y-4">
 							<FormField id="oldPassword" label="Текущий пароль">
 								<Input
@@ -328,12 +298,10 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 						</div>
 					</ProfilePanel>
 
-					<ProfilePanel kicker="сессия" title="Выход из аккаунта" description="Завершить текущую сессию">
-						<div className="rounded-3xl bg-secondary/60 p-unit-mob">
-							<Button onClick={handleLogout} variant="destructive" className="w-full">
-								Выйти из аккаунта
-							</Button>
-						</div>
+					<ProfilePanel title="Выход из аккаунта">
+						<Button onClick={handleLogout} variant="destructive" className="w-full">
+							Выйти из аккаунта
+						</Button>
 					</ProfilePanel>
 				</div>
 			</div>

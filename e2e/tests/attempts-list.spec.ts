@@ -5,6 +5,9 @@ import { horizontalOverflow, lowContrastTexts } from '../fixtures/page-checks'
 
 const LIST_PATH = '/api/tests/admin/attempts'
 const MOCK_QUERY = 'e2e-показать-ещё'
+const FILTER_QUERY = 'e2e-фильтры-попыток'
+const STUDENT_ID = '00000000-0000-4000-8000-000000000002'
+const INACTIVE_STUDENT_ID = '00000000-0000-4000-8000-000000000003'
 
 function attempt(id: string, title: string) {
 	return {
@@ -14,7 +17,7 @@ function attempt(id: string, title: string) {
 		testSlug: 'mock-test',
 		topicSlug: 'mock-topic',
 		topicTitle: 'Тема догрузки',
-		studentId: '00000000-0000-4000-8000-000000000002',
+		studentId: STUDENT_ID,
 		studentIsActive: true,
 		studentName: 'Ученик догрузки',
 		submittedAt: '2026-10-01T10:00:00.000Z',
@@ -85,34 +88,36 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 			const url = new URL(request.url())
 			return url.pathname === LIST_PATH && url.searchParams.get('q') === query
 		})
-		await browserPage.getByPlaceholder('Поиск по студенту, тесту, теме').fill(query)
+		await browserPage.getByRole('searchbox', { name: 'Поиск попыток' }).fill(query)
 		const request = await searched
 		expect(new URL(request.url()).searchParams.get('status')).toBe('active')
-		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toBeVisible()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts\?q=/)
+		await expect(browserPage.getByText('Ничего не найдено', { exact: true })).toBeVisible()
 
-		await browserPage.getByRole('button', { name: 'Сбросить' }).click()
-		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toHaveCount(0)
+		await browserPage.getByRole('button', { name: 'Сбросить фильтры' }).click()
+		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
+		await expect(browserPage.getByRole('searchbox', { name: 'Поиск попыток' })).toHaveValue('')
+		await expect(browserPage.getByText('Ничего не найдено', { exact: true })).toHaveCount(0)
 	})
 
 	test('filters come from the address and the address follows the filters', async ({ adminPage: browserPage }) => {
 		await browserPage.goto('/admin/attempts?topic=e2e-no-such-topic')
-		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toBeVisible()
+		await expect(browserPage.getByText('Ничего не найдено', { exact: true })).toBeVisible()
 		await expect(browserPage).toHaveURL(/\/admin\/attempts\?topic=e2e-no-such-topic$/)
 
-		await browserPage.goto('/admin/attempts?status=all')
-		await expect(browserPage).toHaveURL(/\/admin\/attempts\?status=all$/)
-		await browserPage.getByRole('button', { name: 'Сбросить' }).click()
+		await browserPage.goto('/admin/attempts?topic=e2e-no-such-topic&status=all&q=e2e')
+		await expect(browserPage.getByRole('searchbox', { name: 'Поиск попыток' })).toHaveValue('e2e')
+		await browserPage.getByRole('button', { name: 'Сбросить фильтры' }).click()
 		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
 	})
 
-	test('a filter picked on the page resets when the menu opens the bare list again', async ({
+	test('a search typed on the page resets when the menu opens the bare list again', async ({
 		adminPage: browserPage,
 	}, testInfo) => {
 		await browserPage.goto('/admin/attempts')
-		await browserPage.getByRole('button', { name: 'Статус студентов' }).click()
-		await browserPage.getByRole('menuitemradio', { name: 'Все' }).click()
-		await expect(browserPage).toHaveURL(/\/admin\/attempts\?status=all$/)
-		await expect(browserPage.getByRole('button', { name: 'Сбросить' })).toBeEnabled()
+		const search = browserPage.getByRole('searchbox', { name: 'Поиск попыток' })
+		await search.fill('e2e-сброс-меню')
+		await expect(browserPage).toHaveURL(/\/admin\/attempts\?q=/)
 
 		if (projectKey(testInfo) === 'mobile') await browserPage.getByRole('button', { name: 'Открыть меню' }).click()
 		await browserPage
@@ -120,7 +125,72 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 			.getByRole('link', { name: 'Попытки', exact: true })
 			.click()
 		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
-		await expect(browserPage.locator('button:enabled', { hasText: 'Сбросить' })).toHaveCount(0)
+		await expect(search).toHaveValue('')
+	})
+
+	test('column filters and sort go to the server and stay in the address', async ({ adminPage: browserPage }) => {
+		const requests: URLSearchParams[] = []
+		await browserPage.route(
+			(url) => url.pathname === LIST_PATH && url.searchParams.get('q') === FILTER_QUERY,
+			async (route: Route) => {
+				requests.push(new URL(route.request().url()).searchParams)
+				return route.fulfill({
+					json: {
+						...page([FIRST, SECOND], 0),
+						facets: {
+							topics: [{ slug: 'mock-topic', title: 'Тема догрузки' }],
+							students: [
+								{ id: STUDENT_ID, name: 'Ученик догрузки', isActive: true },
+								{ id: INACTIVE_STUDENT_ID, name: 'Ученик неактивный', isActive: false },
+							],
+						},
+					},
+				})
+			}
+		)
+		const last = (name: string) => requests.at(-1)?.get(name) ?? null
+
+		await browserPage.goto('/admin/attempts')
+		await browserPage.getByRole('searchbox', { name: 'Поиск попыток' }).fill(FILTER_QUERY)
+		const firstRow = browserPage
+			.getByRole('row')
+			.filter({ has: browserPage.locator(`a[href="/admin/attempts/${FIRST.attemptId}"]`) })
+		await expect(firstRow).toContainText('Ученик догрузки')
+		await expect(firstRow).toContainText('50%')
+
+		await browserPage.getByRole('button', { name: 'Фильтр по результату' }).click()
+		await browserPage.getByRole('menuitemcheckbox', { name: /^Не пройден/ }).click()
+		await browserPage.keyboard.press('Escape')
+		await expect(browserPage).toHaveURL(/[?&]result=failed(&|$)/)
+		await expect.poll(() => last('result')).toBe('failed')
+
+		await browserPage.getByRole('button', { name: 'Фильтр по темам' }).click()
+		await browserPage.getByRole('menuitemcheckbox', { name: /^Тема догрузки/ }).click()
+		await browserPage.keyboard.press('Escape')
+		await expect(browserPage).toHaveURL(/[?&]topic=mock-topic(&|$)/)
+		await expect.poll(() => last('topic')).toBe('mock-topic')
+
+		const resultHead = browserPage.getByRole('columnheader', { name: /Результат/ })
+		await resultHead.getByRole('button', { name: 'Результат', exact: true }).click()
+		await expect(resultHead).toHaveAttribute('aria-sort', 'ascending')
+		await expect(browserPage).toHaveURL(/[?&]sort=score-asc(&|$)/)
+		await expect.poll(() => [last('sort'), last('dir')]).toEqual(['score', 'asc'])
+
+		await browserPage.getByRole('button', { name: 'Фильтр по ученикам' }).click()
+		await expect(browserPage.getByRole('option', { name: /^Ученик неактивный/ })).toHaveCount(0)
+		await browserPage.getByRole('option', { name: /^Неактивные/ }).click()
+		await expect(browserPage).toHaveURL(/[?&]status=all(&|$)/)
+		await browserPage.getByRole('option', { name: /^Ученик неактивный/ }).click()
+		await expect(browserPage).toHaveURL(new RegExp(`[?&]student=${INACTIVE_STUDENT_ID}(&|$)`))
+		await expect.poll(() => [last('status'), last('student')]).toEqual(['all', INACTIVE_STUDENT_ID])
+
+		await browserPage.getByRole('button', { name: 'Сбросить', exact: true }).click()
+		await browserPage.keyboard.press('Escape')
+		await expect(browserPage).toHaveURL(/[?&]status=all(&|$)/)
+		await expect(browserPage).not.toHaveURL(/[?&]student=/)
+
+		await firstRow.click({ position: { x: 6, y: 6 } })
+		await expect(browserPage).toHaveURL(new RegExp(`/admin/attempts/${FIRST.attemptId}$`))
 	})
 
 	test('«Показать ещё» appends the next page, keeps rows after a failure and hides at total', async ({
@@ -140,13 +210,13 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 
 		await browserPage.goto('/admin/attempts')
 		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
-		await browserPage.getByPlaceholder('Поиск по студенту, тесту, теме').fill(MOCK_QUERY)
+		await browserPage.getByRole('searchbox', { name: 'Поиск попыток' }).fill(MOCK_QUERY)
 
 		const firstRow = browserPage.locator(`a[href="/admin/attempts/${FIRST.attemptId}"]`)
 		const secondRow = browserPage.locator(`a[href="/admin/attempts/${SECOND.attemptId}"]`)
 		const more = browserPage.getByRole('button', { name: 'Показать ещё' })
 		await expect(firstRow).toBeVisible()
-		await expect(browserPage.getByText('1 из 2')).toBeVisible()
+		await expect(browserPage.getByText(/^Показано 1 из 2$/)).toBeVisible()
 
 		const failed = browserPage.waitForResponse(
 			(response) =>
@@ -168,7 +238,7 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		expect(nextPageCalls).toBe(2)
 	})
 
-	test('a pending attempt shows the chip without a percent and the review filter follows the tile', async ({
+	test('a pending attempt shows the chip without a percent and the review filter follows the toggle', async ({
 		adminPage: browserPage,
 	}) => {
 		await browserPage.route(
@@ -189,10 +259,14 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 
 		await browserPage.goto('/admin/attempts')
 		await expect(browserPage.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
-		await browserPage.getByPlaceholder('Поиск по студенту, тесту, теме').fill(REVIEW_QUERY)
+		await browserPage.getByRole('searchbox', { name: 'Поиск попыток' }).fill(REVIEW_QUERY)
 
-		const pendingRow = browserPage.locator(`a[href="/admin/attempts/${PENDING.attemptId}"]`)
-		const gradedRow = browserPage.locator(`a[href="/admin/attempts/${GRADED.attemptId}"]`)
+		const pendingRow = browserPage
+			.getByRole('row')
+			.filter({ has: browserPage.locator(`a[href="/admin/attempts/${PENDING.attemptId}"]`) })
+		const gradedRow = browserPage
+			.getByRole('row')
+			.filter({ has: browserPage.locator(`a[href="/admin/attempts/${GRADED.attemptId}"]`) })
 		await expect(pendingRow).toBeVisible()
 		await expect(pendingRow).toContainText('На проверке')
 		await expect(pendingRow).toContainText('авто 1 из 1')
@@ -208,45 +282,36 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		expect(lowContrast).toEqual([])
 		expect(await horizontalOverflow(browserPage)).toEqual([])
 
-		const tile = browserPage.getByRole('button', { name: '1 на проверке' })
-		const select = browserPage.getByRole('combobox', { name: 'Проверка' })
-		await expect(tile).toHaveAttribute('aria-pressed', 'false')
-		await expect(select).toHaveText('Проверка: все')
-
-		await tile.click()
-		await expect(browserPage).toHaveURL(/\/admin\/attempts\?review=pending$/)
-		await expect(select).toHaveText('На проверке')
-		await expect(tile).toHaveAttribute('aria-pressed', 'true')
+		const toggle = browserPage.getByRole('button', { name: '1 на проверке' })
+		await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+		await toggle.click()
+		await expect(browserPage).toHaveURL(/review=pending/)
+		await expect(toggle).toHaveAttribute('aria-pressed', 'true')
 		await expect(gradedRow).toHaveCount(0)
-		const averageTile = browserPage.getByText('средний результат').locator('..')
-		await expect(averageTile).toContainText('—')
-		await expect(averageTile).toContainText('без попыток на проверке')
 
-		await tile.click()
-		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
-		await expect(select).toHaveText('Проверка: все')
+		await toggle.click()
+		await expect(browserPage).not.toHaveURL(/review=/)
 		await expect(gradedRow).toBeVisible()
 	})
 
-	test('the review filter lives in the address, resets with «Сбросить» and has its own empty states', async ({
+	test('the review filter lives in the address, resets with «Сбросить фильтры» and has its own empty states', async ({
 		teacherPage: browserPage,
 	}) => {
 		await browserPage.goto('/admin/attempts?review=pending')
-		await expect(browserPage.getByRole('combobox', { name: 'Проверка' })).toHaveText('На проверке')
-		await expect(browserPage.getByRole('heading', { name: 'Нет попыток на проверке' })).toBeVisible()
+		await expect(browserPage.getByRole('button', { name: '0 на проверке' })).toHaveAttribute('aria-pressed', 'true')
+		await expect(browserPage.getByText('Нет попыток на проверке')).toBeVisible()
 		await expect(
 			browserPage.getByText('Здесь появятся сданные попытки, в которых есть ответы, ожидающие проверки учителем.')
 		).toBeVisible()
 
 		await browserPage.goto('/admin/attempts?review=graded')
-		await expect(browserPage.getByRole('heading', { name: 'Нет проверенных попыток' })).toBeVisible()
+		await expect(browserPage.getByText('Нет проверенных попыток')).toBeVisible()
 
 		await browserPage.goto('/admin/attempts?review=graded&topic=e2e-no-such-topic')
-		await expect(browserPage.getByRole('heading', { name: 'Ничего не найдено' })).toBeVisible()
+		await expect(browserPage.getByText('Ничего не найдено')).toBeVisible()
 
-		await browserPage.getByRole('button', { name: 'Сбросить' }).click()
+		await browserPage.getByRole('button', { name: 'Сбросить фильтры' }).click()
 		await expect(browserPage).toHaveURL(/\/admin\/attempts$/)
-		await expect(browserPage.getByRole('combobox', { name: 'Проверка' })).toHaveText('Проверка: все')
-		await expect(browserPage.getByRole('button', { name: '0 на проверке' })).toBeDisabled()
+		await expect(browserPage.getByRole('button', { name: /на проверке$/ })).toHaveCount(0)
 	})
 })

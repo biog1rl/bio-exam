@@ -36,24 +36,44 @@ function isEmptyScope(scope: TestScope): boolean {
 	return !scope.all && scope.topicIds.length === 0
 }
 
+const MAX_LIST_ITEMS = 100
+
+function listParam<T extends z.ZodTypeAny>(item: T) {
+	return z
+		.string()
+		.transform((value) =>
+			value
+				.split(',')
+				.map((part) => part.trim())
+				.filter((part) => part.length > 0)
+		)
+		.pipe(z.array(item).max(MAX_LIST_ITEMS))
+		.optional()
+}
+
 const AttemptsQuerySchema = z.object({
 	limit: z.coerce.number().int().min(1).max(100).default(50),
 	offset: z.coerce.number().int().min(0).default(0),
 	q: z.string().trim().max(200).default(''),
-	topic: z.string().trim().min(1).max(200).optional(),
-	student: z.string().uuid().optional(),
+	topic: listParam(z.string().max(200)),
+	student: listParam(z.string().uuid()),
+	result: listParam(z.enum(['passed', 'failed'])),
 	from: z.string().datetime({ offset: true }).optional(),
 	to: z.string().datetime({ offset: true }).optional(),
 	status: z.enum(['active', 'inactive', 'all']).default('all'),
 	review: z.enum(['all', 'pending', 'graded']).default('all'),
+	sort: z.enum(['date', 'score', 'student', 'test']).default('date'),
+	dir: z.enum(['asc', 'desc']).default('desc'),
 })
 
 type AttemptsQuery = z.infer<typeof AttemptsQuerySchema>
 
 function attemptFilters(scope: TestScope, query: AttemptsQuery): Array<SQL | undefined> {
 	const filters: Array<SQL | undefined> = []
-	if (query.topic) filters.push(eq(topics.slug, query.topic))
-	if (query.student) filters.push(eq(users.id, query.student))
+	if (query.topic?.length) filters.push(inArray(topics.slug, query.topic))
+	if (query.student?.length) filters.push(inArray(users.id, query.student))
+	const results = new Set(query.result)
+	if (results.size === 1) filters.push(eq(testAttempts.finalPassed, results.has('passed')))
 	if (query.from) filters.push(gte(testAttempts.submittedAt, new Date(query.from)))
 	if (query.to) filters.push(lte(testAttempts.submittedAt, new Date(query.to)))
 	if (query.status !== 'all') filters.push(eq(users.isActive, query.status === 'active'))
@@ -70,6 +90,32 @@ function attemptFilters(scope: TestScope, query: AttemptsQuery): Array<SQL | und
 		)
 	}
 	return filters
+}
+
+function attemptsOrder(scope: TestScope, query: AttemptsQuery): SQL[] {
+	const direction = query.dir === 'asc' ? asc : desc
+	const primary =
+		query.sort === 'score'
+			? query.dir === 'asc'
+				? sql`${testAttempts.finalScorePercentage} asc nulls last`
+				: sql`${testAttempts.finalScorePercentage} desc nulls last`
+			: direction({ date: testAttempts.submittedAt, student: studentNameIn(scope), test: tests.title }[query.sort])
+	const order = [primary]
+	if (query.sort !== 'date') order.push(direction(testAttempts.submittedAt))
+	order.push(direction(testAttempts.id))
+	return order
+}
+
+const TIME_ZONE = /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/
+
+function activityTimeZone(value: unknown): string {
+	if (typeof value !== 'string' || !TIME_ZONE.test(value)) return 'UTC'
+	try {
+		new Intl.DateTimeFormat('en-US', { timeZone: value })
+		return value
+	} catch {
+		return 'UTC'
+	}
 }
 
 router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
@@ -118,9 +164,10 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			.orderBy(desc(testAttempts.submittedAt))
 			.limit(8)
 
+		const timeZone = activityTimeZone(req.query.tz)
 		const dailyActivity = await db
 			.select({
-				date: sql<string>`to_char(date_trunc('day', ${testAttempts.submittedAt}), 'YYYY-MM-DD')`,
+				date: sql<string>`to_char(date_trunc('day', ${testAttempts.submittedAt} at time zone ${timeZone}), 'YYYY-MM-DD')`,
 				attempts: sql<number>`count(*)::int`,
 				averageScore: sql<
 					number | null
@@ -128,9 +175,9 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			})
 			.from(testAttempts)
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
-			.where(and(visible, sql`${testAttempts.submittedAt} >= now() - interval '30 days'`))
-			.groupBy(sql`date_trunc('day', ${testAttempts.submittedAt})`)
-			.orderBy(sql`date_trunc('day', ${testAttempts.submittedAt})`)
+			.where(and(visible, sql`${testAttempts.submittedAt} >= now() - interval '31 days'`))
+			.groupBy(sql`1`)
+			.orderBy(sql`1`)
 
 		res.json({
 			summary: {
@@ -219,7 +266,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
 			.innerJoin(topics, eq(topics.id, tests.topicId))
 			.where(filtered)
-			.orderBy(desc(testAttempts.submittedAt), desc(testAttempts.id))
+			.orderBy(...attemptsOrder(scope, query))
 			.limit(limit)
 			.offset(offset)
 

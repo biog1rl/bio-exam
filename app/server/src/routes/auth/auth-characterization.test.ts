@@ -233,23 +233,23 @@ describe('исходы маршрутов D-04 до перевода на пра
 		})
 	}
 
-	const settingsCases: Array<[string, number]> = [
-		['char_admin', 200],
-		['d04_student', 403],
+	const settingsCases: Array<[string, number, number]> = [
+		['char_admin', 200, 200],
+		['d04_student', 200, 403],
 	]
 
-	for (const [name, status] of settingsCases) {
-		test(`GET /api/settings/chart-default-range: ${name} → ${status}`, async () => {
-			const reply = await call(ctx, 'GET', '/api/settings/chart-default-range', { cookies: jarOf(name) })
-			assert.equal(reply.status, status)
+	for (const [name, readStatus, writeStatus] of settingsCases) {
+		test(`GET /api/settings/charts: ${name} → ${readStatus}`, async () => {
+			const reply = await call(ctx, 'GET', '/api/settings/charts', { cookies: jarOf(name) })
+			assert.equal(reply.status, readStatus)
 		})
 
-		test(`PUT /api/settings/chart-default-range: ${name} → ${status}`, async () => {
-			const reply = await call(ctx, 'PUT', '/api/settings/chart-default-range', {
+		test(`PUT /api/settings/charts: ${name} → ${writeStatus}`, async () => {
+			const reply = await call(ctx, 'PUT', '/api/settings/charts', {
 				cookies: jarOf(name),
-				body: { value: 'week' },
+				body: { configs: {} },
 			})
-			assert.equal(reply.status, status)
+			assert.equal(reply.status, writeStatus)
 		})
 	}
 

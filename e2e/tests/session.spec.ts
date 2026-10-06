@@ -177,11 +177,9 @@ test('login page shows the 429 wait and re-enables on login change @session', as
 })
 
 async function openUserCard(page: Page, login: string): Promise<void> {
-	await page.getByPlaceholder('Поиск...').fill(login)
-	const container = page.locator('tr, article').filter({ has: page.getByRole('link', { name: login, exact: true }) })
-	const editButton = container.locator('button:visible').filter({ has: page.locator('svg.lucide-pencil') })
-	await expect(editButton).toHaveCount(1)
-	await editButton.click()
+	await page.getByRole('searchbox', { name: 'Поиск пользователей' }).fill(login)
+	await page.getByRole('button', { name: `Действия с пользователем ${login}`, exact: true }).click()
+	await page.getByRole('menuitem', { name: 'Изменить профиль' }).click()
 	await expect(page.getByRole('heading', { name: `Редактировать пользователя: ${login}` })).toBeVisible()
 }
 

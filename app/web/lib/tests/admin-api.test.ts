@@ -14,10 +14,8 @@ import { apiFetch } from '@/lib/session/client'
 import {
 	ATTEMPTS_LOAD_ERROR,
 	ATTEMPTS_PAGE_SIZE,
-	DEFAULT_ATTEMPTS_FILTERS,
 	adminAttemptsFetcher,
 	adminTestsKeys,
-	attemptsDayRange,
 	fetchAdminAttemptsPage,
 	mergeAttemptPages,
 	parseAdminAttempts,
@@ -38,6 +36,7 @@ import {
 	saveTopic,
 	testOverrideSteps,
 } from './admin-api'
+import { parseAttemptsUrl, type AttemptsUrlFilters } from './attempts-url'
 
 const apiFetchMock = vi.mocked(apiFetch)
 
@@ -503,65 +502,72 @@ function attemptsPage(ids: string[], total: number, offset = 0) {
 }
 
 describe('список попыток: ключ и запрос', () => {
-	test('по умолчанию первая страница активных учеников', () => {
-		assert.equal(ATTEMPTS_PAGE_SIZE, 50)
-		assert.deepEqual(DEFAULT_ATTEMPTS_FILTERS, {
-			q: '',
-			topic: null,
-			student: null,
-			from: null,
-			to: null,
-			status: 'active',
-			review: 'all',
-		})
-		assert.equal(adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS), '/api/tests/admin/attempts?limit=50&status=active')
-	})
+	const DEFAULT_FILTERS: AttemptsUrlFilters = parseAttemptsUrl(new URLSearchParams())
 
-	test('фильтры попадают в строку ключа, поиск обрезается и кодируется, offset только после первой страницы', () => {
-		const key = adminTestsKeys.attempts(
-			{
-				q: '  50% a&b  ',
-				topic: 'cell',
-				student: STUDENT_ID,
-				from: '2026-09-30T21:00:00.000Z',
-				to: '2026-10-01T20:59:59.999Z',
-				status: 'all',
-				review: 'pending',
-			},
-			100
-		)
-		const url = new URL(key, 'https://web.test')
+	function keyParams(filters: Partial<AttemptsUrlFilters>, offset?: number): Record<string, string> {
+		const url = new URL(adminTestsKeys.attempts({ ...DEFAULT_FILTERS, ...filters }, offset), 'https://web.test')
 		assert.equal(url.pathname, '/api/tests/admin/attempts')
-		assert.deepEqual(Object.fromEntries(url.searchParams), {
-			limit: '50',
-			offset: '100',
-			status: 'all',
-			q: '50% a&b',
-			topic: 'cell',
-			student: STUDENT_ID,
-			from: '2026-09-30T21:00:00.000Z',
-			to: '2026-10-01T20:59:59.999Z',
-			review: 'pending',
-		})
-		assert.equal(
-			adminTestsKeys.attempts({ ...DEFAULT_ATTEMPTS_FILTERS, q: '   ' }),
-			adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS)
-		)
+		return Object.fromEntries(url.searchParams)
+	}
+
+	test('по умолчанию первая страница активных учеников без сортировки в ключе', () => {
+		assert.equal(ATTEMPTS_PAGE_SIZE, 50)
+		assert.equal(adminTestsKeys.attempts(DEFAULT_FILTERS), '/api/tests/admin/attempts?limit=50&status=active')
 	})
 
-	test('даты: начало первого и конец последнего выбранного дня в локальном времени', () => {
-		const from = new Date(2026, 8, 30, 15, 20)
-		const to = new Date(2026, 9, 2, 8, 0)
-		assert.deepEqual(attemptsDayRange({ from, to }), {
+	test('фильтры попадают в строку ключа списками, поиск обрезается, offset только после первой страницы', () => {
+		assert.deepEqual(
+			keyParams(
+				{
+					q: '  50% a&b  ',
+					topics: ['cell', 'tissue'],
+					students: [STUDENT_ID, TEST_ID],
+					results: ['failed'],
+					status: 'all',
+					review: 'pending',
+					sort: { key: 'score', direction: 'asc' },
+				},
+				100
+			),
+			{
+				limit: '50',
+				offset: '100',
+				status: 'all',
+				q: '50% a&b',
+				topic: 'cell,tissue',
+				student: `${STUDENT_ID},${TEST_ID}`,
+				result: 'failed',
+				review: 'pending',
+				sort: 'score',
+				dir: 'asc',
+			}
+		)
+		assert.equal(adminTestsKeys.attempts({ ...DEFAULT_FILTERS, q: '   ' }), adminTestsKeys.attempts(DEFAULT_FILTERS))
+	})
+
+	test('оба исхода результата значат без фильтра, сортировка по дате по убыванию не пишется', () => {
+		const params = keyParams({ results: ['passed', 'failed'], sort: { key: 'date', direction: 'desc' } })
+		assert.equal(params.result, undefined)
+		assert.equal(params.sort, undefined)
+		assert.deepEqual(keyParams({ sort: { key: 'date', direction: 'asc' } }), {
+			limit: '50',
+			status: 'active',
+			sort: 'date',
+			dir: 'asc',
+		})
+	})
+
+	test('период: начало первого и конец последнего выбранного дня в локальном времени', () => {
+		assert.deepEqual(keyParams({ from: '2026-09-30', to: '2026-10-02' }), {
+			limit: '50',
+			status: 'active',
 			from: new Date(2026, 8, 30, 0, 0, 0, 0).toISOString(),
 			to: new Date(2026, 9, 2, 23, 59, 59, 999).toISOString(),
 		})
-		assert.deepEqual(attemptsDayRange({ from }), {
-			from: new Date(2026, 8, 30, 0, 0, 0, 0).toISOString(),
-			to: new Date(2026, 8, 30, 23, 59, 59, 999).toISOString(),
-		})
-		assert.deepEqual(attemptsDayRange(undefined), { from: null, to: null })
-		assert.deepEqual(attemptsDayRange({ from: undefined }), { from: null, to: null })
+		const single = keyParams({ from: '2026-09-30', to: null })
+		assert.equal(single.from, new Date(2026, 8, 30, 0, 0, 0, 0).toISOString())
+		assert.equal(single.to, new Date(2026, 8, 30, 23, 59, 59, 999).toISOString())
+		assert.deepEqual(keyParams({ from: null, to: '2026-10-02' }), { limit: '50', status: 'active' })
 	})
 
 	test('parseAdminAttempts пропускает полный ответ и отвергает старую форму', () => {
@@ -620,17 +626,18 @@ describe('список попыток: ключ и запрос', () => {
 	test('adminAttemptsFetcher и fetchAdminAttemptsPage идут по ключу', async () => {
 		const body = attemptsPage(['a'], 1)
 		apiFetchMock.mockResolvedValueOnce(json(200, body))
-		const key = adminTestsKeys.attempts(DEFAULT_ATTEMPTS_FILTERS)
+		const filters = parseAttemptsUrl(new URLSearchParams())
+		const key = adminTestsKeys.attempts(filters)
 		assert.deepEqual(await adminAttemptsFetcher(key), body)
 		assert.equal(lastUrl(), key)
 
 		apiFetchMock.mockResolvedValueOnce(json(200, attemptsPage(['b'], 2, 50)))
-		const outcome = await fetchAdminAttemptsPage(DEFAULT_ATTEMPTS_FILTERS, 50)
+		const outcome = await fetchAdminAttemptsPage(filters, 50)
 		assert.equal(lastUrl(), '/api/tests/admin/attempts?limit=50&offset=50&status=active')
 		assert.equal(outcome.ok, true)
 
 		apiFetchMock.mockResolvedValueOnce(json(500, {}))
-		const failed = await fetchAdminAttemptsPage(DEFAULT_ATTEMPTS_FILTERS, 50)
+		const failed = await fetchAdminAttemptsPage(filters, 50)
 		assert.equal(failed.ok, false)
 		if (!failed.ok) assert.equal(failed.message, ATTEMPTS_LOAD_ERROR)
 		assert.equal(ATTEMPTS_LOAD_ERROR, 'Не удалось загрузить попытки')

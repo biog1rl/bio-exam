@@ -167,8 +167,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
 	{
 		key: 'chart',
 		href: '/admin/settings/chart',
-		title: 'Диапазон графика',
-		description: 'Период графика результатов по умолчанию.',
+		title: 'Графики',
+		description: 'Тип, оси и период каждого графика.',
 		group: 'settings',
 		icon: 'chart',
 		inMenu: true,

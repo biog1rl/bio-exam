@@ -1,5 +1,5 @@
 import { requireServerData, serverRequest } from '@/lib/session/server'
-import { DEFAULT_ATTEMPTS_FILTERS, adminTestsKeys, parseAdminAttempts } from '@/lib/tests/admin-api'
+import { adminTestsKeys, parseAdminAttempts } from '@/lib/tests/admin-api'
 import { attemptsUrl, parseAttemptsUrl } from '@/lib/tests/attempts-url'
 
 import { AdminAttemptsClient } from './AdminAttemptsClient'
@@ -12,7 +12,7 @@ export default async function AdminAttemptsPage({
 	searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
 	const urlFilters = parseAttemptsUrl(await searchParams)
-	const initialKey = adminTestsKeys.attempts({ ...DEFAULT_ATTEMPTS_FILTERS, ...urlFilters })
+	const initialKey = adminTestsKeys.attempts(urlFilters)
 	const initial = requireServerData(
 		await serverRequest(initialKey, { parse: parseAdminAttempts }),
 		attemptsUrl(urlFilters)

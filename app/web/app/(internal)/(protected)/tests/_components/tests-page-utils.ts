@@ -1,50 +1,38 @@
 import type { PublicTestListItem } from '@/lib/tests/types'
 
-export type PublicTestsStats = {
-	totalTests: number
-	totalTopics: number
-	totalQuestions: number
-	timedTests: number
-}
-
 export type PublicTestsTopicGroup = {
 	topicId: string
-	topicSlug: string
 	topicTitle: string
 	tests: PublicTestListItem[]
-	questionsCount: number
-	timedTests: number
 }
 
-export function groupPublicTestsByTopic(tests: PublicTestListItem[]): PublicTestsTopicGroup[] {
-	const grouped = tests.reduce<Record<string, PublicTestsTopicGroup>>((acc, test) => {
-		if (!acc[test.topicId]) {
-			acc[test.topicId] = {
-				topicId: test.topicId,
-				topicSlug: test.topicSlug,
-				topicTitle: test.topicTitle,
-				tests: [],
-				questionsCount: 0,
-				timedTests: 0,
-			}
-		}
+type PluralForms = { one: string; few: string; many: string }
 
-		acc[test.topicId].tests.push(test)
-		acc[test.topicId].questionsCount += test.questionsCount
-		if (test.timeLimitMinutes) acc[test.topicId].timedTests += 1
-		return acc
-	}, {})
+const RU_PLURAL = new Intl.PluralRules('ru')
 
-	return Object.values(grouped)
+export function countLabel(count: number, forms: PluralForms): string {
+	const rule = RU_PLURAL.select(count)
+	return `${count} ${rule === 'one' ? forms.one : rule === 'few' ? forms.few : forms.many}`
 }
 
-export function getPublicTestsStats(groups: PublicTestsTopicGroup[]): PublicTestsStats {
-	const tests = groups.flatMap((group) => group.tests)
+export function testsSearch(q: string): string {
+	return q.trim() ? `?q=${encodeURIComponent(q)}` : ''
+}
 
-	return {
-		totalTests: tests.length,
-		totalTopics: groups.length,
-		totalQuestions: tests.reduce((sum, test) => sum + test.questionsCount, 0),
-		timedTests: tests.filter((test) => Boolean(test.timeLimitMinutes)).length,
+export function filterPublicTests(tests: readonly PublicTestListItem[], q: string): PublicTestListItem[] {
+	const needle = q.trim().toLocaleLowerCase('ru')
+	if (!needle) return [...tests]
+	return tests.filter((test) =>
+		[test.title, test.topicTitle].some((value) => value.toLocaleLowerCase('ru').includes(needle))
+	)
+}
+
+export function groupPublicTestsByTopic(tests: readonly PublicTestListItem[]): PublicTestsTopicGroup[] {
+	const grouped = new Map<string, PublicTestsTopicGroup>()
+	for (const test of tests) {
+		const group = grouped.get(test.topicId)
+		if (group) group.tests.push(test)
+		else grouped.set(test.topicId, { topicId: test.topicId, topicTitle: test.topicTitle, tests: [test] })
 	}
+	return [...grouped.values()]
 }

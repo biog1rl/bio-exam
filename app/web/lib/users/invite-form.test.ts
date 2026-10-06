@@ -7,7 +7,6 @@ import {
 	groupsCell,
 	inviteErrorText,
 	invitePayload,
-	matchesGroup,
 	parseInviteGroups,
 	reinviteErrorText,
 	showGroupField,
@@ -162,21 +161,6 @@ test('groupsCell: до двух названий через запятую, да
 	)
 })
 
-test('matchesGroup: членство в любой из групп строки', () => {
-	const row = {
-		groups: [
-			{ id: 'g1', name: 'Первая' },
-			{ id: 'g2', name: 'Вторая' },
-		],
-	}
-	assert.equal(matchesGroup(row, 'g2'), true)
-	assert.equal(matchesGroup(row, 'g1'), true)
-	assert.equal(matchesGroup(row, 'all'), true)
-	assert.equal(matchesGroup(row, 'g3'), false)
-	assert.equal(matchesGroup({ groups: [] }, 'g1'), false)
-	assert.equal(matchesGroup({ groups: [] }, 'all'), true)
-})
-
 test('parseInviteGroups: только записи с id и name, иначе пустой список', () => {
 	assert.deepEqual(parseInviteGroups(undefined), [])
 	assert.deepEqual(parseInviteGroups({ error: 'Forbidden' }), [])
@@ -195,12 +179,12 @@ test('parseInviteGroups: только записи с id и name, иначе п�
 	)
 })
 
-test('usersEmptyText: поиск, учитель без учеников, остальные', () => {
-	assert.equal(usersEmptyText({ searchQuery: 'ив', teacher: true, totalRows: 0 }), 'Пользователи не найдены')
+test('usersEmptyText: строки скрыты фильтрами, учитель без учеников, остальные', () => {
+	assert.equal(usersEmptyText({ teacher: true, totalRows: 3 }), 'Пользователи не найдены')
+	assert.equal(usersEmptyText({ teacher: false, totalRows: 1 }), 'Пользователи не найдены')
 	assert.equal(
-		usersEmptyText({ searchQuery: '', teacher: true, totalRows: 0 }),
+		usersEmptyText({ teacher: true, totalRows: 0 }),
 		'В ваших группах пока нет учеников. Пригласите ученика или добавьте его в группу.'
 	)
-	assert.equal(usersEmptyText({ searchQuery: '', teacher: true, totalRows: 3 }), 'Нет пользователей')
-	assert.equal(usersEmptyText({ searchQuery: '', teacher: false, totalRows: 0 }), 'Нет пользователей')
+	assert.equal(usersEmptyText({ teacher: false, totalRows: 0 }), 'Нет пользователей')
 })

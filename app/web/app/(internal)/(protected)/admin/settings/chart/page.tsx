@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { ChartSettingsPageClient } from './ChartSettingsPageClient'
 
 export const metadata: Metadata = {
-	title: 'Диапазон графика',
+	title: 'Графики',
 }
 
 export default function ChartSettingsPage() {

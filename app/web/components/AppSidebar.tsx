@@ -116,6 +116,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 												href={link.href}
 												target={link.target}
 												aria-current={isActive ? 'page' : undefined}
+												onClick={() => setOpenMobile(false)}
 												className={cn(
 													'flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none',
 													isActive

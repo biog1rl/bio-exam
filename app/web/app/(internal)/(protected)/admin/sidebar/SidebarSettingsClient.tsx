@@ -16,14 +16,29 @@ import { CSS } from '@dnd-kit/utilities'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 
 import type { LucideIcon } from 'lucide-react'
-import { GripVertical, Plus, Trash2, Eye, EyeOff, ExternalLink, Search, CircleIcon, Pencil } from 'lucide-react'
+import {
+	CircleIcon,
+	ExternalLink,
+	Eye,
+	EyeOff,
+	GripVertical,
+	MoreHorizontal,
+	Pencil,
+	Plus,
+	Search,
+	Trash2,
+} from 'lucide-react'
 import * as Icons from 'lucide-react'
 import dynamicIconImports from 'lucide-react/dynamicIconImports'
 import { toast } from 'sonner'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { TableCard } from '@/components/table/TableCard'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import {
 	Dialog,
 	DialogContent,
@@ -32,10 +47,19 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog'
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { failureMessage } from '@/lib/http/errors'
 import { RequestError, type RequestFailure } from '@/lib/http/request'
@@ -48,6 +72,7 @@ import {
 	type SidebarItem,
 } from '@/lib/settings/api'
 import { SIDEBAR_RELOAD_ERROR, moveSidebarItem, sidebarReloadFailure } from '@/lib/settings/sidebar-items'
+import { cn } from '@/lib/utils/cn'
 
 const iconsMap = Icons as Record<string, unknown>
 
@@ -63,7 +88,7 @@ function getIconComponent(iconName: string): LucideIcon {
 	return CircleIcon
 }
 
-function SortableItem({
+function SidebarLinkRow({
 	item,
 	onEdit,
 	onToggle,
@@ -76,62 +101,89 @@ function SortableItem({
 }) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
 
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-		opacity: isDragging ? 0.5 : 1,
-	}
-
 	const IconComponent = getIconComponent(item.icon)
+	const visibility = item.isActive ? 'Показана' : 'Скрыта'
 
 	return (
-		<div
+		<TableRow
 			ref={setNodeRef}
-			style={style}
-			className="flex items-center gap-2 rounded-lg border bg-card p-3 hover:bg-accent/50"
+			style={{ transform: CSS.Translate.toString(transform), transition }}
+			className={cn(isDragging && 'relative z-10 bg-card shadow-md')}
 		>
-			<button
-				{...attributes}
-				{...listeners}
-				aria-label={`Перетащить ссылку ${item.title}`}
-				className="shrink-0 cursor-grab active:cursor-grabbing"
-			>
-				<GripVertical className="h-5 w-5 text-muted-foreground" />
-			</button>
-
-			<div className="flex min-w-0 flex-1 items-center gap-3">
-				<IconComponent className="h-5 w-5 shrink-0" />
-				<div className="min-w-0 flex-1">
-					<div className="flex min-w-0 items-center gap-2">
-						<span className="truncate font-medium">{item.title}</span>
-						{item.target === '_blank' && <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />}
-					</div>
-					<span className="block truncate text-sm text-muted-foreground">{item.url}</span>
+			<TableCell className="w-10 pr-0 pl-3">
+				<button
+					type="button"
+					{...attributes}
+					{...listeners}
+					aria-label={`Перетащить ссылку ${item.title}`}
+					className="flex cursor-grab rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
+				>
+					<GripVertical className="size-4" aria-hidden="true" />
+				</button>
+			</TableCell>
+			<TableCell className="py-3 pl-2">
+				<div className="flex min-w-0 items-center gap-2">
+					<IconComponent className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+					<span
+						className={cn(
+							'min-w-0 font-medium [overflow-wrap:anywhere]',
+							item.isActive ? 'text-foreground' : 'text-muted-foreground'
+						)}
+					>
+						{item.title}
+					</span>
+					{item.target === '_blank' ? (
+						<span title="Откроется в новой вкладке" className="shrink-0 text-muted-foreground">
+							<ExternalLink className="size-3.5" aria-hidden="true" />
+							<span className="sr-only">Откроется в новой вкладке.</span>
+						</span>
+					) : null}
 				</div>
-			</div>
-
-			<div className="flex shrink-0 items-center gap-1">
-				<Button
-					size="icon"
-					variant="ghost"
-					onClick={() => onToggle(item.id)}
-					aria-label={item.isActive ? `Скрыть ссылку ${item.title}` : `Показать ссылку ${item.title}`}
-				>
-					{item.isActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-				</Button>
-				<Button size="icon" variant="ghost" onClick={() => onEdit(item)} aria-label={`Изменить ссылку ${item.title}`}>
-					<Pencil className="h-4 w-4" />
-				</Button>
-				<Button
-					size="icon"
-					variant="ghost"
-					onClick={() => onDelete(item.id)}
-					aria-label={`Удалить ссылку ${item.title}`}
-				>
-					<Trash2 className="h-4 w-4 text-destructive" />
-				</Button>
-			</div>
-		</div>
+				<p className="mt-0.5 truncate text-xs text-muted-foreground tab-sm:hidden">
+					{item.url}
+					<span className="mob:hidden"> · {visibility.toLowerCase()}</span>
+				</p>
+			</TableCell>
+			<TableCell className="hidden truncate text-muted-foreground tab-sm:table-cell">{item.url}</TableCell>
+			<TableCell className="hidden mob:table-cell">
+				<Badge variant={item.isActive ? 'default' : 'secondary'} className="rounded-full">
+					{visibility}
+				</Badge>
+			</TableCell>
+			<TableCell className="pr-3">
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							size="icon"
+							variant="ghost"
+							className="size-8 rounded-full"
+							aria-label={`Действия со ссылкой ${item.title}`}
+						>
+							<MoreHorizontal className="size-4" aria-hidden="true" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem onSelect={() => onEdit(item)}>
+							<Pencil className="size-4" aria-hidden="true" />
+							Изменить
+						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => onToggle(item.id)}>
+							{item.isActive ? (
+								<EyeOff className="size-4" aria-hidden="true" />
+							) : (
+								<Eye className="size-4" aria-hidden="true" />
+							)}
+							{item.isActive ? 'Скрыть из меню' : 'Показать в меню'}
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => onDelete(item.id)}>
+							<Trash2 className="size-4" aria-hidden="true" />
+							Удалить
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</TableCell>
+		</TableRow>
 	)
 }
 
@@ -344,28 +396,19 @@ export function SidebarSettingsClient() {
 		return () => observer.disconnect()
 	}, [hasMore, handleLoadMore])
 
-	if (loading) {
-		return <div className="p-6">Загрузка...</div>
-	}
-
 	return (
-		<div className="space-y-6 p-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 ref={titleRef} tabIndex={-1} className="text-2xl font-bold">
-						Ссылки в меню
-					</h1>
-					<p className="max-w-2xl text-muted-foreground">
-						Разделы сайта появляются в меню сами, по правам пользователя. Здесь — дополнительные ссылки: они идут
-						отдельной группой «Ссылки», ссылку на закрытый раздел видят только те, кому он доступен. Пункты с адресом
-						раздела сайта в меню не дублируются.
-					</p>
-				</div>
-				<Button onClick={handleAdd}>
-					<Plus className="mr-2 h-4 w-4" />
-					Добавить пункт
-				</Button>
-			</div>
+		<div className="space-y-4">
+			<PageHeader
+				title="Ссылки в меню"
+				titleRef={titleRef}
+				meta="Разделы сайта попадают в меню сами, здесь — дополнительные ссылки"
+			>
+				<ToolbarTooltip label="Добавить пункт">
+					<ToolbarButton tone="primary" label="Добавить пункт" onClick={handleAdd}>
+						<Plus className="size-4" aria-hidden="true" />
+					</ToolbarButton>
+				</ToolbarTooltip>
+			</PageHeader>
 
 			{loadError ? (
 				<LoadErrorAlert
@@ -374,28 +417,50 @@ export function SidebarSettingsClient() {
 					onRetry={loadItems}
 					focusTarget={titleRef}
 				/>
+			) : loading ? (
+				<Skeleton className="h-72 rounded-3xl" aria-label="Загрузка пунктов меню" />
+			) : items.length === 0 ? (
+				<EmptyState
+					title="Дополнительных ссылок пока нет"
+					action={
+						<Button className="rounded-full" onClick={handleAdd}>
+							Добавить первый пункт
+						</Button>
+					}
+				/>
 			) : (
-				<Card className="p-4">
+				<TableCard>
 					<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
 						<SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-							<div className="space-y-2">
-								{items.map((item) => (
-									<SortableItem
-										key={item.id}
-										item={item}
-										onEdit={handleEdit}
-										onToggle={handleToggle}
-										onDelete={handleDelete}
-									/>
-								))}
-							</div>
+							<Table className="table-fixed">
+								<TableHeader>
+									<TableRow className="hover:bg-transparent">
+										<TableHead className="w-10 pl-3">
+											<span className="sr-only">Порядок</span>
+										</TableHead>
+										<TableHead className="pl-2">Ссылка</TableHead>
+										<TableHead className="hidden w-64 tab-sm:table-cell lg:w-80">Адрес</TableHead>
+										<TableHead className="hidden w-32 mob:table-cell">Видимость</TableHead>
+										<TableHead className="w-14 pr-3">
+											<span className="sr-only">Действия</span>
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{items.map((item) => (
+										<SidebarLinkRow
+											key={item.id}
+											item={item}
+											onEdit={handleEdit}
+											onToggle={handleToggle}
+											onDelete={handleDelete}
+										/>
+									))}
+								</TableBody>
+							</Table>
 						</SortableContext>
 					</DndContext>
-
-					{items.length === 0 && (
-						<div className="py-12 text-center text-muted-foreground">Нет пунктов меню. Добавьте первый!</div>
-					)}
-				</Card>
+				</TableCard>
 			)}
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

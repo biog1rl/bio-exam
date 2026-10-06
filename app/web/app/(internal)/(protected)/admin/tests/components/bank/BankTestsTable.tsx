@@ -5,6 +5,7 @@ import { Download, Edit, Eye, MoreHorizontal, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 import { SortableHead } from '@/components/table/SortableHead'
+import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -69,7 +70,7 @@ export function BankTestsTable({
 	)
 
 	return (
-		<div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-sm">
+		<TableCard>
 			<Table className="table-fixed">
 				<TableHeader>
 					<TableRow className="hover:bg-transparent">
@@ -178,6 +179,6 @@ export function BankTestsTable({
 					))}
 				</TableBody>
 			</Table>
-		</div>
+		</TableCard>
 	)
 }

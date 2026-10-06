@@ -205,26 +205,26 @@ describe('списки: GET /api/tests/public/tests и /topics/:slug/tests', () 
 	}
 })
 
-describe('настройки: GET и PUT /api/settings/chart-default-range', () => {
-	const cases: Array<[Profile, number]> = [
-		['admin', 200],
-		['student', 403],
-		['allow_settings_manage', 200],
-		['admin_deny_settings_manage', 403],
+describe('настройки графиков: GET и PUT /api/settings/charts', () => {
+	const cases: Array<[Profile, number, number]> = [
+		['admin', 200, 200],
+		['student', 200, 403],
+		['allow_settings_manage', 200, 200],
+		['admin_deny_settings_manage', 200, 403],
 	]
 
-	for (const [name, status] of cases) {
-		test(`GET: ${name} → ${status}`, async () => {
-			const reply = await call(ctx, 'GET', '/api/settings/chart-default-range', { cookies: jarOf(name) })
-			assert.equal(reply.status, status)
+	for (const [name, readStatus, writeStatus] of cases) {
+		test(`GET: ${name} → ${readStatus}`, async () => {
+			const reply = await call(ctx, 'GET', '/api/settings/charts', { cookies: jarOf(name) })
+			assert.equal(reply.status, readStatus)
 		})
 
-		test(`PUT: ${name} → ${status}`, async () => {
-			const reply = await call(ctx, 'PUT', '/api/settings/chart-default-range', {
+		test(`PUT: ${name} → ${writeStatus}`, async () => {
+			const reply = await call(ctx, 'PUT', '/api/settings/charts', {
 				cookies: jarOf(name),
-				body: { value: 'week' },
+				body: { configs: {} },
 			})
-			assert.equal(reply.status, status)
+			assert.equal(reply.status, writeStatus)
 		})
 	}
 })

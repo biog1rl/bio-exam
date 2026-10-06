@@ -11,7 +11,6 @@ import { apiFetch, AuthExpiredError } from '@/lib/session/client'
 import {
 	AttemptRequestError,
 	fetchChartData,
-	fetchChartDefaultRange,
 	fetchMyTestAttempts,
 	fetchPublicTestBySlug,
 	fetchPublicTestSummary,
@@ -188,14 +187,5 @@ describe('чтение каталога ученика', () => {
 			apiFetchMock.mock.calls.map((call) => call[0]),
 			urls
 		)
-	})
-
-	test('fetchChartDefaultRange при отказе отдаёт month', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(500, {}))
-		assert.deepEqual(await fetchChartDefaultRange(), { value: 'month' })
-		apiFetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-		assert.deepEqual(await fetchChartDefaultRange(), { value: 'month' })
-		apiFetchMock.mockResolvedValueOnce(json(200, { value: 'week' }))
-		assert.deepEqual(await fetchChartDefaultRange(), { value: 'week' })
 	})
 })

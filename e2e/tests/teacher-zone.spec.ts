@@ -179,11 +179,13 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 		await expect(page.getByRole('heading', { name: student.name }).first()).toBeVisible()
 		await expect(page.getByText('Нет назначенных тестов')).toBeVisible()
 
-		const row = page.getByText(teacherTest.title, { exact: true }).locator('xpath=../..')
-		await row.getByRole('button', { name: 'Назначить' }).click()
+		await page.getByRole('button', { name: `Назначить: ${teacherTest.title}`, exact: true }).click()
 		await expect(page.getByText('Тест назначен').first()).toBeVisible()
 		await expect(page.getByText('Нет назначенных тестов')).toHaveCount(0)
-		await expect(page.getByRole('button', { name: 'Удалить назначение' })).toHaveCount(1)
+		const removeButtons = page.getByRole('button', { name: /^Удалить назначение/ })
+		await expect(removeButtons).toHaveCount(1)
+		await expect(removeButtons).toHaveAccessibleName(`Удалить назначение: ${teacherTest.title}`)
+		await expect(page.getByRole('button', { name: `Назначить: ${teacherTest.title}`, exact: true })).toHaveCount(0)
 	})
 
 	test('step 6: the zone student takes the assigned test @teacher-zone', async ({ browser }, testInfo) => {
@@ -207,11 +209,12 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 		const teacherTest = seedTest(key, 'teacher-test')
 
 		await page.goto('/admin/attempts')
-		const row = page.locator(`a[href="/admin/attempts/${zoneAttemptId}"]`)
+		const link = page.locator(`a[href="/admin/attempts/${zoneAttemptId}"]`)
+		const row = page.getByRole('row').filter({ has: link })
 		await expect(row).toBeVisible()
-		await expect(row).toContainText(teacherTest.title)
+		await expect(link).toHaveText(teacherTest.title)
 		await expect(row).toContainText(sessionAccountByPrefix(key, 'zone-student').name)
-		await row.click()
+		await link.click()
 
 		await expect(page).toHaveURL(new RegExp(`/admin/attempts/${zoneAttemptId}$`))
 		const sections = await adminReviewSections(page, zoneAttemptId, teacherTest.questions.length)

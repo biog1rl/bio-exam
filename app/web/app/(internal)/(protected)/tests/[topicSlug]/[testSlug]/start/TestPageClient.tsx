@@ -26,15 +26,11 @@ export default function TestPageClient({ topicSlug, testSlug }: Props) {
 	)
 
 	if (loadingTest) {
-		return <div className="p-6">Загрузка теста...</div>
+		return <div>Загрузка теста...</div>
 	}
 
 	if (testError || !testData?.test) {
-		return (
-			<div className="p-6">
-				<TestMissingState />
-			</div>
-		)
+		return <TestMissingState />
 	}
 
 	const labels = {

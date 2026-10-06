@@ -13,10 +13,8 @@ import {
 	deleteSidebarItem,
 	getAllSidebarItems,
 	getSidebarItems,
-	parseChartRange,
 	parseSidebarItems,
 	reorderSidebarItems,
-	saveChartRange,
 	saveSidebarItem,
 	setSidebarItemActive,
 } from './api'
@@ -29,42 +27,6 @@ function json(status: number, body: unknown): Response {
 
 beforeEach(() => {
 	apiFetchMock.mockReset()
-})
-
-describe('parseChartRange', () => {
-	test('принимает week, month и all', () => {
-		for (const value of ['week', 'month', 'all']) {
-			assert.deepEqual(parseChartRange({ value }), { value })
-		}
-	})
-
-	test('прочее — MalformedBodyError', () => {
-		for (const body of [null, undefined, 'week', {}, { value: 'year' }, { value: 1 }, { error: 'Forbidden' }]) {
-			assert.throws(() => parseChartRange(body), MalformedBodyError)
-		}
-	})
-})
-
-describe('saveChartRange', () => {
-	test('PUT с JSON-телом и разобранным ответом', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(200, { value: 'month' }))
-		const outcome = await saveChartRange('month')
-		assert.deepEqual(outcome, { ok: true, status: 200, data: { value: 'month' } })
-		const [url, init] = apiFetchMock.mock.calls[0] ?? []
-		assert.equal(url, '/api/settings/chart-default-range')
-		assert.equal(init?.method, 'PUT')
-		assert.equal(init?.body, JSON.stringify({ value: 'month' }))
-		assert.equal(new Headers(init?.headers).get('content-type'), 'application/json')
-	})
-
-	test('400 с английским текстом — запасной текст «Ошибка сохранения»', async () => {
-		apiFetchMock.mockResolvedValueOnce(json(400, { error: 'Bad request' }))
-		const outcome = await saveChartRange('week')
-		assert.equal(outcome.ok, false)
-		if (outcome.ok) return
-		assert.equal(outcome.kind, 'http')
-		assert.equal(outcome.message, 'Ошибка сохранения')
-	})
 })
 
 const ITEM_ID = '44444444-4444-4444-8444-444444444444'

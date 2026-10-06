@@ -1,39 +1,72 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
+import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 
+import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarSearch } from '@/components/page/ToolbarSearch'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { StackedAccordion, StackedAccordionItem } from '@/components/ui/stacked-accordion'
 import { fetchPublicTestsList } from '@/lib/tests/api'
 
 import { PublicTestsTopicSection } from './_components/PublicTestsTopicSection'
-import { TestsPageHero } from './_components/TestsPageHero'
-import { TestsPageEmpty, TestsPageError, TestsPageLoading } from './_components/TestsPageState'
-import { getPublicTestsStats, groupPublicTestsByTopic } from './_components/tests-page-utils'
+import { filterPublicTests, groupPublicTestsByTopic, testsSearch } from './_components/tests-page-utils'
 
 export default function TestsPageClient() {
-	const { data, isLoading, error } = useSWR('public-tests-list', fetchPublicTestsList)
+	const searchParams = useSearchParams()
+	const q = searchParams.get('q') ?? ''
+	const titleRef = useRef<HTMLHeadingElement>(null)
+	const { data, isLoading, error, mutate } = useSWR('public-tests-list', fetchPublicTestsList)
 	const tests = useMemo(() => data?.tests ?? [], [data?.tests])
-	const groups = useMemo(() => groupPublicTestsByTopic(tests), [tests])
-	const stats = useMemo(() => getPublicTestsStats(groups), [groups])
+	const groups = useMemo(() => groupPublicTestsByTopic(filterPublicTests(tests, q)), [tests, q])
+	const [openTopics, setOpenTopics] = useState<string[] | null>(null)
+	const openValue = openTopics ?? (q.trim() ? groups.map((group) => group.topicId) : [])
 
-	if (isLoading) {
-		return <TestsPageLoading />
-	}
-
-	if (error) {
-		return <TestsPageError />
+	const updateQuery = (next: string) => {
+		setOpenTopics(null)
+		window.history.replaceState(null, '', `${window.location.pathname}${testsSearch(next)}`)
 	}
 
 	return (
-		<main className="space-y-5">
-			<TestsPageHero stats={stats} />
+		<div className="space-y-4">
+			<PageHeader title="Тесты" titleRef={titleRef}>
+				<ToolbarSearch value={q} onChange={updateQuery} label="Поиск тестов" placeholder="Название теста или темы" />
+			</PageHeader>
 
-			{groups.length === 0 ? (
-				<TestsPageEmpty />
+			{isLoading ? (
+				<div className="space-y-2" aria-label="Загрузка тестов">
+					<Skeleton className="h-16 rounded-lg" />
+					<Skeleton className="h-16 rounded-lg" />
+					<Skeleton className="h-16 rounded-lg" />
+				</div>
+			) : error !== undefined && data === undefined ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить тесты"
+					error={error}
+					onRetry={() => mutate()}
+					focusTarget={titleRef}
+				/>
+			) : tests.length === 0 ? (
+				<EmptyState
+					title="Опубликованных тестов пока нет"
+					description="Когда преподаватель опубликует первый материал, он появится в этом каталоге."
+				/>
+			) : groups.length === 0 ? (
+				<EmptyState
+					title="Ничего не найдено"
+					action={
+						<Button variant="outline" className="rounded-full" onClick={() => updateQuery('')}>
+							Сбросить поиск
+						</Button>
+					}
+				/>
 			) : (
-				<StackedAccordion type="multiple">
+				<StackedAccordion type="multiple" value={openValue} onValueChange={setOpenTopics}>
 					{groups.map((group) => (
 						<StackedAccordionItem key={group.topicId} value={group.topicId}>
 							<PublicTestsTopicSection group={group} />
@@ -41,6 +74,6 @@ export default function TestsPageClient() {
 					))}
 				</StackedAccordion>
 			)}
-		</main>
+		</div>
 	)
 }

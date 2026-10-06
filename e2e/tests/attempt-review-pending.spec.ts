@@ -5,7 +5,6 @@ import { expect, newAccountContext, projectKey, test as base } from '../fixtures
 import { horizontalOverflow, lowContrastTexts } from '../fixtures/page-checks'
 
 const WIDTHS = [1280, 768, 375]
-const SEARCH_PLACEHOLDER = 'Поиск по студенту, тесту, теме'
 
 const test = base.extend<{ reviewStudentPage: Page }>({
 	reviewStudentPage: async ({ browser }, use, testInfo) => {
@@ -45,6 +44,10 @@ async function expectCleanLayout(page: Page, label: string, options: { labelsOnl
 		).toEqual([])
 		expect(await horizontalOverflow(page), `${label}: horizontal overflow at ${width}px`).toEqual([])
 	}
+}
+
+function rowWithLink(page: Page, href: string) {
+	return page.getByRole('row').filter({ has: page.locator(`a[href="${href}"]`) })
 }
 
 async function attemptIdOf(admin: Page, testTitle: string): Promise<string> {
@@ -108,11 +111,17 @@ test('the student sees pending and graded attempts on the test page and the dash
 	await expectCleanLayout(page, 'страница проверенного теста')
 
 	await page.goto('/dashboard')
-	const pendingCard = page.locator(`a[href$="/${pending.slug}"]`).filter({ hasText: 'На проверке' })
+	const pendingCard = page
+		.getByRole('row')
+		.filter({ has: page.locator(`a[href$="/${pending.slug}"]`) })
+		.filter({ hasText: 'На проверке' })
 	await expect(pendingCard).toHaveCount(1)
 	await expect(pendingCard).toContainText('предварительно 1 из 1')
 	await expect(pendingCard).not.toContainText('%')
-	const gradedCard = page.locator(`a[href$="/${graded.slug}"]`).filter({ hasText: '75%' })
+	const gradedCard = page
+		.getByRole('row')
+		.filter({ has: page.locator(`a[href$="/${graded.slug}"]`) })
+		.filter({ hasText: '75%' })
 	await expect(gradedCard).toHaveCount(1)
 	await expect(gradedCard).not.toContainText('На проверке')
 })
@@ -127,11 +136,11 @@ test('the list of attempts shows pending and graded rows and the review filter n
 
 	await page.goto('/admin/attempts')
 	await expect(page.getByRole('heading', { level: 1, name: 'Попытки', exact: true })).toBeVisible()
-	await page.getByPlaceholder(SEARCH_PLACEHOLDER).fill(student.name)
+	await page.getByRole('searchbox', { name: 'Поиск попыток' }).fill(student.name)
 
-	const pendingRow = page.locator(`a[href="/admin/attempts/${pendingId}"]`)
-	const gradedRow = page.locator(`a[href="/admin/attempts/${gradedId}"]`)
-	const submitRow = page.locator(`a[href="/admin/attempts/${submitId}"]`)
+	const pendingRow = rowWithLink(page, `/admin/attempts/${pendingId}`)
+	const gradedRow = rowWithLink(page, `/admin/attempts/${gradedId}`)
+	const submitRow = rowWithLink(page, `/admin/attempts/${submitId}`)
 	await expect(pendingRow).toBeVisible()
 	await expect(gradedRow).toBeVisible()
 	await expect(submitRow).toBeVisible()
@@ -147,26 +156,26 @@ test('the list of attempts shows pending and graded rows and the review filter n
 	await expectCleanLayout(page, 'список попыток')
 
 	await page.setViewportSize({ width: 1280, height: 900 })
-	const select = page.getByRole('combobox', { name: 'Проверка' })
-	await expect(select).toHaveText('Проверка: все')
-	await select.click()
-	await page.getByRole('option', { name: 'На проверке', exact: true }).click()
+	const resultFilter = page.getByRole('button', { name: 'Фильтр по результату' })
+	await resultFilter.click()
+	await page.getByRole('menuitemcheckbox', { name: 'На проверке' }).click()
+	await page.keyboard.press('Escape')
 	await expect(page).toHaveURL(/review=pending/)
-	await expect(select).toHaveText('На проверке')
 	await expect(pendingRow).toBeVisible()
 	await expect(submitRow).toBeVisible()
 	await expect(gradedRow).toHaveCount(0)
 
-	await select.click()
-	await page.getByRole('option', { name: 'Проверено', exact: true }).click()
+	await resultFilter.click()
+	await page.getByRole('menuitemcheckbox', { name: 'На проверке' }).click()
+	await page.getByRole('menuitemcheckbox', { name: 'Проверено учителем' }).click()
+	await page.keyboard.press('Escape')
 	await expect(page).toHaveURL(/review=graded/)
-	await expect(select).toHaveText('Проверено')
 	await expect(gradedRow).toBeVisible()
 	await expect(pendingRow).toHaveCount(0)
 	await expect(submitRow).toHaveCount(0)
 
-	await select.click()
-	await page.getByRole('option', { name: 'Все', exact: true }).click()
+	await resultFilter.click()
+	await page.getByRole('menuitem', { name: 'Сбросить' }).click()
 	await expect(page).not.toHaveURL(/review=/)
 	await expect(pendingRow).toBeVisible()
 	await expect(gradedRow).toBeVisible()
@@ -176,12 +185,12 @@ test('the list of attempts shows pending and graded rows and the review filter n
 	await tile.click()
 	await expect(page).toHaveURL(/review=pending/)
 	await expect(tile).toHaveAttribute('aria-pressed', 'true')
-	await expect(select).toHaveText('На проверке')
 	await expect(gradedRow).toHaveCount(0)
 	await expect(pendingRow).toBeVisible()
 
-	await page.getByRole('button', { name: 'Статус студентов' }).click()
-	await page.getByRole('menuitemradio', { name: 'Все' }).click()
+	await page.getByRole('button', { name: 'Фильтр по ученикам' }).click()
+	await page.getByRole('option', { name: /^Неактивные/ }).click()
+	await page.keyboard.press('Escape')
 	await expect(page).toHaveURL(/status=all/)
 	await expect(page).toHaveURL(/review=pending/)
 	await expect(pendingRow).toBeVisible()
@@ -189,7 +198,6 @@ test('the list of attempts shows pending and graded rows and the review filter n
 
 	await tile.click()
 	await expect(page).not.toHaveURL(/review=/)
-	await expect(select).toHaveText('Проверка: все')
 	await expect(gradedRow).toBeVisible()
 })
 
@@ -223,8 +231,8 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 
 	await page.goto(`/profile/${student.login}`)
 	await expect(page.getByRole('heading', { level: 1, name: student.name })).toBeVisible()
-	const pendingRow = page.locator(`a[href="/admin/attempts/${pendingId}"]`)
-	const gradedRow = page.locator(`a[href="/admin/attempts/${gradedId}"]`)
+	const pendingRow = rowWithLink(page, `/admin/attempts/${pendingId}`)
+	const gradedRow = rowWithLink(page, `/admin/attempts/${gradedId}`)
 	await expect(pendingRow).toBeVisible()
 	await expect(pendingRow).toContainText('На проверке')
 	await expect(pendingRow).toContainText('авто 1 из 1')
@@ -236,8 +244,8 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 	await expectCleanLayout(page, 'профиль ученика')
 
 	await page.goto('/dashboard')
-	const dashboardRows = page.locator(`a[href="/admin/attempts/${submitId}"]`)
-	await expect(dashboardRows).toHaveCount(2)
+	const dashboardRows = rowWithLink(page, `/admin/attempts/${submitId}`)
+	await expect(dashboardRows).toHaveCount(1)
 	for (const dashboardRow of await dashboardRows.all()) {
 		await expect(dashboardRow).toBeVisible()
 		await expect(dashboardRow).toContainText('На проверке')

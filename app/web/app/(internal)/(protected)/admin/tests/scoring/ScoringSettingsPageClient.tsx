@@ -4,13 +4,17 @@ import { isAutoScoredTemplate } from '@bio-exam/exam-core'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { Loader2, Save } from 'lucide-react'
+import { FileText, Loader2, Save } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { TableCard } from '@/components/table/TableCard'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,7 +41,7 @@ type Scope = 'global' | 'test'
 
 const RULES_SWR_OPTIONS = { revalidateOnFocus: false, revalidateOnReconnect: false, revalidateOnMount: false }
 
-const KICKER_CLASS = 'font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase'
+const SELECT_CLASS = 'h-10 w-full rounded-full bg-card px-4 tab-sm:w-60'
 
 const SEGMENT_CLASS =
 	'h-8 shrink-0 rounded-full px-4 text-muted-foreground hover:bg-transparent hover:text-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:shadow-sm'
@@ -95,7 +99,7 @@ export default function ScoringSettingsPageClient() {
 	const [seededKey, setSeededKey] = useState<string | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [didResolveQuerySelection, setDidResolveQuerySelection] = useState(false)
-	const rulesTitleRef = useRef<HTMLHeadingElement>(null)
+	const titleRef = useRef<HTMLHeadingElement>(null)
 
 	const topicsQuery = useSWR(adminTestsKeys.topics(), topicsListFetcher)
 	const testsQuery = useSWR(adminTestsKeys.list(), adminTestsListFetcher)
@@ -202,48 +206,44 @@ export default function ScoringSettingsPageClient() {
 		Promise.all([topicsFailed ? topicsQuery.mutate() : null, testsFailed ? testsQuery.mutate() : null])
 
 	return (
-		<div className="space-y-5">
-			<section className="flex flex-col gap-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:flex-row tab-sm:items-start tab-sm:justify-between tab-sm:p-unit">
-				<div className="min-w-0">
-					<p className={KICKER_CLASS}>банк заданий</p>
-					<h1 className="mt-2 font-serif text-3xl leading-tight text-foreground tab-sm:text-4xl">Настройка баллов</h1>
-					<p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-						Формула баллов для каждого типа вопроса — общая для всех тестов или своя для отдельного теста. Формат ответа
-						и название типа задаются в{' '}
-						<Link
-							href="/admin/tests/question-types"
-							className="font-medium text-primary underline-offset-4 hover:underline"
-						>
-							типах вопросов
-						</Link>
-						.
-					</p>
-				</div>
-				<div className="flex shrink-0 flex-wrap items-center gap-2">
-					{scope === 'test' && selectedTest?.topicSlug ? (
-						<Button variant="outline" asChild className="rounded-full bg-card">
-							<Link href={`/admin/tests/${selectedTest.topicSlug}/${selectedTest.slug}`}>Открыть тест</Link>
-						</Button>
-					) : null}
-					<Button className="rounded-full" onClick={handleSave} disabled={saving || !rulesReady}>
-						{saving ? (
-							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-						) : (
-							<Save className="size-4" aria-hidden="true" />
-						)}
-						Сохранить
-					</Button>
-				</div>
-			</section>
-
-			<section className="space-y-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
-				{topicsFailed || testsFailed ? (
-					<LoadErrorAlert
-						title="Не удалось загрузить темы и тесты"
-						error={topicsQuery.error ?? testsQuery.error}
-						onRetry={retryTopicsAndTests}
-					/>
+		<div className="space-y-4">
+			<PageHeader
+				title="Настройка баллов"
+				titleRef={titleRef}
+				meta={
+					scope === 'global'
+						? 'Общая формула действует во всех тестах, где для типа не задана своя'
+						: 'Включите «Своя формула» у нужных типов, остальные считаются по общей'
+				}
+			>
+				{scope === 'test' && selectedTest?.topicSlug ? (
+					<ToolbarTooltip label="Открыть тест">
+						<ToolbarButton asChild label="Открыть тест">
+							<Link href={`/admin/tests/${selectedTest.topicSlug}/${selectedTest.slug}`}>
+								<FileText className="size-4" aria-hidden="true" />
+							</Link>
+						</ToolbarButton>
+					</ToolbarTooltip>
 				) : null}
+				<Button className="h-10 shrink-0 rounded-full" onClick={handleSave} disabled={saving || !rulesReady}>
+					{saving ? (
+						<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+					) : (
+						<Save className="size-4" aria-hidden="true" />
+					)}
+					Сохранить
+				</Button>
+			</PageHeader>
+
+			{topicsFailed || testsFailed ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить темы и тесты"
+					error={topicsQuery.error ?? testsQuery.error}
+					onRetry={retryTopicsAndTests}
+				/>
+			) : null}
+
+			<div className="flex flex-col gap-2 tab-sm:flex-row tab-sm:flex-wrap tab-sm:items-center">
 				<ToggleGroup
 					type="single"
 					value={scope}
@@ -260,86 +260,72 @@ export default function ScoringSettingsPageClient() {
 						Для одного теста
 					</ToggleGroupItem>
 				</ToggleGroup>
-				<p className="text-sm text-muted-foreground">
-					{scope === 'global'
-						? 'Общая формула действует во всех тестах, где для типа не задана своя.'
-						: 'Включите «Своя формула» у нужных типов — остальные считаются по общей формуле.'}
-				</p>
 
 				{scope === 'test' ? (
-					<div className="grid gap-4 tab-sm:grid-cols-2">
-						<div className="space-y-2">
-							<Label htmlFor="scoring-topic">Тема</Label>
-							<Select
-								value={selectedTopicId}
-								onValueChange={(value) => {
-									setSelectedTopicId(value)
-									setSelectedTestId('')
-								}}
-							>
-								<SelectTrigger id="scoring-topic" className="w-full">
-									<SelectValue placeholder="Выберите тему" />
-								</SelectTrigger>
-								<SelectContent>
-									{topics.map((topic) => (
-										<SelectItem key={topic.id} value={topic.id}>
-											{topic.title}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="scoring-test">Тест</Label>
-							<Select value={selectedTestId} onValueChange={setSelectedTestId} disabled={!selectedTopicId}>
-								<SelectTrigger id="scoring-test" className="w-full">
-									<SelectValue placeholder="Выберите тест" />
-								</SelectTrigger>
-								<SelectContent>
-									{testsForTopic.map((test) => (
-										<SelectItem key={test.id} value={test.id}>
-											{test.title}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-					</div>
+					<>
+						<Label htmlFor="scoring-topic" className="sr-only">
+							Тема
+						</Label>
+						<Select
+							value={selectedTopicId}
+							onValueChange={(value) => {
+								setSelectedTopicId(value)
+								setSelectedTestId('')
+							}}
+						>
+							<SelectTrigger id="scoring-topic" className={SELECT_CLASS}>
+								<SelectValue placeholder="Выберите тему" />
+							</SelectTrigger>
+							<SelectContent>
+								{topics.map((topic) => (
+									<SelectItem key={topic.id} value={topic.id}>
+										{topic.title}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<Label htmlFor="scoring-test" className="sr-only">
+							Тест
+						</Label>
+						<Select value={selectedTestId} onValueChange={setSelectedTestId} disabled={!selectedTopicId}>
+							<SelectTrigger id="scoring-test" className={SELECT_CLASS}>
+								<SelectValue placeholder="Выберите тест" />
+							</SelectTrigger>
+							<SelectContent>
+								{testsForTopic.map((test) => (
+									<SelectItem key={test.id} value={test.id}>
+										{test.title}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</>
 				) : null}
-			</section>
+			</div>
 
-			<section className="space-y-3">
-				<h2 ref={rulesTitleRef} tabIndex={-1} className="px-1 font-serif text-2xl text-foreground">
-					Формулы по типам вопросов
-				</h2>
-				{rulesFailed ? (
-					<LoadErrorAlert
-						title="Не удалось загрузить формулы"
-						error={rulesQuery.error}
-						onRetry={() => (rulesKey ? loadRules(rulesKey) : undefined)}
-						focusTarget={rulesTitleRef}
-					/>
-				) : loadingRules ? (
-					<Skeleton className="h-72 rounded-3xl" aria-label="Загрузка формул" />
-				) : rulesKey === null ? (
-					<p className="rounded-3xl border border-dashed border-border bg-card/70 px-6 py-10 text-center text-sm text-muted-foreground">
-						Выберите тему и тест, чтобы задать для него свои формулы.
-					</p>
-				) : (
-					<Accordion type="multiple" value={openTypes} onValueChange={setOpenTypes} className="space-y-2">
+			{rulesFailed ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить формулы"
+					error={rulesQuery.error}
+					onRetry={() => (rulesKey ? loadRules(rulesKey) : undefined)}
+					focusTarget={titleRef}
+				/>
+			) : loadingRules ? (
+				<Skeleton className="h-72 rounded-3xl" aria-label="Загрузка формул" />
+			) : rulesKey === null ? (
+				<EmptyState description="Выберите тему и тест, чтобы задать для него свои формулы." />
+			) : (
+				<TableCard>
+					<Accordion type="multiple" value={openTypes} onValueChange={setOpenTypes}>
 						{types.map((type) => {
 							const own = scope === 'test' && Boolean(overrideEnabled[type.key])
 							const disabledInTest = scope === 'test' && Boolean(type.override?.isDisabled)
 							return (
-								<AccordionItem
-									value={type.key}
-									key={type.key}
-									className="rounded-3xl border border-border/80 bg-card px-4 shadow-sm last:border-b"
-								>
+								<AccordionItem value={type.key} key={type.key} className="px-4 last:border-b-0 tab-sm:px-5">
 									<AccordionTrigger className="hover:no-underline">
 										<div className="min-w-0 pr-4 text-left">
 											<p className="font-medium text-foreground">{type.title}</p>
-											<p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+											<div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
 												<span>{TEMPLATE_META[type.uiTemplate].label}</span>
 												{own ? (
 													<Badge variant="default" className="rounded-full">
@@ -356,7 +342,7 @@ export default function ScoringSettingsPageClient() {
 														Отключён
 													</Badge>
 												) : null}
-											</p>
+											</div>
 										</div>
 									</AccordionTrigger>
 									<AccordionContent className="space-y-3 pb-4">
@@ -400,8 +386,8 @@ export default function ScoringSettingsPageClient() {
 							)
 						})}
 					</Accordion>
-				)}
-			</section>
+				</TableCard>
+			)}
 		</div>
 	)
 }

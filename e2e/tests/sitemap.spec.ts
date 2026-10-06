@@ -33,17 +33,20 @@ test.describe('site map', () => {
 		)
 		await expect(page.getByRole('heading', { level: 2, name: 'Личное' })).toBeVisible()
 		await expect(page.getByRole('heading', { level: 2, name: 'Управление' })).toHaveCount(0)
-		await expect(page.getByRole('link', { name: /Диапазон графика/ })).toHaveCount(0)
+		await expect(page.getByRole('link', { name: /^Графики/ })).toHaveCount(0)
 	})
 
-	test('admin sees every section and opens the chart range settings', async ({ adminPage: page }) => {
+	test('admin sees every section and opens the chart settings', async ({ adminPage: page }) => {
 		await page.goto('/sitemap')
 		for (const title of ['Основное', 'Управление', 'Настройки теста', 'Настройки общие', 'Личное']) {
 			await expect(page.getByRole('heading', { level: 2, name: title, exact: true })).toBeVisible()
 		}
+		await page.getByRole('searchbox', { name: 'Поиск разделов' }).fill('графики')
+		await expect(page.getByRole('heading', { level: 2, name: 'Управление', exact: true })).toHaveCount(0)
+		await expect(page.getByRole('heading', { level: 2, name: 'Настройки общие', exact: true })).toBeVisible()
 		await page
 			.locator('main')
-			.getByRole('link', { name: /Диапазон графика/ })
+			.getByRole('link', { name: /^Графики/ })
 			.click()
 		await expect(page).toHaveURL(/\/admin\/settings\/chart$/)
 	})

@@ -1,3 +1,5 @@
+import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
+
 export const MIN_CANDIDATE_QUERY = 2
 
 export const CANDIDATES_HINT = 'Введите минимум 2 символа'
@@ -95,4 +97,61 @@ export function groupsEmptyState(input: {
 }): 'teacher-empty' | 'default' {
 	if (input.zoneAll || input.groups > 0 || input.search.trim()) return 'default'
 	return 'teacher-empty'
+}
+
+export type GroupsSortKey = 'order' | 'name' | 'owner' | 'members'
+
+export type GroupsSort = TableSort<GroupsSortKey>
+
+export type GroupsUrlState = { q: string; sort: GroupsSort }
+
+export type GroupsTableRow = { name: string; memberCount: number; owner?: GroupOwner | null }
+
+export const DEFAULT_GROUPS_SORT: GroupsSort = { key: 'order', direction: 'asc' }
+
+const GROUPS_SORT_KEYS: readonly GroupsSortKey[] = ['name', 'owner', 'members']
+
+type ParamsLike = { get(name: string): string | null }
+
+function parseGroupsSort(value: string | null | undefined): GroupsSort {
+	if (!value) return DEFAULT_GROUPS_SORT
+	const direction = value.startsWith('-') ? 'desc' : 'asc'
+	const key = value.replace(/^-/, '') as GroupsSortKey
+	return GROUPS_SORT_KEYS.includes(key) ? { key, direction } : DEFAULT_GROUPS_SORT
+}
+
+export function parseGroupsUrl(params: ParamsLike | null | undefined): GroupsUrlState {
+	return { q: params?.get('q') ?? '', sort: parseGroupsSort(params?.get('sort')) }
+}
+
+export function groupsSearch(state: GroupsUrlState): string {
+	const parts: string[] = []
+	if (state.q.trim()) parts.push(`q=${encodeURIComponent(state.q)}`)
+	if (state.sort.key !== 'order') parts.push(`sort=${state.sort.direction === 'desc' ? '-' : ''}${state.sort.key}`)
+	return parts.length > 0 ? `?${parts.join('&')}` : ''
+}
+
+export function nextGroupsSort(current: GroupsSort, key: GroupsSortKey): GroupsSort {
+	return cycleSort(current, key, DEFAULT_GROUPS_SORT)
+}
+
+export function filterGroups<T extends GroupsTableRow>(groups: readonly T[], q: string): T[] {
+	const needle = q.trim().toLocaleLowerCase('ru')
+	if (!needle) return [...groups]
+	return groups.filter((group) => group.name.toLocaleLowerCase('ru').includes(needle))
+}
+
+function compareGroups(a: GroupsTableRow, b: GroupsTableRow, key: GroupsSortKey): number {
+	if (key === 'name') return a.name.localeCompare(b.name, 'ru')
+	if (key === 'owner') return ownerLabel(a.owner).localeCompare(ownerLabel(b.owner), 'ru')
+	if (key === 'members') return a.memberCount - b.memberCount
+	return 0
+}
+
+export function sortGroups<T extends GroupsTableRow>(groups: readonly T[], sort: GroupsSort): T[] {
+	const sign = sort.direction === 'asc' ? 1 : -1
+	return groups
+		.map((group, index) => ({ group, index }))
+		.sort((a, b) => sign * compareGroups(a.group, b.group, sort.key) || a.index - b.index)
+		.map((entry) => entry.group)
 }

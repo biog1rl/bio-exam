@@ -91,11 +91,13 @@ export async function fetchMyTestAttempts(testId: string, options?: { offset?: n
 	)
 }
 
-export type ChartDataPoint = {
-	date: string
-	maxScore: number
-	minScore: number
-	count: number
+export type ChartAttemptRow = {
+	id: string
+	earnedPoints: number
+	totalPoints: number
+	scorePercentage: number
+	passed: boolean
+	submittedAt: string
 }
 
 export async function fetchChartData(testId: string, params: { from?: string; to?: string }) {
@@ -103,17 +105,9 @@ export async function fetchChartData(testId: string, params: { from?: string; to
 	if (params.from) qs.set('from', params.from)
 	if (params.to) qs.set('to', params.to)
 	const query = qs.toString()
-	return requestJson<{ data: ChartDataPoint[] }>(
+	return requestJson<{ attempts: ChartAttemptRow[] }>(
 		`/api/tests/public/tests/${segment(testId)}/chart-data${query ? `?${query}` : ''}`
 	)
-}
-
-export async function fetchChartDefaultRange(): Promise<{ value: string }> {
-	try {
-		return await requestJson<{ value: string }>('/api/settings/chart-default-range')
-	} catch {
-		return { value: 'month' }
-	}
 }
 
 export async function startTestSession(testId: string): Promise<AttemptSession> {

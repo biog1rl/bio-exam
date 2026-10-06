@@ -8,6 +8,7 @@ import { Check, CircleAlert, Loader2, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 import { Editor } from '@/components/editor/editor'
+import { PageHeader } from '@/components/page/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -141,55 +142,50 @@ export default function QuestionEditor({
 
 	return (
 		<div className="flex flex-col gap-5">
-			{/* Header */}
-			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
-				<div className="flex flex-col gap-5 tab:flex-row tab:items-end tab:justify-between">
-					<div className="min-w-0">
-						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">вопрос</p>
-						<h1 className="mt-2 font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">
-							{question.id ? (context?.number ? `Вопрос ${context.number}` : 'Вопрос') : 'Новый вопрос'}
-						</h1>
-						{context ? (
-							<p className="mt-3 max-w-2xl text-sm break-words text-muted-foreground">
-								{question.id && context.number ? `из ${context.total} · ` : `будет ${context.total + 1}-м · `}
-								<Link
-									href={context.testHref}
-									className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
-								>
-									{context.testTitle}
-								</Link>
-								{context.topicTitle ? ` · ${context.topicTitle}` : null}
-							</p>
-						) : null}
-					</div>
-					<div className={cn('flex flex-wrap gap-2', autosaveStatus !== undefined && 'items-center tab:justify-end')}>
-						{autosaveStatus ? <AutosaveStatusLine status={autosaveStatus} /> : null}
-						{headerActions}
-						<Button
-							variant="secondary"
-							onClick={onCancel}
-							className={leaving ? 'relative rounded-full' : 'rounded-full'}
-							aria-label={leaving ? 'Отмена' : undefined}
-							aria-busy={leaving || undefined}
-						>
-							{leaving ? (
-								<>
-									<span className="invisible">Отмена</span>
-									<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
-								</>
-							) : (
-								'Отмена'
-							)}
-						</Button>
-						<Button className="relative rounded-full" onClick={handleSave} disabled={leaving}>
-							<span className={isSaving ? 'invisible' : ''}>Сохранить вопрос</span>
-							{isSaving && (
+			<PageHeader
+				title={question.id ? (context?.number ? `Вопрос ${context.number}` : 'Вопрос') : 'Новый вопрос'}
+				meta={
+					context ? (
+						<p className="break-words">
+							{question.id && context.number ? `из ${context.total} · ` : `будет ${context.total + 1}-м · `}
+							<Link
+								href={context.testHref}
+								className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+							>
+								{context.testTitle}
+							</Link>
+							{context.topicTitle ? ` · ${context.topicTitle}` : null}
+						</p>
+					) : undefined
+				}
+			>
+				<div className="flex min-w-0 flex-wrap items-center gap-2 tab-sm:justify-end">
+					{autosaveStatus ? <AutosaveStatusLine status={autosaveStatus} /> : null}
+					{headerActions}
+					<Button
+						variant="secondary"
+						onClick={onCancel}
+						className={leaving ? 'relative rounded-full' : 'rounded-full'}
+						aria-label={leaving ? 'Отмена' : undefined}
+						aria-busy={leaving || undefined}
+					>
+						{leaving ? (
+							<>
+								<span className="invisible">Отмена</span>
 								<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
-							)}
-						</Button>
-					</div>
+							</>
+						) : (
+							'Отмена'
+						)}
+					</Button>
+					<Button className="relative rounded-full" onClick={handleSave} disabled={leaving}>
+						<span className={isSaving ? 'invisible' : ''}>Сохранить вопрос</span>
+						{isSaving && (
+							<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
+						)}
+					</Button>
 				</div>
-			</section>
+			</PageHeader>
 
 			<AdminTestsSectionCard title="Формулировка">
 				<Editor
@@ -337,7 +333,7 @@ function AutosaveStatusLine({ status }: { status: { view: AutosaveStatusView; on
 	const { view, onRetry } = status
 	const Icon = AUTOSAVE_ICON[view.icon]
 	return (
-		<div className="flex min-h-9 w-full flex-wrap items-center gap-2 text-sm tab:w-auto">
+		<div className="flex min-h-9 w-full min-w-0 flex-wrap items-center gap-2 text-sm tab-sm:w-auto">
 			<span
 				role="status"
 				aria-live="polite"

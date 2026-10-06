@@ -196,13 +196,14 @@ describe('читатели результата: none, pending и graded', () =>
 				{ cookies: student.cookie }
 			)
 		)
-		const data = reply.body.data as Json[]
-		assert.equal(data.length, 1)
-		assert.equal(data[0]?.date, new Date().toISOString().slice(0, 10))
-		assert.equal(data[0]?.maxScore, 75)
-		assert.equal(data[0]?.minScore, 75)
-		assert.equal(data[0]?.count, 1)
-		assert.ok(!data.some((entry) => entry.date === PENDING_AT.slice(0, 10)))
+		const attempts = reply.body.attempts as Json[]
+		assert.deepEqual(
+			attempts.map((row) => row.id),
+			[graded]
+		)
+		assert.equal(attempts[0]?.scorePercentage, 75)
+		assert.equal(String(attempts[0]?.submittedAt).slice(0, 10), new Date().toISOString().slice(0, 10))
+		assert.ok(!attempts.some((row) => row.id === pending || row.id === none))
 	})
 
 	test('профиль ученика: none, pending и graded', async () => {

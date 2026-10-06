@@ -224,6 +224,22 @@
       "sha256": "86dd934e63a955cc83d27968b2e19a9f08dadbf594372abc99d2e7aeedf252f5",
       "when": 1791264404526,
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "tag": "0028_chart_settings",
+      "file": "0028_chart_settings.sql",
+      "sha256": "bc05e621e1335b0fea3a5583dc63df844cd61baf7d9914ad475fdbeb6aca2eb0",
+      "when": 1791268920500,
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "tag": "0029_drop_app_settings",
+      "file": "0029_drop_app_settings.sql",
+      "sha256": "21f85c337307cce287cd5f237772c86c2f73c497413a4d094c68cff8f1ae1537",
+      "when": 1791268928915,
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,7 @@ const MENU: Record<Role, string[]> = {
 		'Типы вопросов',
 		'Настройка баллов',
 		'Права доступа',
-		'Диапазон графика',
+		'Графики',
 		'Ссылки в меню',
 	],
 }
@@ -120,12 +120,14 @@ test('«Ученики группы» opens the users list filtered by the group
 }, testInfo) => {
 	const groupName = `E2E группа ${projectKey(testInfo)}`
 	await page.goto('/admin/groups')
-	await page.getByRole('link', { name: `Ученики группы ${groupName}` }).click()
+	await page.getByRole('button', { name: `Действия с группой ${groupName}`, exact: true }).click()
+	await page.getByRole('menuitem', { name: 'Ученики группы' }).click()
 	await expect(page).toHaveURL(/\/admin\/users\?group=[^&]+$/)
-	await expect(page.getByRole('combobox').filter({ hasText: groupName })).toBeVisible()
 
-	await page.getByRole('combobox').filter({ hasText: groupName }).click()
-	await page.getByRole('option', { name: 'Все группы' }).click()
+	await page.getByRole('button', { name: 'Фильтр по группам' }).click()
+	const groupOption = page.getByRole('option', { name: groupName })
+	await expect(groupOption).toContainText('выбрано')
+	await groupOption.click()
 	await expect(page).toHaveURL(/\/admin\/users$/)
 })
 

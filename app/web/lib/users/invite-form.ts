@@ -113,11 +113,6 @@ export function groupsTitle(groups: ReadonlyArray<GroupRef>): string {
 	return groups.map((group) => group.name).join(', ')
 }
 
-export function matchesGroup(row: { groups: ReadonlyArray<GroupRef> }, groupFilter: string): boolean {
-	if (groupFilter === 'all') return true
-	return row.groups.some((group) => group.id === groupFilter)
-}
-
 export function groupOwnerLabel(owner: InviteGroupOwner | null | undefined): string | null {
 	if (owner === undefined) return null
 	if (owner === null) return 'администраторы'
@@ -157,8 +152,7 @@ export function parseInviteGroups(body: unknown): InviteGroup[] {
 	return groups
 }
 
-export function usersEmptyText(input: { searchQuery: string; teacher: boolean; totalRows: number }): string {
-	if (input.searchQuery) return 'Пользователи не найдены'
-	if (input.teacher && input.totalRows === 0) return TEACHER_NO_STUDENTS
-	return 'Нет пользователей'
+export function usersEmptyText(input: { teacher: boolean; totalRows: number }): string {
+	if (input.totalRows > 0) return 'Пользователи не найдены'
+	return input.teacher ? TEACHER_NO_STUDENTS : 'Нет пользователей'
 }

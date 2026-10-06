@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 
-import { Download, Edit, FolderOpen, Plus, Search, Settings2, Trash2 } from 'lucide-react'
+import { Download, Edit, FolderOpen, Plus, Settings2, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,6 +11,10 @@ import useSWR from 'swr'
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { ColumnFilterMenu } from '@/components/table/ColumnFilterMenu'
 import { Button } from '@/components/ui/button'
@@ -21,9 +25,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUiAlertDialog } from '@/components/ui/use-ui-alert-dialog'
 import { saveBlob } from '@/lib/http/download'
 import { exportFailureMessage, failureMessage } from '@/lib/http/errors'
@@ -224,46 +226,29 @@ export function BankExplorer({ topicSlug }: { topicSlug?: string }) {
 		<div className="space-y-4">
 			{topic ? <SetBreadcrumbsLabels labels={{ [`/admin/tests/${topic.slug}`]: topic.title }} /> : null}
 
-			<div className="flex flex-col gap-3 tab-sm:flex-row tab-sm:items-center tab-sm:justify-between">
-				<h1 className="min-w-0 font-serif text-2xl leading-tight break-words text-foreground tab-sm:text-3xl">
-					{topicSlug ? (topic?.title ?? 'Тема не найдена') : 'Банк заданий'}
-				</h1>
-
+			<PageHeader title={topicSlug ? (topic?.title ?? 'Тема не найдена') : 'Банк заданий'}>
 				{topicSlug && !topic ? null : (
-					<div className="flex min-w-0 items-center gap-2">
+					<>
 						<div className="tab-sm:hidden">{statusFilter}</div>
-						<label className="relative block min-w-0 flex-1 tab-sm:w-72 tab-sm:flex-none">
-							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								type="search"
-								value={url.q}
-								onChange={(event) => updateUrl({ q: event.target.value })}
-								placeholder={topic ? 'Название теста' : 'Название теста или темы'}
-								aria-label="Поиск тестов"
-								className="h-10 rounded-full bg-card pl-9"
-							/>
-						</label>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button asChild size="icon" className="size-10 shrink-0 rounded-full">
-									<Link href={newTestHref(topic?.slug)} aria-label="Новый тест">
-										<Plus className="size-4" aria-hidden="true" />
-									</Link>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>Новый тест</TooltipContent>
-						</Tooltip>
+						<ToolbarSearch
+							value={url.q}
+							onChange={(q) => updateUrl({ q })}
+							placeholder={topic ? 'Название теста' : 'Название теста или темы'}
+							label="Поиск тестов"
+						/>
+						<ToolbarTooltip label="Новый тест">
+							<ToolbarButton asChild tone="primary" label="Новый тест">
+								<Link href={newTestHref(topic?.slug)}>
+									<Plus className="size-4" aria-hidden="true" />
+								</Link>
+							</ToolbarButton>
+						</ToolbarTooltip>
 						{topic ? (
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
-									<Button
-										variant="outline"
-										size="icon"
-										className="size-10 shrink-0 rounded-full bg-card"
-										aria-label="Действия с темой"
-									>
+									<ToolbarButton label="Действия с темой">
 										<Settings2 className="size-4" aria-hidden="true" />
-									</Button>
+									</ToolbarButton>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
 									{catalog ? (
@@ -306,14 +291,9 @@ export function BankExplorer({ topicSlug }: { topicSlug?: string }) {
 						) : catalog ? (
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
-									<Button
-										variant="outline"
-										size="icon"
-										className="size-10 shrink-0 rounded-full bg-card"
-										aria-label="Настройки банка"
-									>
+									<ToolbarButton label="Настройки банка">
 										<Settings2 className="size-4" aria-hidden="true" />
-									</Button>
+									</ToolbarButton>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
 									<DropdownMenuItem onSelect={() => openTopicDialog(null)}>Создать тему</DropdownMenuItem>
@@ -327,9 +307,9 @@ export function BankExplorer({ topicSlug }: { topicSlug?: string }) {
 								</DropdownMenuContent>
 							</DropdownMenu>
 						) : null}
-					</div>
+					</>
 				)}
-			</div>
+			</PageHeader>
 
 			<div className="grid gap-5 tab:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
 				<div className="hidden tab:block">
@@ -347,12 +327,14 @@ export function BankExplorer({ topicSlug }: { topicSlug?: string }) {
 					</div>
 
 					{topicSlug && !topic ? (
-						<div className="flex flex-col items-center gap-4 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-							<p className="text-muted-foreground">Проверьте адрес: возможно, адрес темы изменили.</p>
-							<Button asChild variant="outline" className="rounded-full">
-								<Link href="/admin/tests">Все тесты</Link>
-							</Button>
-						</div>
+						<EmptyState
+							description="Проверьте адрес: возможно, адрес темы изменили."
+							action={
+								<Button asChild variant="outline" className="rounded-full">
+									<Link href="/admin/tests">Все тесты</Link>
+								</Button>
+							}
+						/>
 					) : (
 						<>
 							{testsFailed ? (
@@ -360,34 +342,40 @@ export function BankExplorer({ topicSlug }: { topicSlug?: string }) {
 							) : testsPending ? (
 								<Skeleton className="h-96 rounded-3xl" aria-label="Загрузка тестов" />
 							) : scopeTests.length === 0 ? (
-								<div className="flex flex-col items-center gap-4 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-									<p className="font-medium text-foreground">
-										{topic ? 'В теме пока нет тестов' : 'В банке пока нет тестов'}
-									</p>
-									<p className="text-sm text-muted-foreground">
-										{topic
+								<EmptyState
+									title={topic ? 'В теме пока нет тестов' : 'В банке пока нет тестов'}
+									description={
+										topic
 											? 'Создайте первый тест: тема подставится сама.'
 											: topics.length === 0 && catalog
 												? 'Сначала создайте тему, затем тест в ней.'
-												: 'Создайте первый тест.'}
-									</p>
-									{!topic && topics.length === 0 && catalog ? (
-										<Button className="rounded-full" onClick={() => openTopicDialog(null)}>
-											Создать тему
-										</Button>
-									) : (
-										<Button asChild className="rounded-full">
-											<Link href={newTestHref(topic?.slug)}>Создать тест</Link>
-										</Button>
-									)}
-								</div>
+												: 'Создайте первый тест.'
+									}
+									action={
+										!topic && topics.length === 0 && catalog ? (
+											<Button className="rounded-full" onClick={() => openTopicDialog(null)}>
+												Создать тему
+											</Button>
+										) : (
+											<Button asChild className="rounded-full">
+												<Link href={newTestHref(topic?.slug)}>Создать тест</Link>
+											</Button>
+										)
+									}
+								/>
 							) : visibleTests.length === 0 ? (
-								<div className="flex flex-col items-center gap-4 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-									<p className="text-muted-foreground">Ничего не найдено с такими фильтрами.</p>
-									<Button variant="outline" className="rounded-full" onClick={() => updateUrl({ statuses: [], q: '' })}>
-										Сбросить фильтры
-									</Button>
-								</div>
+								<EmptyState
+									description="Ничего не найдено с такими фильтрами."
+									action={
+										<Button
+											variant="outline"
+											className="rounded-full"
+											onClick={() => updateUrl({ statuses: [], q: '' })}
+										>
+											Сбросить фильтры
+										</Button>
+									}
+								/>
 							) : (
 								<div className="space-y-2">
 									<BankTestsTable

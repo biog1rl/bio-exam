@@ -3,20 +3,21 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DateRange } from 'react-day-picker'
 
-import { format } from 'date-fns'
+import { format, isValid, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import {
 	ArrowRight,
 	CalendarIcon,
 	Check,
 	ChevronDown,
+	CircleCheck,
+	CircleX,
 	Loader2,
 	LockKeyholeOpen,
 	LogOut,
 	Pencil,
-	Search,
+	Plus,
 	Trash2,
-	UserPlus,
 	X,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -24,10 +25,15 @@ import { useQueryState } from 'nuqs'
 import { toast } from 'sonner'
 import useSWR, { useSWRConfig } from 'swr'
 
+import { AttemptChart } from '@/components/charts/AttemptChart'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
-import { AttemptBarChart } from '@/components/progress/AttemptBarChart'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
-import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
+import { TableCard } from '@/components/table/TableCard'
+import { useRowLink } from '@/components/table/use-row-link'
+import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import {
 	AlertDialog,
@@ -42,12 +48,12 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { EditUserDialog } from '@/components/users/dialogs/EditUserDialog'
 import {
 	actionErrorText,
@@ -58,10 +64,10 @@ import {
 	sessionActionsState,
 	type SessionActionKind,
 } from '@/components/users/session-actions'
+import { useChartConfigs } from '@/lib/charts/api'
 import { failureMessage, failureOf } from '@/lib/http/errors'
 import {
 	assignTopicColors,
-	DEFAULT_PERIOD,
 	filterAttemptsByPeriod,
 	parseDateParam,
 	parseDayParam,
@@ -69,7 +75,7 @@ import {
 	PERIOD_PRESETS,
 	resolvePeriodBounds,
 } from '@/lib/progress/attempt-chart'
-import { adminTestsKeys, adminTestsListFetcher } from '@/lib/tests/admin-api'
+import { adminTestsKeys, adminTestsListFetcher, type AdminTestListItem } from '@/lib/tests/admin-api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { attemptsUrl } from '@/lib/tests/attempts-url'
 import {
@@ -82,9 +88,12 @@ import {
 	userAttemptsFetcher,
 	userByLoginFetcher,
 	usersKeys,
+	type UserAttemptRow,
+	type UserTestAssignment,
 } from '@/lib/users/api'
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
 import { usersUrl } from '@/lib/users/users-url'
+import { cn } from '@/lib/utils/cn'
 
 type Props = {
 	login: string
@@ -101,54 +110,271 @@ function failedSources(sources: LoadSource[]): LoadSource[] {
 }
 
 function ProfileSectionCard({
-	kicker,
 	title,
 	children,
 	loading,
 	sources = [],
 	action,
 }: {
-	kicker: string
 	title: string
 	children: ReactNode
 	loading?: boolean
 	sources?: LoadSource[]
 	action?: ReactNode
 }) {
-	const titleRef = useRef<HTMLDivElement>(null)
+	const titleRef = useRef<HTMLHeadingElement>(null)
 	const failed = failedSources(sources)
 
 	return (
-		<Card className="min-w-0 rounded-4xl border-border/80 bg-card/90">
-			<CardHeader className="flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
-					<CardTitle ref={titleRef} tabIndex={-1} className="font-serif text-2xl leading-tight">
-						{title}
-					</CardTitle>
-				</div>
+		<section className="min-w-0 space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
+			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+				<h2 ref={titleRef} tabIndex={-1} className="text-lg font-semibold outline-none">
+					{title}
+				</h2>
 				{action}
-			</CardHeader>
-			<CardContent>
-				{failed.length > 0 ? (
-					<LoadErrorAlert
-						title="Не удалось загрузить данные"
-						error={failed[0].error}
-						onRetry={() => Promise.all(failed.map((source) => source.mutate()))}
-						focusTarget={titleRef}
-					/>
-				) : loading ? (
-					<p role="status">Загрузка...</p>
-				) : (
-					children
-				)}
-			</CardContent>
-		</Card>
+			</div>
+			{failed.length > 0 ? (
+				<LoadErrorAlert
+					title="Не удалось загрузить данные"
+					error={failed[0].error}
+					onRetry={() => Promise.all(failed.map((source) => source.mutate()))}
+					focusTarget={titleRef}
+				/>
+			) : loading ? (
+				<p role="status" className="text-sm text-muted-foreground">
+					Загрузка...
+				</p>
+			) : (
+				children
+			)}
+		</section>
 	)
 }
 
 function EmptyProfileState({ children }: { children: ReactNode }) {
-	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
+	return (
+		<div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+			{children}
+		</div>
+	)
+}
+
+function shortDate(value: string, pattern: string): string {
+	const parsed = parseISO(value)
+	return isValid(parsed) ? format(parsed, pattern) : '—'
+}
+
+function AttemptsTable({
+	attempts,
+	colorBySlug,
+}: {
+	attempts: UserAttemptRow[]
+	colorBySlug: ReadonlyMap<string, string>
+}) {
+	const rowLink = useRowLink()
+	return (
+		<TableCard className="shadow-none">
+			<Table className="table-fixed">
+				<TableHeader>
+					<TableRow className="hover:bg-transparent">
+						<TableHead className="pl-4">Тест</TableHead>
+						<TableHead className="hidden w-40 text-right tab-sm:table-cell">Дата</TableHead>
+						<TableHead className="w-40 pr-4 text-right">Результат</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{attempts.map((attempt) => {
+						const href = `/admin/attempts/${attempt.attemptId}`
+						const dotColor = colorBySlug.get(attempt.topicSlug)
+						const submitted = shortDate(attempt.submittedAt, 'dd.MM.yyyy, HH:mm')
+						const view = attemptResultView(attempt)
+						return (
+							<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
+								<TableCell className="py-3 pl-4">
+									<Link
+										href={href}
+										className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
+									>
+										{attempt.testTitle}
+									</Link>
+									<p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+										{dotColor ? (
+											<span
+												className="size-2 shrink-0 rounded-full"
+												style={{ background: dotColor }}
+												aria-hidden="true"
+											/>
+										) : null}
+										<span className="truncate">{attempt.topicTitle ?? attempt.topicSlug}</span>
+									</p>
+									<p className="mt-0.5 text-xs text-muted-foreground tabular-nums tab-sm:hidden">{submitted}</p>
+								</TableCell>
+								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+									{submitted}
+								</TableCell>
+								<TableCell className="py-3 pr-4 text-right">
+									{view.kind === 'pending' ? (
+										<span className="inline-flex justify-end">
+											<AttemptReviewLine view={view} audience="staff" />
+										</span>
+									) : (
+										<>
+											<span className="inline-flex items-center gap-1.5 font-medium tabular-nums">
+												{view.passed ? (
+													<CircleCheck className="size-4 text-primary" aria-hidden="true" />
+												) : (
+													<CircleX className="size-4 text-muted-foreground" aria-hidden="true" />
+												)}
+												{Math.round(view.percent)}%
+												<span className="sr-only">{view.passed ? 'Пройден' : 'Не пройден'}</span>
+											</span>
+											<p className="text-xs text-muted-foreground tabular-nums">
+												{view.points.earned} из {view.points.total}
+											</p>
+											{view.teacherChecked ? (
+												<span className="mt-1 inline-flex">
+													<TeacherCheckedMark />
+												</span>
+											) : null}
+										</>
+									)}
+								</TableCell>
+							</TableRow>
+						)
+					})}
+				</TableBody>
+			</Table>
+		</TableCard>
+	)
+}
+
+function AssignmentsTable({
+	assignments,
+	removingTestId,
+	onRemove,
+}: {
+	assignments: UserTestAssignment[]
+	removingTestId: string | null
+	onRemove: (testId: string) => void
+}) {
+	return (
+		<TableCard className="shadow-none">
+			<Table className="table-fixed">
+				<TableHeader>
+					<TableRow className="hover:bg-transparent">
+						<TableHead className="pl-4">Тест</TableHead>
+						<TableHead className="hidden w-28 text-right tab-sm:table-cell">Назначен</TableHead>
+						<TableHead className="w-14 pr-3">
+							<span className="sr-only">Действия</span>
+						</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{assignments.map((assignment) => {
+						const assigned = shortDate(assignment.assignedAt, 'dd.MM.yyyy')
+						const removable = assignmentAction(assignment) === 'remove'
+						const removing = removingTestId === assignment.testId
+						return (
+							<TableRow key={assignment.testId}>
+								<TableCell className="py-2.5 pl-4">
+									<p className="font-medium [overflow-wrap:anywhere] text-foreground">{assignment.testTitle}</p>
+									<p className="text-xs text-muted-foreground tabular-nums tab-sm:hidden">Назначен {assigned}</p>
+									{removable ? null : <p className="text-xs text-muted-foreground">Назначил администратор</p>}
+								</TableCell>
+								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+									{assigned}
+								</TableCell>
+								<TableCell className="pr-3">
+									{removable ? (
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													size="icon"
+													variant="ghost"
+													className="size-8 rounded-full text-muted-foreground hover:text-destructive"
+													aria-label={`Удалить назначение: ${assignment.testTitle}`}
+													onClick={() => onRemove(assignment.testId)}
+													disabled={removing}
+												>
+													{removing ? (
+														<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+													) : (
+														<Trash2 className="size-4" aria-hidden="true" />
+													)}
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>Удалить назначение</TooltipContent>
+										</Tooltip>
+									) : null}
+								</TableCell>
+							</TableRow>
+						)
+					})}
+				</TableBody>
+			</Table>
+		</TableCard>
+	)
+}
+
+function AssignableTestsTable({
+	tests,
+	assigningTestId,
+	onAssign,
+}: {
+	tests: AdminTestListItem[]
+	assigningTestId: string | null
+	onAssign: (testId: string) => void
+}) {
+	return (
+		<TableCard className="shadow-none">
+			<div className="max-h-80 overflow-y-auto">
+				<Table className="table-fixed">
+					<TableHeader>
+						<TableRow className="hover:bg-transparent">
+							<TableHead className="pl-4">Тест</TableHead>
+							<TableHead className="w-14 pr-3">
+								<span className="sr-only">Действия</span>
+							</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{tests.map((test) => {
+							const assigning = assigningTestId === test.id
+							return (
+								<TableRow key={test.id}>
+									<TableCell className="py-2.5 pl-4">
+										<p className="font-medium [overflow-wrap:anywhere] text-foreground">{test.title}</p>
+										{test.topicTitle ? <p className="text-xs text-muted-foreground">{test.topicTitle}</p> : null}
+									</TableCell>
+									<TableCell className="pr-3">
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													size="icon"
+													variant="ghost"
+													className="size-8 rounded-full text-muted-foreground hover:text-primary"
+													aria-label={`Назначить: ${test.title}`}
+													onClick={() => onAssign(test.id)}
+													disabled={assigning}
+												>
+													{assigning ? (
+														<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+													) : (
+														<Plus className="size-4" aria-hidden="true" />
+													)}
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>Назначить</TooltipContent>
+										</Tooltip>
+									</TableCell>
+								</TableRow>
+							)
+						})}
+					</TableBody>
+				</Table>
+			</div>
+		</TableCard>
+	)
 }
 
 function withLoginBreak(text: string, login: string) {
@@ -217,7 +443,8 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const [visibleCount, setVisibleCount] = useState(5)
 
 	// Date range filter state
-	const [range, setRange] = useQueryState('range', { defaultValue: DEFAULT_PERIOD })
+	const chartConfig = useChartConfigs().profileAttempts
+	const [range, setRange] = useQueryState('range', { defaultValue: '' })
 	const [customFrom, setCustomFrom] = useQueryState('from', { defaultValue: '' })
 	const [customTo, setCustomTo] = useQueryState('to', { defaultValue: '' })
 	const [calendarOpen, setCalendarOpen] = useState(false)
@@ -275,7 +502,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}, [attempts, search, topicFilter, activeTestIds])
 
 	const [now] = useState(() => new Date())
-	const period = parsePeriod(range)
+	const period = range ? parsePeriod(range) : chartConfig.period
 	const dayDate = useMemo(() => parseDayParam(selectedDay), [selectedDay])
 	const fromDate = useMemo(() => parseDateParam(customFrom), [customFrom])
 	const toDate = useMemo(() => parseDateParam(customTo), [customTo])
@@ -349,7 +576,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	const handlePresetChange = (value: string) => {
 		if (!value) return
-		void setRange(value === DEFAULT_PERIOD ? null : value)
+		void setRange(value)
 		void setCustomFrom('')
 		void setCustomTo('')
 		void setSelectedDay(null)
@@ -457,46 +684,38 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const presetValue = !dayDate && PERIOD_PRESETS.some((preset) => preset.value === period) ? period : ''
 
 	return (
-		<div className="space-y-6">
-			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
-				<div className="flex items-start justify-between gap-4">
-					<div>
-						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
-							профиль ученика
-						</p>
-						<div className="mt-2 flex flex-wrap items-center gap-2">
-							<h1 className="font-serif text-4xl leading-none text-foreground tab-sm:text-5xl">{displayName}</h1>
-							{userGroups.map((group) => (
-								<Link
-									key={group.id}
-									href={usersUrl(group.id)}
-									title="Ученики группы"
-									className="rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-								>
-									<Badge variant="secondary" className="rounded-full hover:bg-secondary/70">
-										{group.name}
-									</Badge>
-								</Link>
-							))}
-						</div>
-						<p className="mt-4 font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">{user.login}</p>
-					</div>
-					{canEditUser && (
-						<Button
-							variant="outline"
-							size="icon"
-							aria-label="Изменить профиль"
-							onClick={() => setEditOpen(true)}
-							className="rounded-2xl border-border/80 transition-colors hover:border-primary hover:bg-secondary/70"
-						>
-							<Pencil className="h-4 w-4" />
-						</Button>
-					)}
-				</div>
-			</section>
+		<div className="space-y-4">
+			<PageHeader
+				title={displayName}
+				meta={
+					<span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+						<span className="break-all">{user.login}</span>
+						{userGroups.map((group) => (
+							<Link
+								key={group.id}
+								href={usersUrl(group.id)}
+								title="Ученики группы"
+								className="rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+							>
+								<Badge variant="secondary" className="rounded-full hover:bg-secondary/70">
+									{group.name}
+								</Badge>
+							</Link>
+						))}
+					</span>
+				}
+			>
+				{canEditUser ? (
+					<ToolbarTooltip label="Изменить профиль">
+						<ToolbarButton label="Изменить профиль" onClick={() => setEditOpen(true)}>
+							<Pencil className="size-4" aria-hidden="true" />
+						</ToolbarButton>
+					</ToolbarTooltip>
+				) : null}
+			</PageHeader>
 
-			<div className="grid gap-6 tab:grid-cols-2">
-				<ProfileSectionCard kicker="контакты" title="Контакты">
+			<div className="grid gap-4 tab:grid-cols-2">
+				<ProfileSectionCard title="Контакты">
 					{contacts.length === 0 ? (
 						<EmptyProfileState>Контакты не указаны</EmptyProfileState>
 					) : (
@@ -527,11 +746,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				</ProfileSectionCard>
 
 				{showSessionCard && (
-					<ProfileSectionCard kicker="помощь со входом" title="Сеансы и вход">
+					<ProfileSectionCard title="Сеансы и вход">
 						<p className="text-sm text-muted-foreground">
 							Пригодится, если ученик не может войти или остался в аккаунте на чужом устройстве.
 						</p>
-						<div className="mt-4 flex flex-wrap gap-2">
+						<div className="flex flex-wrap gap-2">
 							<Button
 								ref={clearButtonRef}
 								variant="outline"
@@ -558,7 +777,6 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			</div>
 
 			<ProfileSectionCard
-				kicker="динамика"
 				title="Пройденные тесты"
 				loading={attemptsLoading || assignmentsLoading}
 				sources={[attemptsSource, assignmentsSource]}
@@ -573,23 +791,19 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				}
 			>
 				<div className="space-y-4">
-					{/* Filters */}
 					{attempts.length > 0 && (
-						<div className="flex flex-wrap gap-2">
-							<div className="relative min-w-45 flex-1">
-								<Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									placeholder="Поиск по тесту..."
-									value={search}
-									onChange={(e) => {
-										void setSearch(e.target.value)
-										setVisibleCount(5)
-									}}
-									className="h-8 pl-8 text-sm"
-								/>
-							</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<ToolbarSearch
+								value={search}
+								onChange={(value) => {
+									void setSearch(value)
+									setVisibleCount(5)
+								}}
+								label="Поиск по тесту"
+								placeholder="Название теста"
+								className="min-w-45"
+							/>
 
-							{/* Topic select */}
 							<Select
 								value={topicFilter}
 								onValueChange={(v) => {
@@ -598,7 +812,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									setVisibleCount(5)
 								}}
 							>
-								<SelectTrigger className="h-8 w-45 text-sm">
+								<SelectTrigger aria-label="Тема" className="h-10 w-45 rounded-full bg-card">
 									<SelectValue placeholder="Все темы" />
 								</SelectTrigger>
 								<SelectContent>
@@ -611,18 +825,16 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 								</SelectContent>
 							</Select>
 
-							{/* Multi-select tests */}
 							{testOptions.length > 0 && (
 								<Popover>
 									<PopoverTrigger asChild>
-										<Button variant="outline" size="sm" className="h-8 gap-1.5 text-sm font-normal">
-											{testPickerLabel}
-											<ChevronDown className="h-3.5 w-3.5 opacity-60" />
+										<Button variant="outline" className="h-10 max-w-full gap-1.5 rounded-full bg-card font-normal">
+											<span className="truncate">{testPickerLabel}</span>
+											<ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
 										</Button>
 									</PopoverTrigger>
 									<PopoverContent className="w-64 p-2" align="start">
 										<div className="max-h-60 space-y-1 overflow-y-auto">
-											{/* "All" option */}
 											<button
 												className="flex w-full items-center gap-2 rounded-2xl px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70"
 												onClick={() => {
@@ -661,12 +873,16 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<ToggleGroup
 								type="single"
 								aria-label="Период"
-								className="flex-wrap justify-start"
+								className="flex-wrap justify-start gap-1 rounded-full border border-border/80 bg-card p-1"
 								value={presetValue}
 								onValueChange={handlePresetChange}
 							>
 								{PERIOD_PRESETS.map((preset) => (
-									<ToggleGroupItem key={preset.value} value={preset.value} className="h-8 text-xs">
+									<ToggleGroupItem
+										key={preset.value}
+										value={preset.value}
+										className="h-8 rounded-full px-3 text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+									>
 										{preset.label}
 									</ToggleGroupItem>
 								))}
@@ -677,8 +893,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 								<PopoverTrigger asChild>
 									<Button
 										variant={period === 'custom' && !dayDate ? 'default' : 'outline'}
-										size="sm"
-										className="h-8 text-xs"
+										className={cn('h-10 rounded-full', !(period === 'custom' && !dayDate) && 'bg-card')}
 										onClick={() => void setRange('custom')}
 									>
 										{period === 'custom' && fromDate && toDate
@@ -702,8 +917,11 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							{/* Single day picker */}
 							<Popover open={dayCalendarOpen} onOpenChange={setDayCalendarOpen}>
 								<PopoverTrigger asChild>
-									<Button variant={dayDate ? 'default' : 'outline'} size="sm" className="h-8 gap-1.5 text-xs">
-										<CalendarIcon className="h-3.5 w-3.5" />
+									<Button
+										variant={dayDate ? 'default' : 'outline'}
+										className={cn('h-10 gap-1.5 rounded-full', !dayDate && 'bg-card')}
+									>
+										<CalendarIcon className="size-4" aria-hidden="true" />
 										{dayDate ? format(dayDate, 'd MMMM yyyy', { locale: ru }) : 'Один день'}
 									</Button>
 								</PopoverTrigger>
@@ -721,15 +939,21 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							</Popover>
 
 							{selectedDay && (
-								<Button variant="ghost" size="sm" className="h-8 px-2" onClick={clearDay}>
-									<X className="h-3.5 w-3.5" />
+								<Button
+									variant="ghost"
+									size="icon"
+									className="size-10 rounded-full"
+									onClick={clearDay}
+									aria-label="Сбросить день"
+								>
+									<X className="size-4" aria-hidden="true" />
 								</Button>
 							)}
 						</div>
 					)}
 
 					{!dayDate && chartAttempts.length > 0 && (
-						<AttemptBarChart attempts={chartAttempts} colors={topicColors} mode="range" />
+						<AttemptChart attempts={chartAttempts} config={chartConfig} mode="range" topicColors={topicColorBySlug} />
 					)}
 
 					{!dayDate && chartAttempts.length === 0 && filteredAttempts.length > 0 && (
@@ -748,68 +972,20 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									Нет попыток за выбранный день
 								</div>
 							) : (
-								<AttemptBarChart attempts={chartAttempts} colors={topicColors} mode="day" />
+								<AttemptChart attempts={chartAttempts} config={chartConfig} mode="day" topicColors={topicColorBySlug} />
 							)}
 						</div>
 					)}
 
-					{/* List */}
 					{attempts.length === 0 ? (
 						<EmptyProfileState>Отправленных попыток пока нет</EmptyProfileState>
 					) : filteredAttempts.length === 0 ? (
 						<EmptyProfileState>Ничего не найдено</EmptyProfileState>
 					) : (
-						<div className="space-y-2">
-							{visibleAttempts.map((attempt) => {
-								const dotColor = topicColorBySlug.get(attempt.topicSlug)
-								const view = attemptResultView(attempt)
-								const submitted = new Date(attempt.submittedAt).toLocaleString('ru-RU')
-								return (
-									<Link
-										href={`/admin/attempts/${attempt.attemptId}`}
-										key={attempt.attemptId}
-										className="flex items-center justify-between gap-3 rounded-3xl border border-border/70 bg-secondary/60 px-3 py-2 transition-colors hover:border-primary/70 hover:bg-secondary/70"
-									>
-										<div className="min-w-0 flex-1">
-											<div className="flex items-center gap-1.5">
-												{dotColor && (
-													<span
-														className="inline-block h-2 w-2 shrink-0 rounded-full"
-														style={{ background: dotColor }}
-													/>
-												)}
-												<p className="truncate text-sm font-medium">{attempt.testTitle}</p>
-											</div>
-											<p className="text-xs text-muted-foreground">
-												{view.kind === 'pending'
-													? view.auto
-														? `${submitted} · авто ${view.auto.earned} из ${view.auto.total}`
-														: submitted
-													: `${submitted} · ${view.points.earned}/${view.points.total} · ${Math.round(view.percent)}%`}
-											</p>
-										</div>
-										<div className="flex items-center gap-2">
-											{view.kind === 'pending' ? (
-												<ReviewStatusChip />
-											) : (
-												<>
-													<Badge variant={view.passed ? 'default' : 'secondary'}>
-														{view.passed ? 'Пройден' : 'Не пройден'}
-													</Badge>
-													{view.teacherChecked && <TeacherCheckedMark />}
-												</>
-											)}
-										</div>
-									</Link>
-								)
-							})}
+						<div className="space-y-3">
+							<AttemptsTable attempts={visibleAttempts} colorBySlug={topicColorBySlug} />
 							{visibleCount < filteredAttempts.length && (
-								<Button
-									variant="outline"
-									size="sm"
-									className="rounded-2xl"
-									onClick={() => setVisibleCount((c) => c + 5)}
-								>
+								<Button variant="outline" className="rounded-full" onClick={() => setVisibleCount((c) => c + 5)}>
 									Загрузить ещё
 								</Button>
 							)}
@@ -818,54 +994,16 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 				</div>
 			</ProfileSectionCard>
 
-			<div className="grid gap-6 lg:grid-cols-2">
-				<ProfileSectionCard
-					kicker="назначения"
-					title="Назначенные тесты"
-					loading={assignmentsLoading}
-					sources={[assignmentsSource]}
-				>
+			<div className="grid gap-4 lg:grid-cols-2">
+				<ProfileSectionCard title="Назначенные тесты" loading={assignmentsLoading} sources={[assignmentsSource]}>
 					{assignments.length === 0 ? (
 						<EmptyProfileState>Нет назначенных тестов</EmptyProfileState>
 					) : (
-						<div className="space-y-2">
-							{assignments.map((a) => (
-								<div
-									key={a.testId}
-									className="flex items-center justify-between gap-2 rounded-3xl border border-border/70 bg-secondary/60 px-3 py-2"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-medium">{a.testTitle}</p>
-										<p className="text-xs text-muted-foreground">
-											{new Date(a.assignedAt).toLocaleDateString('ru-RU')}
-										</p>
-									</div>
-									{assignmentAction(a) === 'remove' ? (
-										<Button
-											size="icon"
-											variant="ghost"
-											className="rounded-2xl transition-colors hover:bg-secondary/70 hover:text-destructive"
-											aria-label="Удалить назначение"
-											onClick={() => handleRemove(a.testId)}
-											disabled={removingTestId === a.testId}
-										>
-											{removingTestId === a.testId ? (
-												<Loader2 className="h-4 w-4 animate-spin" />
-											) : (
-												<Trash2 className="h-4 w-4" />
-											)}
-										</Button>
-									) : (
-										<p className="shrink-0 text-xs text-muted-foreground">Назначил администратор</p>
-									)}
-								</div>
-							))}
-						</div>
+						<AssignmentsTable assignments={assignments} removingTestId={removingTestId} onRemove={handleRemove} />
 					)}
 				</ProfileSectionCard>
 
 				<ProfileSectionCard
-					kicker="банк тестов"
 					title="Назначить тест"
 					loading={testsLoading || assignmentsLoading}
 					sources={[testsSource, assignmentsSource]}
@@ -875,37 +1013,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					) : availableTests.length === 0 ? (
 						<EmptyProfileState>Все тесты уже назначены</EmptyProfileState>
 					) : (
-						<div className="max-h-80 space-y-2 overflow-y-auto">
-							{availableTests.map((t) => (
-								<div
-									key={t.id}
-									className="flex items-center justify-between gap-2 rounded-3xl border border-border/70 bg-secondary/60 px-3 py-2"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-medium">{t.title}</p>
-										{t.topicTitle && (
-											<Badge variant="secondary" className="mt-0.5 text-xs">
-												{t.topicTitle}
-											</Badge>
-										)}
-									</div>
-									<Button
-										size="sm"
-										variant="outline"
-										className="rounded-2xl transition-colors hover:border-primary/70 hover:bg-secondary/70"
-										onClick={() => handleAssign(t.id)}
-										disabled={assigningTestId === t.id}
-									>
-										{assigningTestId === t.id ? (
-											<Loader2 className="mr-1 h-3 w-3 animate-spin" />
-										) : (
-											<UserPlus className="mr-1 h-3 w-3" />
-										)}
-										Назначить
-									</Button>
-								</div>
-							))}
-						</div>
+						<AssignableTestsTable tests={availableTests} assigningTestId={assigningTestId} onAssign={handleAssign} />
 					)}
 				</ProfileSectionCard>
 			</div>

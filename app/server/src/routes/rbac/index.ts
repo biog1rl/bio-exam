@@ -87,6 +87,11 @@ router.delete('/grant', sessionRequired(), requirePerm('rbac', 'write'), async (
 	}
 })
 
+async function hasAdminRole(userId: string): Promise<boolean> {
+	const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
+	return rs.some((r) => r.role === 'admin')
+}
+
 // ---------- User grants (user overrides have priority over role)
 
 router.get(
@@ -125,10 +130,7 @@ router.post('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), asyn
 
 		if (!isValidAction(domain, action)) return res.status(400).json({ error: ERROR_MESSAGES.UNKNOWN_DOMAIN_ACTION })
 
-		// если пользователь — admin, не даём трогать
-		const rs = await db.select({ role: userRoles.roleKey }).from(userRoles).where(eq(userRoles.userId, userId))
-		if (rs.some((r) => r.role === 'admin'))
-			return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_USER_GRANTS_IMMUTABLE })
+		if (await hasAdminRole(userId)) return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_USER_GRANTS_IMMUTABLE })
 
 		await db
 			.insert(rbacUserGrants)
@@ -151,6 +153,8 @@ router.delete('/user/grant', sessionRequired(), requirePerm('rbac', 'write'), as
 		if (!parsed.success)
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		const { userId, domain, action } = parsed.data
+
+		if (await hasAdminRole(userId)) return res.status(400).json({ error: ERROR_MESSAGES.ADMIN_USER_GRANTS_IMMUTABLE })
 
 		await db
 			.delete(rbacUserGrants)

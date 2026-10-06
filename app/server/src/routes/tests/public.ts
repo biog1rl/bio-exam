@@ -12,7 +12,7 @@ import { and, asc, count, desc, eq, gte, lte, ne, sql } from 'drizzle-orm'
 import { Router, type Response } from 'express'
 
 import { db } from '../../db/index.js'
-import { appSettings, questions, testAttempts, tests, topics } from '../../db/schema.js'
+import { questions, testAttempts, tests, topics } from '../../db/schema.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -434,7 +434,6 @@ router.get('/tests/:id/attempts/me', validateUUID('id'), sessionRequired(), asyn
 	}
 })
 
-// GET /api/tests/public/tests/:id/chart-data - данные для графика (все попытки в диапазоне дат)
 router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async (req, res, next) => {
 	try {
 		const testId = req.params.id as string
@@ -465,33 +464,20 @@ router.get('/tests/:id/chart-data', validateUUID('id'), sessionRequired(), async
 			}
 		}
 
-		// Fetch all attempts in range ordered ASC
-		const allAttempts = await db
+		const attempts = await db
 			.select({
+				id: testAttempts.id,
+				earnedPoints: testAttempts.finalEarnedPoints,
+				totalPoints: testAttempts.totalPoints,
 				scorePercentage: testAttempts.finalScorePercentage,
+				passed: testAttempts.finalPassed,
 				submittedAt: testAttempts.submittedAt,
 			})
 			.from(testAttempts)
 			.where(and(...conditions))
-			.orderBy(asc(testAttempts.submittedAt))
+			.orderBy(asc(testAttempts.submittedAt), asc(testAttempts.id))
 
-		// Group by date (YYYY-MM-DD), keep max/min/count per day
-		const byDate = new Map<string, { scores: number[] }>()
-		for (const a of allAttempts) {
-			if (a.scorePercentage === null) continue
-			const dateKey = a.submittedAt.toISOString().slice(0, 10)
-			if (!byDate.has(dateKey)) byDate.set(dateKey, { scores: [] })
-			byDate.get(dateKey)!.scores.push(Math.round(a.scorePercentage))
-		}
-
-		const data = [...byDate.entries()].map(([date, { scores }]) => ({
-			date,
-			maxScore: Math.max(...scores),
-			minScore: Math.min(...scores),
-			count: scores.length,
-		}))
-
-		res.json({ data })
+		res.json({ attempts })
 	} catch (e) {
 		next(e)
 	}

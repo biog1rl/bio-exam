@@ -4,12 +4,18 @@ import { AUTO_SCORED_TEMPLATES } from '@bio-exam/exam-core'
 
 import { useMemo, useRef, useState } from 'react'
 
-import { Plus, Settings } from 'lucide-react'
+import { Calculator, Plus, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { ColumnFilterMenu } from '@/components/table/ColumnFilterMenu'
+import { SortableHead } from '@/components/table/SortableHead'
+import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,14 +30,30 @@ import { Textarea } from '@/components/ui/textarea'
 import { failureMessage } from '@/lib/http/errors'
 import { adminTestsKeys, questionTypesFetcher, saveQuestionType } from '@/lib/tests/admin-api'
 import { cn } from '@/lib/utils/cn'
+import { cycleSort, sortDirectionOf, type TableSort } from '@/lib/utils/table-sort'
 
 import QuestionTypeScoringRuleEditor from '../components/QuestionTypeScoringRuleEditor'
 import {
 	TEMPLATE_META,
 	createDefaultQuestionTypeScoringRule,
+	type QuestionTypeDefinition,
 	type QuestionTypeScoringRule,
 	type QuestionUiTemplate,
 } from '../types'
+
+type TypeStatus = 'active' | 'inactive'
+
+const TYPE_STATUSES: readonly TypeStatus[] = ['active', 'inactive']
+
+const STATUS_LABELS: Record<TypeStatus, string> = { active: 'Активен', inactive: 'Отключён' }
+
+type TypeSort = TableSort<'default' | 'title'>
+
+const DEFAULT_SORT: TypeSort = { key: 'default', direction: 'asc' }
+
+function typeStatus(item: QuestionTypeDefinition): TypeStatus {
+	return item.isActive ? 'active' : 'inactive'
+}
 
 type CreateState = {
 	key: string
@@ -71,6 +93,14 @@ export default function QuestionTypesPageClient() {
 		questionTypesFetcher
 	)
 	const types = useMemo(() => data?.questionTypes ?? [], [data])
+	const [statuses, setStatuses] = useState<TypeStatus[]>([])
+	const [sort, setSort] = useState<TypeSort>(DEFAULT_SORT)
+	const visibleTypes = useMemo(() => {
+		const filtered = statuses.length === 0 ? types : types.filter((item) => statuses.includes(typeStatus(item)))
+		if (sort.key === 'default') return filtered
+		const sign = sort.direction === 'asc' ? 1 : -1
+		return [...filtered].sort((a, b) => sign * a.title.localeCompare(b.title, 'ru'))
+	}, [types, statuses, sort])
 	const rowLink = useRowLink()
 	const loadFailed = error !== undefined && data === undefined
 
@@ -111,31 +141,36 @@ export default function QuestionTypesPageClient() {
 		await mutate()
 	}
 
+	const statusFilter = (
+		<ColumnFilterMenu
+			label="Фильтр по статусу"
+			options={TYPE_STATUSES.map((value) => ({
+				value,
+				label: STATUS_LABELS[value],
+				count: types.filter((item) => typeStatus(item) === value).length,
+			}))}
+			selected={statuses}
+			onChange={setStatuses}
+		/>
+	)
+
 	return (
-		<div className="space-y-5">
-			<section className="flex flex-col gap-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:flex-row tab-sm:items-start tab-sm:justify-between tab-sm:p-unit">
-				<div className="min-w-0">
-					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">банк заданий</p>
-					<h1
-						ref={titleRef}
-						tabIndex={-1}
-						className="mt-2 font-serif text-3xl leading-tight text-foreground tab-sm:text-4xl"
-					>
-						Типы вопросов
-					</h1>
-					<p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-						Шаблон ответа, проверка вариантов и формула баллов для каждого типа. Баллы для отдельного теста — в{' '}
-						<Link href="/admin/tests/scoring" className="font-medium text-primary underline-offset-4 hover:underline">
-							настройке баллов
+		<div className="space-y-4">
+			<PageHeader title="Типы вопросов" titleRef={titleRef}>
+				<div className="mob:hidden">{statusFilter}</div>
+				<ToolbarTooltip label="Новый тип">
+					<ToolbarButton tone="primary" label="Новый тип" onClick={() => setDialogOpen(true)}>
+						<Plus className="size-4" aria-hidden="true" />
+					</ToolbarButton>
+				</ToolbarTooltip>
+				<ToolbarTooltip label="Настройка баллов">
+					<ToolbarButton asChild label="Настройка баллов">
+						<Link href="/admin/tests/scoring">
+							<Calculator className="size-4" aria-hidden="true" />
 						</Link>
-						.
-					</p>
-				</div>
-				<Button className="shrink-0 rounded-full" onClick={() => setDialogOpen(true)}>
-					<Plus className="size-4" aria-hidden="true" />
-					Новый тип
-				</Button>
-			</section>
+					</ToolbarButton>
+				</ToolbarTooltip>
+			</PageHeader>
 
 			{loadFailed ? (
 				<LoadErrorAlert
@@ -146,22 +181,41 @@ export default function QuestionTypesPageClient() {
 				/>
 			) : isLoading ? (
 				<Skeleton className="h-72 rounded-3xl" aria-label="Загрузка типов вопросов" />
+			) : types.length > 0 && visibleTypes.length === 0 ? (
+				<EmptyState
+					description="Ничего не найдено с такими фильтрами."
+					action={
+						<Button variant="outline" className="rounded-full" onClick={() => setStatuses([])}>
+							Сбросить фильтры
+						</Button>
+					}
+				/>
 			) : (
-				<div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-sm">
+				<TableCard>
 					<Table className="table-fixed">
 						<TableHeader>
 							<TableRow className="hover:bg-transparent">
-								<TableHead className="pl-4">Тип</TableHead>
+								<SortableHead
+									label="Тип"
+									direction={sortDirectionOf(sort, 'title')}
+									onSort={() => setSort((current) => cycleSort(current, 'title', DEFAULT_SORT))}
+									className="pl-4"
+								/>
 								<TableHead className="hidden w-48 tab-sm:table-cell">Шаблон ответа</TableHead>
 								<TableHead className="hidden w-44 tab:table-cell">Код</TableHead>
-								<TableHead className="hidden w-52 mob:table-cell">Статус</TableHead>
+								<TableHead className="hidden w-52 mob:table-cell">
+									<span className="inline-flex items-center gap-1">
+										Статус
+										{statusFilter}
+									</span>
+								</TableHead>
 								<TableHead className="w-14 pr-3">
 									<span className="sr-only">Настроить</span>
 								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{types.map((item) => {
+							{visibleTypes.map((item) => {
 								const href = `/admin/tests/question-types/${item.key}`
 								const template = TEMPLATE_META[item.uiTemplate]?.label ?? item.uiTemplate
 								return (
@@ -218,7 +272,7 @@ export default function QuestionTypesPageClient() {
 							})}
 						</TableBody>
 					</Table>
-				</div>
+				</TableCard>
 			)}
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

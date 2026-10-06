@@ -608,12 +608,13 @@ export const testTimerSettings = pgTable(
 	})
 ).enableRLS()
 
-/** Глобальные настройки приложения (key-value) */
-export const appSettings = pgTable(
-	'app_settings',
+export const chartSettings = pgTable(
+	'chart_settings',
 	{
-		key: text('key').primaryKey(),
-		value: text('value').notNull(),
+		id: text('id').primaryKey().default('global'),
+		configs: jsonb('configs').$type<Record<string, unknown>>().notNull().default({}),
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+		updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
 	},
 	() => ({
 		denyDirectAccess: denyDirectAccessPolicy(),

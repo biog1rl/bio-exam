@@ -19,9 +19,8 @@ import { hasZipEndOfCentralDirectory } from '@/lib/http/download'
 import { exportFailureMessage } from '@/lib/http/errors'
 import { MalformedBodyError, request, requestBlob, type RequestFailure, type RequestOutcome } from '@/lib/http/request'
 import { fetcherWith } from '@/lib/http/swr'
-import type { UserStatus } from '@/lib/users/status-filter'
 
-import type { ReviewFilter } from './attempts-url'
+import { isDefaultAttemptsSort, parseDay, type AttemptsUrlFilters } from './attempts-url'
 import type { TopicTeacher } from './bank-view'
 
 export type AdminTestListItem = Test
@@ -92,18 +91,6 @@ export type ArchiveDownload = { blob: Blob; filename: string }
 
 const EXPORT_FALLBACK_MESSAGE = 'Ошибка экспорта'
 
-export type AttemptsFilters = {
-	q: string
-	topic: string | null
-	student: string | null
-	from: string | null
-	to: string | null
-	status: UserStatus
-	review: ReviewFilter
-}
-
-export type AttemptsDayRange = { from?: Date; to?: Date }
-
 export type MergedAttempts = {
 	rows: AdminAttemptListItem[]
 	loaded: number
@@ -115,30 +102,43 @@ export const ATTEMPTS_PAGE_SIZE = 50
 
 export const ATTEMPTS_LOAD_ERROR = 'Не удалось загрузить попытки'
 
-export const DEFAULT_ATTEMPTS_FILTERS: AttemptsFilters = {
-	q: '',
-	topic: null,
-	student: null,
-	from: null,
-	to: null,
-	status: 'active',
-	review: 'all',
-}
-
 type AttemptsKey = `/api/tests/admin/attempts?${string}`
 
-function attemptsKey(filters: AttemptsFilters, offset = 0): AttemptsKey {
+function startOfDay(date: Date): Date {
+	const value = new Date(date)
+	value.setHours(0, 0, 0, 0)
+	return value
+}
+
+function endOfDay(date: Date): Date {
+	const value = new Date(date)
+	value.setHours(23, 59, 59, 999)
+	return value
+}
+
+function attemptsDayRange(range: { from?: Date; to?: Date }): { from: string | null; to: string | null } {
+	if (!range.from) return { from: null, to: null }
+	return { from: startOfDay(range.from).toISOString(), to: endOfDay(range.to ?? range.from).toISOString() }
+}
+
+function attemptsKey(filters: AttemptsUrlFilters, offset = 0): AttemptsKey {
 	const params = new URLSearchParams()
 	params.set('limit', String(ATTEMPTS_PAGE_SIZE))
 	if (offset > 0) params.set('offset', String(offset))
 	params.set('status', filters.status)
 	const q = filters.q.trim()
 	if (q) params.set('q', q)
-	if (filters.topic) params.set('topic', filters.topic)
-	if (filters.student) params.set('student', filters.student)
-	if (filters.from) params.set('from', filters.from)
-	if (filters.to) params.set('to', filters.to)
+	if (filters.topics.length > 0) params.set('topic', filters.topics.join(','))
+	if (filters.students.length > 0) params.set('student', filters.students.join(','))
+	if (filters.results.length === 1) params.set('result', filters.results[0])
 	if (filters.review !== 'all') params.set('review', filters.review)
+	const period = attemptsDayRange({ from: parseDay(filters.from) ?? undefined, to: parseDay(filters.to) ?? undefined })
+	if (period.from) params.set('from', period.from)
+	if (period.to) params.set('to', period.to)
+	if (!isDefaultAttemptsSort(filters.sort)) {
+		params.set('sort', filters.sort.key)
+		params.set('dir', filters.sort.direction)
+	}
 	return `/api/tests/admin/attempts?${params.toString()}`
 }
 
@@ -162,7 +162,7 @@ export const adminTestsKeys = {
 	assignments: (testId: string) => `/api/tests/${testId}/assignments`,
 	scoringGlobal: () => questionTypesKey({ includeInactive: true }),
 	scoringTest: (testId: string) => questionTypesKey({ testId, includeInactive: true }),
-	attempts: (filters: AttemptsFilters, offset?: number) => attemptsKey(filters, offset),
+	attempts: (filters: AttemptsUrlFilters, offset?: number) => attemptsKey(filters, offset),
 }
 
 export function parseAdminTestsList(body: unknown): AdminTestsListResponse {
@@ -198,27 +198,10 @@ export function parseAdminAttempts(body: unknown): AdminAttemptsResponse {
 export const adminAttemptsFetcher = fetcherWith(parseAdminAttempts)
 
 export function fetchAdminAttemptsPage(
-	filters: AttemptsFilters,
+	filters: AttemptsUrlFilters,
 	offset: number
 ): Promise<RequestOutcome<AdminAttemptsResponse>> {
 	return request(attemptsKey(filters, offset), { parse: parseAdminAttempts, fallbackMessage: ATTEMPTS_LOAD_ERROR })
-}
-
-function startOfDay(date: Date): Date {
-	const value = new Date(date)
-	value.setHours(0, 0, 0, 0)
-	return value
-}
-
-function endOfDay(date: Date): Date {
-	const value = new Date(date)
-	value.setHours(23, 59, 59, 999)
-	return value
-}
-
-export function attemptsDayRange(range: AttemptsDayRange | undefined): { from: string | null; to: string | null } {
-	if (!range?.from) return { from: null, to: null }
-	return { from: startOfDay(range.from).toISOString(), to: endOfDay(range.to ?? range.from).toISOString() }
 }
 
 export function mergeAttemptPages(pages: readonly AdminAttemptsResponse[]): MergedAttempts {

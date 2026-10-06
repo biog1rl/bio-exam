@@ -11,7 +11,7 @@ vi.mock('@/lib/session/client', () => ({
 import { MalformedBodyError, RequestError } from '@/lib/http/request'
 import { apiFetch } from '@/lib/session/client'
 
-import { parseRbacRoles, rbacKeys, rbacRolesFetcher, setRoleGrant } from './api'
+import { deleteRoleGrant, parseRbacRoles, rbacKeys, rbacRolesFetcher, setRoleGrant } from './api'
 
 const apiFetchMock = vi.mocked(apiFetch)
 
@@ -66,15 +66,27 @@ describe('rbacRolesFetcher', () => {
 	})
 })
 
-describe('setRoleGrant', () => {
-	test('POST /api/rbac/grant с JSON-телом', async () => {
+describe('гранты роли', () => {
+	test.each([
+		{
+			name: 'setRoleGrant — POST /api/rbac/grant с allow',
+			run: () => setRoleGrant({ roleKey: 'teacher', domain: 'tests', action: 'write', allow: true }),
+			method: 'POST',
+			body: { roleKey: 'teacher', domain: 'tests', action: 'write', allow: true },
+		},
+		{
+			name: 'deleteRoleGrant — DELETE /api/rbac/grant без allow',
+			run: () => deleteRoleGrant({ roleKey: 'teacher', domain: 'tests', action: 'write' }),
+			method: 'DELETE',
+			body: { roleKey: 'teacher', domain: 'tests', action: 'write' },
+		},
+	])('$name', async ({ run, method, body }) => {
 		apiFetchMock.mockResolvedValueOnce(json(200, { ok: true }))
-		const body = { roleKey: 'teacher' as const, domain: 'tests', action: 'write', allow: true }
-		const outcome = await setRoleGrant(body)
+		const outcome = await run()
 		assert.deepEqual(outcome, { ok: true, status: 200, data: { ok: true } })
 		const [url, init] = apiFetchMock.mock.calls[0] ?? []
 		assert.equal(url, '/api/rbac/grant')
-		assert.equal(init?.method, 'POST')
+		assert.equal(init?.method, method)
 		assert.equal(init?.body, JSON.stringify(body))
 		assert.equal(new Headers(init?.headers).get('content-type'), 'application/json')
 	})

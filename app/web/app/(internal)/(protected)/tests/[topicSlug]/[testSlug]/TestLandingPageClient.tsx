@@ -1,54 +1,29 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import type { DateRange } from 'react-day-picker'
+import { useState } from 'react'
 
-import { format, subMonths, subWeeks } from 'date-fns'
+import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-import { useQueryState } from 'nuqs'
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
+import { TableCard } from '@/components/table/TableCard'
 import { TestMissingState } from '@/components/tests/TestMissingState'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
-import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import type { ChartDataPoint } from '@/lib/tests/api'
-import { fetchChartData, fetchChartDefaultRange, fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
+import { fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
 
-const chartConfig = {
-	maxScore: {
-		label: 'Лучший результат',
-		color: 'var(--chart-1)',
-	},
-}
-
-function ChartTooltipCustom({ active, payload }: { active?: boolean; payload?: { payload: ChartDataPoint }[] }) {
-	if (!active || !payload?.length) return null
-	const d = payload[0].payload
-	const dateLabel = format(new Date(d.date), 'd MMMM yyyy', { locale: ru })
-	return (
-		<div className="min-w-40 space-y-1 rounded-lg border bg-background px-3 py-2 text-sm">
-			<p className="font-medium">{dateLabel}</p>
-			<p className="text-muted-foreground">Попыток: {d.count}</p>
-			<p className="text-green-600 dark:text-green-400">Лучший: {formatPercent(d.maxScore)}</p>
-			{d.count > 1 && <p className="text-red-500 dark:text-red-400">Худший: {formatPercent(d.minScore)}</p>}
-		</div>
-	)
-}
+import { TestResultsChart } from './TestResultsChart'
 
 interface Props {
 	topicSlug: string
@@ -94,71 +69,19 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 		}
 	}
 
-	// --- Date filter (nuqs URL state) ---
-	const [range, setRange] = useQueryState('range', { defaultValue: '' })
-	const [customFrom, setCustomFrom] = useQueryState('from', { defaultValue: '' })
-	const [customTo, setCustomTo] = useQueryState('to', { defaultValue: '' })
-	const [calendarOpen, setCalendarOpen] = useState(false)
-	const [calendarRange, setCalendarRange] = useState<DateRange>({ from: undefined, to: undefined })
-
-	const { data: adminDefaultData } = useSWR('chart-default-range', fetchChartDefaultRange)
-	const adminDefault = adminDefaultData?.value ?? 'month'
-	const effectiveRange = range || adminDefault
-
-	// --- Chart data ---
-	const { from: chartFrom, to: chartTo } = useMemo(() => {
-		const now = new Date()
-		if (effectiveRange === 'week') return { from: subWeeks(now, 1).toISOString(), to: undefined }
-		if (effectiveRange === 'month') return { from: subMonths(now, 1).toISOString(), to: undefined }
-		if (effectiveRange === 'custom')
-			return {
-				from: customFrom || undefined,
-				to: customTo || undefined,
-			}
-		// 'all'
-		return { from: undefined, to: undefined }
-	}, [effectiveRange, customFrom, customTo])
-
-	const { data: chartData, isLoading: chartLoading } = useSWR(
-		testId ? `chart-${testId}-${effectiveRange}-${chartFrom}-${chartTo}` : null,
-		() => fetchChartData(testId!, { from: chartFrom, to: chartTo }),
-		{ revalidateOnFocus: false, keepPreviousData: true }
-	)
-
-	const handlePresetChange = (value: string) => {
-		if (!value) return
-		setRange(value)
-		setCustomFrom('')
-		setCustomTo('')
-	}
-
-	const handleCalendarSelect = (selected: DateRange | undefined) => {
-		if (!selected) return
-		setCalendarRange(selected)
-		if (selected.from && selected.to && selected.from.getTime() !== selected.to.getTime()) {
-			setCustomFrom(selected.from.toISOString())
-			setCustomTo(selected.to.toISOString())
-			setCalendarOpen(false)
-		}
-	}
-
 	// --- Render ---
 	if (testLoading) {
 		return (
-			<main className="space-y-6 p-4 tab-sm:p-6">
-				<Skeleton className="h-8 w-64" />
-				<Skeleton className="h-70 w-full" />
+			<div className="space-y-4">
+				<Skeleton className="h-10 w-64 rounded-full" />
+				<Skeleton className="h-48 rounded-3xl" />
 				<Skeleton className="h-65 w-full" />
-			</main>
+			</div>
 		)
 	}
 
 	if (!test) {
-		return (
-			<main className="p-4 tab-sm:p-6">
-				<TestMissingState />
-			</main>
-		)
+		return <TestMissingState />
 	}
 
 	const labels = {
@@ -166,68 +89,75 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 		[`/tests/${topicSlug}/${testSlug}`]: test.title,
 	}
 
-	const points = chartData?.data ?? []
-
 	return (
-		<main className="space-y-6 p-4 tab-sm:p-6">
+		<div className="space-y-6">
 			<SetBreadcrumbsLabels labels={labels} />
 
-			{/* Header */}
-			<div className="flex flex-wrap items-start justify-between gap-4">
-				<div>
-					<Link
-						href="/tests"
-						className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:underline focus-visible:outline-none"
-					>
-						<ArrowLeft className="size-4" aria-hidden="true" />
-						Все тесты · {test.topicTitle}
-					</Link>
-					<h1 className="mt-2 text-2xl font-semibold">{test.title}</h1>
-					{test.description && <p className="mt-1 text-sm text-muted-foreground">{test.description}</p>}
-				</div>
-				<Button asChild size="lg" className="w-full mob:w-auto">
+			<PageHeader title={test.title} meta={test.description || undefined}>
+				<Button asChild className="h-10 rounded-full px-5">
 					<Link href={`/tests/${topicSlug}/${testSlug}/start`}>Начать тест</Link>
 				</Button>
-			</div>
+			</PageHeader>
 
-			{/* Attempts widget */}
-			<section className="space-y-2">
-				<h2 className="text-lg font-medium">История попыток</h2>
-				<ScrollArea className="h-70 rounded-md border" viewportClassName="overflow-x-auto!">
-					{attemptsLoading ? (
-						<div className="space-y-2 p-4">
-							{[...Array(3)].map((_, i) => (
-								<Skeleton key={i} className="h-8 w-full" />
-							))}
-						</div>
-					) : total === 0 ? (
-						<div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
-							Ещё нет попыток
-						</div>
-					) : (
-						<Table>
+			<TestResultsChart
+				test={{ id: test.id, title: test.title, slug: testSlug, topicSlug, topicTitle: test.topicTitle }}
+			/>
+
+			<section className="space-y-3">
+				<h2 className="text-lg font-semibold">История попыток</h2>
+				{attemptsLoading ? (
+					<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка истории попыток" />
+				) : total === 0 ? (
+					<EmptyState title="Ещё нет попыток" className="py-10" />
+				) : (
+					<TableCard>
+						<Table className="table-fixed">
 							<TableHeader>
-								<TableRow>
-									<TableHead>Номер попытки</TableHead>
-									<TableHead>Дата</TableHead>
-									<TableHead>% правильных</TableHead>
+								<TableRow className="hover:bg-transparent">
+									<TableHead className="pl-4">Дата</TableHead>
+									<TableHead className="hidden w-28 text-right tab-sm:table-cell">Баллы</TableHead>
+									<TableHead className="w-40 text-right">Результат</TableHead>
+									<TableHead className="hidden w-36 pr-4 tab-sm:table-cell">Статус</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{allRows.map((row, idx) => {
+								{allRows.map((row) => {
 									const view = attemptResultView(row)
+									const final = view.kind === 'final' ? view : null
 									return (
 										<TableRow key={row.id}>
-											<TableCell>{total - idx}</TableCell>
-											<TableCell>{format(new Date(row.submittedAt), 'dd.MM.yyyy', { locale: ru })}</TableCell>
-											<TableCell>
-												{view.kind === 'pending' ? (
-													<AttemptReviewLine view={view} audience="student" />
+											<TableCell className="py-3 pl-4">
+												<span className="font-medium tabular-nums">
+													{format(new Date(row.submittedAt), 'dd.MM.yyyy, HH:mm', { locale: ru })}
+												</span>
+												{final ? (
+													<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
+														{final.points.earned} / {final.points.total} · {final.passed ? 'Пройден' : 'Не пройден'}
+													</p>
+												) : null}
+											</TableCell>
+											<TableCell className="hidden text-right whitespace-nowrap tabular-nums tab-sm:table-cell">
+												{final ? `${final.points.earned} / ${final.points.total}` : '—'}
+											</TableCell>
+											<TableCell className="py-3 text-right">
+												{final ? (
+													<span className="inline-flex flex-col items-end gap-1">
+														<span className="tabular-nums">{formatPercent(final.percent)}</span>
+														{final.teacherChecked ? <TeacherCheckedMark /> : null}
+													</span>
+												) : view.kind === 'pending' ? (
+													<span className="inline-flex justify-end">
+														<AttemptReviewLine view={view} audience="student" />
+													</span>
+												) : null}
+											</TableCell>
+											<TableCell className="hidden pr-4 tab-sm:table-cell">
+												{final ? (
+													<Badge variant={final.passed ? 'default' : 'secondary'} className="rounded-full">
+														{final.passed ? 'Пройден' : 'Не пройден'}
+													</Badge>
 												) : (
-													<div className="flex flex-col items-start gap-1">
-														<span>{formatPercent(view.percent)}</span>
-														{view.teacherChecked ? <TeacherCheckedMark /> : null}
-													</div>
+													<span className="text-muted-foreground">—</span>
 												)}
 											</TableCell>
 										</TableRow>
@@ -235,84 +165,14 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 								})}
 							</TableBody>
 						</Table>
-					)}
-				</ScrollArea>
+					</TableCard>
+				)}
 				{allRows.length < total && (
-					<Button variant="outline" size="sm" onClick={handleLoadMore} disabled={loadingMore}>
+					<Button variant="outline" size="sm" className="rounded-full" onClick={handleLoadMore} disabled={loadingMore}>
 						{loadingMore ? 'Загрузка...' : 'Загрузить ещё'}
 					</Button>
 				)}
 			</section>
-
-			{/* Chart section */}
-			<section className="space-y-4">
-				<div className="flex flex-wrap items-center gap-2">
-					<ToggleGroup
-						type="single"
-						value={['week', 'month', 'all'].includes(effectiveRange) ? effectiveRange : ''}
-						onValueChange={handlePresetChange}
-					>
-						<ToggleGroupItem value="week">Неделя</ToggleGroupItem>
-						<ToggleGroupItem value="month">Месяц</ToggleGroupItem>
-						<ToggleGroupItem value="all">Всё время</ToggleGroupItem>
-					</ToggleGroup>
-
-					<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-						<PopoverTrigger asChild>
-							<Button
-								variant={effectiveRange === 'custom' ? 'default' : 'outline'}
-								size="sm"
-								onClick={() => {
-									setRange('custom')
-								}}
-							>
-								{effectiveRange === 'custom' && customFrom && customTo
-									? `${format(new Date(customFrom), 'dd.MM.yy', { locale: ru })} — ${format(new Date(customTo), 'dd.MM.yy', { locale: ru })}`
-									: 'Свой диапазон'}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="start">
-							<Calendar
-								mode="range"
-								selected={calendarRange}
-								onSelect={handleCalendarSelect}
-								locale={ru}
-								numberOfMonths={2}
-							/>
-						</PopoverContent>
-					</Popover>
-				</div>
-
-				<div className="transition-opacity duration-300" style={{ opacity: chartLoading ? 0.4 : 1 }}>
-					{chartLoading && points.length === 0 ? (
-						<Skeleton className="h-50 w-full" />
-					) : !chartLoading && points.length === 0 ? (
-						<div className="flex h-50 items-center justify-center rounded-md border text-sm text-muted-foreground">
-							Нет данных за выбранный период
-						</div>
-					) : (
-						<ChartContainer config={chartConfig} className="h-50 w-full">
-							<AreaChart data={points}>
-								<CartesianGrid vertical={false} />
-								<XAxis
-									dataKey="date"
-									tickFormatter={(v: string) => format(new Date(v), 'd MMM', { locale: ru })}
-									tick={{ fontSize: 11 }}
-								/>
-								<YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
-								<ChartTooltip content={<ChartTooltipCustom />} />
-								<Area
-									dataKey="maxScore"
-									type="monotone"
-									fill="var(--color-maxScore)"
-									stroke="var(--color-maxScore)"
-									fillOpacity={0.3}
-								/>
-							</AreaChart>
-						</ChartContainer>
-					)}
-				</div>
-			</section>
-		</main>
+		</div>
 	)
 }

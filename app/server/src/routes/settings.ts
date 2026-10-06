@@ -1,59 +1,61 @@
-/**
- * Settings router — key-value app settings for admin use.
- * Mounted at /api/settings
- */
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { Router } from 'express'
-import { z } from 'zod'
 
 import { db } from '../db/index.js'
-import { appSettings } from '../db/schema.js'
+import { chartSettings } from '../db/schema.js'
+import { ChartConfigsPatchSchema, resolveChartConfigs } from '../lib/charts/config.js'
+import { ERROR_MESSAGES } from '../lib/constants.js'
 import { requirePerm } from '../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../middleware/auth/session.js'
 
 const router = Router()
 
-const CHART_RANGE_KEY = 'chart_default_range'
+const GLOBAL_ID = 'global'
 
-const ChartRangeValueSchema = z.enum(['week', 'month', 'all'])
+async function readStoredConfigs() {
+	const row = await db.query.chartSettings.findFirst({
+		where: eq(chartSettings.id, GLOBAL_ID),
+		columns: { configs: true, updatedAt: true },
+	})
+	return { configs: row?.configs ?? {}, updatedAt: row?.updatedAt ?? null }
+}
 
-// GET /api/settings/chart-default-range
-router.get('/chart-default-range', sessionRequired(), requirePerm('settings', 'manage'), async (req, res, next) => {
+function chartsReply(stored: { configs: unknown; updatedAt: Date | null }) {
+	return {
+		configs: resolveChartConfigs(stored.configs),
+		updatedAt: stored.updatedAt ? stored.updatedAt.toISOString() : null,
+	}
+}
+
+router.get('/charts', sessionRequired(), async (_req, res, next) => {
 	try {
-		let row: { value: string } | undefined
-		try {
-			row = await db.query.appSettings.findFirst({
-				where: eq(appSettings.key, CHART_RANGE_KEY),
-				columns: { value: true },
-			})
-		} catch (error) {
-			req.log?.error?.({ err: error }, 'Failed to read chart default range, using fallback')
-			return res.json({ value: 'month' })
-		}
-
-		res.json({ value: row?.value ?? 'month' })
+		res.json(chartsReply(await readStoredConfigs()))
 	} catch (e) {
 		next(e)
 	}
 })
 
-// PUT /api/settings/chart-default-range
-router.put('/chart-default-range', sessionRequired(), requirePerm('settings', 'manage'), async (req, res, next) => {
+router.put('/charts', sessionRequired(), requirePerm('settings', 'manage'), async (req, res, next) => {
 	try {
-		const parsed = z.object({ value: ChartRangeValueSchema }).safeParse(req.body)
+		const parsed = ChartConfigsPatchSchema.safeParse(req.body)
 		if (!parsed.success) {
-			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
+			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsed.error.flatten() })
 		}
 
-		await db
-			.insert(appSettings)
-			.values({ key: CHART_RANGE_KEY, value: parsed.data.value })
-			.onConflictDoUpdate({
-				target: appSettings.key,
-				set: { value: parsed.data.value },
-			})
+		const patch = parsed.data.configs
+		const now = new Date()
+		const userId = req.authUser?.id ?? null
 
-		res.json({ value: parsed.data.value })
+		const [saved] = await db
+			.insert(chartSettings)
+			.values({ id: GLOBAL_ID, configs: patch, updatedAt: now, updatedBy: userId })
+			.onConflictDoUpdate({
+				target: chartSettings.id,
+				set: { configs: sql`${chartSettings.configs} || excluded.configs`, updatedAt: now, updatedBy: userId },
+			})
+			.returning({ configs: chartSettings.configs, updatedAt: chartSettings.updatedAt })
+
+		res.json(chartsReply({ configs: saved?.configs ?? patch, updatedAt: saved?.updatedAt ?? now }))
 	} catch (e) {
 		next(e)
 	}

@@ -4,11 +4,8 @@ import { describe, test } from 'vitest'
 import {
 	assignTopicColors,
 	barMinPointSize,
-	buildAttemptBars,
-	buildTopicChartConfig,
 	filterAttemptsByPeriod,
 	fitBarLabel,
-	legendTopics,
 	parseDateParam,
 	parseDayParam,
 	parsePeriod,
@@ -88,124 +85,6 @@ describe('assignTopicColors', () => {
 		assert.equal(colors[5].color, 'var(--chart-6)')
 		assert.equal(colors[9].color, 'var(--chart-10)')
 		assert.equal(colors[10].color, 'var(--chart-1)')
-	})
-})
-
-describe('buildTopicChartConfig', () => {
-	test('ключ — topicConfigKey, label — название раздела, color — токен палитры', () => {
-		const colors = assignTopicColors([
-			{ topicSlug: 'e2e-topic', topicTitle: 'Цитология' },
-			{ topicSlug: 'a;b', topicTitle: 'Опасный' },
-		])
-		const config = buildTopicChartConfig(colors)
-		assert.deepEqual(config['topic-e2e-topic'], { label: 'Цитология', color: 'var(--chart-2)' })
-		assert.deepEqual(config[topicConfigKey('a;b')], { label: 'Опасный', color: 'var(--chart-1)' })
-		assert.equal(Object.keys(config).length, 2)
-	})
-})
-
-describe('buildAttemptBars', () => {
-	const colors = assignTopicColors([{ topicSlug: 'e2e-topic', topicTitle: 'Цитология' }])
-
-	test('пустой вход — пустой массив', () => {
-		assert.deepEqual(buildAttemptBars([], colors, 'range'), [])
-	})
-
-	test('три попытки разных тестов в один день — три столбика подряд по времени', () => {
-		const first = attempt({ testId: 't1', testTitle: 'Первый', submittedAt: local(2026, 9, 4, 9) })
-		const second = attempt({ testId: 't2', testTitle: 'Второй', submittedAt: local(2026, 9, 4, 11) })
-		const third = attempt({ testId: 't3', testTitle: 'Третий', submittedAt: local(2026, 9, 4, 15) })
-		const rows = buildAttemptBars([third, first, second], colors, 'range')
-		assert.deepEqual(
-			rows.map((row) => [row.kind, row.key, row.testTitle]),
-			[
-				['attempt', first.attemptId, 'Первый'],
-				['attempt', second.attemptId, 'Второй'],
-				['attempt', third.attemptId, 'Третий'],
-			]
-		)
-		assert.deepEqual(
-			rows.map((row) => row.tick),
-			['', '4 окт.', '']
-		)
-	})
-
-	test('две попытки одного теста в один день — два отдельных столбика', () => {
-		const first = attempt({ submittedAt: local(2026, 9, 4, 9), scorePercentage: 40 })
-		const second = attempt({ submittedAt: local(2026, 9, 4, 10), scorePercentage: 80 })
-		const rows = buildAttemptBars([second, first], colors, 'range')
-		assert.equal(rows.length, 2)
-		assert.deepEqual(
-			rows.map((row) => row.percent),
-			[40, 80]
-		)
-		assert.deepEqual(
-			rows.map((row) => row.tick),
-			['4 окт.', '']
-		)
-	})
-
-	test('попытки двух дней разделены одним промежутком', () => {
-		const dayOne = attempt({ submittedAt: local(2026, 9, 4, 9) })
-		const dayTwoA = attempt({ submittedAt: local(2026, 9, 6, 9) })
-		const dayTwoB = attempt({ submittedAt: local(2026, 9, 6, 10) })
-		const dayTwoC = attempt({ submittedAt: local(2026, 9, 6, 11) })
-		const rows = buildAttemptBars([dayTwoC, dayOne, dayTwoB, dayTwoA], colors, 'range')
-		assert.deepEqual(
-			rows.map((row) => row.kind),
-			['attempt', 'gap', 'attempt', 'attempt', 'attempt']
-		)
-		const gap = rows[1]
-		assert.equal(gap.percent, null)
-		assert.equal(gap.tick, '')
-		assert.equal(gap.key, 'gap-2026-10-06')
-		assert.deepEqual(
-			rows.map((row) => row.tick),
-			['4 окт.', '', '', '6 окт.', '']
-		)
-	})
-
-	test('режим day — без промежутков, у каждого столбика время', () => {
-		const first = attempt({ submittedAt: local(2026, 9, 4, 9, 5) })
-		const second = attempt({ submittedAt: local(2026, 9, 4, 14, 30) })
-		const rows = buildAttemptBars([second, first], colors, 'day')
-		assert.deepEqual(
-			rows.map((row) => [row.kind, row.tick]),
-			[
-				['attempt', '09:05'],
-				['attempt', '14:30'],
-			]
-		)
-	})
-
-	test('23:30 и 00:30 следующего дня по местному времени — разные дни', () => {
-		const late = attempt({ submittedAt: local(2026, 9, 4, 23, 30) })
-		const early = attempt({ submittedAt: local(2026, 9, 5, 0, 30) })
-		const rows = buildAttemptBars([early, late], colors, 'range')
-		assert.deepEqual(
-			rows.map((row) => row.kind),
-			['attempt', 'gap', 'attempt']
-		)
-		assert.deepEqual(
-			rows.map((row) => row.tick),
-			['4 окт.', '', '5 окт.']
-		)
-	})
-
-	test('процент ограничен 0…100, цвет и подписи раздела из конфигурации', () => {
-		const over = attempt({ scorePercentage: 130, submittedAt: local(2026, 9, 4, 9) })
-		const under = attempt({ scorePercentage: -5, submittedAt: local(2026, 9, 4, 10) })
-		const rows = buildAttemptBars([over, under], colors, 'range')
-		assert.deepEqual(
-			rows.map((row) => row.percent),
-			[100, 0]
-		)
-		for (const row of rows) {
-			assert.equal(row.fill, 'var(--color-topic-e2e-topic)')
-			assert.equal(row.topicKey, 'topic-e2e-topic')
-			assert.equal(row.topicTitle, 'Цитология')
-			assert.equal(row.totalPoints, 10)
-		}
 	})
 })
 
@@ -321,29 +200,6 @@ describe('fitBarLabel', () => {
 				assert.ok(label.text.length <= Math.floor((space - 8) / 7))
 			}
 		}
-	})
-})
-
-describe('legendTopics', () => {
-	test('только разделы со столбиками, в порядке цветов, без повторов', () => {
-		const colors = assignTopicColors([
-			{ topicSlug: 'botany', topicTitle: 'Ботаника' },
-			{ topicSlug: 'cell', topicTitle: 'Клетка' },
-			{ topicSlug: 'zoology', topicTitle: 'Зоология' },
-		])
-		const rows = buildAttemptBars(
-			[
-				attempt({ topicSlug: 'zoology', submittedAt: local(2026, 9, 4, 9) }),
-				attempt({ topicSlug: 'botany', submittedAt: local(2026, 9, 5, 9) }),
-				attempt({ topicSlug: 'zoology', submittedAt: local(2026, 9, 6, 9) }),
-			],
-			colors,
-			'range'
-		)
-		assert.deepEqual(
-			legendTopics(rows, colors).map((topic) => topic.slug),
-			['botany', 'zoology']
-		)
 	})
 })
 

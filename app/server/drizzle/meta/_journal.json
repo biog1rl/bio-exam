@@ -197,6 +197,20 @@
       "when": 1791264404526,
       "tag": "0027_notification_journal",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791268920500,
+      "tag": "0028_chart_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791268928915,
+      "tag": "0029_drop_app_settings",
+      "breakpoints": true
     }
   ]
 }

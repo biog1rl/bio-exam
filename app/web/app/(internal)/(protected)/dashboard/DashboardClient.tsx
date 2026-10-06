@@ -1,33 +1,24 @@
 'use client'
 
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 
-import {
-	ArrowRight,
-	BookOpenCheck,
-	CheckCircle2,
-	ClipboardList,
-	Leaf,
-	LibraryBig,
-	LineChart,
-	LockKeyhole,
-	Microscope,
-	PanelTop,
-	Sparkles,
-	UsersRound,
-} from 'lucide-react'
-import Image from 'next/image'
+import { ArrowRight } from 'lucide-react'
 import Link from 'next/link'
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import useSWR from 'swr'
 
+import { ActivityChart, ContentChart } from '@/components/charts/DashboardCharts'
+import { EmptyState } from '@/components/page/EmptyState'
+import { PageHeader } from '@/components/page/PageHeader'
 import { StudentProgressSection } from '@/components/progress/StudentProgressSection'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { TableCard } from '@/components/table/TableCard'
+import { useRowLink } from '@/components/table/use-row-link'
 import { AttemptReviewLine, type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
+import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { Button } from '@/components/ui/button'
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { dashboardUrl, useChartConfigs } from '@/lib/charts/api'
 import { request } from '@/lib/http/request'
 import { quickLinkSections } from '@/lib/navigation/sections'
 import { optionalAdminData } from '@/lib/tests/admin-optional'
@@ -93,21 +84,6 @@ type AdminDashboardData = {
 	}>
 }
 
-const teacherChartConfig = {
-	published: {
-		label: 'Опубликовано',
-		color: 'var(--chart-1)',
-	},
-	drafts: {
-		label: 'Черновики',
-		color: 'var(--chart-2)',
-	},
-	questions: {
-		label: 'Вопросы',
-		color: 'var(--chart-3)',
-	},
-} satisfies ChartConfig
-
 async function fetchAdminJson<T>(url: string): Promise<T | null> {
 	return optionalAdminData(await request<T>(url))
 }
@@ -122,45 +98,38 @@ function average(values: number[]) {
 	return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
-function reviewDateLine(
-	submittedAt: string,
-	view: Extract<AttemptResultView, { kind: 'pending' }>,
-	audience: AttemptReviewAudience
-) {
-	const date = formatDate(submittedAt)
-	if (!view.auto) return date
-	return `${date} · ${audience === 'student' ? 'предварительно' : 'авто'} ${view.auto.earned} из ${view.auto.total}`
-}
-
 function dashboardName(firstName?: string | null, login?: string | null) {
 	return firstName || login || 'Пользователь'
 }
 
-function SoftPanel({ children, className = '' }: { children: ReactNode; className?: string }) {
-	return (
-		<section className={`rounded-4xl border border-border/80 bg-card/90 shadow-sm ${className}`}>{children}</section>
-	)
+type Stat = {
+	label: string
+	value: string | number
+	loading: boolean
 }
 
-const interactiveCardClass =
-	'transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
-
-function SectionTitle({ kicker, title, children }: { kicker: string; title: string; children?: ReactNode }) {
+function StatCards({ stats }: { stats: Stat[] }) {
 	return (
-		<div>
-			<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
-			<h2 className="mt-2 font-serif text-2xl text-foreground tab-sm:text-3xl">{title}</h2>
-			{children ? <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{children}</p> : null}
+		<div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-3">
+			{stats.map((stat) => (
+				<div key={stat.label} className="rounded-3xl border border-border/80 bg-card px-4 py-3">
+					{stat.loading ? (
+						<Skeleton className="my-0.5 h-6 w-12" />
+					) : (
+						<p className="text-xl font-semibold text-foreground tabular-nums">{stat.value}</p>
+					)}
+					<p className="text-xs text-muted-foreground">{stat.label}</p>
+				</div>
+			))}
 		</div>
 	)
 }
 
-function LoadingRow() {
+function SectionHeading({ title, children }: { title: string; children?: ReactNode }) {
 	return (
-		<div className="grid gap-3 tab-sm:grid-cols-3">
-			<Skeleton className="h-28 rounded-3xl" />
-			<Skeleton className="h-28 rounded-3xl" />
-			<Skeleton className="h-28 rounded-3xl" />
+		<div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+			<h2 className="text-lg font-semibold text-foreground">{title}</h2>
+			{children}
 		</div>
 	)
 }
@@ -169,10 +138,190 @@ function EmptyPanel({ children }: { children: ReactNode }) {
 	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
 }
 
+function ChartCard({ title, children }: { title: string; children: ReactNode }) {
+	return (
+		<section className="min-w-0 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
+			<h2 className="mb-4 text-lg font-semibold text-foreground">{title}</h2>
+			{children}
+		</section>
+	)
+}
+
+const mainLinkClass =
+	'font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none'
+
+function testHrefOf(test: PublicTestListItem) {
+	return `/tests/${test.topicSlug}/${test.slug}`
+}
+
+function AvailableTestsTable({ tests }: { tests: PublicTestListItem[] }) {
+	const rowLink = useRowLink()
+	return (
+		<TableCard>
+			<Table className="table-fixed">
+				<TableHeader>
+					<TableRow className="hover:bg-transparent">
+						<TableHead className="pl-4">Тест</TableHead>
+						<TableHead className="hidden w-24 text-right tab-sm:table-cell">Вопросы</TableHead>
+						<TableHead className="hidden w-24 pr-4 text-right tab-sm:table-cell">Таймер</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{tests.map((test) => (
+						<TableRow key={test.id} className="cursor-pointer" {...rowLink(testHrefOf(test))}>
+							<TableCell className="py-3 pl-4">
+								<Link href={testHrefOf(test)} className={mainLinkClass}>
+									{test.title}
+								</Link>
+								<p className="mt-0.5 text-xs text-muted-foreground">
+									{test.topicTitle}
+									{test.passingScore != null ? ` · проходной ${formatPercent(test.passingScore)}` : null}
+									<span className="tab-sm:hidden">
+										{` · вопросов: ${test.questionsCount}`}
+										{test.timeLimitMinutes ? ` · ${test.timeLimitMinutes} мин` : null}
+									</span>
+								</p>
+							</TableCell>
+							<TableCell className="hidden text-right tabular-nums tab-sm:table-cell">{test.questionsCount}</TableCell>
+							<TableCell className="hidden pr-4 text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+								{test.timeLimitMinutes ? `${test.timeLimitMinutes} мин` : '—'}
+							</TableCell>
+						</TableRow>
+					))}
+				</TableBody>
+			</Table>
+		</TableCard>
+	)
+}
+
+function ResultCell({ attempt, audience }: { attempt: AttemptResultFields; audience: AttemptReviewAudience }) {
+	const view = attemptResultView(attempt)
+	if (view.kind === 'pending') {
+		return (
+			<TableCell className="py-3 pr-4 text-right">
+				<span className="inline-flex justify-end">
+					<AttemptReviewLine view={view} audience={audience} />
+				</span>
+			</TableCell>
+		)
+	}
+	return (
+		<TableCell className="py-3 pr-4 text-right whitespace-nowrap tabular-nums">
+			{formatPercent(view.percent)}
+			{view.teacherChecked ? (
+				<span className="mt-1 flex justify-end">
+					<TeacherCheckedMark />
+				</span>
+			) : null}
+		</TableCell>
+	)
+}
+
+function LatestAttemptsTable({ attempts }: { attempts: DashboardAttempt[] }) {
+	const rowLink = useRowLink()
+	return (
+		<TableCard>
+			<Table className="table-fixed">
+				<TableHeader>
+					<TableRow className="hover:bg-transparent">
+						<TableHead className="pl-4">Тест</TableHead>
+						<TableHead className="hidden w-24 text-right tab-sm:table-cell">Дата</TableHead>
+						<TableHead className="w-40 pr-4 text-right">Результат</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{attempts.map((attempt) => (
+						<TableRow key={attempt.id} className="cursor-pointer" {...rowLink(attempt.testHref)}>
+							<TableCell className="py-3 pl-4">
+								<Link href={attempt.testHref} className={mainLinkClass}>
+									{attempt.testTitle}
+								</Link>
+								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">{formatDate(attempt.submittedAt)}</p>
+							</TableCell>
+							<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+								{formatDate(attempt.submittedAt)}
+							</TableCell>
+							<ResultCell attempt={attempt} audience="student" />
+						</TableRow>
+					))}
+				</TableBody>
+			</Table>
+		</TableCard>
+	)
+}
+
+function StudentAttemptsTable({ attempts }: { attempts: AdminDashboardAttempt[] }) {
+	const rowLink = useRowLink()
+	return (
+		<TableCard>
+			<Table className="table-fixed">
+				<TableHeader>
+					<TableRow className="hover:bg-transparent">
+						<TableHead className="pl-4">Ученик</TableHead>
+						<TableHead className="hidden lg:table-cell">Тест</TableHead>
+						<TableHead className="hidden w-24 text-right tab-sm:table-cell">Дата</TableHead>
+						<TableHead className="w-40 pr-4 text-right">Результат</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{attempts.map((attempt) => {
+						const href = `/admin/attempts/${attempt.attemptId}`
+						return (
+							<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
+								<TableCell className="py-3 pl-4">
+									<Link href={href} className={mainLinkClass}>
+										{attempt.studentName}
+									</Link>
+									<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground lg:hidden">
+										{attempt.testTitle}
+										<span className="tab-sm:hidden"> · {formatDate(attempt.submittedAt)}</span>
+									</p>
+								</TableCell>
+								<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
+									{attempt.testTitle}
+								</TableCell>
+								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+									{formatDate(attempt.submittedAt)}
+								</TableCell>
+								<ResultCell attempt={attempt} audience="staff" />
+							</TableRow>
+						)
+					})}
+				</TableBody>
+			</Table>
+		</TableCard>
+	)
+}
+
+function QuickLinks({ links }: { links: { href: string; title: string }[] }) {
+	return (
+		<TableCard>
+			<ul className="divide-y divide-border">
+				{links.map((section) => (
+					<li key={section.href}>
+						<Link
+							href={section.href}
+							className="group flex items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:underline focus-visible:outline-none"
+						>
+							<span>{section.title}</span>
+							<ArrowRight
+								className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+								aria-hidden="true"
+							/>
+						</Link>
+					</li>
+				))}
+			</ul>
+		</TableCard>
+	)
+}
+
 export default function DashboardClient() {
 	const { me, can, perms } = useAuth()
 	const quickLinks = useMemo(() => quickLinkSections(perms), [perms])
 	const canReadTests = can('tests', 'read')
+	const chartConfigs = useChartConfigs()
+	const [now] = useState(() => new Date())
 
 	const testsQuery = useSWR(canReadTests ? null : 'dashboard-public-tests', fetchPublicTestsList)
 	const tests = useMemo(() => testsQuery.data?.tests ?? [], [testsQuery.data?.tests])
@@ -200,7 +349,7 @@ export default function DashboardClient() {
 		fetchAdminJson<{ tests: AdminTest[] }>('/api/tests')
 	)
 	const adminDashboardQuery = useSWR(canReadTests ? 'dashboard-admin-summary' : null, () =>
-		fetchAdminJson<AdminDashboardData>('/api/tests/admin/dashboard')
+		fetchAdminJson<AdminDashboardData>(dashboardUrl())
 	)
 
 	const attemptBundles = attemptsQuery.data ?? []
@@ -227,421 +376,139 @@ export default function DashboardClient() {
 	const adminTests = adminTestsQuery.data?.tests ?? []
 	const adminDashboard = adminDashboardQuery.data
 	const adminLatestAttempts = adminDashboard?.latestAttempts ?? []
-	const adminLatestAttempt = adminLatestAttempts[0] ?? null
-	const adminLatestView = adminLatestAttempt ? attemptResultView(adminLatestAttempt) : null
-	const latestView = latestAttempt ? attemptResultView(latestAttempt) : null
 	const teacherAllowed = canReadTests && adminTopicsQuery.data !== null && adminTestsQuery.data !== null
 	const publishedCount = adminTests.filter((test) => test.isPublished).length
 	const draftCount = adminTests.length - publishedCount
 	const totalQuestions = adminTests.reduce((sum, test) => sum + (test.questionsCount ?? 0), 0)
-	const teacherTopicData = topics.slice(0, 8).map((topic) => {
-		const topicTests = adminTests.filter((test) => test.topicId === topic.id)
-		const published = topicTests.filter((test) => test.isPublished).length
-		return {
-			topic: topic.title.length > 18 ? `${topic.title.slice(0, 18)}…` : topic.title,
-			published,
-			drafts: topicTests.length - published,
-			questions: topicTests.reduce((sum, test) => sum + (test.questionsCount ?? 0), 0),
-		}
-	})
-	const heroTitle = canReadTests
-		? 'Контроль тестов и активности студентов'
-		: latestAttempt
-			? 'Продолжить работу с тестами'
-			: 'Выберите назначенный тест'
 	const heroHref = canReadTests ? '/admin/tests' : (latestAttempt?.testHref ?? '/tests')
 	const heroCta = canReadTests ? 'Управление тестами' : latestAttempt ? 'Открыть последний тест' : 'Перейти к тестам'
-	const heroBadgeValue = canReadTests ? `${publishedCount} опубликовано` : `${tests.length} доступно`
 	const adminSummary = adminDashboard?.summary
+	const studentAttemptsLoading = testsQuery.isLoading || attemptsQuery.isLoading
+	const statsLoadingAdmin = adminDashboardQuery.isLoading
+	const statsLoadingCatalog = adminTopicsQuery.isLoading || adminTestsQuery.isLoading
+	const stats: Stat[] = canReadTests
+		? [
+				{ label: 'попыток студентов', value: adminSummary?.totalAttempts ?? 0, loading: statsLoadingAdmin },
+				{ label: 'активных студентов', value: adminSummary?.activeStudents ?? 0, loading: statsLoadingAdmin },
+				{
+					label: 'средний балл',
+					value: adminSummary?.averageScore != null ? `${Math.round(adminSummary.averageScore)}%` : '—',
+					loading: statsLoadingAdmin,
+				},
+				...(statsLoadingCatalog || teacherAllowed
+					? [
+							{ label: 'темы', value: topics.length, loading: statsLoadingCatalog },
+							{ label: 'опубликовано', value: publishedCount, loading: statsLoadingCatalog },
+							{ label: 'черновики', value: draftCount, loading: statsLoadingCatalog },
+							{ label: 'вопросов', value: totalQuestions, loading: statsLoadingCatalog },
+						]
+					: []),
+			]
+		: [
+				{ label: 'завершено', value: completedTotal, loading: studentAttemptsLoading },
+				{
+					label: 'средний балл',
+					value: averageScore === null ? '—' : `${averageScore}%`,
+					loading: studentAttemptsLoading,
+				},
+				{
+					label: 'лучший результат',
+					value: bestPercent === null ? '—' : formatPercent(bestPercent),
+					loading: studentAttemptsLoading,
+				},
+			]
 
 	return (
-		<main className="space-y-5">
-			<section className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,.92fr)]">
-				<SoftPanel className="overflow-hidden p-unit-mob tab-sm:p-unit">
-					<div className="mb-6 flex flex-wrap gap-2">
-						<span className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-2 text-sm text-secondary-foreground">
-							<Leaf className="size-4" />
-							{dashboardName(me?.firstName, me?.login)}
-						</span>
-						<span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
-							<ClipboardList className="size-4" />
-							{heroBadgeValue}
-						</span>
-					</div>
+		<div className="space-y-6">
+			<PageHeader title={dashboardName(me?.firstName, me?.login)}>
+				<Button asChild className="h-10 rounded-full px-5">
+					<Link href={heroHref}>
+						{heroCta}
+						<ArrowRight className="size-4" aria-hidden="true" />
+					</Link>
+				</Button>
+			</PageHeader>
 
-					<div className="grid gap-6 tab:grid-cols-[1fr_auto] tab:items-end">
-						<div>
-							<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">сегодня</p>
-							<h1 className="mt-2 max-w-3xl font-serif text-3xl leading-[1.02] text-foreground mob:text-4xl tab-sm:text-5xl">
-								{heroTitle}
-							</h1>
-						</div>
-						<Button asChild size="lg" className="-md w-full rounded-full transition-all mob:w-auto">
-							<Link href={heroHref}>
-								{heroCta}
-								<ArrowRight className="size-4" />
-							</Link>
-						</Button>
-					</div>
-
-					<div className="mt-8 grid gap-3 tab-sm:grid-cols-3">
-						{canReadTests ? (
-							adminDashboardQuery.isLoading ? (
-								<LoadingRow />
-							) : (
-								[
-									['попыток студентов', adminSummary?.totalAttempts ?? 0, BookOpenCheck],
-									['активных студентов', adminSummary?.activeStudents ?? 0, UsersRound],
-									[
-										'средний балл',
-										adminSummary?.averageScore != null ? `${Math.round(adminSummary.averageScore)}%` : '—',
-										LineChart,
-									],
-								].map(([label, value, Icon]) => {
-									const TypedIcon = Icon as typeof BookOpenCheck
-									return (
-										<div key={label as string} className="rounded-3xl bg-secondary/80 p-unit">
-											<TypedIcon className="mb-5 size-5 text-primary" />
-											<p className="font-serif text-3xl">{value as string | number}</p>
-											<p className="mt-1 text-sm text-muted-foreground">{label as string}</p>
-										</div>
-									)
-								})
-							)
-						) : attemptsQuery.isLoading ? (
-							<LoadingRow />
-						) : (
-							[
-								['завершено', completedTotal, BookOpenCheck],
-								['средний балл', averageScore === null ? '—' : `${averageScore}%`, LineChart],
-								['лучший результат', bestPercent === null ? '—' : formatPercent(bestPercent), Sparkles],
-							].map(([label, value, Icon]) => {
-								const TypedIcon = Icon as typeof BookOpenCheck
-								return (
-									<div key={label as string} className="rounded-3xl bg-secondary/80 p-unit">
-										<TypedIcon className="mb-5 size-5 text-primary" />
-										<p className="font-serif text-3xl">{value as string | number}</p>
-										<p className="mt-1 text-sm text-muted-foreground">{label as string}</p>
-									</div>
-								)
-							})
-						)}
-					</div>
-				</SoftPanel>
-
-				<SoftPanel className="relative min-h-80 overflow-hidden tab-sm:min-h-105">
-					<Image
-						src="/img/main-bg.jpg"
-						alt="Лесной биологический фон"
-						fill
-						sizes="(min-width: 768px) 33vw, 100vw"
-						className="object-cover"
-						priority
-						unoptimized
-					/>
-					<div className="absolute inset-0 bg-linear-to-b from-foreground/20 via-background/20 to-foreground/55" />
-					<div className="absolute inset-x-3 bottom-3 rounded-3xl border border-white/45 bg-card/85 p-unit-mob shadow-lg backdrop-blur-md tab-sm:inset-x-5 tab-sm:bottom-5 tab-sm:p-unit">
-						<p className="font-mono text-[0.6875rem] tracking-[0.2em] text-muted-foreground uppercase">
-							{canReadTests ? 'последняя попытка студента' : 'последняя попытка'}
-						</p>
-						{canReadTests ? (
-							adminLatestAttempt ? (
-								<Link
-									href={`/admin/attempts/${adminLatestAttempt.attemptId}`}
-									className={`group mt-3 block rounded-2xl ${interactiveCardClass}`}
-								>
-									<div className="flex items-start justify-between gap-3">
-										<div className="min-w-0">
-											<p className="truncate font-serif text-xl mob:text-2xl">{adminLatestAttempt.studentName}</p>
-											<p className="truncate text-sm text-muted-foreground">{adminLatestAttempt.testTitle}</p>
-										</div>
-										<ArrowRight className="mt-1 size-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
-									</div>
-									{adminLatestView?.kind === 'final' ? (
-										<>
-											<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-												<div
-													className="h-full rounded-full bg-primary"
-													style={{ width: `${adminLatestView.percent}%` }}
-												/>
-											</div>
-											<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-												<span>{formatDate(adminLatestAttempt.submittedAt)}</span>
-												<span>{formatPercent(adminLatestView.percent)}</span>
-											</div>
-										</>
-									) : adminLatestView ? (
-										<>
-											<div className="mt-4">
-												<AttemptReviewLine view={adminLatestView} audience="staff" />
-											</div>
-											<p className="mt-3 text-sm text-muted-foreground">{formatDate(adminLatestAttempt.submittedAt)}</p>
-										</>
-									) : null}
-								</Link>
-							) : (
-								<p className="mt-3 text-sm text-muted-foreground">Попыток студентов пока нет</p>
-							)
-						) : latestAttempt ? (
-							<Link href={latestAttempt.testHref} className={`group mt-3 block rounded-2xl ${interactiveCardClass}`}>
-								<div className="flex items-start justify-between gap-3">
-									<p className="truncate font-serif text-xl mob:text-2xl">{latestAttempt.testTitle}</p>
-									<ArrowRight className="mt-1 size-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
-								</div>
-								{latestView?.kind === 'final' ? (
-									<>
-										<div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-											<div className="h-full rounded-full bg-primary" style={{ width: `${latestView.percent}%` }} />
-										</div>
-										<div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-											<span>{formatDate(latestAttempt.submittedAt)}</span>
-											<span>{formatPercent(latestView.percent)}</span>
-										</div>
-									</>
-								) : latestView ? (
-									<>
-										<div className="mt-4">
-											<AttemptReviewLine view={latestView} audience="student" />
-										</div>
-										<p className="mt-3 text-sm text-muted-foreground">{formatDate(latestAttempt.submittedAt)}</p>
-									</>
-								) : null}
-							</Link>
-						) : (
-							<p className="mt-3 text-sm text-muted-foreground">Попыток пока нет</p>
-						)}
-					</div>
-				</SoftPanel>
-			</section>
+			<StatCards stats={stats} />
 
 			{canReadTests ? null : (
-				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_23.75rem]">
-					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<div className="flex flex-wrap items-start justify-between gap-4">
-							<SectionTitle kicker="студент" title="Доступные тесты" />
-							<Button asChild variant="outline" className="-sm rounded-full bg-card transition-all">
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-2">
+					<section className="space-y-3">
+						<SectionHeading title="Доступные тесты">
+							<Button asChild variant="outline" size="sm" className="rounded-full bg-card">
 								<Link href="/tests">Все доступные</Link>
 							</Button>
-						</div>
+						</SectionHeading>
+						{testsQuery.isLoading ? (
+							<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка тестов" />
+						) : featuredTests.length === 0 ? (
+							<EmptyState description="Назначенных тестов пока нет." className="py-10" />
+						) : (
+							<AvailableTestsTable tests={featuredTests} />
+						)}
+					</section>
 
-						<div className="mt-7 grid gap-3">
-							{testsQuery.isLoading ? (
-								<LoadingRow />
-							) : featuredTests.length === 0 ? (
-								<EmptyPanel>Назначенных тестов пока нет.</EmptyPanel>
-							) : (
-								featuredTests.map((test) => (
-									<Link
-										key={test.id}
-										href={`/tests/${test.topicSlug}/${test.slug}`}
-										className={`grid gap-4 rounded-3xl border border-border bg-card p-unit hover:bg-secondary/45 tab-sm:grid-cols-[1fr_auto] ${interactiveCardClass}`}
-									>
-										<div>
-											<p className="text-sm text-muted-foreground">{test.topicTitle}</p>
-											<h3 className="mt-1 font-serif text-2xl">{test.title}</h3>
-											<p className="mt-2 text-sm text-muted-foreground">
-												{test.questionsCount} вопросов
-												{test.timeLimitMinutes ? ` · ${test.timeLimitMinutes} мин` : ''}
-												{test.passingScore != null ? ` · проходной ${formatPercent(test.passingScore)}` : ''}
-											</p>
-										</div>
-										<div className="flex items-center gap-2 text-primary">
-											Открыть
-											<ArrowRight className="size-4" />
-										</div>
-									</Link>
-								))
-							)}
-						</div>
-					</SoftPanel>
-
-					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<SectionTitle kicker="история" title="Последние попытки" />
-						<div className="mt-6 space-y-3">
-							{attemptsQuery.isLoading ? (
-								[0, 1, 2].map((item) => <Skeleton key={item} className="h-20 rounded-3xl" />)
-							) : latestAttempts.length === 0 ? (
-								<EmptyPanel>История появится после первой попытки.</EmptyPanel>
-							) : (
-								latestAttempts.map((attempt) => {
-									const view = attemptResultView(attempt)
-									return (
-										<Link
-											key={attempt.id}
-											href={attempt.testHref}
-											className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-										>
-											<div className="flex items-center justify-between gap-3">
-												<p className="truncate font-medium">{attempt.testTitle}</p>
-												{view.kind === 'final' ? (
-													<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
-														{formatPercent(view.percent)}
-														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-													</span>
-												) : (
-													<span className="flex shrink-0 items-center gap-2">
-														<ReviewStatusChip className="bg-card" />
-														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-													</span>
-												)}
-											</div>
-											{view.kind === 'final' ? (
-												<>
-													<div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-														<div className="h-full rounded-full bg-primary" style={{ width: `${view.percent}%` }} />
-													</div>
-													<p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt)}</p>
-												</>
-											) : (
-												<p className="mt-3 text-xs text-muted-foreground">
-													{reviewDateLine(attempt.submittedAt, view, 'student')}
-												</p>
-											)}
-										</Link>
-									)
-								})
-							)}
-						</div>
-					</SoftPanel>
-				</section>
+					<section className="space-y-3">
+						<SectionHeading title="Последние попытки" />
+						{studentAttemptsLoading ? (
+							<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка попыток" />
+						) : latestAttempts.length === 0 ? (
+							<EmptyState description="История появится после первой попытки." className="py-10" />
+						) : (
+							<LatestAttemptsTable attempts={latestAttempts} />
+						)}
+					</section>
+				</div>
 			)}
 
 			{canReadTests ? (
-				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_23.75rem]">
-					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<SectionTitle kicker="история" title="Последние попытки студентов" />
-						<div className="mt-6 space-y-3">
-							{adminDashboardQuery.isLoading ? (
-								[0, 1, 2].map((item) => <Skeleton key={item} className="h-20 rounded-3xl" />)
-							) : adminLatestAttempts.length === 0 ? (
-								<EmptyPanel>Студенты пока не завершали тесты.</EmptyPanel>
-							) : (
-								adminLatestAttempts.slice(0, 5).map((attempt) => {
-									const view = attemptResultView(attempt)
-									return (
-										<Link
-											key={attempt.attemptId}
-											href={`/admin/attempts/${attempt.attemptId}`}
-											className={`group block rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-										>
-											<div className="flex items-center justify-between gap-3">
-												<div className="min-w-0">
-													<p className="truncate font-medium">{attempt.studentName}</p>
-													<p className="truncate text-xs text-muted-foreground">{attempt.testTitle}</p>
-												</div>
-												{view.kind === 'final' ? (
-													<span className="flex items-center gap-2 rounded-full bg-card px-3 py-1 text-sm">
-														{formatPercent(view.percent)}
-														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-													</span>
-												) : (
-													<span className="flex shrink-0 items-center gap-2">
-														<ReviewStatusChip className="bg-card" />
-														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-													</span>
-												)}
-											</div>
-											<p className="mt-2 text-xs text-muted-foreground">
-												{view.kind === 'final'
-													? formatDate(attempt.submittedAt)
-													: reviewDateLine(attempt.submittedAt, view, 'staff')}
-											</p>
-										</Link>
-									)
-								})
-							)}
-						</div>
-					</SoftPanel>
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_23.75rem]">
+					<section className="space-y-3">
+						<SectionHeading title="Последние попытки студентов" />
+						{adminDashboardQuery.isLoading ? (
+							<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка попыток" />
+						) : adminLatestAttempts.length === 0 ? (
+							<EmptyState description="Студенты пока не завершали тесты." className="py-10" />
+						) : (
+							<StudentAttemptsTable attempts={adminLatestAttempts.slice(0, 5)} />
+						)}
+					</section>
 
-					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<SectionTitle kicker="быстрый вход" title="Управление" />
-						<div className="mt-6 grid gap-3">
-							{quickLinks.map((section) => (
-								<Link
-									key={section.href}
-									href={section.href}
-									className={`group flex items-center justify-between rounded-3xl bg-secondary/70 p-unit hover:bg-secondary ${interactiveCardClass}`}
-								>
-									<span>{section.title}</span>
-									<ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-								</Link>
-							))}
-						</div>
-					</SoftPanel>
-				</section>
+					<section className="space-y-3">
+						<SectionHeading title="Управление" />
+						<QuickLinks links={quickLinks} />
+					</section>
+				</div>
 			) : null}
 
 			{canReadTests ? null : <StudentProgressSection />}
 
 			{canReadTests ? (
-				<section className="grid grid-cols-[minmax(0,1fr)] gap-5 tab:grid-cols-[23.75rem_minmax(0,1fr)]">
-					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<SectionTitle kicker="учитель / админ" title="Состояние базы" />
-
+				<div className="grid gap-4 xl:grid-cols-2">
+					<ChartCard title="Публикации и наполнение">
 						{adminTopicsQuery.isLoading || adminTestsQuery.isLoading ? (
-							<div className="mt-7">
-								<LoadingRow />
-							</div>
-						) : !teacherAllowed ? (
-							<div className="mt-7 rounded-3xl bg-secondary p-unit">
-								<LockKeyhole className="mb-5 size-6 text-muted-foreground" />
-								<p className="font-serif text-2xl">Нужны права администратора</p>
-							</div>
+							<Skeleton className="h-72 rounded-2xl" />
+						) : topics.length === 0 ? (
+							<EmptyPanel>
+								{can('zone', 'all')
+									? 'Нет тем для отображения.'
+									: 'Вам ещё не закреплены темы. Обратитесь к администратору.'}
+							</EmptyPanel>
 						) : (
-							<div className="mt-7 grid gap-3">
-								{[
-									['темы', topics.length, LibraryBig],
-									['опубликовано', publishedCount, CheckCircle2],
-									['черновики', draftCount, PanelTop],
-									['вопросов', totalQuestions, Microscope],
-								].map(([label, value, Icon]) => {
-									const TypedIcon = Icon as typeof LibraryBig
-									return (
-										<div key={label as string} className="flex items-center gap-4 rounded-3xl bg-secondary/70 p-unit">
-											<TypedIcon className="size-5 text-primary" />
-											<p className="font-serif text-2xl">{value as number}</p>
-											<p className="text-sm text-muted-foreground">{label as string}</p>
-										</div>
-									)
-								})}
-							</div>
+							<ContentChart topics={topics} tests={adminTests} config={chartConfigs.content} />
 						)}
-					</SoftPanel>
-
-					<SoftPanel className="p-unit-mob tab-sm:p-unit">
-						<div className="flex flex-wrap items-start justify-between gap-4">
-							<SectionTitle kicker="график" title="Публикации и наполнение" />
-							<Button asChild variant="outline" className="-sm rounded-full bg-card transition-all">
-								<Link href="/admin/tests">Управление тестами</Link>
-							</Button>
-						</div>
-
-						<div className="mt-7">
-							{adminTopicsQuery.isLoading || adminTestsQuery.isLoading ? (
-								<Skeleton className="h-75 rounded-3xl" />
-							) : teacherTopicData.length === 0 ? (
-								<EmptyPanel>
-									{can('zone', 'all')
-										? 'Нет тем для отображения.'
-										: 'Вам ещё не закреплены темы. Обратитесь к администратору.'}
-								</EmptyPanel>
-							) : (
-								<ChartContainer config={teacherChartConfig} className="h-75 w-full">
-									<BarChart data={teacherTopicData}>
-										<CartesianGrid vertical={false} />
-										<XAxis dataKey="topic" tickLine={false} axisLine={false} />
-										<YAxis tickLine={false} axisLine={false} />
-										<ChartTooltip content={<ChartTooltipContent />} />
-										<Bar dataKey="published" stackId="tests" fill="var(--color-published)" radius={[8, 8, 0, 0]} />
-										<Bar dataKey="drafts" stackId="tests" fill="var(--color-drafts)" radius={[8, 8, 0, 0]} />
-										<Bar dataKey="questions" fill="var(--color-questions)" radius={8} />
-									</BarChart>
-								</ChartContainer>
-							)}
-						</div>
-					</SoftPanel>
-				</section>
+					</ChartCard>
+					<ChartCard title="Активность учеников">
+						{adminDashboardQuery.isLoading ? (
+							<Skeleton className="h-72 rounded-2xl" />
+						) : !adminDashboard ? (
+							<EmptyPanel>Нет данных об активности.</EmptyPanel>
+						) : (
+							<ActivityChart days={adminDashboard.dailyActivity} config={chartConfigs.activity} now={now} />
+						)}
+					</ChartCard>
+				</div>
 			) : null}
-		</main>
+		</div>
 	)
 }

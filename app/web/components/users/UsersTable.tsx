@@ -2,59 +2,100 @@
 
 import { roleDisplayName } from '@bio-exam/rbac'
 
-import { useState, useMemo } from 'react'
+import { useState, type ReactNode } from 'react'
 
-import { Link as LinkIcon, Pencil, Search } from 'lucide-react'
+import { format, isValid, parseISO } from 'date-fns'
+import { Link as LinkIcon, MoreHorizontal, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { useSWRConfig } from 'swr'
 
 import { useAuth } from '@/components/providers/AuthProvider'
+import { SortableHead } from '@/components/table/SortableHead'
+import { TableCard } from '@/components/table/TableCard'
+import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { highlightText } from '@/lib/search/highlight'
 import { usersKeys } from '@/lib/users/api'
-import { groupsCell, groupsTitle, showReinvite, usersEmptyText } from '@/lib/users/invite-form'
-import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
+import { groupsCell, groupsTitle, showReinvite } from '@/lib/users/invite-form'
+import { nextUsersSort, userDisplayName, type UsersSort, type UsersSortKey } from '@/lib/users/users-url'
+import { cn } from '@/lib/utils/cn'
+import { sortDirectionOf } from '@/lib/utils/table-sort'
 import type { UserRow } from '@/types/users'
 
-import { UserRowItem } from './UserRowItem'
-import { UserStatusFilter } from './UserStatusFilter'
 import { EditUserDialog } from './dialogs/EditUserDialog'
 import { ReinviteUserDialog } from './dialogs/ReinviteUserDialog'
 
 type Props = {
 	rows: UserRow[]
-	isLoading: boolean
-	canEdit?: boolean
+	loading: boolean
+	searchQuery: string
+	sort: UsersSort
+	onSortChange: (sort: UsersSort) => void
+	rolesFilter: ReactNode
+	groupsFilter: ReactNode
+	statusFilter: ReactNode
 }
 
-export function UsersTable({ rows, isLoading, canEdit }: Props) {
+function createdDate(value: string): string {
+	const parsed = parseISO(value)
+	return isValid(parsed) ? format(parsed, 'dd.MM.yyyy') : '—'
+}
+
+function profileHref(user: UserRow): string {
+	return user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
+}
+
+function Highlighted({ text, query }: { text: string; query: string }) {
+	if (!query.trim()) return <>{text}</>
+	return <span dangerouslySetInnerHTML={{ __html: highlightText(text, query) }} />
+}
+
+function FilterHead({ label, filter, className }: { label: string; filter: ReactNode; className: string }) {
+	return (
+		<TableHead className={className}>
+			<span className="inline-flex items-center gap-1">
+				{label}
+				{filter}
+			</span>
+		</TableHead>
+	)
+}
+
+export function UsersTable({
+	rows,
+	loading,
+	searchQuery,
+	sort,
+	onSortChange,
+	rolesFilter,
+	groupsFilter,
+	statusFilter,
+}: Props) {
 	const { mutate } = useSWRConfig()
 	const { can } = useAuth()
-
-	const effectiveCanEdit = typeof canEdit === 'boolean' ? canEdit : can('users', 'edit')
+	const rowLink = useRowLink()
+	const canEdit = can('users', 'edit')
 	const canInvite = can('users', 'invite')
-	const showActions = effectiveCanEdit || canInvite
-	const teacherView = !can('zone', 'all')
-
-	const cols = 7 + (showActions ? 1 : 0)
-
-	const [searchQuery, setSearchQuery] = useState('')
-	const [statusFilter, setStatusFilter] = useState<UserStatus>('active')
+	const zoneAll = can('zone', 'all')
 	const [editOpen, setEditOpen] = useState(false)
 	const [reinviteOpen, setReinviteOpen] = useState(false)
 	const [currentUser, setCurrentUser] = useState<UserRow | null>(null)
 
-	const handleEditClick = (u: UserRow) => {
-		setCurrentUser(u)
+	const allowReinvite = (user: UserRow) =>
+		showReinvite({ isActive: Boolean(user.isActive), activatedAt: user.activatedAt }, { canInvite, zoneAll })
+	const showActions = loading ? canEdit || canInvite : canEdit || rows.some(allowReinvite)
+
+	const openEdit = (user: UserRow) => {
+		setCurrentUser(user)
 		setEditOpen(true)
 	}
 
-	const handleReinviteClick = (u: UserRow) => {
-		setCurrentUser(u)
+	const openReinvite = (user: UserRow) => {
+		setCurrentUser(user)
 		setReinviteOpen(true)
 	}
 
@@ -62,202 +103,167 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 		void mutate(usersKeys.list())
 	}
 
-	const filteredRows = useMemo(() => {
-		const visibleRows = rows.filter((user) => matchesUserStatus(user.isActive, statusFilter))
-		if (!searchQuery.trim()) return visibleRows
-
-		const query = searchQuery.toLowerCase().trim()
-		return visibleRows.filter((user) => {
-			const login = (user.login ?? '').toLowerCase()
-			const firstName = (user.firstName ?? '').toLowerCase()
-			const lastName = (user.lastName ?? '').toLowerCase()
-			const fullName = `${firstName} ${lastName}`.trim()
-
-			return login.includes(query) || fullName.includes(query) || firstName.includes(query) || lastName.includes(query)
-		})
-	}, [rows, searchQuery, statusFilter])
-
-	const emptyText = usersEmptyText({ searchQuery, teacher: teacherView, totalRows: rows.length })
-
-	const body = useMemo(() => {
-		if (isLoading) {
-			return Array.from({ length: 5 }).map((_, i) => (
-				<TableRow key={`sk-${i}`} className="h-14">
-					<TableCell>
-						<Skeleton className="h-4 w-[85%]" />
-					</TableCell>
-					<TableCell>
-						<Skeleton className="h-4 w-[55%]" />
-					</TableCell>
-					<TableCell className="space-x-2">
-						<Skeleton className="inline-block h-5 w-16 rounded-full" />
-						<Skeleton className="inline-block h-5 w-20 rounded-full" />
-					</TableCell>
-					<TableCell>
-						<Skeleton className="h-5 w-20 rounded-full" />
-					</TableCell>
-					<TableCell>
-						<Skeleton className="h-4 w-20" />
-					</TableCell>
-					<TableCell>
-						<Skeleton className="h-4 w-28" />
-					</TableCell>
-					<TableCell>
-						<Skeleton className="h-4 w-24" />
-					</TableCell>
-					{showActions && (
-						<TableCell className="text-right">
-							<Skeleton className="h-8 w-28" />
-						</TableCell>
-					)}
-				</TableRow>
-			))
-		}
-
-		if (!filteredRows.length) {
-			return (
-				<TableRow>
-					<TableCell colSpan={cols} className="h-24 text-center text-muted-foreground">
-						{emptyText}
-					</TableCell>
-				</TableRow>
-			)
-		}
-
-		return filteredRows.map((u) => (
-			<UserRowItem
-				key={u.id}
-				user={u}
-				searchQuery={searchQuery}
-				canEditRow={effectiveCanEdit}
-				canInvite={canInvite}
-				zoneAll={!teacherView}
-				onEditClick={handleEditClick}
-				onReinviteClick={handleReinviteClick}
-			/>
-		))
-	}, [isLoading, filteredRows, searchQuery, cols, effectiveCanEdit, canInvite, teacherView, showActions, emptyText])
+	const head = (label: string, key: UsersSortKey, className?: string, align?: 'left' | 'right') => (
+		<SortableHead
+			label={label}
+			direction={sortDirectionOf(sort, key)}
+			onSort={() => onSortChange(nextUsersSort(sort, key))}
+			className={className}
+			align={align}
+		/>
+	)
 
 	return (
 		<>
-			<div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-				<div className="relative">
-					<Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						type="text"
-						placeholder="Поиск..."
-						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
-						className="pl-9"
-					/>
-				</div>
-				<UserStatusFilter value={statusFilter} onChange={setStatusFilter} label="Статус пользователей" />
-			</div>
-
-			<div className="space-y-3 tab-sm:hidden">
-				{isLoading ? (
-					Array.from({ length: 5 }).map((_, i) => <Skeleton key={`mobile-sk-${i}`} className="h-36 rounded-3xl" />)
-				) : filteredRows.length === 0 ? (
-					<div className="rounded-3xl border p-4 text-center text-sm text-muted-foreground">{emptyText}</div>
-				) : (
-					filteredRows.map((user) => {
-						const active = Boolean(user.isActive)
-						const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-						const nameDisplay = fullName || user.name || '—'
-						const loginDisplay = user.login ?? '—'
-						const allowReinvite = showReinvite(
-							{ isActive: active, activatedAt: user.activatedAt },
-							{ canInvite, zoneAll: !teacherView }
-						)
-						const profileHref = user.login ? `/profile/${encodeURIComponent(user.login)}` : `/admin/users/${user.id}`
-
-						return (
-							<article key={user.id} className="rounded-3xl border bg-card p-4">
-								<div className="flex items-start justify-between gap-3">
-									<div className="min-w-0">
-										<Link href={profileHref} className="truncate font-medium hover:underline">
-											{loginDisplay}
-										</Link>
-										<p className="mt-1 truncate text-sm text-muted-foreground">{nameDisplay}</p>
-									</div>
-									<Badge variant={active ? 'default' : 'outline'}>{active ? 'Активен' : 'Неактивен'}</Badge>
-								</div>
-
-								<div className="mt-4 flex flex-wrap gap-1.5">
-									{user.roles.length > 0 ? (
-										user.roles.map((role) => (
-											<Badge key={role} variant="secondary" className="capitalize">
-												{roleDisplayName(role)}
-											</Badge>
-										))
-									) : (
-										<span className="text-sm text-muted-foreground">Роли не назначены</span>
-									)}
-								</div>
-
-								<div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-									<p className="break-words" title={groupsTitle(user.groups) || undefined}>
-										Группа: {groupsCell(user.groups)}
-									</p>
-									<p>Создан: {formatDateTime(user.createdAt)}</p>
-									<p>Кем создан: {user.createdByName ?? '—'}</p>
-								</div>
-
-								{effectiveCanEdit || allowReinvite ? (
-									<div className="mt-4 flex justify-end gap-2">
-										{effectiveCanEdit ? (
-											<Button
-												size="icon"
-												variant="outline"
-												aria-label="Изменить профиль"
-												onClick={() => handleEditClick(user)}
-											>
-												<Pencil aria-hidden />
-											</Button>
+			<TableCard>
+				<Table className="table-fixed">
+					<TableHeader>
+						<TableRow className="hover:bg-transparent">
+							{head('Пользователь', 'name', 'pl-4')}
+							<FilterHead label="Роли" filter={rolesFilter} className="hidden w-44 tab:table-cell" />
+							<FilterHead label="Группа" filter={groupsFilter} className="hidden w-48 lg:table-cell" />
+							<FilterHead label="Статус" filter={statusFilter} className="hidden w-32 tab-sm:table-cell" />
+							{head('Создан', 'created', 'hidden w-32 xl:table-cell', 'right')}
+							<TableHead className="hidden w-44 xl:table-cell">Кем создан</TableHead>
+							{showActions ? (
+								<TableHead className="w-14 pr-3">
+									<span className="sr-only">Действия</span>
+								</TableHead>
+							) : null}
+						</TableRow>
+					</TableHeader>
+					<TableBody aria-busy={loading || undefined}>
+						{loading
+							? Array.from({ length: 5 }, (_, index) => (
+									<TableRow key={index} className="hover:bg-transparent">
+										<TableCell className="py-3 pl-4">
+											<Skeleton className="h-4 w-40 max-w-full" />
+											<Skeleton className="mt-1.5 h-3 w-24 max-w-full" />
+										</TableCell>
+										<TableCell className="hidden tab:table-cell">
+											<Skeleton className="h-5 w-20 rounded-full" />
+										</TableCell>
+										<TableCell className="hidden lg:table-cell">
+											<Skeleton className="h-4 w-24" />
+										</TableCell>
+										<TableCell className="hidden tab-sm:table-cell">
+											<Skeleton className="h-5 w-20 rounded-full" />
+										</TableCell>
+										<TableCell className="hidden xl:table-cell">
+											<Skeleton className="ml-auto h-4 w-20" />
+										</TableCell>
+										<TableCell className="hidden xl:table-cell">
+											<Skeleton className="h-4 w-24" />
+										</TableCell>
+										{showActions ? (
+											<TableCell className="pr-3">
+												<Skeleton className="size-8 rounded-full" />
+											</TableCell>
 										) : null}
-										{allowReinvite ? (
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														size="icon"
-														variant="outline"
-														aria-label="Новая ссылка приглашения"
-														onClick={() => handleReinviteClick(user)}
+									</TableRow>
+								))
+							: rows.map((user) => {
+									const href = profileHref(user)
+									const name = userDisplayName(user)
+									const login = user.login || '—'
+									const active = Boolean(user.isActive)
+									const statusText = active ? 'Активен' : 'Неактивен'
+									const roleNames = user.roles.map((role) => roleDisplayName(role)).join(', ')
+									const reinvite = allowReinvite(user)
+									return (
+										<TableRow key={user.id} className="cursor-pointer" {...rowLink(href)}>
+											<TableCell className="py-3 pl-4">
+												<Link
+													href={href}
+													className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
+												>
+													<Highlighted text={name} query={searchQuery} />
+												</Link>
+												<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground">
+													<Highlighted text={login} query={searchQuery} />
+													{roleNames ? <span className="tab:hidden"> · {roleNames}</span> : null}
+													<span className="tab-sm:hidden"> · {statusText}</span>
+												</p>
+												{user.groups.length > 0 ? (
+													<p
+														className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground lg:hidden"
+														title={groupsTitle(user.groups)}
 													>
-														<LinkIcon aria-hidden />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent>Новая ссылка приглашения</TooltipContent>
-											</Tooltip>
-										) : null}
-									</div>
-								) : null}
-							</article>
-						)
-					})
-				)}
-			</div>
-
-			<div className="hidden w-0 min-w-full overflow-hidden rounded-md border tab-sm:block">
-				<div className="[&>div]:overflow-x-auto">
-					<Table className="min-w-245">
-						<TableHeader className="bg-muted/50">
-							<TableRow>
-								<TableHead>Логин</TableHead>
-								<TableHead>Имя</TableHead>
-								<TableHead>Роли</TableHead>
-								<TableHead>Статус</TableHead>
-								<TableHead>Группа</TableHead>
-								<TableHead>Создан</TableHead>
-								<TableHead>Кем создан</TableHead>
-								{showActions && <TableHead className="text-right">Действия</TableHead>}
-							</TableRow>
-						</TableHeader>
-
-						<TableBody>{body}</TableBody>
-					</Table>
-				</div>
-			</div>
+														{groupsCell(user.groups)}
+													</p>
+												) : null}
+											</TableCell>
+											<TableCell className="hidden tab:table-cell">
+												{user.roles.length > 0 ? (
+													<div className="flex flex-wrap gap-1.5">
+														{user.roles.map((role) => (
+															<Badge key={role} variant="secondary" className="rounded-full">
+																{roleDisplayName(role)}
+															</Badge>
+														))}
+													</div>
+												) : (
+													<span className="text-muted-foreground">—</span>
+												)}
+											</TableCell>
+											<TableCell
+												className={cn(
+													'hidden truncate lg:table-cell',
+													user.groups.length === 0 && 'text-muted-foreground'
+												)}
+												title={groupsTitle(user.groups) || undefined}
+											>
+												{groupsCell(user.groups)}
+											</TableCell>
+											<TableCell className="hidden tab-sm:table-cell">
+												<Badge variant={active ? 'default' : 'outline'} className="rounded-full">
+													{statusText}
+												</Badge>
+											</TableCell>
+											<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums xl:table-cell">
+												{createdDate(user.createdAt)}
+											</TableCell>
+											<TableCell className="hidden truncate text-muted-foreground xl:table-cell">
+												{user.createdByName ?? '—'}
+											</TableCell>
+											{showActions ? (
+												<TableCell className="pr-3">
+													{canEdit || reinvite ? (
+														<DropdownMenu>
+															<DropdownMenuTrigger asChild>
+																<Button
+																	size="icon"
+																	variant="ghost"
+																	className="size-8 rounded-full"
+																	aria-label={`Действия с пользователем ${user.login || name}`}
+																>
+																	<MoreHorizontal className="size-4" aria-hidden="true" />
+																</Button>
+															</DropdownMenuTrigger>
+															<DropdownMenuContent align="end">
+																{canEdit ? (
+																	<DropdownMenuItem onSelect={() => openEdit(user)}>
+																		<Pencil className="size-4" aria-hidden="true" />
+																		Изменить профиль
+																	</DropdownMenuItem>
+																) : null}
+																{reinvite ? (
+																	<DropdownMenuItem onSelect={() => openReinvite(user)}>
+																		<LinkIcon className="size-4" aria-hidden="true" />
+																		Новая ссылка приглашения
+																	</DropdownMenuItem>
+																) : null}
+															</DropdownMenuContent>
+														</DropdownMenu>
+													) : null}
+												</TableCell>
+											) : null}
+										</TableRow>
+									)
+								})}
+					</TableBody>
+				</Table>
+			</TableCard>
 
 			<EditUserDialog open={editOpen} onOpenChange={setEditOpen} user={currentUser} onSaved={afterChange} />
 			<ReinviteUserDialog
@@ -268,12 +274,4 @@ export function UsersTable({ rows, isLoading, canEdit }: Props) {
 			/>
 		</>
 	)
-}
-
-function formatDateTime(iso: string) {
-	try {
-		return new Date(iso).toLocaleString()
-	} catch {
-		return iso
-	}
 }

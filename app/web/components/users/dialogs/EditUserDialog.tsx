@@ -6,10 +6,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 
 import { Check, ChevronDownIcon, ChevronsUpDown, LockKeyholeOpen, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR, { useSWRConfig } from 'swr'
 
 import { useAuth } from '@/components/providers/AuthProvider'
+import { IMMUTABLE_ROLE_KEY } from '@/components/rbac/grants'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import {
 	AlertDialog,
@@ -39,7 +41,6 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { UserGrantsDialog } from '@/components/users/dialogs/UserGrantsDialog'
 import { LOGIN_PATTERN, LOGIN_HINT } from '@/lib/auth/validators'
 import { groupsKeys, groupsListFetcher } from '@/lib/groups/api'
 import { failureMessage } from '@/lib/http/errors'
@@ -156,9 +157,6 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 	const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
 	const [initialGroupIds, setInitialGroupIds] = useState<string[]>([])
 	const [groupsOpen, setGroupsOpen] = useState(false)
-
-	// модалка кастомных прав
-	const [grantsOpen, setGrantsOpen] = useState(false)
 
 	const [confirmAction, setConfirmAction] = useState<SessionActionKind | null>(null)
 	const [pendingAction, setPendingAction] = useState<SessionActionKind | null>(null)
@@ -344,6 +342,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 
 	const triggerLabel = selectedRole ? roleDisplayName(selectedRole) : 'Выберите роль'
 	const grantsDisabled = roleChanged // нельзя открывать, пока роль не сохранена
+	const adminUser = Boolean(user && !user.roles.every((key) => key !== IMMUTABLE_ROLE_KEY))
 
 	return (
 		<>
@@ -526,20 +525,24 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								<Tooltip delayDuration={150}>
 									<TooltipTrigger asChild>
 										<span>
-											<Button
-												variant="secondary"
-												onClick={() => setGrantsOpen(true)}
-												disabled={grantsDisabled || !user}
-											>
-												Права…
-											</Button>
+											{grantsDisabled || adminUser || !user ? (
+												<Button variant="secondary" disabled>
+													Права…
+												</Button>
+											) : (
+												<Button asChild variant="secondary">
+													<Link href={`/admin/settings/rbac?userId=${encodeURIComponent(user.id)}`}>Права…</Link>
+												</Button>
+											)}
 										</span>
 									</TooltipTrigger>
-									{grantsDisabled && (
+									{grantsDisabled ? (
 										<TooltipContent>
 											Сначала сохраните изменения роли, затем настройте права пользователя
 										</TooltipContent>
-									)}
+									) : adminUser ? (
+										<TooltipContent>У администратора все права, они не меняются</TooltipContent>
+									) : null}
 								</Tooltip>
 							</TooltipProvider>
 						</div>
@@ -610,9 +613,6 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-
-			{/* Модалка прав пользователя */}
-			{user && <UserGrantsDialog open={grantsOpen} onOpenChange={setGrantsOpen} userId={user.id} />}
 
 			<AlertDialog open={confirmAction === 'revoke'} onOpenChange={onConfirmOpenChange}>
 				<AlertDialogContent onCloseAutoFocus={returnFocus('revoke')}>

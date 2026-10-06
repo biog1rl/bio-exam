@@ -198,12 +198,26 @@ test('generate-no-diff: the restored snapshot produces no new file', async (t) =
 	assert.equal(result.ok, true, joined(result))
 })
 
-test('generate-no-diff: without snapshots newer than 0015 the destructive diff stops the check', async (t) => {
+test('generate-no-diff: a table missing from schema.ts gives a destructive diff that stops the check', async (t) => {
 	const dir = await fixture(t, async (d) => {
-		for (const file of await fsp.readdir(path.join(d, 'meta'))) {
-			const match = /^(\d{4})_snapshot\.json$/.exec(file)
-			if (match && Number(match[1]) > 15) await fsp.rm(path.join(d, 'meta', file))
+		const snapshots = (await fsp.readdir(path.join(d, 'meta')))
+			.filter((file) => /^\d{4}_snapshot\.json$/.test(file))
+			.sort()
+		const latest = path.join(d, 'meta', snapshots[snapshots.length - 1])
+		const snapshot = await readJson(latest)
+		snapshot.tables['public.destructive_probe'] = {
+			name: 'destructive_probe',
+			schema: '',
+			columns: { id: { name: 'id', type: 'text', primaryKey: true, notNull: true } },
+			indexes: {},
+			foreignKeys: {},
+			compositePrimaryKeys: {},
+			uniqueConstraints: {},
+			policies: {},
+			checkConstraints: {},
+			isRLSEnabled: false,
 		}
+		await writeJson(latest, snapshot)
 	})
 	const before = (await fsp.readdir(dir)).sort()
 	const result = await checkGenerateNoDiff(dir)

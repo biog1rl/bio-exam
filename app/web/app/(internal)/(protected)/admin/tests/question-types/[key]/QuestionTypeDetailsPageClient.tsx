@@ -11,6 +11,7 @@ import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { PageHeader } from '@/components/page/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,10 +40,6 @@ import { TEMPLATE_META, createDefaultQuestionTypeScoringRule } from '../../types
 const FORM_SWR_OPTIONS = { revalidateOnFocus: false, revalidateOnReconnect: false }
 
 const TYPE_SWR_OPTIONS = { ...FORM_SWR_OPTIONS, revalidateOnMount: false }
-
-const KICKER_CLASS = 'font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase'
-
-const CARD_CLASS = 'space-y-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit'
 
 type GlobalForm = {
 	title: string
@@ -152,9 +149,9 @@ function SwitchRow({
 
 function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
 	return (
-		<section className={CARD_CLASS}>
+		<section className="space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-6">
 			<div>
-				<h2 className="font-serif text-2xl text-foreground">{title}</h2>
+				<h2 className="text-base font-semibold text-foreground">{title}</h2>
 				{description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
 			</div>
 			{children}
@@ -319,7 +316,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 						onRetry={() => loadType(typeKey)}
 					/>
 				) : (
-					<Skeleton className="h-96 rounded-4xl" aria-label="Загрузка типа вопроса" />
+					<Skeleton className="h-96 rounded-3xl" aria-label="Загрузка типа вопроса" />
 				)}
 			</div>
 		)
@@ -333,15 +330,12 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 		: `/admin/tests/scoring?type=${typeKey}`
 
 	return (
-		<div className="space-y-5">
+		<div className="space-y-4">
 			<SetBreadcrumbsLabels labels={breadcrumbLabels} />
-			<section className="flex flex-col gap-4 rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:flex-row tab-sm:items-start tab-sm:justify-between tab-sm:p-unit">
-				<div className="min-w-0">
-					<p className={KICKER_CLASS}>тип вопроса</p>
-					<h1 className="mt-2 font-serif text-3xl leading-tight break-words text-foreground tab-sm:text-4xl">
-						{questionType.title}
-					</h1>
-					<p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+			<PageHeader
+				title={questionType.title}
+				meta={
+					<div className="flex flex-wrap items-center gap-1.5">
 						<span>Формат ответа: {TEMPLATE_META[questionType.uiTemplate].label}</span>
 						{questionType.isSystem ? (
 							<Badge variant="outline" className="rounded-full">
@@ -353,13 +347,14 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 								Отключён
 							</Badge>
 						)}
-					</p>
-				</div>
-				<Button className="shrink-0 rounded-full" onClick={saveGlobal} disabled={savingGlobal}>
+					</div>
+				}
+			>
+				<Button className="h-10 shrink-0 rounded-full" onClick={saveGlobal} disabled={savingGlobal}>
 					<Save className="size-4" aria-hidden="true" />
 					Сохранить тип
 				</Button>
-			</section>
+			</PageHeader>
 
 			<Section title="Основное">
 				<div className="grid gap-4 tab-sm:grid-cols-2">

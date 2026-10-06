@@ -210,12 +210,16 @@ describe('читатели результата: попытки без откр�
 				{ cookies: student.cookie }
 			)
 		)
-		const data = reply.body.data as Json[]
-		assert.equal(data.length, 1)
-		assert.equal(data[0]?.date, day)
-		assert.equal(data[0]?.maxScore, 100)
-		assert.equal(data[0]?.minScore, 50)
-		assert.equal(data[0]?.count, 2)
+		const attempts = reply.body.attempts as Json[]
+		assert.deepEqual(
+			attempts.map((row) => row.id),
+			[a1.attemptId, a2.attemptId]
+		)
+		assert.ok(attempts.every((row) => String(row.submittedAt).slice(0, 10) === day))
+		assert.deepEqual(
+			attempts.map((row) => Number(row.scorePercentage)).sort((left, right) => left - right),
+			[50, 100]
+		)
 	})
 
 	test('попытки в профиле ученика', async () => {

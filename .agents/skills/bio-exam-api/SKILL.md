@@ -14,6 +14,7 @@ Express владеет данными и политикой доступа (`doc
 - `requirePerm` и `requirePermKey` (`app/server/src/middleware/auth/requirePerm.ts`) закрывают раздел по ключу права; объектные маршруты проверяют доступ функциями `scope.ts`, а не `requirePerm`.
 - Решения по строке роли (`'admin'`, `roles.includes(...)`) запрещены, разрешено только право из `@bio-exam/rbac`: это держит `scripts/auth-no-role-string-checks.test.mjs`.
 - Пункты бокового меню: `GET /api/sidebar` требует сессию и отдаёт только пункты, которые пользователь может открыть (`canOpenPath` из `packages/rbac/src/sections.ts`); запись проходит схему `app/server/src/routes/sidebar/schema.ts` — адрес только `/…` или `http(s)://`.
+- Настройки графиков: `GET /api/settings/charts` открыт любому вошедшему, `PUT` требует `settings.manage` (`app/server/src/routes/settings.ts`). Схемы и значения по умолчанию — `app/server/src/lib/charts/config.ts`: при чтении испорченное поле заменяется значением по умолчанию, запись проверяется строго; хранится одна строка `chart_settings` с `configs` (jsonb) по ключу графика.
 - Адрес темы не может совпадать со статическими страницами банка (`RESERVED_TOPIC_SLUGS` в `packages/rbac/src/sections.ts`): `POST`/`PATCH /api/tests/topics` отвечают 400. Новая статическая страница прямо под `/admin/tests/` добавляется в этот список.
 
 ## Роли и зона учителя

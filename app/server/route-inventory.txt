@@ -108,8 +108,8 @@ GET /api/tests/public/tests/:id/chart-data  validateUUID(id) > sessionRequired >
 POST /api/tests/public/tests/:id/start  validateUUID(id) > sessionRequired > <anonymous>
 PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 POST /api/tests/public/tests/:id/submit  validateUUID(id) > sessionRequired > <anonymous>
-GET /api/settings/chart-default-range  sessionRequired > requirePerm(settings.manage) > <anonymous>
-PUT /api/settings/chart-default-range  sessionRequired > requirePerm(settings.manage) > <anonymous>
+GET /api/settings/charts  sessionRequired > <anonymous>
+PUT /api/settings/charts  sessionRequired > requirePerm(settings.manage) > <anonymous>
 GET /api/groups/my  sessionRequired > <anonymous>
 GET /api/groups/candidates  sessionRequired > requirePerm(groups.manage_groups) > <anonymous>
 GET /api/groups/owner-options  sessionRequired > requirePerm(groups.manage_groups) > <anonymous>

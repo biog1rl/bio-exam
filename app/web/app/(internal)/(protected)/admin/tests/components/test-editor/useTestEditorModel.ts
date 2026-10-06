@@ -497,10 +497,7 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		title: form.title,
 		totalPoints: totalPoints(form.questions),
 		onPublishedChange: (isPublished: boolean) => setForm((prev) => ({ ...prev, isPublished })),
-		route:
-			topicSlug && testSlug
-				? { topicSlug, testSlug, topicTitle: topics.find((topic) => topic.slug === topicSlug)?.title ?? null }
-				: null,
+		route: topicSlug && testSlug ? { topicSlug, testSlug } : null,
 		questionCount,
 		isEditingExisting,
 		isPublished: form.isPublished,

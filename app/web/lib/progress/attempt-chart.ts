@@ -65,103 +65,6 @@ export function assignTopicColors(items: { topicSlug: string; topicTitle: string
 	}))
 }
 
-export function buildTopicChartConfig(colors: TopicColor[]): Record<string, { label: string; color: string }> {
-	const config: Record<string, { label: string; color: string }> = {}
-	for (const topic of colors) {
-		config[topic.key] = { label: topic.title, color: topic.color }
-	}
-	return config
-}
-
-type AttemptBarRowShared = {
-	key: string
-	testTitle: string
-	topicTitle: string
-	topicKey: string
-	fill: string
-	submittedAt: string
-	earnedPoints: number
-	totalPoints: number
-	tick: string
-}
-
-export type AttemptBarRow =
-	| (AttemptBarRowShared & { kind: 'attempt'; percent: number })
-	| (AttemptBarRowShared & { kind: 'gap'; percent: null })
-
-export type ChartMode = 'range' | 'day'
-
-function clampPercent(value: number): number {
-	if (!Number.isFinite(value)) return 0
-	return Math.min(100, Math.max(0, value))
-}
-
-function localDayKey(iso: string): string {
-	return format(new Date(iso), 'yyyy-MM-dd')
-}
-
-function attemptRow(attempt: ProgressAttempt, topics: Map<string, TopicColor>, tick: string): AttemptBarRow {
-	const topic = topics.get(attempt.topicSlug)
-	const topicKey = topic?.key ?? topicConfigKey(attempt.topicSlug)
-	return {
-		kind: 'attempt',
-		key: attempt.attemptId,
-		percent: clampPercent(attempt.scorePercentage),
-		testTitle: attempt.testTitle,
-		topicTitle: topic?.title ?? attempt.topicTitle ?? attempt.topicSlug,
-		topicKey,
-		fill: `var(--color-${topicKey})`,
-		submittedAt: attempt.submittedAt,
-		earnedPoints: attempt.earnedPoints,
-		totalPoints: attempt.totalPoints,
-		tick,
-	}
-}
-
-function gapRow(day: string): AttemptBarRow {
-	return {
-		kind: 'gap',
-		key: `gap-${day}`,
-		percent: null,
-		testTitle: '',
-		topicTitle: '',
-		topicKey: '',
-		fill: '',
-		submittedAt: '',
-		earnedPoints: 0,
-		totalPoints: 0,
-		tick: '',
-	}
-}
-
-export function buildAttemptBars(attempts: ProgressAttempt[], colors: TopicColor[], mode: ChartMode): AttemptBarRow[] {
-	const topics = new Map(colors.map((topic) => [topic.slug, topic]))
-	const sorted = [...attempts].sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime())
-
-	if (mode === 'day') {
-		return sorted.map((attempt) => attemptRow(attempt, topics, format(new Date(attempt.submittedAt), 'HH:mm')))
-	}
-
-	const days: { day: string; attempts: ProgressAttempt[] }[] = []
-	for (const attempt of sorted) {
-		const day = localDayKey(attempt.submittedAt)
-		const last = days[days.length - 1]
-		if (last && last.day === day) last.attempts.push(attempt)
-		else days.push({ day, attempts: [attempt] })
-	}
-
-	const rows: AttemptBarRow[] = []
-	days.forEach((group, groupIndex) => {
-		if (groupIndex > 0) rows.push(gapRow(group.day))
-		const labelIndex = Math.floor((group.attempts.length - 1) / 2)
-		group.attempts.forEach((attempt, index) => {
-			const tick = index === labelIndex ? format(new Date(attempt.submittedAt), 'd MMM', { locale: ru }) : ''
-			rows.push(attemptRow(attempt, topics, tick))
-		})
-	})
-	return rows
-}
-
 export function barMinPointSize(value: number | null | undefined): number {
 	return value === null || value === undefined ? 0 : 3
 }
@@ -221,11 +124,6 @@ export function fitBarLabel(
 	return { text: truncateLabel(text, capacity), vertical, placement }
 }
 
-export function legendTopics(rows: AttemptBarRow[], colors: TopicColor[]): TopicColor[] {
-	const present = new Set(rows.filter((row) => row.kind === 'attempt').map((row) => row.topicKey))
-	return colors.filter((topic) => present.has(topic.key))
-}
-
 export type PeriodValue = 'week' | 'month' | '3months' | '6months' | 'all' | 'custom'
 
 export const PERIOD_PRESETS: { value: Exclude<PeriodValue, 'custom'>; label: string }[] = [
@@ -236,7 +134,7 @@ export const PERIOD_PRESETS: { value: Exclude<PeriodValue, 'custom'>; label: str
 	{ value: 'all', label: 'Всё время' },
 ]
 
-export const DEFAULT_PERIOD: PeriodValue = 'month'
+const DEFAULT_PERIOD: PeriodValue = 'month'
 
 const PERIOD_VALUES: readonly string[] = ['week', 'month', '3months', '6months', 'all', 'custom']
 

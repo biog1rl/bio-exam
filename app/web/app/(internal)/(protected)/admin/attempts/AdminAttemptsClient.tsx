@@ -1,127 +1,129 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { DateRange } from 'react-day-picker'
 
-import { format } from 'date-fns'
+import { format, isValid, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ArrowRight, CalendarIcon, CheckCircle2, Clock3, Eye, FileText, Loader2, Search, XCircle } from 'lucide-react'
+import { CalendarRange, CheckCircle2, Clock3, Loader2, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
-import { useDebounce } from '@/components/editor/editor-hooks/use-debounce'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { PageHeader } from '@/components/page/PageHeader'
+import { ToolbarButton } from '@/components/page/ToolbarButton'
+import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { ColumnFilterMenu, type ColumnFilterOption } from '@/components/table/ColumnFilterMenu'
+import { SortableHead } from '@/components/table/SortableHead'
+import { TableCard } from '@/components/table/TableCard'
+import { useRowLink } from '@/components/table/use-row-link'
 import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { UserStatusFilter } from '@/components/users/UserStatusFilter'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { failureMessage } from '@/lib/http/errors'
 import {
 	ATTEMPTS_LOAD_ERROR,
 	adminAttemptsFetcher,
 	adminTestsKeys,
-	attemptsDayRange,
 	fetchAdminAttemptsPage,
 	mergeAttemptPages,
-	type AttemptsFilters,
 } from '@/lib/tests/admin-api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
-import { attemptsUrl, parseAttemptsUrl, type AttemptsUrlFilters, type ReviewFilter } from '@/lib/tests/attempts-url'
-import { matchesUserStatus } from '@/lib/users/status-filter'
+import {
+	attemptsUrl,
+	formatDay,
+	nextAttemptsSort,
+	parseAttemptsUrl,
+	parseDay,
+	type AttemptResult,
+	type AttemptsUrlFilters,
+	type ReviewFilter,
+} from '@/lib/tests/attempts-url'
+import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cn } from '@/lib/utils/cn'
+import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { AdminAttemptListItem, AdminAttemptsResponse } from './attempts-types'
 
-const SEARCH_DEBOUNCE_MS = 300
+const STATUS_OPTIONS: readonly ColumnFilterOption<string>[] = [
+	{ value: 'active', label: 'Активные' },
+	{ value: 'inactive', label: 'Неактивные' },
+]
 
-const REVIEW_TRIGGER_LABELS: Record<ReviewFilter, string> = {
-	all: 'Проверка: все',
-	pending: 'На проверке',
-	graded: 'Проверено',
-}
+const RESULT_OPTIONS: readonly ColumnFilterOption<AttemptResult>[] = [
+	{ value: 'passed', label: 'Пройден' },
+	{ value: 'failed', label: 'Не пройден' },
+]
+
+const REVIEW_OPTIONS: readonly ColumnFilterOption<string>[] = [
+	{ value: 'pending', label: 'На проверке' },
+	{ value: 'graded', label: 'Проверено учителем' },
+]
 
 type MorePages = { key: string; pages: AdminAttemptsResponse[] }
 
-function formatDate(value?: string) {
-	if (!value) return 'нет даты'
-	return new Intl.DateTimeFormat('ru-RU', {
-		day: '2-digit',
-		month: 'short',
-		year: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit',
-	}).format(new Date(value))
+function subscribeNever() {
+	return () => {}
 }
 
-function formatDateRange(range: DateRange | undefined) {
-	if (!range?.from) return 'Любой период'
-	if (!range.to) return `${format(range.from, 'dd.MM.yy', { locale: ru })} — ...`
-	return `${format(range.from, 'dd.MM.yy', { locale: ru })} — ${format(range.to, 'dd.MM.yy', { locale: ru })}`
+function onClient() {
+	return true
 }
 
-function StatTile({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof FileText }) {
-	return (
-		<div className="rounded-3xl border border-border/70 bg-secondary/65 p-4">
-			<Icon className="mb-4 size-5 text-primary" />
-			<p className="font-serif text-3xl leading-none">{value}</p>
-			<p className="mt-2 text-sm text-muted-foreground">{label}</p>
-		</div>
-	)
+function onServer() {
+	return false
 }
 
-function ReviewTile({
-	value,
-	active,
-	disabled,
-	onClick,
-}: {
-	value: string | number
-	active: boolean
-	disabled: boolean
-	onClick: () => void
-}) {
-	return (
-		<button
-			type="button"
-			aria-pressed={active}
-			disabled={disabled}
-			onClick={onClick}
-			className={cn(
-				'rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60',
-				active
-					? 'border-primary bg-card'
-					: 'border-border/70 bg-secondary/65 hover:border-primary/45 hover:bg-secondary'
-			)}
-		>
-			<Clock3 className="mb-4 size-5 text-primary" aria-hidden="true" />
-			<p className="font-serif text-3xl leading-none">{value}</p>
-			<p className="mt-2 text-sm text-muted-foreground">на проверке</p>
-		</button>
-	)
+function submittedLabel(value: string): string {
+	const date = parseISO(value)
+	return isValid(date) ? format(date, 'd MMM yyyy, HH:mm', { locale: ru }) : '—'
+}
+
+function periodRange(from: string | null, to: string | null): DateRange | undefined {
+	const start = parseDay(from)
+	if (!start) return undefined
+	return { from: start, to: parseDay(to) ?? start }
+}
+
+function periodLabel(range: DateRange): string {
+	const from = range.from ? format(range.from, 'dd.MM.yy') : ''
+	const to = range.to ? format(range.to, 'dd.MM.yy') : from
+	return from === to ? from : `${from} — ${to}`
+}
+
+function statusOfChoice(selected: readonly string[]): UserStatus {
+	const [only] = selected
+	return selected.length === 1 && (only === 'active' || only === 'inactive') ? only : 'all'
+}
+
+function reviewOfChoice(selected: readonly string[]): ReviewFilter {
+	const [only] = selected
+	return selected.length === 1 && (only === 'pending' || only === 'graded') ? only : 'all'
 }
 
 function emptyAttemptsContent({
 	filtered,
-	onlyReview,
+	review,
 	zoneAll,
 }: {
 	filtered: boolean
-	onlyReview: ReviewFilter
+	review: ReviewFilter
 	zoneAll: boolean
-}) {
-	if (onlyReview === 'pending') {
+}): { title: string; text: string } {
+	if (review === 'pending') {
 		return {
 			title: 'Нет попыток на проверке',
 			text: 'Здесь появятся сданные попытки, в которых есть ответы, ожидающие проверки учителем.',
 		}
 	}
-	if (onlyReview === 'graded') {
+	if (review === 'graded') {
 		return {
 			title: 'Нет проверенных попыток',
 			text: 'Здесь появятся попытки с открытыми вопросами, проверенные учителем.',
@@ -130,102 +132,54 @@ function emptyAttemptsContent({
 	if (filtered) {
 		return {
 			title: 'Ничего не найдено',
-			text: 'Измените поиск, тему, студента, дату или проверку, чтобы расширить выборку.',
+			text: 'Измените поиск, тему, ученика, дату или проверку, чтобы расширить выборку.',
 		}
 	}
 	return {
 		title: 'Попыток пока нет',
 		text: zoneAll
-			? 'Когда студенты начнут проходить тесты, здесь появится журнал результатов.'
+			? 'Когда ученики начнут проходить тесты, здесь появится журнал результатов.'
 			: 'Здесь появятся попытки учеников по вашим темам.',
 	}
 }
 
-function AttemptsEmptyState({
-	filtered,
-	onlyReview,
-	zoneAll,
-}: {
-	filtered: boolean
-	onlyReview: ReviewFilter
-	zoneAll: boolean
-}) {
-	const { title, text } = emptyAttemptsContent({ filtered, onlyReview, zoneAll })
-	return (
-		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
-			<FileText className="size-7 text-primary" />
-			<h2 className="mt-5 font-serif text-3xl">{title}</h2>
-			<p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{text}</p>
-		</section>
-	)
-}
-
-function AttemptRow({ attempt }: { attempt: AdminAttemptListItem }) {
+function AttemptResultCell({ attempt }: { attempt: AdminAttemptListItem }) {
 	const view = attemptResultView(attempt)
-	const ResultIcon = view.kind === 'final' && !view.passed ? XCircle : CheckCircle2
-
+	if (view.kind === 'pending') {
+		return (
+			<TableCell className="py-3 pr-4 text-right">
+				<span className="inline-flex justify-end">
+					<ReviewStatusChip />
+				</span>
+				{view.auto ? (
+					<p className="mt-1 text-xs text-muted-foreground tabular-nums">
+						авто {view.auto.earned} из {view.auto.total}
+					</p>
+				) : null}
+			</TableCell>
+		)
+	}
+	const Icon = view.passed ? CheckCircle2 : XCircle
+	const label = view.passed ? 'Пройден' : 'Не пройден'
 	return (
-		<Link
-			href={`/admin/attempts/${attempt.attemptId}`}
-			className="block rounded-3xl border border-border/80 bg-card/90 px-4 py-3 transition-colors outline-none hover:border-primary/45 hover:bg-secondary/45 focus-visible:border-primary"
-		>
-			<div className="grid gap-3 tab-sm:grid-cols-[minmax(0,1fr)_10.625rem_10.625rem_1.5rem] tab-sm:items-center">
-				<div className="min-w-0">
-					<div className="flex flex-wrap items-center gap-2">
-						<span className="font-mono text-[0.625rem] tracking-[0.18em] text-muted-foreground uppercase">
-							{attempt.topicTitle}
-						</span>
-						{view.kind === 'pending' ? (
-							<ReviewStatusChip />
-						) : (
-							<span
-								className={
-									view.passed
-										? 'rounded-full border border-green-500/35 bg-green-50 px-2.5 py-0.5 text-xs text-green-700'
-										: 'rounded-full border border-red-500/35 bg-red-50 px-2.5 py-0.5 text-xs text-red-700'
-								}
-							>
-								{view.passed ? 'Пройден' : 'Не пройден'}
-							</span>
-						)}
-					</div>
-					<h2 className="mt-1 line-clamp-2 font-serif text-xl leading-tight mob:text-2xl tab-sm:truncate">
-						{attempt.testTitle}
-					</h2>
-					<p className="mt-1 truncate text-sm text-muted-foreground">{attempt.studentName}</p>
-				</div>
-
-				<p className="text-sm text-muted-foreground tab-sm:text-right">{formatDate(attempt.submittedAt)}</p>
-
-				{view.kind === 'pending' ? (
-					<div className="flex items-center gap-2 tab-sm:justify-end">
-						<Clock3 className="size-4 text-muted-foreground" aria-hidden="true" />
-						{view.auto ? (
-							<p className="text-xs text-balance text-muted-foreground tab-sm:text-right">
-								авто {view.auto.earned} из {view.auto.total}
-							</p>
-						) : null}
-					</div>
-				) : (
-					<div className="flex items-center gap-2 tab-sm:justify-end">
-						<ResultIcon className={view.passed ? 'size-4 text-green-600' : 'size-4 text-red-600'} />
-						<div className="tab-sm:text-right">
-							<p className="font-serif text-2xl leading-none">{Math.round(view.percent)}%</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								{view.points.earned}/{view.points.total}
-							</p>
-							{view.teacherChecked ? (
-								<div className="mt-1 tab-sm:flex tab-sm:justify-end">
-									<TeacherCheckedMark />
-								</div>
-							) : null}
-						</div>
-					</div>
-				)}
-
-				<ArrowRight className="hidden size-5 shrink-0 text-primary tab-sm:block" />
-			</div>
-		</Link>
+		<TableCell className="py-3 pr-4 text-right">
+			<span className="inline-flex items-center justify-end gap-1.5" title={label}>
+				<Icon
+					className={cn('size-3.5', view.passed ? 'text-green-700 dark:text-green-400' : 'text-destructive')}
+					aria-hidden="true"
+				/>
+				<span className="font-medium text-foreground tabular-nums">{Math.round(view.percent)}%</span>
+				<span className="sr-only">{label}</span>
+			</span>
+			<p className="text-xs text-muted-foreground tabular-nums">
+				{view.points.earned}/{view.points.total}
+			</p>
+			{view.teacherChecked ? (
+				<span className="mt-1 inline-flex justify-end">
+					<TeacherCheckedMark />
+				</span>
+			) : null}
+		</TableCell>
 	)
 }
 
@@ -233,89 +187,81 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	const { can } = useAuth()
 	const zoneAll = can('zone', 'all')
 	const titleRef = useRef<HTMLHeadingElement>(null)
-	const [query, setQuery] = useState('')
-	const [debouncedQuery, setDebouncedQuery] = useState('')
+	const rowLink = useRowLink()
 	const searchParams = useSearchParams()
-	const urlFilters = useMemo(() => parseAttemptsUrl(searchParams ?? new URLSearchParams()), [searchParams])
-	const topicSlug = urlFilters.topic ?? 'all'
-	const studentId = urlFilters.student ?? 'all'
-	const statusFilter = urlFilters.status
-	const reviewFilter = urlFilters.review
-	const updateUrlFilters = (next: Partial<AttemptsUrlFilters>) => {
-		window.history.replaceState(null, '', attemptsUrl({ ...urlFilters, ...next }))
-	}
-	const setTopicSlug = (value: string) => updateUrlFilters({ topic: value === 'all' ? null : value })
-	const setStudentId = (value: string) => updateUrlFilters({ student: value === 'all' ? null : value })
-	const [dateRange, setDateRange] = useState<DateRange | undefined>()
-	const [calendarOpen, setCalendarOpen] = useState(false)
+	const url = useMemo(() => parseAttemptsUrl(searchParams ?? new URLSearchParams()), [searchParams])
+	const hydrated = useSyncExternalStore(subscribeNever, onClient, onServer)
+	const [periodOpen, setPeriodOpen] = useState(false)
 	const [more, setMore] = useState<MorePages | null>(null)
 	const [loadingMoreKey, setLoadingMoreKey] = useState<string | null>(null)
-	const pushQuery = useDebounce((value: string) => setDebouncedQuery(value), SEARCH_DEBOUNCE_MS)
 
-	const filters = useMemo<AttemptsFilters>(
-		() => ({
-			q: debouncedQuery,
-			topic: topicSlug === 'all' ? null : topicSlug,
-			student: studentId === 'all' ? null : studentId,
-			...attemptsDayRange(dateRange),
-			status: statusFilter,
-			review: reviewFilter,
-		}),
-		[dateRange, debouncedQuery, reviewFilter, statusFilter, studentId, topicSlug]
-	)
-	const key = adminTestsKeys.attempts(filters)
+	const updateUrl = (patch: Partial<AttemptsUrlFilters>) => {
+		window.history.replaceState(null, '', attemptsUrl({ ...url, ...patch }))
+	}
+
+	const filters = url
+	const key = hydrated || url.from === null ? adminTestsKeys.attempts(filters) : initialKey
 	const keyRef = useRef(key)
 	useEffect(() => {
 		keyRef.current = key
 	}, [key])
 
-	const { data, error, mutate } = useSWR(key, adminAttemptsFetcher, {
+	const { data, error, isLoading, mutate } = useSWR(key, adminAttemptsFetcher, {
 		fallbackData: key === initialKey ? initial : undefined,
-		revalidateOnMount: false,
+		revalidateOnMount: key === initialKey ? false : undefined,
 		revalidateOnFocus: false,
 		revalidateOnReconnect: false,
+		keepPreviousData: true,
 	})
 
 	const extraPages = more && more.key === key ? more.pages : []
 	const merged = data ? mergeAttemptPages([data, ...extraPages]) : null
-	const loadFailed = error !== undefined && data === undefined
+	const loadFailed = error !== undefined
 	const facets = data?.facets ?? initial.facets
+	const pendingTotal = data?.summary.pendingTotal ?? initial.summary.pendingTotal
 	const scopeTotal = data?.scopeTotal ?? initial.scopeTotal
-	const students = useMemo(
-		() => facets.students.filter((student) => matchesUserStatus(student.isActive, statusFilter)),
-		[facets.students, statusFilter]
-	)
 	const loadingMore = loadingMoreKey === key
+	const period = periodRange(url.from, url.to)
 
-	const hasOtherFilters = Boolean(
-		query || dateRange?.from || studentId !== 'all' || topicSlug !== 'all' || statusFilter !== 'active'
-	)
-	const hasFilters = hasOtherFilters || reviewFilter !== 'all'
-	const onlyReview = hasOtherFilters ? 'all' : reviewFilter
-	const pendingTotal = data ? data.summary.pendingTotal : '—'
-	const averageScore = data?.summary.averageScore != null ? `${Math.round(data.summary.averageScore)}%` : '—'
-	const shown = merged
-		? merged.rows.length < merged.total
-			? `${merged.rows.length} из ${merged.total}`
-			: merged.rows.length
-		: '—'
+	const otherFilters =
+		url.q.trim() !== '' ||
+		url.topics.length > 0 ||
+		url.students.length > 0 ||
+		url.results.length > 0 ||
+		url.from !== null ||
+		url.status !== 'active'
+	const hasFilters = otherFilters || url.review !== 'all'
 
-	const handleDateRangeSelect = (range: DateRange | undefined) => {
-		setDateRange(range)
-		if (range?.from && range.to) setCalendarOpen(false)
+	const hiddenInactive =
+		merged !== null && merged.rows.length === 0 && url.status === 'active' && !hasFilters && scopeTotal > 0
+	const empty = emptyAttemptsContent({
+		filtered: hasFilters || hiddenInactive,
+		review: otherFilters ? 'all' : url.review,
+		zoneAll,
+	})
+
+	const changeStatus = (selected: string[]) => {
+		const status = statusOfChoice(selected)
+		const visible = new Set(
+			facets.students.filter((student) => matchesUserStatus(student.isActive, status)).map((student) => student.id)
+		)
+		updateUrl({ status, students: url.students.filter((id) => visible.has(id)) })
 	}
 
-	const handleQueryChange = (value: string) => {
-		setQuery(value)
-		pushQuery(value)
+	const selectPeriod = (range: DateRange | undefined) => {
+		const from = range?.from ? formatDay(range.from) : null
+		const to = range?.to ? formatDay(range.to) : null
+		updateUrl({ from, to: to === from ? null : to })
+		if (from && to && to !== from) setPeriodOpen(false)
+	}
+
+	const resetPeriod = () => {
+		updateUrl({ from: null, to: null })
+		setPeriodOpen(false)
 	}
 
 	const resetFilters = () => {
-		pushQuery.cancel()
-		setQuery('')
-		setDebouncedQuery('')
-		updateUrlFilters({ topic: null, student: null, status: 'active', review: 'all' })
-		setDateRange(undefined)
+		updateUrl({ topics: [], students: [], results: [], status: 'active', review: 'all', q: '', from: null, to: null })
 	}
 
 	const loadMore = async () => {
@@ -337,175 +283,240 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 		})
 	}
 
+	const studentOptions = facets.students
+		.filter((student) => matchesUserStatus(student.isActive, url.status))
+		.map((student) => ({ value: student.id, label: student.name, hint: student.isActive ? undefined : 'неактивен' }))
+
+	const studentFilter = (
+		<ColumnFilterMenu
+			label="Фильтр по ученикам"
+			searchPlaceholder="Найти ученика"
+			groups={[
+				{
+					label: 'Статус ученика',
+					options: STATUS_OPTIONS,
+					selected: url.status === 'all' ? [] : [url.status],
+					onChange: changeStatus,
+				},
+				{
+					label: 'Ученики',
+					options: studentOptions,
+					selected: url.students,
+					onChange: (students) => updateUrl({ students }),
+				},
+			]}
+			onReset={() => updateUrl({ status: 'all', students: [] })}
+		/>
+	)
+
+	const topicFilter = (
+		<ColumnFilterMenu
+			label="Фильтр по темам"
+			options={facets.topics.map((topic) => ({ value: topic.slug, label: topic.title }))}
+			selected={url.topics}
+			onChange={(topics) => updateUrl({ topics })}
+		/>
+	)
+
+	const resultFilter = (
+		<ColumnFilterMenu
+			label="Фильтр по результату"
+			groups={[
+				{
+					label: 'Результат',
+					options: RESULT_OPTIONS,
+					selected: url.results,
+					onChange: (results) => updateUrl({ results: results as AttemptResult[] }),
+				},
+				{
+					label: 'Проверка',
+					options: REVIEW_OPTIONS,
+					selected: url.review === 'all' ? [] : [url.review],
+					onChange: (selected) => updateUrl({ review: reviewOfChoice(selected) }),
+				},
+			]}
+			onReset={() => updateUrl({ results: [], review: 'all' })}
+			align="end"
+		/>
+	)
+
 	return (
-		<main className="space-y-4">
-			<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
-				<div className="grid gap-6 tab:grid-cols-[1fr_13.75rem]">
-					<div>
-						<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">
-							администрирование
-						</p>
-						<h1
-							ref={titleRef}
-							tabIndex={-1}
-							className="mt-2 max-w-3xl font-serif text-3xl leading-none text-foreground outline-none mob:text-4xl tab-sm:text-5xl"
-						>
-							Попытки
-						</h1>
-						<p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-							Компактный журнал прохождений с фильтрами по теме, студенту, дате и быстрым поиском.
-						</p>
-					</div>
-
-					<div className="rounded-3xl border border-border/70 bg-secondary/55 p-4">
-						<CheckCircle2 className="size-6 text-primary" />
-						<p className="mt-5 font-serif text-4xl leading-none">{averageScore}</p>
-						<p className="mt-2 text-sm text-muted-foreground">средний результат</p>
-						{data && data.summary.pendingTotal > 0 ? (
-							<p className="mt-1 text-xs text-muted-foreground">без попыток на проверке</p>
-						) : null}
-					</div>
+		<div className="space-y-4">
+			<PageHeader title="Попытки" titleRef={titleRef}>
+				<div className="flex items-center gap-1 lg:hidden">
+					{topicFilter}
+					<span className="tab-sm:hidden">{resultFilter}</span>
 				</div>
-
-				<div className="mt-6 grid gap-3 tab-sm:grid-cols-3 tab:grid-cols-5">
-					<StatTile label="всего в базе" value={scopeTotal} icon={FileText} />
-					<StatTile label="показано" value={shown} icon={Eye} />
-					<StatTile label="пройдено" value={data ? data.summary.passed : '—'} icon={CheckCircle2} />
-					<ReviewTile
-						value={pendingTotal}
-						active={reviewFilter === 'pending'}
-						disabled={data ? data.summary.pendingTotal === 0 && reviewFilter !== 'pending' : false}
-						onClick={() => updateUrlFilters({ review: reviewFilter === 'pending' ? 'all' : 'pending' })}
-					/>
-					<StatTile label="тем" value={facets.topics.length} icon={FileText} />
-				</div>
-			</section>
-
-			<section className="rounded-4xl border border-border/80 bg-card/90 p-3 tab-sm:p-4">
-				<div className="mb-3 flex flex-wrap items-center gap-2">
-					<UserStatusFilter
-						align="start"
-						value={statusFilter}
-						onChange={(status) => updateUrlFilters({ status, student: null })}
-					/>
-					<Select value={reviewFilter} onValueChange={(value) => updateUrlFilters({ review: value as ReviewFilter })}>
-						<SelectTrigger
-							aria-label="Проверка"
-							className="h-10 w-full rounded-full border-border/70 bg-secondary/40 px-4 transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary mob:w-56"
-						>
-							<SelectValue>{REVIEW_TRIGGER_LABELS[reviewFilter]}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">Все</SelectItem>
-							<SelectItem value="pending">На проверке</SelectItem>
-							<SelectItem value="graded">Проверено</SelectItem>
-						</SelectContent>
-					</Select>
-				</div>
-				<div className="grid gap-3 tab:grid-cols-[minmax(12rem,1fr)_repeat(3,minmax(0,13.125rem))_auto]">
-					<label className="relative block">
-						<Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" />
-						<Input
-							type="search"
-							value={query}
-							onChange={(event) => handleQueryChange(event.target.value)}
-							placeholder="Поиск по студенту, тесту, теме"
-							className="h-10 rounded-full border-border/70 bg-secondary/40 pr-4 pl-9 text-sm transition-colors placeholder:text-muted-foreground hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary"
-						/>
-					</label>
-
-					<Select value={topicSlug} onValueChange={setTopicSlug}>
-						<SelectTrigger className="h-10 rounded-full border-border/70 bg-secondary/40 px-4 transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary">
-							<SelectValue placeholder="Все темы" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">Все темы</SelectItem>
-							{facets.topics.map((topic) => (
-								<SelectItem key={topic.slug} value={topic.slug}>
-									{topic.title}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
-					<Select value={studentId} onValueChange={setStudentId}>
-						<SelectTrigger className="h-10 rounded-full border-border/70 bg-secondary/40 px-4 transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary">
-							<SelectValue placeholder="Все студенты" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">Все студенты</SelectItem>
-							{students.map((student) => (
-								<SelectItem key={student.id} value={student.id}>
-									{student.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
-					<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-						<PopoverTrigger asChild>
-							<button
-								type="button"
-								className="flex h-10 w-full items-center justify-start rounded-full border border-border/70 bg-secondary/40 px-4 text-left text-sm transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary focus-visible:outline-none"
-							>
-								<CalendarIcon className="mr-2 size-4 text-muted-foreground" />
-								<span className="truncate">{formatDateRange(dateRange)}</span>
-							</button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="start">
-							<Calendar
-								mode="range"
-								selected={dateRange}
-								onSelect={handleDateRangeSelect}
-								locale={ru}
-								numberOfMonths={1}
-							/>
-						</PopoverContent>
-					</Popover>
-
-					<button
-						type="button"
-						onClick={resetFilters}
-						disabled={!hasFilters}
-						className="h-10 rounded-full border border-border/70 bg-card px-4 text-sm transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+				<ToolbarSearch
+					value={url.q}
+					onChange={(q) => updateUrl({ q })}
+					label="Поиск попыток"
+					placeholder="Ученик, тест или тема"
+				/>
+				{pendingTotal > 0 || url.review === 'pending' ? (
+					<Button
+						variant={url.review === 'pending' ? 'default' : 'outline'}
+						aria-pressed={url.review === 'pending'}
+						className={cn('h-10 shrink-0 rounded-full', url.review !== 'pending' && 'bg-card')}
+						onClick={() => updateUrl({ review: url.review === 'pending' ? 'all' : 'pending' })}
 					>
-						Сбросить
-					</button>
-				</div>
-			</section>
+						<Clock3 className="size-4" aria-hidden="true" />
+						{pendingTotal} на проверке
+					</Button>
+				) : null}
+				<Popover open={periodOpen} onOpenChange={setPeriodOpen}>
+					<PopoverTrigger asChild>
+						<ToolbarButton label="Период" dot={period !== undefined}>
+							<CalendarRange className="size-4" aria-hidden="true" />
+						</ToolbarButton>
+					</PopoverTrigger>
+					<PopoverContent align="end" className="w-auto p-0">
+						<Calendar
+							mode="range"
+							selected={period}
+							onSelect={selectPeriod}
+							defaultMonth={period?.from}
+							locale={ru}
+							numberOfMonths={1}
+						/>
+						{period ? (
+							<div className="flex items-center justify-between gap-3 border-t px-3 py-2">
+								<span className="text-sm text-muted-foreground tabular-nums">{periodLabel(period)}</span>
+								<Button variant="ghost" size="sm" className="rounded-full" onClick={resetPeriod}>
+									Сбросить период
+								</Button>
+							</div>
+						) : null}
+					</PopoverContent>
+				</Popover>
+			</PageHeader>
 
 			{loadFailed ? (
 				<LoadErrorAlert title={ATTEMPTS_LOAD_ERROR} error={error} onRetry={() => mutate()} focusTarget={titleRef} />
 			) : !merged ? (
-				<section
-					role="status"
-					className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob text-sm text-muted-foreground tab-sm:p-unit"
-				>
-					Загрузка...
-				</section>
-			) : merged.rows.length === 0 ? (
-				<AttemptsEmptyState filtered={hasFilters} onlyReview={onlyReview} zoneAll={zoneAll} />
+				<Skeleton className="h-96 rounded-3xl" aria-label="Загрузка попыток" />
 			) : (
-				<section className="space-y-2">
-					{merged.rows.map((attempt) => (
-						<AttemptRow key={attempt.attemptId} attempt={attempt} />
-					))}
+				<div className="space-y-2">
+					<div aria-busy={isLoading || undefined} className={cn('transition-opacity', isLoading && 'opacity-60')}>
+						<TableCard>
+							<Table className="table-fixed">
+								<TableHeader>
+									<TableRow className="hover:bg-transparent">
+										<TableHead className="pl-4">
+											<span className="inline-flex items-center gap-1">
+												Ученик
+												{studentFilter}
+											</span>
+										</TableHead>
+										<TableHead>Тест</TableHead>
+										<TableHead className="hidden w-40 lg:table-cell">
+											<span className="inline-flex items-center gap-1">
+												Тема
+												{topicFilter}
+											</span>
+										</TableHead>
+										<SortableHead
+											label="Дата"
+											direction={sortDirectionOf(url.sort, 'date')}
+											onSort={() => updateUrl({ sort: nextAttemptsSort(url.sort, 'date') })}
+											align="right"
+											className="hidden w-44 tab-sm:table-cell"
+										/>
+										<SortableHead
+											label="Результат"
+											direction={sortDirectionOf(url.sort, 'score')}
+											onSort={() => updateUrl({ sort: nextAttemptsSort(url.sort, 'score') })}
+											align="right"
+											filter={<span className="hidden tab-sm:inline-flex">{resultFilter}</span>}
+											className="w-32 pr-4 tab-sm:w-40"
+										/>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{merged.rows.length === 0 ? (
+										<TableRow className="hover:bg-transparent">
+											<TableCell colSpan={5} className="py-12 text-center whitespace-normal">
+												<p className="font-medium text-foreground">{empty.title}</p>
+												<p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{empty.text}</p>
+												<div className="mt-4 flex flex-wrap justify-center gap-2">
+													{hiddenInactive ? (
+														<Button
+															variant="outline"
+															className="rounded-full bg-card"
+															onClick={() => updateUrl({ status: 'all' })}
+														>
+															Показать всех учеников
+														</Button>
+													) : null}
+													{hasFilters ? (
+														<Button variant="outline" className="rounded-full bg-card" onClick={resetFilters}>
+															Сбросить фильтры
+														</Button>
+													) : null}
+												</div>
+											</TableCell>
+										</TableRow>
+									) : null}
+									{merged.rows.map((attempt) => {
+										const href = `/admin/attempts/${attempt.attemptId}`
+										return (
+											<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
+												<TableCell className="py-3 pl-4">
+													<p
+														className={cn(
+															'[overflow-wrap:anywhere]',
+															attempt.studentIsActive ? 'text-foreground' : 'text-muted-foreground'
+														)}
+													>
+														{attempt.studentName}
+													</p>
+													{attempt.studentIsActive ? null : <p className="text-xs text-muted-foreground">неактивен</p>}
+												</TableCell>
+												<TableCell className="py-3">
+													<Link
+														href={href}
+														className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
+													>
+														{attempt.testTitle}
+													</Link>
+													<p className="mt-0.5 text-xs text-muted-foreground lg:hidden">
+														{attempt.topicTitle}
+														<span className="tab-sm:hidden"> · {submittedLabel(attempt.submittedAt)}</span>
+													</p>
+												</TableCell>
+												<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
+													{attempt.topicTitle}
+												</TableCell>
+												<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+													{submittedLabel(attempt.submittedAt)}
+												</TableCell>
+												<AttemptResultCell attempt={attempt} />
+											</TableRow>
+										)
+									})}
+								</TableBody>
+							</Table>
+						</TableCard>
+					</div>
 					{merged.hasMore ? (
-						<div className="flex justify-center pt-2">
-							<button
-								type="button"
+						<div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+							<Button
+								variant="outline"
+								className="rounded-full bg-card"
 								onClick={() => void loadMore()}
-								disabled={loadingMore}
+								disabled={loadingMore || isLoading}
 								aria-busy={loadingMore || undefined}
-								className="inline-flex h-10 items-center gap-2 rounded-full border border-border/70 bg-card px-5 text-sm transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary focus-visible:outline-none disabled:pointer-events-none disabled:opacity-70"
 							>
 								{loadingMore ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
 								Показать ещё
-							</button>
+							</Button>
+							<p className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+								Показано {merged.rows.length} из {merged.total}
+							</p>
 						</div>
 					) : null}
-				</section>
+				</div>
 			)}
-		</main>
+		</div>
 	)
 }

@@ -14,7 +14,9 @@ export type RbacOverrideRow = { roleKey: string; domain: string; action: string;
 
 export type RbacRolesResponse = { roles: RbacRoleRow[]; overrides: RbacOverrideRow[] }
 
-export type RoleGrantBody = { roleKey: RoleKey; domain: string; action: string; allow: boolean }
+export type RoleGrantTarget = { roleKey: RoleKey; domain: string; action: string }
+
+export type RoleGrantBody = RoleGrantTarget & { allow: boolean }
 
 const ROLE_GRANT_URL = '/api/rbac/grant'
 
@@ -35,4 +37,13 @@ export const rbacRolesFetcher = fetcherWith(parseRbacRoles)
 
 export function setRoleGrant(body: RoleGrantBody): Promise<RequestOutcome<unknown>> {
 	return request(ROLE_GRANT_URL, { method: 'POST', json: body, fallbackMessage: 'Ошибка сохранения' })
+}
+
+export function deleteRoleGrant(target: RoleGrantTarget): Promise<RequestOutcome<unknown>> {
+	const { roleKey, domain, action } = target
+	return request(ROLE_GRANT_URL, {
+		method: 'DELETE',
+		json: { roleKey, domain, action },
+		fallbackMessage: 'Ошибка сохранения',
+	})
 }

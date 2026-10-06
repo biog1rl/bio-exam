@@ -96,7 +96,7 @@ function formatTime(seconds: number, showHours: boolean): string {
 
 export default function TestRunner(props: Props) {
 	const { me } = useAuth()
-	if (!me) return <div className="p-6">Загрузка теста...</div>
+	if (!me) return <div>Загрузка теста...</div>
 	return <AttemptRunner key={`${props.test.id}:${me.id}`} {...props} userId={me.id} />
 }
 
@@ -266,7 +266,9 @@ function AttemptRunner({
 		<div className="flex min-w-0 flex-col gap-4 tab:flex-row">
 			<div className="min-w-0 flex-1">
 				<div className="space-y-2">
-					<h1 className="text-2xl font-semibold">{test.title}</h1>
+					<h1 className="font-serif text-2xl leading-tight break-words text-foreground tab-sm:text-3xl">
+						{test.title}
+					</h1>
 					{test.description ? <p className="whitespace-pre-wrap text-muted-foreground">{test.description}</p> : null}
 					<div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
 						<span>Тема: {test.topicTitle}</span>
