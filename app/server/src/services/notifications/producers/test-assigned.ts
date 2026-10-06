@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 
-import { tests, topics } from '../../../db/schema.js'
+import { testAssignments, tests, topics } from '../../../db/schema.js'
 import { recordNotifications, type NotificationInput, type NotificationTx } from '../record.js'
 
 export const TEST_ASSIGNED_KIND = 'test.assigned'
@@ -45,5 +45,22 @@ export async function recordTestAssigned(
 	if (recipientIds.length === 0) return
 	const title = await visibleTestTitle(tx, input.testId)
 	if (title === null) return
+	await recordNotifications(tx, testAssignedInputs(input.testId, title, input.actorId, recipientIds))
+}
+
+export async function recordTestPublished(
+	tx: NotificationTx,
+	input: { testId: string; actorId: string | null }
+): Promise<void> {
+	const title = await visibleTestTitle(tx, input.testId)
+	if (title === null) return
+	const rows = await tx
+		.select({ userId: testAssignments.userId })
+		.from(testAssignments)
+		.where(eq(testAssignments.testId, input.testId))
+	const recipientIds = [...new Set(rows.map((row) => row.userId))]
+		.filter((recipientId) => recipientId !== input.actorId)
+		.sort()
+	if (recipientIds.length === 0) return
 	await recordNotifications(tx, testAssignedInputs(input.testId, title, input.actorId, recipientIds))
 }

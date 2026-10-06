@@ -7,6 +7,7 @@ import { questions, tests, topics } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { ApiError, isUniqueViolation } from '../../lib/errors.js'
 import type { TopicSchema, UpdateTestSettingsSchema } from '../../schemas/tests.js'
+import { recordTestPublished } from '../notifications/index.js'
 import { updateQuestionSearchDocumentLocation } from '../search/question-documents.js'
 import { StorageKeyError, storage } from '../storage/index.js'
 import { lockTest, type Tx } from './order.js'
@@ -477,19 +478,23 @@ export async function updateTestSettings(params: {
 	}
 
 	if (!relocating) {
-		const [updated] = await db
-			.update(tests)
-			.set({ ...values, updatedAt: new Date() })
-			.where(
-				and(
-					eq(tests.id, testId),
-					eq(tests.slug, existingTest.slug),
-					eq(tests.topicId, existingTest.topicId),
-					eq(tests.version, existingTest.version)
+		const updated = await db.transaction(async (tx) => {
+			const [row] = await tx
+				.update(tests)
+				.set({ ...values, updatedAt: new Date() })
+				.where(
+					and(
+						eq(tests.id, testId),
+						eq(tests.slug, existingTest.slug),
+						eq(tests.topicId, existingTest.topicId),
+						eq(tests.version, existingTest.version)
+					)
 				)
-			)
-			.returning()
-		if (!updated) throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
+				.returning()
+			if (!row) throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
+			if (shouldIncrementVersion) await recordTestPublished(tx, { testId, actorId: userId })
+			return row
+		})
 		return { test: updated, topicSlug: topic.slug }
 	}
 
@@ -537,6 +542,7 @@ export async function updateTestSettings(params: {
 				await updateQuestionSearchDocumentLocation({ questionId: row.id, testId, topicId: data.topicId }, tx)
 			}
 		}
+		if (shouldIncrementVersion) await recordTestPublished(tx, { testId, actorId: userId })
 		return updated
 	})
 
