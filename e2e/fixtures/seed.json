@@ -33,6 +33,11 @@
 			"slug": "e2e-review",
 			"title": "E2E: проверка открытых ответов",
 			"description": "Тема для попыток на проверке"
+		},
+		{
+			"slug": "e2e-notif",
+			"title": "E2E: уведомления",
+			"description": "Тема для сквозной проверки уведомлений"
 		}
 	],
 	"bulkUsers": { "prefix": "bulk-user", "count": 110, "name": "Массовый пользователь" },
@@ -79,6 +84,18 @@
 					"login": "review-student-desktop",
 					"role": "user",
 					"name": "Ученик проверки desktop",
+					"storageState": true
+				},
+				{
+					"login": "bell-student-desktop",
+					"role": "user",
+					"name": "Ученик колокольчика desktop",
+					"storageState": true
+				},
+				{
+					"login": "notify-student-desktop",
+					"role": "user",
+					"name": "Ученик уведомлений desktop",
 					"storageState": true
 				}
 			],
@@ -458,6 +475,32 @@
 							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
 						}
 					]
+				},
+				{
+					"slug": "notify-test-desktop",
+					"title": "Тест для уведомлений (desktop)",
+					"topic": "e2e-notif",
+					"published": true,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "nt-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Где у эукариот хранится основная часть ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "В ядре"
+								},
+								{
+									"id": "2",
+									"text": "В рибосоме"
+								}
+							],
+							"correct": "1"
+						}
+					]
 				}
 			],
 			"groups": [
@@ -484,6 +527,38 @@
 					"grade": {
 						"rg-open": 2
 					}
+				}
+			],
+			"notifications": [
+				{
+					"recipient": "bell-student-desktop",
+					"kind": "test.assigned",
+					"testTitles": [
+						"Строение клетки, вариант 1 (desktop)",
+						"Строение клетки, вариант 2 (desktop)",
+						"Строение клетки, вариант 3 (desktop)",
+						"Строение клетки, вариант 4 (desktop)",
+						"Строение клетки, вариант 5 (desktop)",
+						"Строение клетки, вариант 6 (desktop)",
+						"Строение клетки, вариант 7 (desktop)",
+						"Строение клетки, вариант 8 (desktop)",
+						"Строение клетки, вариант 9 (desktop)",
+						"Строение клетки, вариант 10 (desktop)",
+						"Строение клетки, вариант 11 (desktop)",
+						"Строение клетки, вариант 12 (desktop)",
+						"Строение клетки, вариант 13 (desktop)",
+						"Строение клетки, вариант 14 (desktop)",
+						"Строение клетки, вариант 15 (desktop)",
+						"Строение клетки, вариант 16 (desktop)",
+						"Строение клетки, вариант 17 (desktop)",
+						"Строение клетки, вариант 18 (desktop)",
+						"Сравнение строения растительной, животной и грибной клетки в контексте происхождения эукариот: суперпозиционноеразличиемембранныхорганоидов и особенности обмена веществ (desktop)",
+						"Тест \"Клетка\" и «ядро» (desktop)"
+					]
+				},
+				{
+					"recipient": "bell-student-desktop",
+					"kind": "chat.message"
 				}
 			]
 		},
@@ -529,6 +604,18 @@
 					"login": "review-student-mobile",
 					"role": "user",
 					"name": "Ученик проверки mobile",
+					"storageState": true
+				},
+				{
+					"login": "bell-student-mobile",
+					"role": "user",
+					"name": "Ученик колокольчика mobile",
+					"storageState": true
+				},
+				{
+					"login": "notify-student-mobile",
+					"role": "user",
+					"name": "Ученик уведомлений mobile",
 					"storageState": true
 				}
 			],
@@ -908,6 +995,32 @@
 							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
 						}
 					]
+				},
+				{
+					"slug": "notify-test-mobile",
+					"title": "Тест для уведомлений (mobile)",
+					"topic": "e2e-notif",
+					"published": true,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "nt-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Где у эукариот хранится основная часть ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "В ядре"
+								},
+								{
+									"id": "2",
+									"text": "В рибосоме"
+								}
+							],
+							"correct": "1"
+						}
+					]
 				}
 			],
 			"groups": [
@@ -934,6 +1047,38 @@
 					"grade": {
 						"rg-open": 2
 					}
+				}
+			],
+			"notifications": [
+				{
+					"recipient": "bell-student-mobile",
+					"kind": "test.assigned",
+					"testTitles": [
+						"Строение клетки, вариант 1 (mobile)",
+						"Строение клетки, вариант 2 (mobile)",
+						"Строение клетки, вариант 3 (mobile)",
+						"Строение клетки, вариант 4 (mobile)",
+						"Строение клетки, вариант 5 (mobile)",
+						"Строение клетки, вариант 6 (mobile)",
+						"Строение клетки, вариант 7 (mobile)",
+						"Строение клетки, вариант 8 (mobile)",
+						"Строение клетки, вариант 9 (mobile)",
+						"Строение клетки, вариант 10 (mobile)",
+						"Строение клетки, вариант 11 (mobile)",
+						"Строение клетки, вариант 12 (mobile)",
+						"Строение клетки, вариант 13 (mobile)",
+						"Строение клетки, вариант 14 (mobile)",
+						"Строение клетки, вариант 15 (mobile)",
+						"Строение клетки, вариант 16 (mobile)",
+						"Строение клетки, вариант 17 (mobile)",
+						"Строение клетки, вариант 18 (mobile)",
+						"Сравнение строения растительной, животной и грибной клетки в контексте происхождения эукариот: суперпозиционноеразличиемембранныхорганоидов и особенности обмена веществ (mobile)",
+						"Тест \"Клетка\" и «ядро» (mobile)"
+					]
+				},
+				{
+					"recipient": "bell-student-mobile",
+					"kind": "chat.message"
 				}
 			]
 		}

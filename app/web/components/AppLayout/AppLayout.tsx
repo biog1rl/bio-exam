@@ -11,6 +11,7 @@ import { MobileMenuButton } from '@/components/MobileMenuButton'
 import SearchButton from '@/components/Search/SearchButton'
 import SearchDialog from '@/components/Search/SearchDialog'
 import AuthGuard from '@/components/auth/AuthGuard'
+import NotificationBell from '@/components/notifications/NotificationBell'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -59,6 +60,7 @@ export default async function AppLayout({
 										</div>
 
 										<div className="ml-auto flex h-full shrink-0 items-center gap-unit-mob tab-sm:gap-unit">
+											<NotificationBell />
 											<SearchButton />
 										</div>
 									</header>

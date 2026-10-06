@@ -11,7 +11,7 @@
  * хранилище — промпт каждого вопроса через модуль содержимого.
  * Попытки блока attempts создаются тем же путём, что сдача по HTTP (scoreSubmission и submitAttempt),
  * проверенные дополнительно проходят через materializeAttemptOutcome.
- * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n>
+ * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n> notifications=<n>
  */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -46,6 +46,8 @@ type SeedAttempt = {
 	grade?: Record<string, number>
 }
 
+type SeedNotification = { recipient: string; kind: string; testTitles?: string[] }
+
 type SeedTopic = { slug: string; title: string; description: string; teachers?: string[] }
 
 type SeedGroup = { name: string; owner: string; members: string[] }
@@ -59,7 +61,13 @@ type SeedFile = {
 	bulkUsers?: SeedBulkUsers
 	projects: Record<
 		string,
-		{ accounts: SeedAccount[]; tests: SeedTest[]; groups?: SeedGroup[]; attempts?: SeedAttempt[] }
+		{
+			accounts: SeedAccount[]
+			tests: SeedTest[]
+			groups?: SeedGroup[]
+			attempts?: SeedAttempt[]
+			notifications?: SeedNotification[]
+		}
 	>
 }
 
@@ -115,6 +123,7 @@ async function main(): Promise<void> {
 	const { setGroupOwner, setTopicTeachers } = await import('../services/access-policy/index.js')
 	const { startAttemptSession, submitAttempt } = await import('../services/attempt-sessions/index.js')
 	const { materializeAttemptOutcome, scoreSubmission } = await import('../services/scored-attempt/index.js')
+	const { recordNotifications } = await import('../services/notifications/index.js')
 
 	try {
 		const passwordHash = await bcrypt.hash(seed.password, 10)
@@ -354,8 +363,32 @@ async function main(): Promise<void> {
 			}
 		}
 
+		let notificationCount = 0
+		for (const project of projects) {
+			const inputs = (project.notifications ?? []).flatMap((seedNotification) => {
+				const recipientId = result.userIds.get(seedNotification.recipient)
+				if (!recipientId) throw new Error(`seed notification: unknown recipient ${seedNotification.recipient}`)
+				const entries = seedNotification.testTitles
+					? seedNotification.testTitles.map((testTitle) => ({ testTitle }))
+					: [{}]
+				return entries.map((params) => {
+					const subject = { type: seedNotification.kind.split('.')[0], id: crypto.randomUUID() }
+					return {
+						recipientId,
+						actorId: null,
+						kind: seedNotification.kind,
+						subject,
+						dedupeKey: `${seedNotification.kind}:${subject.id}`,
+						params,
+					}
+				})
+			})
+			await db.transaction((tx) => recordNotifications(tx, inputs))
+			notificationCount += inputs.length
+		}
+
 		console.log(
-			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount}`
+			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount} notifications=${notificationCount}`
 		)
 	} finally {
 		await pgPool.end()
