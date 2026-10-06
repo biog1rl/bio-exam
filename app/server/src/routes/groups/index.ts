@@ -3,6 +3,7 @@ import { Router, type Request } from 'express'
 
 import { db } from '../../db/index.js'
 import { studentGroups, userGroups, users } from '../../db/schema.js'
+import { escapeLike } from '../../lib/sql-like.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -32,10 +33,6 @@ const STAFF_IN_TEACHER_GROUP = 'В группе учителя могут быт
 const OWNER_NOT_CANDIDATE = 'Учитель не найден или не активен'
 const CANDIDATES_MIN_QUERY = 2
 const CANDIDATES_LIMIT = 20
-
-function escapeLikePattern(value: string): string {
-	return value.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
 
 type RuleViolation = { status: number; body: Record<string, unknown> }
 
@@ -101,7 +98,7 @@ groupsRouter.get('/candidates', sessionRequired(), requirePerm('groups', 'manage
 			res.status(400).json({ error: 'Укажите не меньше 2 символов для поиска' })
 			return
 		}
-		const escaped = escapeLikePattern(q)
+		const escaped = escapeLike(q)
 		const contains = `%${escaped}%`
 		const prefix = `${escaped}%`
 		const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`

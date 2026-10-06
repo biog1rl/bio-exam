@@ -1,5 +1,3 @@
-export const PROMPT_READ_CONCURRENCY = 123
-
 export async function mapBounded<T, R>(
 	items: readonly T[],
 	limit: number,

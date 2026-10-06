@@ -14,6 +14,7 @@ import { Router, type Response } from 'express'
 import { db } from '../../db/index.js'
 import { questions, testAttempts, tests, topics } from '../../db/schema.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
+import { isUuid } from '../../lib/uuid.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest, testScope } from '../../services/access-policy/index.js'
@@ -41,8 +42,6 @@ const router = Router()
 // =============================================================================
 // Zod Schemas
 // =============================================================================
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const DB_RETRY_ENABLED = process.env.DB_QUERY_RETRY !== '0'
 
@@ -239,7 +238,7 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 				.limit(1)
 		)
 		let test = testRows[0]
-		if (!test && UUID_RE.test(testSlug)) {
+		if (!test && isUuid(testSlug)) {
 			const fallbackRows = await withTransientDbRetry('public test by id fallback', () =>
 				db
 					.select({

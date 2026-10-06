@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { db } from '../../../db/index.js'
 import { questions, testAttempts, tests, topics, userRoles, users } from '../../../db/schema.js'
+import { escapeLike } from '../../../lib/sql-like.js'
 import { getQuestionTypeMapForTest } from '../../../lib/tests/question-type-resolver.js'
 import { requirePerm } from '../../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../../middleware/auth/session.js'
@@ -13,7 +14,6 @@ import { validateUUID } from '../../../middleware/validateParams.js'
 import { canReviewAttempt, testScope, type TestScope } from '../../../services/access-policy/index.js'
 import { questionMarkdownCandidates, readQuestionTexts } from '../../../services/question-content/index.js'
 import { attemptResultColumns, readAdminAttemptView } from '../../../services/scored-attempt/index.js'
-import { escapeLike } from '../../../services/search/database-search.js'
 
 const router = Router()
 

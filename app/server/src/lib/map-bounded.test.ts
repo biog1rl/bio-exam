@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 
-import { mapBounded, PROMPT_READ_CONCURRENCY } from './bounded.js'
+import { mapBounded } from './map-bounded.js'
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms))
@@ -83,10 +83,5 @@ describe('mapBounded', () => {
 			mapBounded([1], 1.5, async (item) => item),
 			RangeError
 		)
-	})
-
-	test('PROMPT_READ_CONCURRENCY — целое больше 1', () => {
-		assert.ok(Number.isInteger(PROMPT_READ_CONCURRENCY))
-		assert.ok(PROMPT_READ_CONCURRENCY > 1)
 	})
 })

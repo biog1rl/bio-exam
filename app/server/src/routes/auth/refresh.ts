@@ -1,5 +1,6 @@
 import { Router } from 'express'
 
+import { clientIp } from '../../lib/client-ip.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { readCookie, REFRESH_COOKIE, rotateRefreshToken, setSessionCookies } from '../../services/session/index.js'
 
@@ -10,7 +11,7 @@ router.post('/', async (req, res, next) => {
 		const raw = readCookie(req, REFRESH_COOKIE)
 		if (!raw) return res.status(401).json({ error: ERROR_MESSAGES.UNAUTHORIZED })
 
-		const result = await rotateRefreshToken({ raw, ip: req.ip || req.socket.remoteAddress || null })
+		const result = await rotateRefreshToken({ raw, ip: clientIp(req) })
 		switch (result.outcome) {
 			case 'rotated':
 				if (result.regranted) {

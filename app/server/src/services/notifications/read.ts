@@ -2,7 +2,7 @@ import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { notificationEvents } from '../../db/schema.js'
-import { isValidUUID } from '../../middleware/validateParams.js'
+import { isUuid } from '../../lib/uuid.js'
 import { encodeCursor, type CursorPosition } from './cursor.js'
 import { kindOpenHandler, notificationText } from './kinds.js'
 
@@ -65,7 +65,7 @@ export async function countUnread(userId: string): Promise<number> {
 }
 
 async function markOneRead(userId: string, id: string) {
-	if (!isValidUUID(id)) return null
+	if (!isUuid(id)) return null
 	const [event] = await db
 		.update(notificationEvents)
 		.set({ readAt: sql`coalesce(${notificationEvents.readAt}, now())` })

@@ -1,28 +1,14 @@
-import {
-	MatchingPairsSchema,
-	OptionSchema,
-	type LegacyAttemptResultItem,
-	type QuestionContent,
-} from '@bio-exam/exam-core'
+import type { LegacyAttemptResultItem } from '@bio-exam/exam-core'
 
 import { and, desc, inArray, lte, sql } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { answerKeys, questions, testAttempts } from '../../db/schema.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
+import { isUuid } from '../../lib/uuid.js'
+import { readContent } from './facts.js'
 import { legacyFact, type LegacyQuestion } from './legacy-fact.js'
 import type { ReadableFact } from './view.js'
-
-function readContent(row: { options: unknown; matchingPairs: unknown }): QuestionContent {
-	const options = OptionSchema.array().safeParse(row.options)
-	const matchingPairs = MatchingPairsSchema.safeParse(row.matchingPairs)
-	return {
-		options: options.success ? options.data : [],
-		matchingPairs: matchingPairs.success ? matchingPairs.data : null,
-	}
-}
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 async function readHistoryKeys(attemptId: string, questionIds: string[]): Promise<Map<string, unknown>> {
 	if (questionIds.length === 0) return new Map()
@@ -51,7 +37,7 @@ export async function readLegacyFacts(params: {
 	items: LegacyAttemptResultItem[]
 }): Promise<ReadableFact[]> {
 	const { attemptId, testId, items } = params
-	const questionIds = [...new Set(items.map((item) => item.questionId).filter((id) => UUID_PATTERN.test(id)))]
+	const questionIds = [...new Set(items.map((item) => item.questionId).filter(isUuid))]
 	if (questionIds.length === 0) return items.map((item) => legacyFact({ item, question: null, historyKey: null }))
 
 	const questionRows = await db

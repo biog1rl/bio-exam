@@ -4,6 +4,7 @@
  */
 import type { Request, Response, NextFunction } from 'express'
 
+import { clientIp } from '../lib/client-ip.js'
 import { ERROR_MESSAGES } from '../lib/constants.js'
 import { ApiError } from '../lib/errors.js'
 import { nameMiddleware } from '../lib/middleware-name.js'
@@ -61,7 +62,7 @@ export function rateLimiter(options: RateLimiterOptions = {}) {
 	const { maxAttempts = 5, windowMs = 60 * 1000, keyPrefix = '', clientKey } = options
 
 	const limiter = (req: Request, res: Response, next: NextFunction) => {
-		const client = clientKey?.(req) || req.ip || req.socket.remoteAddress || 'unknown'
+		const client = clientKey?.(req) || clientIp(req) || 'unknown'
 		const key = keyPrefix ? `${keyPrefix}:${client}` : client
 		const now = Date.now()
 		// Memory-only implementation (suitable for single-instance personal deployment)

@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { db } from '../../db/index.js'
 import { testAssignments, testAttempts, tests, topics, userGroups, users, userRoles } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
+import { escapeLike } from '../../lib/sql-like.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
@@ -46,10 +47,6 @@ const DIRECTORY_MIN_QUERY = 2
 const DIRECTORY_DEFAULT_LIMIT = 10
 const DIRECTORY_MAX_LIMIT = 20
 
-function escapeLikePattern(value: string): string {
-	return value.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
-
 router.get('/directory', sessionRequired(), async (req, res, next) => {
 	try {
 		const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
@@ -60,7 +57,7 @@ router.get('/directory', sessionRequired(), async (req, res, next) => {
 			Math.max(Math.trunc(Number(req.query.limit)) || DIRECTORY_DEFAULT_LIMIT, 1),
 			DIRECTORY_MAX_LIMIT
 		)
-		const escaped = escapeLikePattern(q)
+		const escaped = escapeLike(q)
 		const contains = `%${escaped}%`
 		const prefix = `${escaped}%`
 		const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
