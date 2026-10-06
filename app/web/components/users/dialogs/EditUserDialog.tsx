@@ -63,7 +63,7 @@ import {
 } from '@/lib/users/edit-user-form'
 import { parseInviteGroups } from '@/lib/users/invite-form'
 import { useRoleTraits } from '@/lib/users/role-traits'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
 import type { UserRow } from '@/types/users'
 
 import {

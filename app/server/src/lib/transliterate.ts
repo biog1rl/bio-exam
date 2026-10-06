@@ -27,14 +27,3 @@ export function transliterate(str: string): string {
 		)
 		.join('/')
 }
-
-/**
- * Обратный переход: "kak-eto-rabotaet" → "ккак eto rabotaet" → кириллица.
- * Удобно для отображения понятных подписей.
- */
-export function reverseTransliterate(str: string): string {
-	return str
-		.split('/')
-		.map((part) => converter.reverse(part.replace(/-/g, ' ')))
-		.join('/')
-}

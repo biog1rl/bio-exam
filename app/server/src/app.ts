@@ -10,7 +10,7 @@ import helmet from 'helmet'
  */
 import './lib/patchExpressAsyncErrors.js'
 import './config/env.js'
-import { ApiError, isApiError } from './lib/errors.js'
+import { isApiError } from './lib/errors.js'
 import { pinoHttpMiddleware } from './lib/logger.js'
 import { sessionOptional } from './middleware/auth/session.js'
 import requestId from './middleware/requestId.js'

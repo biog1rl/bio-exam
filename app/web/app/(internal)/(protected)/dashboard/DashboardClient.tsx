@@ -23,7 +23,7 @@ import { request } from '@/lib/http/request'
 import { quickLinkSections } from '@/lib/navigation/sections'
 import { optionalAdminData } from '@/lib/tests/admin-optional'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
-import { attemptResultView, type AttemptResultFields, type AttemptResultView } from '@/lib/tests/attempt-result-view'
+import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
 

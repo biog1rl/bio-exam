@@ -44,7 +44,7 @@ import {
 import { swrFetcher } from '@/lib/http/swr'
 import { usersKeys } from '@/lib/users/api'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
 import type { UserRow } from '@/types/users'
 
 export type GroupSheetGroup = Group

@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { type AutosaveStatusView, RETRY_SAVE_LABEL } from '@/lib/drafts/draft-ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
 
 import type { Question, QuestionType, QuestionTypeDefinition, QuestionUiTemplate } from '../types'
 import { createDefaultMatchingPairs, generateId } from '../types'

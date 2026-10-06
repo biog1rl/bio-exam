@@ -18,7 +18,7 @@ import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { AttemptQuestionView, PublicTestDetail, PublicTestQuestion, TestAttemptSummary } from '@/lib/tests/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
 import {

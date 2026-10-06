@@ -1,5 +1,5 @@
 import '../config/env.js'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 
 import { db, pgPool } from '../db/index.js'
 import { questions, tests, topics } from '../db/schema.js'
