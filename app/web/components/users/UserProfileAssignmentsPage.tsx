@@ -26,6 +26,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { AttemptChart } from '@/components/charts/AttemptChart'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -125,13 +126,7 @@ function ProfileSectionCard({
 	const failed = failedSources(sources)
 
 	return (
-		<section className="min-w-0 space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-				<h2 ref={titleRef} tabIndex={-1} className="text-lg font-semibold outline-none">
-					{title}
-				</h2>
-				{action}
-			</div>
+		<Panel title={title} titleRef={titleRef} actions={action}>
 			{failed.length > 0 ? (
 				<LoadErrorAlert
 					title="Не удалось загрузить данные"
@@ -146,7 +141,7 @@ function ProfileSectionCard({
 			) : (
 				children
 			)}
-		</section>
+		</Panel>
 	)
 }
 

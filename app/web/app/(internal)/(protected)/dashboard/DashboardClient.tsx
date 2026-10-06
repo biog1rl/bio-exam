@@ -9,6 +9,7 @@ import useSWR from 'swr'
 import { ActivityChart, ContentChart } from '@/components/charts/DashboardCharts'
 import { EmptyState } from '@/components/page/EmptyState'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { StudentProgressSection } from '@/components/progress/StudentProgressSection'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
@@ -132,15 +133,6 @@ function SectionHeading({ title, children }: { title: string; children?: ReactNo
 
 function EmptyPanel({ children }: { children: ReactNode }) {
 	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
-}
-
-function ChartCard({ title, children }: { title: string; children: ReactNode }) {
-	return (
-		<section className="min-w-0 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<h2 className="mb-4 text-lg font-semibold text-foreground">{title}</h2>
-			{children}
-		</section>
-	)
 }
 
 const mainLinkClass =
@@ -468,7 +460,7 @@ export default function DashboardClient() {
 
 			{canReadTests ? (
 				<div className="grid gap-4 xl:grid-cols-2">
-					<ChartCard title="Публикации и наполнение">
+					<Panel title="Публикации и наполнение">
 						{adminTopicsQuery.isLoading || adminTestsQuery.isLoading ? (
 							<Skeleton className="h-72 rounded-2xl" />
 						) : topics.length === 0 ? (
@@ -480,8 +472,8 @@ export default function DashboardClient() {
 						) : (
 							<ContentChart topics={topics} tests={adminTests} config={chartConfigs.content} />
 						)}
-					</ChartCard>
-					<ChartCard title="Активность учеников">
+					</Panel>
+					<Panel title="Активность учеников">
 						{adminDashboardQuery.isLoading ? (
 							<Skeleton className="h-72 rounded-2xl" />
 						) : !adminDashboard ? (
@@ -489,7 +481,7 @@ export default function DashboardClient() {
 						) : (
 							<ActivityChart days={adminDashboard.dailyActivity} config={chartConfigs.activity} now={now} />
 						)}
-					</ChartCard>
+					</Panel>
 				</div>
 			) : null}
 		</div>

@@ -14,6 +14,7 @@ import { useMemo } from 'react'
 import { Loader2, Plus, Search, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
+import { Panel } from '@/components/page/Panel'
 import { SortableHead } from '@/components/table/SortableHead'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,7 +24,6 @@ import { formatDateTime } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { Question, QuestionDraft } from '../../types'
-import { AdminTestsSectionCard } from '../AdminTestsSectionCard'
 import { QuestionRow, questionRowId } from './QuestionRow'
 import {
 	filterQuestions,
@@ -152,7 +152,7 @@ export function QuestionsPanel({
 	return (
 		<div className="space-y-5">
 			{questionDrafts.length > 0 ? (
-				<AdminTestsSectionCard title="Черновики вопросов" headerClassName="pb-3">
+				<Panel title="Черновики вопросов">
 					{questionDrafts.map((draft) => (
 						<div
 							key={draft.id}
@@ -175,7 +175,7 @@ export function QuestionsPanel({
 							</Button>
 						</div>
 					))}
-				</AdminTestsSectionCard>
+				</Panel>
 			) : null}
 
 			{questions.length === 0 ? (

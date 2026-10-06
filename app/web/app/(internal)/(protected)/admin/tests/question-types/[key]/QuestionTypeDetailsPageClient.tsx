@@ -2,7 +2,7 @@
 
 import { AUTO_SCORED_TEMPLATES, isAutoScoredTemplate } from '@bio-exam/exam-core'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Save } from 'lucide-react'
 import Link from 'next/link'
@@ -12,6 +12,7 @@ import useSWR from 'swr'
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -144,18 +145,6 @@ function SwitchRow({
 			</Label>
 			<Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
 		</div>
-	)
-}
-
-function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
-	return (
-		<section className="space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-6">
-			<div>
-				<h2 className="text-base font-semibold text-foreground">{title}</h2>
-				{description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
-			</div>
-			{children}
-		</section>
 	)
 }
 
@@ -356,7 +345,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 				</Button>
 			</PageHeader>
 
-			<Section title="Основное">
+			<Panel title="Основное">
 				<div className="grid gap-4 tab-sm:grid-cols-2">
 					<div className="space-y-1">
 						<Label htmlFor="type-title">Название</Label>
@@ -447,11 +436,11 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 					disabled={isOpenType}
 					onCheckedChange={(checked) => setGlobalForm((prev) => (prev ? { ...prev, isActive: checked } : prev))}
 				/>
-			</Section>
+			</Panel>
 
-			<Section
+			<Panel
 				title="Общая формула баллов"
-				description={
+				meta={
 					<>
 						Действует во всех тестах. Все формулы сразу и свои формулы для отдельных тестов — в{' '}
 						<Link
@@ -473,9 +462,9 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 						onChange={(next) => setGlobalForm((prev) => (prev ? { ...prev, scoringRule: next } : prev))}
 					/>
 				)}
-			</Section>
+			</Panel>
 
-			<Section title="Для отдельного теста" description="Своё название типа или отключение только в выбранном тесте.">
+			<Panel title="Для отдельного теста" meta="Своё название типа или отключение только в выбранном тесте.">
 				<div className="grid gap-4 tab-sm:grid-cols-2">
 					<div className="space-y-1">
 						<Label htmlFor="type-test-topic">Тема</Label>
@@ -562,7 +551,7 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 				) : (
 					<p className="text-sm text-muted-foreground">Выберите тему и тест.</p>
 				)}
-			</Section>
+			</Panel>
 			{alertDialog}
 		</div>
 	)

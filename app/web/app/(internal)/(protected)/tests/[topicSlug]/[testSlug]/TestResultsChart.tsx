@@ -9,6 +9,7 @@ import { useQueryState } from 'nuqs'
 import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { Panel } from '@/components/page/Panel'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -96,9 +97,9 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 		period === 'custom' && customStart && customEnd ? formatPeriod(customStart, customEnd) : 'Свой период'
 
 	return (
-		<section className="rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-				<h2 className="text-lg font-semibold text-foreground">Мои результаты</h2>
+		<Panel
+			title="Мои результаты"
+			actions={
 				<div className="flex flex-wrap items-center gap-2">
 					<ToggleGroup
 						type="single"
@@ -132,8 +133,8 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 						</PopoverContent>
 					</Popover>
 				</div>
-			</div>
-
+			}
+		>
 			<div className="transition-opacity duration-300" style={{ opacity: isLoading && data ? 0.4 : 1 }}>
 				{error && !data ? (
 					<p role="alert" className="text-sm text-destructive">
@@ -149,6 +150,6 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 					<AttemptChart attempts={attempts} config={config} />
 				)}
 			</div>
-		</section>
+		</Panel>
 	)
 }

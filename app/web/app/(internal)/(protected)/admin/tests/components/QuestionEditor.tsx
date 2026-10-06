@@ -9,6 +9,7 @@ import Link from 'next/link'
 
 import { Editor } from '@/components/editor/editor'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +19,6 @@ import { cn } from '@/lib/utils/cn'
 
 import type { Question, QuestionType, QuestionTypeDefinition, QuestionUiTemplate } from '../types'
 import { createDefaultMatchingPairs, generateId } from '../types'
-import { AdminTestsSectionCard } from './AdminTestsSectionCard'
 import MatchingEditor from './MatchingEditor'
 import OptionsEditor from './OptionsEditor'
 
@@ -187,7 +187,7 @@ export default function QuestionEditor({
 				</div>
 			</PageHeader>
 
-			<AdminTestsSectionCard title="Формулировка">
+			<Panel title="Формулировка">
 				<Editor
 					initialMdxContent={question.promptText}
 					onMdxChange={handlePromptMdxChange}
@@ -206,8 +206,8 @@ export default function QuestionEditor({
 									docPath={docPath}
 								/>
 							</div> */}
-			</AdminTestsSectionCard>
-			<AdminTestsSectionCard title="Ответ и проверка" contentClassName="flex flex-col gap-4">
+			</Panel>
+			<Panel title="Ответ и проверка">
 				<div className="flex flex-col gap-2">
 					<Label>Тип вопроса</Label>
 					<Select
@@ -324,7 +324,7 @@ export default function QuestionEditor({
 						</p>
 					</div>
 				)}
-			</AdminTestsSectionCard>
+			</Panel>
 		</div>
 	)
 }

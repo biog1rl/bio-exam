@@ -5,6 +5,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { Panel } from '@/components/page/Panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChartConfigs } from '@/lib/charts/api'
 import { ATTEMPT_PERIOD_OPTIONS } from '@/lib/charts/config'
@@ -41,11 +42,7 @@ export function StudentProgressSection() {
 	const failed = Boolean(testsQuery.error || attemptsQuery.error)
 
 	return (
-		<section className="rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-				<h2 className="text-lg font-semibold text-foreground">Пройденные тесты</h2>
-				<p className="text-sm text-muted-foreground">{config.period === 'all' ? 'За всё время' : periodLabel}</p>
-			</div>
+		<Panel title="Пройденные тесты" meta={config.period === 'all' ? 'За всё время' : periodLabel}>
 			{failed ? (
 				<p role="alert" className="text-sm text-destructive">
 					Не удалось загрузить попытки
@@ -59,6 +56,6 @@ export function StudentProgressSection() {
 			) : (
 				<AttemptChart attempts={periodAttempts} config={config} />
 			)}
-		</section>
+		</Panel>
 	)
 }
