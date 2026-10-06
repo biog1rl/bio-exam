@@ -1,4 +1,5 @@
 import { forgetQuestionDraftCopies } from '@/lib/drafts/question-draft-copy'
+import { requireRecord } from '@/lib/http/body'
 import { saveBlob } from '@/lib/http/download'
 import { exportFailureMessage, failureMessage, failureOf, readApiError } from '@/lib/http/errors'
 import {
@@ -31,19 +32,14 @@ export type ExportToast = { kind: 'success' | 'error'; text: string } | null
 const EXPORT_FALLBACK_MESSAGE = 'Ошибка экспорта'
 const EXPORT_SUCCESS_MESSAGE = 'Тест экспортирован'
 
-function asRecord(body: unknown): Record<string, unknown> {
-	if (!body || typeof body !== 'object' || Array.isArray(body)) throw new MalformedBodyError()
-	return body as Record<string, unknown>
-}
-
 function requireTest(body: unknown): Record<string, unknown> {
-	const record = asRecord(body)
-	if (typeof asRecord(record.test).id !== 'string') throw new MalformedBodyError()
+	const record = requireRecord(body)
+	if (typeof requireRecord(record.test).id !== 'string') throw new MalformedBodyError()
 	return record
 }
 
 function requireArray(body: unknown, field: string): void {
-	if (!Array.isArray(asRecord(body)[field])) throw new MalformedBodyError()
+	if (!Array.isArray(requireRecord(body)[field])) throw new MalformedBodyError()
 }
 
 export function parseTestSummary(body: unknown): TestSummaryResponse {
@@ -63,7 +59,7 @@ export function parseQuestionDrafts(body: unknown): QuestionDraftsResponse {
 }
 
 export function parseQuestionDraftDetail(body: unknown): QuestionDraftDetailResponse {
-	asRecord(asRecord(body).draft)
+	requireRecord(requireRecord(body).draft)
 	return body as QuestionDraftDetailResponse
 }
 
@@ -78,11 +74,11 @@ function parseCreatedTest(body: unknown): CreatedTestResponse {
 }
 
 function parseUpdatedTest(body: unknown): UpdatedTestResponse {
-	return asRecord(body) as UpdatedTestResponse
+	return requireRecord(body) as UpdatedTestResponse
 }
 
 function parseMovedQuestion(body: unknown): MovedQuestionPath {
-	const target = asRecord(asRecord(body).target)
+	const target = requireRecord(requireRecord(body).target)
 	if (typeof target.topicSlug !== 'string' || typeof target.testSlug !== 'string') throw new MalformedBodyError()
 	return { topicSlug: target.topicSlug, testSlug: target.testSlug }
 }

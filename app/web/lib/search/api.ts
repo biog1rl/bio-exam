@@ -1,7 +1,7 @@
 import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
 import type { SearchResponse, SearchScope } from '@/types/search'
 
-export function parseSearchResponse(body: unknown): SearchResponse {
+function parseSearchResponse(body: unknown): SearchResponse {
 	if (!body || typeof body !== 'object' || Array.isArray(body)) throw new MalformedBodyError()
 	if (!Array.isArray((body as Record<string, unknown>).categories)) throw new MalformedBodyError()
 	return body as SearchResponse

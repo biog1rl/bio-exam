@@ -1,4 +1,5 @@
 import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
+import { isRecord } from '@/lib/utils/is-record'
 
 export type AvatarUpload = { avatarUrl: string | null; avatarCroppedUrl: string | null }
 
@@ -15,10 +16,6 @@ export type PasswordBody = { oldPassword: string; newPassword: string }
 
 const AVATAR_URL = '/api/users/avatar'
 const PROFILE_URL = '/api/users/profile'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
 
 function isNullableString(value: unknown): boolean {
 	return value === null || typeof value === 'string'
