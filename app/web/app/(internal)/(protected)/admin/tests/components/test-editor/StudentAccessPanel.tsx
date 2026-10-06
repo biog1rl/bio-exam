@@ -1,10 +1,13 @@
 import { useState, type ReactNode } from 'react'
 
-import { Loader2, Search, UserMinus, UserPlus } from 'lucide-react'
+import { Loader2, UserMinus, UserPlus } from 'lucide-react'
 
+import { EmptyState } from '@/components/page/EmptyState'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { ToolbarSearch } from '@/components/page/ToolbarSearch'
+import { TableCard } from '@/components/table/TableCard'
 import { Button } from '@/components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -43,28 +46,21 @@ export function StudentAccessToolbar({
 	return (
 		<div className="flex min-w-0 items-center gap-2 tab-sm:w-96">
 			<div className="tab-sm:hidden">{statusFilter}</div>
-			<label className="relative block min-w-0 flex-1">
-				<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-				<Input
-					type="search"
-					value={query}
-					onChange={(event) => onQueryChange(event.target.value)}
-					placeholder="Имя или логин"
-					aria-label="Поиск учеников"
-					className="h-10 rounded-full bg-card pl-9"
-				/>
-			</label>
+			<ToolbarSearch
+				value={query}
+				onChange={onQueryChange}
+				label="Поиск учеников"
+				placeholder="Имя или логин"
+				className="tab-sm:w-auto tab-sm:flex-1"
+			/>
 			<Popover open={open} onOpenChange={setOpen}>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<PopoverTrigger asChild>
-							<Button size="icon" className="size-10 shrink-0 rounded-full" aria-label="Добавить ученика">
-								<UserPlus className="size-4" aria-hidden="true" />
-							</Button>
-						</PopoverTrigger>
-					</TooltipTrigger>
-					<TooltipContent>Добавить ученика</TooltipContent>
-				</Tooltip>
+				<ToolbarTooltip label="Добавить ученика">
+					<PopoverTrigger asChild>
+						<ToolbarButton label="Добавить ученика" tone="primary">
+							<UserPlus className="size-4" aria-hidden="true" />
+						</ToolbarButton>
+					</PopoverTrigger>
+				</ToolbarTooltip>
 				<PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] p-0">
 					<Command>
 						<CommandInput placeholder="Имя или логин" aria-label="Найти ученика для добавления" />
@@ -139,10 +135,7 @@ export function StudentAccessPanel({
 
 	if (studentAssignments.length === 0) {
 		return (
-			<div className="flex flex-col items-center gap-2 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-				<p className="font-medium text-foreground">У теста пока нет учеников с доступом</p>
-				<p className="text-sm text-muted-foreground">Добавьте их кнопкой справа от поиска.</p>
-			</div>
+			<EmptyState title="У теста пока нет учеников с доступом" description="Добавьте их кнопкой справа от поиска." />
 		)
 	}
 
@@ -150,18 +143,20 @@ export function StudentAccessPanel({
 
 	if (rows.length === 0) {
 		return (
-			<div className="flex flex-col items-center gap-4 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-				<p className="text-muted-foreground">Никого не нашли с такими фильтрами.</p>
-				<Button variant="outline" className="rounded-full" onClick={onResetFilters}>
-					Сбросить фильтры
-				</Button>
-			</div>
+			<EmptyState
+				description="Никого не нашли с такими фильтрами."
+				action={
+					<Button variant="outline" className="rounded-full" onClick={onResetFilters}>
+						Сбросить фильтры
+					</Button>
+				}
+			/>
 		)
 	}
 
 	return (
 		<div className="space-y-2">
-			<div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-sm">
+			<TableCard>
 				<Table className="table-fixed">
 					<TableHeader>
 						<TableRow className="hover:bg-transparent">
@@ -240,7 +235,7 @@ export function StudentAccessPanel({
 						})}
 					</TableBody>
 				</Table>
-			</div>
+			</TableCard>
 			{rows.length !== studentAssignments.length ? (
 				<p className="px-3 text-xs text-muted-foreground" aria-live="polite">
 					Показано {rows.length} из {studentAssignments.length}
