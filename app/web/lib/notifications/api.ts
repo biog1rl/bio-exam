@@ -1,6 +1,8 @@
 import { mutate } from 'swr'
 
-import { MalformedBodyError, request, requestJson, type RequestOutcome } from '@/lib/http/request'
+import { MalformedBodyError, request, requestJson, type RequestFailure, type RequestOutcome } from '@/lib/http/request'
+
+import { isInternalHref } from './format'
 
 export const notificationKeys = {
 	unreadCount: (userId: string) => `notifications/unread-count/${userId}`,
@@ -19,6 +21,11 @@ export type NotificationsPage = {
 	items: NotificationItem[]
 	nextCursor: string | null
 }
+
+export type OpenNotificationResult =
+	| { kind: 'ok'; href: string }
+	| { kind: 'no_access' }
+	| { kind: 'failed'; failure: RequestFailure }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -48,6 +55,13 @@ export function parseNotificationsPage(body: unknown): NotificationsPage {
 	return { items: items.map(parseNotificationItem), nextCursor }
 }
 
+export function parseOpenNotification(body: unknown): { href: string } {
+	if (!isRecord(body)) throw new MalformedBodyError()
+	const { href } = body
+	if (typeof href !== 'string') throw new MalformedBodyError()
+	return { href }
+}
+
 export function loadUnreadCount(): Promise<number> {
 	return requestJson('/api/notifications/unread-count', { parse: parseUnreadCount })
 }
@@ -59,6 +73,22 @@ export function loadNotificationsPage(cursor?: string | null): Promise<Notificat
 
 export function markAllNotificationsRead(): Promise<RequestOutcome<unknown>> {
 	return request('/api/notifications/read-all', { method: 'POST' })
+}
+
+export async function openNotification(id: string): Promise<OpenNotificationResult> {
+	const outcome = await request(`/api/notifications/${encodeURIComponent(id)}/open`, { parse: parseOpenNotification })
+	if (outcome.ok) {
+		return isInternalHref(outcome.data.href) ? { kind: 'ok', href: outcome.data.href } : { kind: 'no_access' }
+	}
+	if (
+		outcome.kind === 'http' &&
+		outcome.status === 403 &&
+		isRecord(outcome.body) &&
+		outcome.body.error === 'NO_ACCESS'
+	) {
+		return { kind: 'no_access' }
+	}
+	return { kind: 'failed', failure: outcome }
 }
 
 export function refreshNotifications(): Promise<unknown> {

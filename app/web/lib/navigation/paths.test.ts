@@ -7,6 +7,7 @@ describe('isPagePath', () => {
 		expect(isPagePath('/tests/cell')).toBe(false)
 		expect(isPagePath('/tests/cell/')).toBe(false)
 		expect(isPagePath('/invite')).toBe(false)
+		expect(isPagePath('/notifications')).toBe(false)
 		expect(isPagePath('/admin/tests/cell/basics/questions')).toBe(false)
 		expect(isPagePath('/admin/tests/cell/basics/questions/drafts')).toBe(false)
 	})
@@ -25,6 +26,10 @@ describe('parentPagePath', () => {
 		expect(parentPagePath('/tests/cell/basics/start')).toBe('/tests/cell/basics')
 		expect(parentPagePath('/admin/tests/cell/basics/questions/42')).toBe('/admin/tests/cell/basics')
 		expect(parentPagePath('/admin/tests/cell/basics/questions/drafts/7')).toBe('/admin/tests/cell/basics')
+	})
+
+	it('страница перехода уведомления ведёт на главную', () => {
+		expect(parentPagePath('/notifications/9f1c')).toBe(HOME_PATH)
 	})
 
 	it('чужой профиль ведёт к списку пользователей', () => {

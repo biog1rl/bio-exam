@@ -92,6 +92,18 @@ async function openBell(page: Page): Promise<Locator> {
 	return dialog
 }
 
+async function openFirstUnreadRow(page: Page): Promise<void> {
+	const dialog = await openBell(page)
+	await expect(dialog.getByRole('link')).toHaveCount(20)
+	await dialog.getByRole('link').filter({ hasText: 'Непрочитанное:' }).first().click()
+}
+
+function unreadFromName(name: string | null): number {
+	const match = /(\d+)/.exec(name ?? '')
+	if (!match) throw new Error(`no number in «${name}»`)
+	return Number(match[1])
+}
+
 async function listScroll(dialog: Locator): Promise<{ scrollHeight: number; clientHeight: number }> {
 	return dialog.evaluate((element) => {
 		const list = [...element.querySelectorAll('*')].find((node) => getComputedStyle(node).overflowY === 'auto')
@@ -323,6 +335,81 @@ test.describe('bell-student', () => {
 		await expect(page.getByText('Не удалось отметить уведомления прочитанными. Попробуйте ещё раз.')).toBeVisible()
 		await expect(bellButton(page)).toHaveAccessibleName('Уведомления, 21 непрочитанное')
 		await page.unroute(match, handler)
+	})
+
+	test('opening a row re-checks access and shows «Нет доступа к материалу» without the object', async ({
+		bellStudentPage: page,
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 900 })
+		await page.goto('/dashboard')
+		const bell = bellButton(page)
+		await expect(bell).toHaveAccessibleName(/^Уведомления, \d+ непрочитан/)
+		const before = unreadFromName(await bell.getAttribute('aria-label'))
+		await openFirstUnreadRow(page)
+		await expect(page).toHaveURL(/\/notifications\/[0-9a-f-]{36}$/)
+		await expect(bellDialog(page)).toBeHidden()
+		const main = page.locator('main')
+		await expect(main.getByRole('heading', { name: 'Нет доступа к материалу' })).toBeVisible()
+		await expect(main.getByText('Возможно, назначение снято.')).toBeVisible()
+		await expect(main.getByRole('link', { name: 'На главную' })).toBeVisible()
+		await expect(main).not.toContainText('Строение клетки')
+		await expect(main).not.toContainText('Клетка')
+		await expect(async () => {
+			expect(unreadFromName(await bell.getAttribute('aria-label'))).toBe(before - 1)
+		}).toPass()
+	})
+
+	test('the denied screen takes focus, the crumb and the tab say «Уведомление»', async ({ bellStudentPage: page }) => {
+		await page.setViewportSize({ width: 1280, height: 900 })
+		await page.goto('/dashboard')
+		await expect(bellButton(page)).toHaveAccessibleName(/^Уведомления, \d+ непрочитан/)
+		await openFirstUnreadRow(page)
+		const heading = page.locator('main').getByRole('heading', { name: 'Нет доступа к материалу' })
+		await expect(heading).toBeFocused()
+		await expect(page.locator('header [aria-current="page"]')).toHaveText('Уведомление')
+		await expect(page).toHaveTitle(/Уведомление - /)
+	})
+
+	test('an unknown id opens the same screen and «Назад» without history leads to /dashboard', async ({
+		bellStudentPage: page,
+	}) => {
+		await page.goto('/notifications/not-a-uuid')
+		await expect(page.getByRole('heading', { name: 'Нет доступа к материалу' })).toBeVisible()
+		await page.getByRole('button', { name: 'Назад' }).click()
+		await expect(page).toHaveURL(/\/dashboard$/)
+	})
+
+	test('a failed open shows an error and «Повторить» opens the notification again', async ({
+		bellStudentPage: page,
+	}) => {
+		const match = (url: URL) => /^\/api\/notifications\/[^/]+\/open$/.test(url.pathname)
+		const handler = (route: Route) => route.fulfill({ status: 500, json: { error: 'boom' } })
+		await page.route(match, handler)
+		await page.goto('/notifications/not-a-uuid')
+		await expect(page.getByText('Не удалось открыть уведомление')).toBeVisible()
+		await page.unroute(match, handler)
+		await page.getByRole('button', { name: 'Повторить' }).click()
+		await expect(page.getByRole('heading', { name: 'Нет доступа к материалу' })).toBeVisible()
+	})
+
+	test('a foreign href from the server is not followed', async ({ bellStudentPage: page }) => {
+		const match = (url: URL) => /^\/api\/notifications\/[^/]+\/open$/.test(url.pathname)
+		const handler = (route: Route) => route.fulfill({ status: 200, json: { href: '//evil.example/x' } })
+		await page.route(match, handler)
+		await page.goto('/notifications/not-a-uuid')
+		await expect(page.getByRole('heading', { name: 'Нет доступа к материалу' })).toBeVisible()
+		await expect(page).toHaveURL(/\/notifications\/not-a-uuid$/)
+		await page.unroute(match, handler)
+	})
+
+	test('the denied screen fits 375, 768 and 1280 px', async ({ bellStudentPage: page }) => {
+		for (const width of [375, 768, 1280]) {
+			await page.setViewportSize({ width, height: 800 })
+			await page.goto('/notifications/not-a-uuid')
+			await expect(page.getByRole('heading', { name: 'Нет доступа к материалу' })).toBeVisible()
+			expect(await horizontalOverflow(page), `overflow at ${width}`).toEqual([])
+			expect(await lowContrastTexts(page), `contrast at ${width}`).toEqual([])
+		}
 	})
 
 	test('«Прочитать все» clears the number, the dots and the tab prefix and keeps the focus', async ({

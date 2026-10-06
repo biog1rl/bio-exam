@@ -1,6 +1,8 @@
 const BADGE_LIMIT = 9
 const TITLE_PREFIX = /^\(\d+\+?\) /
 
+const INTERNAL_HREF = /^\/(?![/\\])/
+
 const pluralRules = new Intl.PluralRules('ru')
 
 export function badgeLabel(count: number): string {
@@ -20,4 +22,8 @@ export function bellAccessibleName(count: number): string {
 	return pluralRules.select(count) === 'one'
 		? `Уведомления, ${count} непрочитанное`
 		: `Уведомления, ${count} непрочитанных`
+}
+
+export function isInternalHref(href: string): boolean {
+	return INTERNAL_HREF.test(href)
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 
-import { badgeLabel, bellAccessibleName, titlePrefix, withTitlePrefix } from './format'
+import { badgeLabel, bellAccessibleName, isInternalHref, titlePrefix, withTitlePrefix } from './format'
 
 describe('badgeLabel', () => {
 	test.each([
@@ -50,5 +50,20 @@ describe('withTitlePrefix', () => {
 		['(9+) Главная - Био', '(9+) ', '(9+) Главная - Био'],
 	])('%j с префиксом %j -> %j', (title, prefix, expected) => {
 		assert.equal(withTitlePrefix(title, prefix), expected)
+	})
+})
+
+describe('isInternalHref', () => {
+	test.each([
+		['/tests/a/b', true],
+		['/', true],
+		['//evil.example/x', false],
+		['/\\evil.example', false],
+		['https://evil.example', false],
+		['javascript:alert(1)', false],
+		['tests/a', false],
+		['', false],
+	])('%j -> %s', (href, expected) => {
+		assert.equal(isInternalHref(href), expected)
 	})
 })

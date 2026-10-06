@@ -10,6 +10,7 @@ const LABEL_PATTERNS: readonly LabelPattern[] = [
 	{ pattern: /^\/admin\/attempts\/[^/]+$/, label: 'Разбор попытки' },
 	{ pattern: /^\/admin\/users\/[^/]+$/, label: 'Пользователь' },
 	{ pattern: /^\/invite\/[^/]+$/, label: 'Приглашение' },
+	{ pattern: /^\/notifications\/[^/]+$/, label: 'Уведомление' },
 	{ pattern: /^\/profile\/[^/]+$/, label: (segment) => segment },
 ]
 

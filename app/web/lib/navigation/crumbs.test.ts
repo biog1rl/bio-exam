@@ -41,6 +41,7 @@ describe('подписи крошек', () => {
 		expect(staticCrumbLabel('/tests/cell/basics/start')).toBe('Прохождение')
 		expect(staticCrumbLabel('/admin/attempts/9f1c')).toBe('Разбор попытки')
 		expect(staticCrumbLabel('/invite/abc')).toBe('Приглашение')
+		expect(staticCrumbLabel('/notifications/9f1c')).toBe('Уведомление')
 		expect(staticCrumbLabel('/profile/%D0%B8%D0%B2%D0%B0%D0%BD')).toBe('иван')
 		expect(staticCrumbLabel('/admin/tests/cell')).toBeNull()
 	})

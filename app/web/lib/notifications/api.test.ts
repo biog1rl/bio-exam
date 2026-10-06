@@ -8,7 +8,7 @@ vi.mock('@/lib/session/client', () => ({
 
 import { MalformedBodyError } from '@/lib/http/request'
 
-import { parseNotificationsPage, parseUnreadCount } from './api'
+import { parseNotificationsPage, parseOpenNotification, parseUnreadCount } from './api'
 
 describe('parseUnreadCount', () => {
 	test.each([
@@ -49,5 +49,15 @@ describe('parseNotificationsPage', () => {
 		[null],
 	])('%j -> MalformedBodyError', (body) => {
 		assert.throws(() => parseNotificationsPage(body), MalformedBodyError)
+	})
+})
+
+describe('parseOpenNotification', () => {
+	test('{ href } parses', () => {
+		assert.deepEqual(parseOpenNotification({ href: '/tests/a/b' }), { href: '/tests/a/b' })
+	})
+
+	test.each([[{}], [{ href: 5 }], [null], [[]]])('%j -> MalformedBodyError', (body) => {
+		assert.throws(() => parseOpenNotification(body), MalformedBodyError)
 	})
 })
