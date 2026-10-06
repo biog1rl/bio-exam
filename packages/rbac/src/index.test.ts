@@ -13,12 +13,6 @@ const RUNTIME_EXPORTS = [
 	'roleDisplayName',
 	'can',
 	'normaliseRoleKeys',
-	'normaliseUserIdentifiers',
-	'normaliseRoleAccessMap',
-	'normaliseUserAccessMap',
-	'createAccessRule',
-	'accessRuleToSerializable',
-	'normaliseActionList',
 	'SECTION_PERMISSIONS',
 	'canAccessSection',
 	'canOpenPath',
@@ -28,7 +22,7 @@ const RUNTIME_EXPORTS = [
 ]
 
 describe('@bio-exam/rbac', () => {
-	test('экспортирует ровно 21 рантайм-имя', () => {
+	test('экспортирует ровно 15 рантайм-имён', () => {
 		expect(Object.keys(rbac).sort()).toEqual([...RUNTIME_EXPORTS].sort())
 	})
 

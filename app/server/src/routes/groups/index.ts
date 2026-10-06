@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or, sql } from 'drizzle-orm'
+import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { Router, type Request } from 'express'
 
 import { db } from '../../db/index.js'
@@ -21,7 +21,7 @@ import {
 	zoneOwnerCandidates,
 	type ZoneExecutor,
 } from '../../services/access-policy/index.js'
-import { avatarUrl } from '../../services/storage/links.js'
+import { peopleQuery, PEOPLE_QUERY_TOO_SHORT, searchPeople } from '../users/user-rows.js'
 
 export const groupsRouter = Router()
 
@@ -30,12 +30,7 @@ const DEACTIVATED_MEMBER = 'Деактивированного ученика н
 const PENDING_MEMBER = 'Ученика, который ещё не принял приглашение, добавляет в группу его учитель или администратор'
 const STAFF_IN_TEACHER_GROUP = 'В группе учителя могут быть только ученики'
 const OWNER_NOT_CANDIDATE = 'Учитель не найден или не активен'
-const CANDIDATES_MIN_QUERY = 2
 const CANDIDATES_LIMIT = 20
-
-function escapeLikePattern(value: string): string {
-	return value.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
 
 type RuleViolation = { status: number; body: Record<string, unknown> }
 
@@ -96,55 +91,12 @@ groupsRouter.get('/my', sessionRequired(), async (req, res, next) => {
 
 groupsRouter.get('/candidates', sessionRequired(), requirePerm('groups', 'manage_groups'), async (req, res, next) => {
 	try {
-		const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
-		if (q.length < CANDIDATES_MIN_QUERY) {
-			res.status(400).json({ error: 'Укажите не меньше 2 символов для поиска' })
+		const q = peopleQuery(req.query.q)
+		if (q === null) {
+			res.status(400).json({ error: PEOPLE_QUERY_TOO_SHORT })
 			return
 		}
-		const escaped = escapeLikePattern(q)
-		const contains = `%${escaped}%`
-		const prefix = `${escaped}%`
-		const fullName = sql`concat_ws(' ', ${users.firstName}, ${users.lastName})`
-		const rows = await db
-			.select({
-				id: users.id,
-				name: users.name,
-				firstName: users.firstName,
-				lastName: users.lastName,
-				initials: users.initials,
-				avatarColor: users.avatarColor,
-				avatarCropped: users.avatarCropped,
-			})
-			.from(users)
-			.where(
-				and(
-					eq(users.isActive, true),
-					studentOnlyFilter(users.id),
-					or(
-						sql`${users.name} ilike ${contains} escape '\\'`,
-						sql`${users.firstName} ilike ${contains} escape '\\'`,
-						sql`${users.lastName} ilike ${contains} escape '\\'`,
-						sql`${fullName} ilike ${contains} escape '\\'`
-					)
-				)
-			)
-			.orderBy(
-				sql`case when lower(${users.name}) = lower(${q}) then 0 when ${users.name} ilike ${prefix} escape '\\' then 1 else 2 end`,
-				asc(users.name),
-				asc(users.id)
-			)
-			.limit(CANDIDATES_LIMIT)
-		res.json({
-			users: rows.map((row) => ({
-				id: row.id,
-				name: row.name,
-				firstName: row.firstName,
-				lastName: row.lastName,
-				initials: row.initials,
-				avatarColor: row.avatarColor,
-				avatarCropped: avatarUrl(row.avatarCropped),
-			})),
-		})
+		res.json({ users: await searchPeople(q, { limit: CANDIDATES_LIMIT, where: studentOnlyFilter(users.id) }) })
 	} catch (err) {
 		next(err)
 	}

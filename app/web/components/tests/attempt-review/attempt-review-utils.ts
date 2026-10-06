@@ -346,17 +346,6 @@ export function formatDuration(ms: number): string {
 	return `${minutes}м ${rest}с`
 }
 
-export function formatAttemptDate(value?: string): string {
-	if (!value) return 'нет даты'
-	return new Intl.DateTimeFormat('ru-RU', {
-		day: '2-digit',
-		month: 'short',
-		year: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit',
-	}).format(new Date(value))
-}
-
 export function getQuestionPointsLabel(view: Pick<AttemptQuestionView, 'status' | 'points' | 'earnedPoints'>) {
 	if (view.status === 'pending') return `до ${view.points} балл.`
 	return `${view.earnedPoints} / ${view.points} балл.`

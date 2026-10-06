@@ -4,12 +4,9 @@ import { Component, useEffect, useMemo, useState, type ImgHTMLAttributes, type R
 
 import { Loader2 } from 'lucide-react'
 import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
-import { serialize } from 'next-mdx-remote/serialize'
 
 import { getSignedUrl, resolvesViaApi } from '@/lib/image-signed-url-cache'
-import { normalizeMdxSource } from '@/lib/mdx/normalizeSource'
-import { buildMdxOptions } from '@/lib/mdx/options'
-import { withoutInlineImages } from '@/lib/mdx/withoutInlineImages'
+import { compileMdx, mdxFallbackText, prepareMdxSource } from '@/lib/mdx/compile'
 
 type Props = {
 	source?: string | null
@@ -20,7 +17,7 @@ const mdxCache = new Map<string, MDXRemoteSerializeResult>()
 
 type MdxImageProps = ImgHTMLAttributes<HTMLImageElement>
 const IMAGE_SKELETON_CLASS =
-	'relative overflow-hidden rounded-md border border-border bg-muted shadow-inner before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/70 before:to-transparent dark:before:via-white/15'
+	'relative overflow-hidden rounded-md border border-border bg-muted shadow-inner before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r motion-reduce:before:animate-none before:from-transparent before:via-white/70 before:to-transparent dark:before:via-white/15'
 
 function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: number }) {
 	return (
@@ -132,8 +129,8 @@ class MdxErrorBoundary extends Component<MdxErrorBoundaryProps, { failed: boolea
 }
 
 export default function MdxRenderer({ source, className }: Props) {
-	const normalized = useMemo(() => normalizeMdxSource((source ?? '').trim()), [source])
-	const fallbackText = useMemo(() => withoutInlineImages(normalized), [normalized])
+	const normalized = useMemo(() => prepareMdxSource(source), [source])
+	const fallbackText = useMemo(() => mdxFallbackText(normalized), [normalized])
 	const [compiled, setCompiled] = useState<MDXRemoteSerializeResult | null>(null)
 	const [hasError, setHasError] = useState(false)
 	const components = useMemo(() => ({ img: MdxImage }), [])
@@ -156,7 +153,7 @@ export default function MdxRenderer({ source, className }: Props) {
 			}
 
 			try {
-				const result = await serialize(normalized, buildMdxOptions())
+				const result = await compileMdx(normalized)
 				if (cancelled) return
 				mdxCache.set(normalized, result)
 				setCompiled(result)

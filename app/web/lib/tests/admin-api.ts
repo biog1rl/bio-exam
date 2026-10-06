@@ -15,6 +15,7 @@ import type {
 	TopicFormData,
 	TopicsResponse,
 } from '@/app/(internal)/(protected)/admin/tests/types'
+import { requireRecord } from '@/lib/http/body'
 import { hasZipEndOfCentralDirectory } from '@/lib/http/download'
 import { exportFailureMessage } from '@/lib/http/errors'
 import { MalformedBodyError, request, requestBlob, type RequestFailure, type RequestOutcome } from '@/lib/http/request'
@@ -173,24 +174,19 @@ export function parseAdminTestsList(body: unknown): AdminTestsListResponse {
 
 export const adminTestsListFetcher = fetcherWith(parseAdminTestsList)
 
-function asRecord(body: unknown): Record<string, unknown> {
-	if (!body || typeof body !== 'object' || Array.isArray(body)) throw new MalformedBodyError()
-	return body as Record<string, unknown>
-}
-
 export function parseAdminAttempts(body: unknown): AdminAttemptsResponse {
-	const record = asRecord(body)
+	const record = requireRecord(body)
 	if (!Array.isArray(record.rows) || typeof record.total !== 'number' || typeof record.scopeTotal !== 'number') {
 		throw new MalformedBodyError()
 	}
-	const summary = asRecord(record.summary)
+	const summary = requireRecord(record.summary)
 	if (typeof summary.passed !== 'number') throw new MalformedBodyError()
 	if (summary.averageScore !== null && typeof summary.averageScore !== 'number') throw new MalformedBodyError()
 	if (typeof summary.pendingTotal !== 'number') throw new MalformedBodyError()
 	for (const row of record.rows) {
-		if (!REVIEW_STATUSES.includes(asRecord(row).reviewStatus as ReviewStatus)) throw new MalformedBodyError()
+		if (!REVIEW_STATUSES.includes(requireRecord(row).reviewStatus as ReviewStatus)) throw new MalformedBodyError()
 	}
-	const facets = asRecord(record.facets)
+	const facets = requireRecord(record.facets)
 	if (!Array.isArray(facets.topics) || !Array.isArray(facets.students)) throw new MalformedBodyError()
 	return body as AdminAttemptsResponse
 }
@@ -223,19 +219,19 @@ export function mergeAttemptPages(pages: readonly AdminAttemptsResponse[]): Merg
 }
 
 export function parseTopicsList(body: unknown): TopicsResponse {
-	if (!Array.isArray(asRecord(body).topics)) throw new MalformedBodyError()
+	if (!Array.isArray(requireRecord(body).topics)) throw new MalformedBodyError()
 	return body as TopicsResponse
 }
 
 export const topicsListFetcher = fetcherWith(parseTopicsList)
 
 function parseSavedTopic(body: unknown): { topic: Topic } {
-	if (typeof asRecord(asRecord(body).topic).id !== 'string') throw new MalformedBodyError()
+	if (typeof requireRecord(requireRecord(body).topic).id !== 'string') throw new MalformedBodyError()
 	return body as { topic: Topic }
 }
 
 function parseTeacherOptions(body: unknown): { teachers: TeacherOption[] } {
-	if (!Array.isArray(asRecord(body).teachers)) throw new MalformedBodyError()
+	if (!Array.isArray(requireRecord(body).teachers)) throw new MalformedBodyError()
 	return body as { teachers: TeacherOption[] }
 }
 
@@ -270,16 +266,16 @@ function testOverridePath(testId: string, key: string): string {
 }
 
 export function parseQuestionTypes(body: unknown): QuestionTypesResponse {
-	if (!Array.isArray(asRecord(body).questionTypes)) throw new MalformedBodyError()
+	if (!Array.isArray(requireRecord(body).questionTypes)) throw new MalformedBodyError()
 	return body as QuestionTypesResponse
 }
 
-export function parseScoringRules(body: unknown): ScoringRulesResponse {
+function parseScoringRules(body: unknown): ScoringRulesResponse {
 	return parseQuestionTypes(body)
 }
 
 export function parseQuestionType(body: unknown): QuestionTypeResponse {
-	if (typeof asRecord(asRecord(body).questionType).key !== 'string') throw new MalformedBodyError()
+	if (typeof requireRecord(requireRecord(body).questionType).key !== 'string') throw new MalformedBodyError()
 	return body as QuestionTypeResponse
 }
 

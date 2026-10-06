@@ -1,6 +1,7 @@
 import { mutate } from 'swr'
 
 import { MalformedBodyError, request, requestJson, type RequestFailure, type RequestOutcome } from '@/lib/http/request'
+import { isRecord } from '@/lib/utils/is-record'
 
 import { isInternalHref } from './format'
 
@@ -26,10 +27,6 @@ export type OpenNotificationResult =
 	| { kind: 'ok'; href: string }
 	| { kind: 'no_access' }
 	| { kind: 'failed'; failure: RequestFailure }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
 
 export function parseUnreadCount(body: unknown): number {
 	if (!isRecord(body)) throw new MalformedBodyError()

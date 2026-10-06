@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/page/PageHeader'
 import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { ColumnFilterMenu } from '@/components/table/ColumnFilterMenu'
 import { SortableHead } from '@/components/table/SortableHead'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
@@ -244,9 +245,7 @@ export default function QuestionTypesPageClient() {
 										</TableCell>
 										<TableCell className="hidden mob:table-cell">
 											<span className="flex flex-wrap gap-1">
-												<Badge variant={item.isActive ? 'default' : 'secondary'} className="rounded-full">
-													{item.isActive ? 'Активен' : 'Отключён'}
-												</Badge>
+												<StatusBadge on={item.isActive}>{item.isActive ? 'Активен' : 'Отключён'}</StatusBadge>
 												{item.isSystem ? (
 													<Badge variant="outline" className="rounded-full">
 														Системный

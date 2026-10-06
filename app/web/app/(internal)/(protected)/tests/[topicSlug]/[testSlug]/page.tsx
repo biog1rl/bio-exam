@@ -1,5 +1,7 @@
 import { TestLandingPageClient } from './TestLandingPageClient'
 
+export const metadata = { title: 'Тест' }
+
 interface Props {
 	params: Promise<{ topicSlug: string; testSlug: string }>
 }

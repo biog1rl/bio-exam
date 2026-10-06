@@ -1,3 +1,5 @@
+import { personName } from './person-name'
+
 export type InviteVariant = 'teacher' | 'admin'
 
 export type InviteGroupOwner = {
@@ -116,8 +118,7 @@ export function groupsTitle(groups: ReadonlyArray<GroupRef>): string {
 export function groupOwnerLabel(owner: InviteGroupOwner | null | undefined): string | null {
 	if (owner === undefined) return null
 	if (owner === null) return 'администраторы'
-	const fullName = [owner.firstName ?? '', owner.lastName ?? ''].join(' ').trim()
-	return fullName || owner.name || '—'
+	return personName(owner)
 }
 
 function asNullableString(value: unknown): string | null {

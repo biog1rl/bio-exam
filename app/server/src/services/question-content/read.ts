@@ -4,10 +4,12 @@ import { db } from '../../db/index.js'
 import { answerKeys, questions, tests, topics } from '../../db/schema.js'
 import { ERROR_MESSAGES } from '../../lib/constants.js'
 import { ApiError } from '../../lib/errors.js'
+import { mapBounded } from '../../lib/map-bounded.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { normalizeKey, storage, StorageKeyError, type StorageModule } from '../storage/index.js'
-import { mapBounded, PROMPT_READ_CONCURRENCY } from './bounded.js'
 import { questionMarkdownCandidates } from './paths.js'
+
+export const PROMPT_READ_CONCURRENCY = 123
 
 export type QuestionMarkdownKind = 'prompt' | 'explanation'
 

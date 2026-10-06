@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,15 +37,6 @@ interface ProfileData {
 
 interface ProfileClientProps {
 	initialData: ProfileData
-}
-
-function ProfilePanel({ title, children }: { title: string; children: ReactNode }) {
-	return (
-		<section className="space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<h2 className="text-lg font-semibold">{title}</h2>
-			{children}
-		</section>
-	)
 }
 
 function FormField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
@@ -193,7 +185,7 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 			<div className="grid gap-4 tab:grid-cols-2">
 				{canEditAvatar && (
 					<div className="space-y-4">
-						<ProfilePanel title="Аватар">
+						<Panel title="Аватар">
 							<div className="flex justify-center rounded-3xl bg-secondary/70 p-unit-mob tab-sm:p-unit">
 								<AvatarEditor
 									firstName={profileData.firstName}
@@ -214,12 +206,12 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									size="lg"
 								/>
 							</div>
-						</ProfilePanel>
+						</Panel>
 					</div>
 				)}
 
 				<div className={`space-y-4 ${!canEditAvatar ? 'max-w-xl tab:col-span-2' : ''}`}>
-					<ProfilePanel title="Основная информация">
+					<Panel title="Основная информация">
 						<div className="space-y-4">
 							<div className="grid gap-4 mob:grid-cols-2">
 								<FormField id="firstName" label="Имя">
@@ -261,9 +253,9 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 								{isLoading ? 'Сохранение...' : 'Сохранить изменения'}
 							</Button>
 						</div>
-					</ProfilePanel>
+					</Panel>
 
-					<ProfilePanel title="Смена пароля">
+					<Panel title="Смена пароля">
 						<div className="space-y-4">
 							<FormField id="oldPassword" label="Текущий пароль">
 								<Input
@@ -296,13 +288,13 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 								{isPasswordLoading ? 'Смена пароля...' : 'Сменить пароль'}
 							</Button>
 						</div>
-					</ProfilePanel>
+					</Panel>
 
-					<ProfilePanel title="Выход из аккаунта">
+					<Panel title="Выход из аккаунта">
 						<Button onClick={handleLogout} variant="destructive" className="w-full">
 							Выйти из аккаунта
 						</Button>
-					</ProfilePanel>
+					</Panel>
 				</div>
 			</div>
 		</div>

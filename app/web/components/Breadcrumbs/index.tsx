@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react'
 
+import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -13,11 +14,16 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { ASYNC_LABEL_WAIT_MS, breadcrumbConfig, matchPath } from '@/config/breadcrumbs'
-import { crumbTrail, fallbackCrumbLabel, staticCrumbLabel } from '@/lib/navigation/crumbs'
+import {
+	ASYNC_LABEL_WAIT_MS,
+	crumbsHidden,
+	crumbTrail,
+	fallbackCrumbLabel,
+	staticCrumbLabel,
+	waitsForAsyncLabel,
+} from '@/lib/navigation/crumbs'
 import { HOME_PATH } from '@/lib/navigation/paths'
 
-import LoaderComponent from '../LoaderComponent'
 import { useBreadcrumbs } from './BreadcrumbsContext'
 
 const LABEL_CLASS = 'block max-w-40 truncate tab-sm:max-w-64'
@@ -32,12 +38,12 @@ export default function Breadcrumbs() {
 		return () => clearTimeout(timer)
 	}, [pathname])
 
-	if (matchPath(breadcrumbConfig.hideOn, pathname)) return null
+	if (crumbsHidden(pathname)) return null
 
 	const trail = crumbTrail(pathname)
 	const items = trail.map((href, index) => {
 		const known = labels[href] ?? staticCrumbLabel(href)
-		const waiting = !known && waitedFor !== pathname && matchPath(breadcrumbConfig.asyncLabelOn, href)
+		const waiting = !known && waitedFor !== pathname && waitsForAsyncLabel(href)
 		return { href, label: known ?? fallbackCrumbLabel(href), waiting, last: index === trail.length - 1 }
 	})
 
@@ -60,7 +66,7 @@ export default function Breadcrumbs() {
 						<BreadcrumbItem>
 							{item.waiting ? (
 								<BreadcrumbPage aria-label="Загрузка названия">
-									<LoaderComponent />
+									<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 								</BreadcrumbPage>
 							) : item.last ? (
 								<BreadcrumbPage className={LABEL_CLASS}>{item.label}</BreadcrumbPage>

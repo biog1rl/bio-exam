@@ -29,18 +29,17 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { groupsKeys, groupsListFetcher, type Group } from '@/lib/groups/api'
+import { TEACHER_GROUPS_EMPTY, ownerLabel } from '@/lib/groups/group-form'
 import {
-	TEACHER_GROUPS_EMPTY,
 	filterGroups,
 	groupsEmptyState,
 	groupsSearch,
 	nextGroupsSort,
-	ownerLabel,
 	parseGroupsUrl,
 	sortGroups,
 	type GroupsSortKey,
 	type GroupsUrlState,
-} from '@/lib/groups/group-form'
+} from '@/lib/groups/groups-table'
 import { usersUrl } from '@/lib/users/users-url'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 

@@ -1,12 +1,12 @@
 import type { MetadataRoute } from 'next'
 
-import { siteConfig } from '@/config/site'
+const SITE_NAME = 'bio-exam'
 
 export default function manifest(): MetadataRoute.Manifest {
 	return {
-		name: siteConfig.name,
-		short_name: siteConfig.name,
-		description: siteConfig.description,
+		name: SITE_NAME,
+		short_name: SITE_NAME,
+		description: SITE_NAME,
 		start_url: '/',
 		background_color: '#ffffff',
 		theme_color: '#ffffff',

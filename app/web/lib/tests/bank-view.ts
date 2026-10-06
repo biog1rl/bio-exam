@@ -3,6 +3,8 @@ import { can, type PermissionKey } from '@bio-exam/rbac'
 import { failureMessage } from '@/lib/http/errors'
 import type { RequestFailure } from '@/lib/http/request'
 
+import { personName } from '../users/person-name'
+
 export type TopicTeacher = {
 	id: string
 	name: string | null
@@ -69,11 +71,6 @@ export function testTopicPickerState({
 	return canManage ? 'create-first' : 'ask-admin'
 }
 
-export function teacherDisplayName(teacher: TopicTeacher): string {
-	const fullName = [teacher.firstName ?? '', teacher.lastName ?? ''].join(' ').trim()
-	return fullName || teacher.name || '—'
-}
-
 export function teachersCountLabel(count: number): string {
 	const mod10 = count % 10
 	const mod100 = count % 100
@@ -84,13 +81,13 @@ export function teachersCountLabel(count: number): string {
 
 export function teachersLine(teachers: readonly TopicTeacher[]): string {
 	if (teachers.length === 0) return 'Без учителя'
-	if (teachers.length === 1) return `Учитель: ${teacherDisplayName(teachers[0])}`
+	if (teachers.length === 1) return `Учитель: ${personName(teachers[0])}`
 	return `Учителя: ${teachers.length}`
 }
 
 export function teacherTriggerLabel(selected: readonly TopicTeacher[]): string {
 	if (selected.length === 0) return 'Выберите учителей'
-	if (selected.length === 1) return teacherDisplayName(selected[0])
+	if (selected.length === 1) return personName(selected[0])
 	return teachersCountLabel(selected.length)
 }
 

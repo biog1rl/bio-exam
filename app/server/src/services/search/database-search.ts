@@ -1,9 +1,10 @@
 import { STAFF_ROLE_KEYS, type PermissionKey } from '@bio-exam/rbac'
 
 import { pgPool } from '../../db/index.js'
+import { mapBounded } from '../../lib/map-bounded.js'
+import { escapeLike } from '../../lib/sql-like.js'
 import { transliterate } from '../../lib/transliterate.js'
 import { studentOnlySql, type GroupScope, type TestScope, type UserScope } from '../access-policy/index.js'
-import { mapBounded } from '../question-content/index.js'
 import { attemptResultSql } from '../scored-attempt/columns.js'
 import { highlightSnippet } from './highlight.js'
 
@@ -80,10 +81,6 @@ function normalizeQuery(query: string): string {
 function clampLimit(value: number): number {
 	if (!Number.isFinite(value)) return 10
 	return Math.max(1, Math.min(Math.trunc(value), 25))
-}
-
-export function escapeLike(value: string): string {
-	return value.replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 
 function queryAlt(query: string): string {

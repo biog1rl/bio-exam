@@ -1,17 +1,14 @@
 'use client'
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import type { DateRange } from 'react-day-picker'
 
-import { format, isValid, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import {
 	ArrowRight,
 	CalendarIcon,
 	Check,
 	ChevronDown,
-	CircleCheck,
-	CircleX,
 	Loader2,
 	LockKeyholeOpen,
 	LogOut,
@@ -21,20 +18,23 @@ import {
 	X,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useQueryState } from 'nuqs'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR, { useSWRConfig } from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { ChartPeriodPicker } from '@/components/charts/ChartPeriodPicker'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { EmptyState } from '@/components/page/EmptyState'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -52,7 +52,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { EditUserDialog } from '@/components/users/dialogs/EditUserDialog'
 import {
@@ -65,14 +64,13 @@ import {
 	type SessionActionKind,
 } from '@/components/users/session-actions'
 import { useChartConfigs } from '@/lib/charts/api'
+import { useChartPeriod } from '@/lib/charts/use-chart-period'
 import { failureMessage, failureOf } from '@/lib/http/errors'
+import { replaceSearchParams } from '@/lib/navigation/search-params'
 import {
 	assignTopicColors,
 	filterAttemptsByPeriod,
-	parseDateParam,
 	parseDayParam,
-	parsePeriod,
-	PERIOD_PRESETS,
 	resolvePeriodBounds,
 } from '@/lib/progress/attempt-chart'
 import { adminTestsKeys, adminTestsListFetcher, type AdminTestListItem } from '@/lib/tests/admin-api'
@@ -91,9 +89,11 @@ import {
 	type UserAttemptRow,
 	type UserTestAssignment,
 } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
 import { usersUrl } from '@/lib/users/users-url'
 import { cn } from '@/lib/utils/cn'
+import { formatDateTime, formatDay } from '@/lib/utils/dates'
 
 type Props = {
 	login: string
@@ -126,13 +126,7 @@ function ProfileSectionCard({
 	const failed = failedSources(sources)
 
 	return (
-		<section className="min-w-0 space-y-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-				<h2 ref={titleRef} tabIndex={-1} className="text-lg font-semibold outline-none">
-					{title}
-				</h2>
-				{action}
-			</div>
+		<Panel title={title} titleRef={titleRef} actions={action}>
 			{failed.length > 0 ? (
 				<LoadErrorAlert
 					title="Не удалось загрузить данные"
@@ -147,21 +141,8 @@ function ProfileSectionCard({
 			) : (
 				children
 			)}
-		</section>
+		</Panel>
 	)
-}
-
-function EmptyProfileState({ children }: { children: ReactNode }) {
-	return (
-		<div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-			{children}
-		</div>
-	)
-}
-
-function shortDate(value: string, pattern: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, pattern) : '—'
 }
 
 function AttemptsTable({
@@ -186,7 +167,7 @@ function AttemptsTable({
 					{attempts.map((attempt) => {
 						const href = `/admin/attempts/${attempt.attemptId}`
 						const dotColor = colorBySlug.get(attempt.topicSlug)
-						const submitted = shortDate(attempt.submittedAt, 'dd.MM.yyyy, HH:mm')
+						const submitted = formatDateTime(attempt.submittedAt)
 						const view = attemptResultView(attempt)
 						return (
 							<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
@@ -213,31 +194,7 @@ function AttemptsTable({
 									{submitted}
 								</TableCell>
 								<TableCell className="py-3 pr-4 text-right">
-									{view.kind === 'pending' ? (
-										<span className="inline-flex justify-end">
-											<AttemptReviewLine view={view} audience="staff" />
-										</span>
-									) : (
-										<>
-											<span className="inline-flex items-center gap-1.5 font-medium tabular-nums">
-												{view.passed ? (
-													<CircleCheck className="size-4 text-primary" aria-hidden="true" />
-												) : (
-													<CircleX className="size-4 text-muted-foreground" aria-hidden="true" />
-												)}
-												{Math.round(view.percent)}%
-												<span className="sr-only">{view.passed ? 'Пройден' : 'Не пройден'}</span>
-											</span>
-											<p className="text-xs text-muted-foreground tabular-nums">
-												{view.points.earned} из {view.points.total}
-											</p>
-											{view.teacherChecked ? (
-												<span className="mt-1 inline-flex">
-													<TeacherCheckedMark />
-												</span>
-											) : null}
-										</>
-									)}
+									<AttemptScore view={view} audience="staff" />
 								</TableCell>
 							</TableRow>
 						)
@@ -271,7 +228,7 @@ function AssignmentsTable({
 				</TableHeader>
 				<TableBody>
 					{assignments.map((assignment) => {
-						const assigned = shortDate(assignment.assignedAt, 'dd.MM.yyyy')
+						const assigned = formatDay(assignment.assignedAt)
 						const removable = assignmentAction(assignment) === 'remove'
 						const removing = removingTestId === assignment.testId
 						return (
@@ -437,21 +394,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const clearButtonRef = useRef<HTMLButtonElement>(null)
 	const [assigningTestId, setAssigningTestId] = useState<string | null>(null)
 	const [removingTestId, setRemovingTestId] = useState<string | null>(null)
-	const [search, setSearch] = useQueryState('q', { defaultValue: '' })
-	const [topicFilter, setTopicFilter] = useQueryState('topic', { defaultValue: 'all' })
-	const [testsParam, setTestsParam] = useQueryState('tests', { defaultValue: '' })
+	const searchParams = useSearchParams()
+	const search = searchParams?.get('q') ?? ''
+	const topicFilter = searchParams?.get('topic') ?? 'all'
+	const testsParam = searchParams?.get('tests') ?? ''
 	const [visibleCount, setVisibleCount] = useState(5)
 
-	// Date range filter state
 	const chartConfig = useChartConfigs().profileAttempts
-	const [range, setRange] = useQueryState('range', { defaultValue: '' })
-	const [customFrom, setCustomFrom] = useQueryState('from', { defaultValue: '' })
-	const [customTo, setCustomTo] = useQueryState('to', { defaultValue: '' })
-	const [calendarOpen, setCalendarOpen] = useState(false)
-	const [calendarRange, setCalendarRange] = useState<DateRange>({ from: undefined, to: undefined })
-
-	// Single day state
-	const [selectedDay, setSelectedDay] = useQueryState('day', { defaultValue: '' })
+	const chartPeriod = useChartPeriod(chartConfig.period)
+	const { period, day: selectedDay } = chartPeriod
 	const [dayCalendarOpen, setDayCalendarOpen] = useState(false)
 
 	const selectedTestIds = useMemo(() => new Set(testsParam ? testsParam.split(',').filter(Boolean) : []), [testsParam])
@@ -502,18 +453,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}, [attempts, search, topicFilter, activeTestIds])
 
 	const [now] = useState(() => new Date())
-	const period = range ? parsePeriod(range) : chartConfig.period
 	const dayDate = useMemo(() => parseDayParam(selectedDay), [selectedDay])
-	const fromDate = useMemo(() => parseDateParam(customFrom), [customFrom])
-	const toDate = useMemo(() => parseDateParam(customTo), [customTo])
 
 	const periodAttempts = useMemo(
 		() =>
 			filterAttemptsByPeriod(
 				filteredAttempts,
-				resolvePeriodBounds({ period, from: customFrom, to: customTo, day: selectedDay }, now)
+				resolvePeriodBounds({ period, from: chartPeriod.from, to: chartPeriod.to, day: selectedDay }, now)
 			),
-		[filteredAttempts, period, customFrom, customTo, selectedDay, now]
+		[filteredAttempts, period, chartPeriod.from, chartPeriod.to, selectedDay, now]
 	)
 
 	const chartAttempts = useMemo(
@@ -570,37 +518,18 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		const next = new Set(selectedTestIds)
 		if (next.has(testId)) next.delete(testId)
 		else next.add(testId)
-		void setTestsParam(next.size > 0 ? Array.from(next).join(',') : null)
+		replaceSearchParams({ tests: next.size > 0 ? Array.from(next).join(',') : null })
 		setVisibleCount(5)
-	}
-
-	const handlePresetChange = (value: string) => {
-		if (!value) return
-		void setRange(value)
-		void setCustomFrom('')
-		void setCustomTo('')
-		void setSelectedDay(null)
-	}
-
-	const handleCalendarSelect = (selected: DateRange | undefined) => {
-		if (!selected) return
-		setCalendarRange(selected)
-		if (selected.from && selected.to) {
-			void setCustomFrom(selected.from.toISOString())
-			void setCustomTo(selected.to.toISOString())
-			void setSelectedDay(null)
-			setCalendarOpen(false)
-		}
 	}
 
 	const handleDaySelect = (date: Date | undefined) => {
 		if (!date) return
-		void setSelectedDay(format(date, 'yyyy-MM-dd'))
+		chartPeriod.chooseDay(format(date, 'yyyy-MM-dd'))
 		setDayCalendarOpen(false)
 	}
 
 	const clearDay = () => {
-		void setSelectedDay(null)
+		chartPeriod.chooseDay(null)
 	}
 
 	const sessionActions = sessionActionsState({
@@ -670,7 +599,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		)
 	}
 
-	const displayName = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.login
+	const displayName = personName(user)
 	const userGroups = user.groups ?? []
 	const contacts = contactRows(user)
 
@@ -680,8 +609,6 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			: selectedTestIds.size === 1
 				? (testOptions.find((t) => selectedTestIds.has(t.id))?.title ?? '1 тест')
 				: `${selectedTestIds.size} теста выбрано`
-
-	const presetValue = !dayDate && PERIOD_PRESETS.some((preset) => preset.value === period) ? period : ''
 
 	return (
 		<div className="space-y-4">
@@ -717,7 +644,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			<div className="grid gap-4 tab:grid-cols-2">
 				<ProfileSectionCard title="Контакты">
 					{contacts.length === 0 ? (
-						<EmptyProfileState>Контакты не указаны</EmptyProfileState>
+						<EmptyState size="sm" description="Контакты не указаны" />
 					) : (
 						<dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
 							{contacts.map((row) => (
@@ -796,7 +723,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<ToolbarSearch
 								value={search}
 								onChange={(value) => {
-									void setSearch(value)
+									replaceSearchParams({ q: value })
 									setVisibleCount(5)
 								}}
 								label="Поиск по тесту"
@@ -807,8 +734,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<Select
 								value={topicFilter}
 								onValueChange={(v) => {
-									void setTopicFilter(v)
-									void setTestsParam(null)
+									replaceSearchParams({ topic: v === 'all' ? null : v, tests: null })
 									setVisibleCount(5)
 								}}
 							>
@@ -838,7 +764,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											<button
 												className="flex w-full items-center gap-2 rounded-2xl px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70"
 												onClick={() => {
-													void setTestsParam(null)
+													replaceSearchParams({ tests: null })
 													setVisibleCount(5)
 												}}
 											>
@@ -869,49 +795,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 					{/* Date range controls */}
 					{attempts.length > 0 && (
-						<div className="flex flex-wrap items-center gap-2">
-							<ToggleGroup
-								type="single"
-								aria-label="Период"
-								className="flex-wrap justify-start gap-1 rounded-full border border-border/80 bg-card p-1"
-								value={presetValue}
-								onValueChange={handlePresetChange}
-							>
-								{PERIOD_PRESETS.map((preset) => (
-									<ToggleGroupItem
-										key={preset.value}
-										value={preset.value}
-										className="h-8 rounded-full px-3 text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-									>
-										{preset.label}
-									</ToggleGroupItem>
-								))}
-							</ToggleGroup>
-
-							{/* Custom date range */}
-							<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-								<PopoverTrigger asChild>
-									<Button
-										variant={period === 'custom' && !dayDate ? 'default' : 'outline'}
-										className={cn('h-10 rounded-full', !(period === 'custom' && !dayDate) && 'bg-card')}
-										onClick={() => void setRange('custom')}
-									>
-										{period === 'custom' && fromDate && toDate
-											? `${format(fromDate, 'dd.MM.yy', { locale: ru })} — ${format(toDate, 'dd.MM.yy', { locale: ru })}`
-											: 'Свой диапазон'}
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-auto p-0" align="start">
-									<Calendar
-										mode="range"
-										selected={calendarRange}
-										onSelect={handleCalendarSelect}
-										locale={ru}
-										numberOfMonths={2}
-									/>
-								</PopoverContent>
-							</Popover>
-
+						<ChartPeriodPicker
+							period={period}
+							from={chartPeriod.fromDate}
+							to={chartPeriod.toDate}
+							onPreset={chartPeriod.choosePreset}
+							onRange={chartPeriod.chooseRange}
+							inactive={Boolean(dayDate)}
+							align="start"
+						>
 							<div className="h-5 w-px bg-border" />
 
 							{/* Single day picker */}
@@ -949,7 +841,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									<X className="size-4" aria-hidden="true" />
 								</Button>
 							)}
-						</div>
+						</ChartPeriodPicker>
 					)}
 
 					{!dayDate && chartAttempts.length > 0 && (
@@ -978,16 +870,14 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					)}
 
 					{attempts.length === 0 ? (
-						<EmptyProfileState>Отправленных попыток пока нет</EmptyProfileState>
+						<EmptyState size="sm" description="Отправленных попыток пока нет" />
 					) : filteredAttempts.length === 0 ? (
-						<EmptyProfileState>Ничего не найдено</EmptyProfileState>
+						<EmptyState size="sm" description="Ничего не найдено" />
 					) : (
 						<div className="space-y-3">
 							<AttemptsTable attempts={visibleAttempts} colorBySlug={topicColorBySlug} />
 							{visibleCount < filteredAttempts.length && (
-								<Button variant="outline" className="rounded-full" onClick={() => setVisibleCount((c) => c + 5)}>
-									Загрузить ещё
-								</Button>
+								<LoadMoreButton onClick={() => setVisibleCount((c) => c + 5)} className="justify-start" />
 							)}
 						</div>
 					)}
@@ -997,7 +887,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			<div className="grid gap-4 lg:grid-cols-2">
 				<ProfileSectionCard title="Назначенные тесты" loading={assignmentsLoading} sources={[assignmentsSource]}>
 					{assignments.length === 0 ? (
-						<EmptyProfileState>Нет назначенных тестов</EmptyProfileState>
+						<EmptyState size="sm" description="Нет назначенных тестов" />
 					) : (
 						<AssignmentsTable assignments={assignments} removingTestId={removingTestId} onRemove={handleRemove} />
 					)}
@@ -1009,9 +899,9 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 					sources={[testsSource, assignmentsSource]}
 				>
 					{(testsData?.tests ?? []).length === 0 ? (
-						<EmptyProfileState>Нет доступных тестов</EmptyProfileState>
+						<EmptyState size="sm" description="Нет доступных тестов" />
 					) : availableTests.length === 0 ? (
-						<EmptyProfileState>Все тесты уже назначены</EmptyProfileState>
+						<EmptyState size="sm" description="Все тесты уже назначены" />
 					) : (
 						<AssignableTestsTable tests={availableTests} assigningTestId={assigningTestId} onAssign={handleAssign} />
 					)}

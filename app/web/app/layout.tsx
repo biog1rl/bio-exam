@@ -4,27 +4,26 @@ import type { Metadata, Viewport } from 'next'
 import AppLayout from '@/components/AppLayout/AppLayout'
 import { Toaster } from '@/components/ui/sonner'
 import { fontMono, fontSans, fontSerif } from '@/config/fonts'
-import { siteConfig } from '@/config/site'
 import '@/styles/globals.css'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+const SITE_NAME = 'bio-exam'
+
 export const metadata: Metadata = {
 	title: {
-		default: siteConfig.name,
-		template: `%s - ${siteConfig.name}`,
+		default: SITE_NAME,
+		template: `%s - ${SITE_NAME}`,
 	},
-	description: siteConfig.description,
+	description: SITE_NAME,
 	robots: 'noindex, nofollow',
 }
 
 export const viewport: Viewport = {
 	themeColor: [{ media: '(prefers-color-scheme: light)', color: 'white' }],
 }
-
-// ---------------- layout ----------------
 
 export default async function RootLayout({
 	children,

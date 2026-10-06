@@ -33,8 +33,7 @@ const ATTEMPT_ROUTES = 'app/server/src/routes/tests/admin/attempts.ts'
 const ASSIGNMENT_ROUTES = 'app/server/src/routes/tests/assignments.ts'
 const GROUP_ROUTES = 'app/server/src/routes/groups/index.ts'
 const USER_ROUTES = 'app/server/src/routes/users/index.ts'
-const LOGIN_THROTTLE_ROUTES = 'app/server/src/routes/users/login-throttle.ts'
-const SESSION_ROUTES = 'app/server/src/routes/users/sessions.ts'
+const SIGN_IN_ASSIST_ROUTES = 'app/server/src/routes/users/sign-in-assist.ts'
 const INVITE_ROUTES = 'app/server/src/routes/auth/invites.ts'
 
 const ROUTE_FILES = {
@@ -53,8 +52,7 @@ const ROUTE_FILES = {
 	[ASSIGNMENT_ROUTES]: { router: 'assignmentsRouter', mount: '/api/tests/:testId/assignments' },
 	[GROUP_ROUTES]: { router: 'groupsRouter', mount: '/api/groups' },
 	[USER_ROUTES]: { router: 'router', mount: '/api/users' },
-	[LOGIN_THROTTLE_ROUTES]: { router: 'router', mount: '/api/users' },
-	[SESSION_ROUTES]: { router: 'router', mount: '/api/users' },
+	[SIGN_IN_ASSIST_ROUTES]: { router: 'router', mount: '/api/users' },
 	[INVITE_ROUTES]: { router: 'router', mount: '/api/auth/invites' },
 }
 
@@ -112,8 +110,8 @@ const INVENTORY = [
 	route(USER_ROUTES, 'get', '/:userId/test-attempts', LIST, ['testScope(']),
 	route(USER_ROUTES, 'get', '/:id', COARSE, ['canReadUser(']),
 	route(USER_ROUTES, 'get', '/by-login/:login', COARSE, ['canReadUser(', 'hasGlobalZone(']),
-	route(LOGIN_THROTTLE_ROUTES, 'delete', '/:id/login-throttle', OBJECT, ['canAssistSignIn(']),
-	route(SESSION_ROUTES, 'post', '/:id/sessions/revoke', OBJECT, ['canAssistSignIn(']),
+	route(SIGN_IN_ASSIST_ROUTES, 'delete', '/:id/login-throttle', OBJECT, ['canAssistSignIn(']),
+	route(SIGN_IN_ASSIST_ROUTES, 'post', '/:id/sessions/revoke', OBJECT, ['canAssistSignIn(']),
 	route(INVITE_ROUTES, 'post', '/', COARSE, ['hasGlobalZone(', 'canManageGroup(', 'canManageStudent(']),
 	route(GROUP_ROUTES, 'post', '/', COARSE, ['hasGlobalZone(', 'setGroupOwner(']),
 	route(GROUP_ROUTES, 'get', '/candidates', COARSE, ['studentOnlyFilter(']),

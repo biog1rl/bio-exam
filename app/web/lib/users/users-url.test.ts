@@ -107,7 +107,7 @@ describe('фильтр и сортировка строк', () => {
 	})
 
 	it('сортировка по имени и дате создания, сброс возвращает порядок сервера', () => {
-		expect(ids(sortUsers(rows, { key: 'name', direction: 'asc' }))).toEqual(['ghost', 'teacher1', 'ivanov'])
+		expect(ids(sortUsers(rows, { key: 'name', direction: 'asc' }))).toEqual(['teacher1', 'ivanov', 'ghost'])
 		expect(ids(sortUsers(rows, { key: 'created', direction: 'desc' }))).toEqual(['ivanov', 'ghost', 'teacher1'])
 		expect(ids(sortUsers(rows, DEFAULT_USERS_SORT))).toEqual(['ivanov', 'teacher1', 'ghost'])
 	})

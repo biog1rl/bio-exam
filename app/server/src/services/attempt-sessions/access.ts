@@ -2,6 +2,7 @@ import { and, eq, exists, inArray, or, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { testAssignments, tests, topics } from '../../db/schema.js'
+import { isUuid } from '../../lib/uuid.js'
 import type { TestScope } from '../access-policy/index.js'
 
 export type AttemptTest = {
@@ -25,25 +26,37 @@ export type AttemptAccessParams = {
 	canReadTest: () => Promise<boolean>
 }
 
-export async function findVisibleTest(testId: string): Promise<AttemptTest | null> {
+const attemptTestColumns = {
+	id: tests.id,
+	slug: tests.slug,
+	title: tests.title,
+	description: tests.description,
+	showCorrectAnswer: tests.showCorrectAnswer,
+	timeLimitMinutes: tests.timeLimitMinutes,
+	passingScore: tests.passingScore,
+	topicId: topics.id,
+	topicSlug: topics.slug,
+	topicTitle: topics.title,
+}
+
+async function findVisible(where: SQL | undefined): Promise<AttemptTest | null> {
 	const rows = await db
-		.select({
-			id: tests.id,
-			slug: tests.slug,
-			title: tests.title,
-			description: tests.description,
-			showCorrectAnswer: tests.showCorrectAnswer,
-			timeLimitMinutes: tests.timeLimitMinutes,
-			passingScore: tests.passingScore,
-			topicId: topics.id,
-			topicSlug: topics.slug,
-			topicTitle: topics.title,
-		})
+		.select(attemptTestColumns)
 		.from(tests)
 		.innerJoin(topics, eq(tests.topicId, topics.id))
-		.where(and(eq(tests.id, testId), eq(tests.isPublished, true), eq(topics.isActive, true)))
+		.where(and(where, eq(tests.isPublished, true), eq(topics.isActive, true)))
 		.limit(1)
 	return rows[0] ?? null
+}
+
+export function findVisibleTest(testId: string): Promise<AttemptTest | null> {
+	return findVisible(eq(tests.id, testId))
+}
+
+export async function findVisibleTestBySlug(topicSlug: string, testSlug: string): Promise<AttemptTest | null> {
+	const bySlug = await findVisible(and(eq(topics.slug, topicSlug), eq(tests.slug, testSlug)))
+	if (bySlug || !isUuid(testSlug)) return bySlug
+	return findVisible(and(eq(topics.slug, topicSlug), eq(tests.id, testSlug)))
 }
 
 export async function isAssignedOrPrivileged({ testId, userId, canReadTest }: AttemptAccessParams): Promise<boolean> {

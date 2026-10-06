@@ -9,42 +9,26 @@ import useSWR from 'swr'
 import { ActivityChart, ContentChart } from '@/components/charts/DashboardCharts'
 import { EmptyState } from '@/components/page/EmptyState'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { StudentProgressSection } from '@/components/progress/StudentProgressSection'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { AttemptReviewLine, type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { dashboardUrl, useChartConfigs } from '@/lib/charts/api'
-import { request } from '@/lib/http/request'
+import { useChartConfigs } from '@/lib/charts/api'
+import { deniedAsNull } from '@/lib/http/swr'
 import { quickLinkSections } from '@/lib/navigation/sections'
-import { optionalAdminData } from '@/lib/tests/admin-optional'
+import { adminTestsKeys, adminTestsListFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
-import { attemptResultView, type AttemptResultFields, type AttemptResultView } from '@/lib/tests/attempt-result-view'
+import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
+import { adminDashboardFetcher, adminDashboardKey, type AdminDashboardAttempt } from '@/lib/tests/dashboard-api'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
-
-type Topic = {
-	id: string
-	title: string
-	isActive: boolean
-	testsCount?: number
-}
-
-type AdminTest = {
-	id: string
-	slug?: string
-	title: string
-	topicId: string
-	topicSlug?: string
-	topicTitle?: string
-	isPublished: boolean
-	questionsCount?: number
-	updatedAt?: string
-}
+import { formatShortDay } from '@/lib/utils/dates'
 
 type AttemptBundle = {
 	test: PublicTestListItem
@@ -55,42 +39,6 @@ type AttemptBundle = {
 type DashboardAttempt = TestAttemptSummary & {
 	testTitle: string
 	testHref: string
-}
-
-type AdminDashboardAttempt = AttemptResultFields & {
-	attemptId: string
-	testId: string
-	testTitle: string
-	testSlug: string
-	topicSlug: string
-	topicTitle: string
-	studentId: string
-	studentName: string
-	submittedAt: string
-}
-
-type AdminDashboardData = {
-	summary: {
-		totalAttempts: number
-		activeStudents: number
-		averageScore: number | null
-		passedAttempts: number
-	}
-	latestAttempts: AdminDashboardAttempt[]
-	dailyActivity: Array<{
-		date: string
-		attempts: number
-		averageScore: number | null
-	}>
-}
-
-async function fetchAdminJson<T>(url: string): Promise<T | null> {
-	return optionalAdminData(await request<T>(url))
-}
-
-function formatDate(value?: string) {
-	if (!value) return 'нет даты'
-	return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short' }).format(new Date(value))
 }
 
 function average(values: number[]) {
@@ -131,19 +79,6 @@ function SectionHeading({ title, children }: { title: string; children?: ReactNo
 			<h2 className="text-lg font-semibold text-foreground">{title}</h2>
 			{children}
 		</div>
-	)
-}
-
-function EmptyPanel({ children }: { children: ReactNode }) {
-	return <div className="rounded-3xl bg-secondary/70 p-unit text-sm text-muted-foreground">{children}</div>
-}
-
-function ChartCard({ title, children }: { title: string; children: ReactNode }) {
-	return (
-		<section className="min-w-0 rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<h2 className="mb-4 text-lg font-semibold text-foreground">{title}</h2>
-			{children}
-		</section>
 	)
 }
 
@@ -195,24 +130,9 @@ function AvailableTestsTable({ tests }: { tests: PublicTestListItem[] }) {
 }
 
 function ResultCell({ attempt, audience }: { attempt: AttemptResultFields; audience: AttemptReviewAudience }) {
-	const view = attemptResultView(attempt)
-	if (view.kind === 'pending') {
-		return (
-			<TableCell className="py-3 pr-4 text-right">
-				<span className="inline-flex justify-end">
-					<AttemptReviewLine view={view} audience={audience} />
-				</span>
-			</TableCell>
-		)
-	}
 	return (
-		<TableCell className="py-3 pr-4 text-right whitespace-nowrap tabular-nums">
-			{formatPercent(view.percent)}
-			{view.teacherChecked ? (
-				<span className="mt-1 flex justify-end">
-					<TeacherCheckedMark />
-				</span>
-			) : null}
+		<TableCell className="py-3 pr-4 text-right">
+			<AttemptScore view={attemptResultView(attempt)} audience={audience} />
 		</TableCell>
 	)
 }
@@ -236,10 +156,12 @@ function LatestAttemptsTable({ attempts }: { attempts: DashboardAttempt[] }) {
 								<Link href={attempt.testHref} className={mainLinkClass}>
 									{attempt.testTitle}
 								</Link>
-								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">{formatDate(attempt.submittedAt)}</p>
+								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
+									{formatShortDay(attempt.submittedAt)}
+								</p>
 							</TableCell>
 							<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-								{formatDate(attempt.submittedAt)}
+								{formatShortDay(attempt.submittedAt)}
 							</TableCell>
 							<ResultCell attempt={attempt} audience="student" />
 						</TableRow>
@@ -274,14 +196,14 @@ function StudentAttemptsTable({ attempts }: { attempts: AdminDashboardAttempt[] 
 									</Link>
 									<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground lg:hidden">
 										{attempt.testTitle}
-										<span className="tab-sm:hidden"> · {formatDate(attempt.submittedAt)}</span>
+										<span className="tab-sm:hidden"> · {formatShortDay(attempt.submittedAt)}</span>
 									</p>
 								</TableCell>
 								<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
 									{attempt.testTitle}
 								</TableCell>
 								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-									{formatDate(attempt.submittedAt)}
+									{formatShortDay(attempt.submittedAt)}
 								</TableCell>
 								<ResultCell attempt={attempt} audience="staff" />
 							</TableRow>
@@ -342,15 +264,9 @@ export default function DashboardClient() {
 			)
 	)
 
-	const adminTopicsQuery = useSWR(canReadTests ? 'dashboard-admin-topics' : null, () =>
-		fetchAdminJson<{ topics: Topic[] }>('/api/tests/topics')
-	)
-	const adminTestsQuery = useSWR(canReadTests ? 'dashboard-admin-tests' : null, () =>
-		fetchAdminJson<{ tests: AdminTest[] }>('/api/tests')
-	)
-	const adminDashboardQuery = useSWR(canReadTests ? 'dashboard-admin-summary' : null, () =>
-		fetchAdminJson<AdminDashboardData>(dashboardUrl())
-	)
+	const adminTopicsQuery = useSWR(canReadTests ? adminTestsKeys.topics() : null, deniedAsNull(topicsListFetcher))
+	const adminTestsQuery = useSWR(canReadTests ? adminTestsKeys.list() : null, deniedAsNull(adminTestsListFetcher))
+	const adminDashboardQuery = useSWR(canReadTests ? adminDashboardKey() : null, deniedAsNull(adminDashboardFetcher))
 
 	const attemptBundles = attemptsQuery.data ?? []
 	const allAttempts: DashboardAttempt[] = attemptBundles.flatMap((bundle) =>
@@ -485,28 +401,31 @@ export default function DashboardClient() {
 
 			{canReadTests ? (
 				<div className="grid gap-4 xl:grid-cols-2">
-					<ChartCard title="Публикации и наполнение">
+					<Panel title="Публикации и наполнение">
 						{adminTopicsQuery.isLoading || adminTestsQuery.isLoading ? (
 							<Skeleton className="h-72 rounded-2xl" />
 						) : topics.length === 0 ? (
-							<EmptyPanel>
-								{can('zone', 'all')
-									? 'Нет тем для отображения.'
-									: 'Вам ещё не закреплены темы. Обратитесь к администратору.'}
-							</EmptyPanel>
+							<EmptyState
+								size="sm"
+								description={
+									can('zone', 'all')
+										? 'Нет тем для отображения.'
+										: 'Вам ещё не закреплены темы. Обратитесь к администратору.'
+								}
+							/>
 						) : (
 							<ContentChart topics={topics} tests={adminTests} config={chartConfigs.content} />
 						)}
-					</ChartCard>
-					<ChartCard title="Активность учеников">
+					</Panel>
+					<Panel title="Активность учеников">
 						{adminDashboardQuery.isLoading ? (
 							<Skeleton className="h-72 rounded-2xl" />
 						) : !adminDashboard ? (
-							<EmptyPanel>Нет данных об активности.</EmptyPanel>
+							<EmptyState size="sm" description="Нет данных об активности." />
 						) : (
 							<ActivityChart days={adminDashboard.dailyActivity} config={chartConfigs.activity} now={now} />
 						)}
-					</ChartCard>
+					</Panel>
 				</div>
 			) : null}
 		</div>

@@ -1,5 +1,4 @@
-import { endOfDay, format, isValid, parse, parseISO, startOfDay, subDays, subMonths } from 'date-fns'
-import { ru } from 'date-fns/locale'
+import { endOfDay, isValid, parse, parseISO, startOfDay, subDays, subMonths } from 'date-fns'
 
 export type ProgressAttempt = {
 	attemptId: string

@@ -31,13 +31,13 @@ import {
 	TEACHERS_HINT,
 	TEACHERS_SEARCH_PLACEHOLDER,
 	canManageCatalog,
-	teacherDisplayName,
 	teacherTriggerLabel,
 	teachersSetChanged,
 	topicSaveFailure,
 	topicSaveOutcome,
 	type TopicTeacher,
 } from '@/lib/tests/bank-view'
+import { personName } from '@/lib/users/person-name'
 import { cn } from '@/lib/utils/cn'
 import { transliterate } from '@/lib/utils/transliterate'
 
@@ -252,7 +252,7 @@ export function TopicFormDialog({
 											<CommandEmpty>{TEACHERS_EMPTY}</CommandEmpty>
 											<CommandGroup>
 												{teacherOptions.map((teacher) => {
-													const label = teacherDisplayName(teacher)
+													const label = personName(teacher)
 													const selected = teacherIds.includes(teacher.id)
 													return (
 														<CommandItem
@@ -277,7 +277,7 @@ export function TopicFormDialog({
 							{selectedTeachers.length > 0 ? (
 								<div className="flex flex-wrap gap-2">
 									{selectedTeachers.map((teacher) => {
-										const label = teacherDisplayName(teacher)
+										const label = personName(teacher)
 										return (
 											<Badge key={teacher.id} variant="secondary" className="max-w-full gap-1">
 												<span className="min-w-0 truncate">{label}</span>

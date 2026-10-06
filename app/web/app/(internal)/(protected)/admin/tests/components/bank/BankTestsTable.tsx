@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react'
 
-import { format, isValid, parseISO } from 'date-fns'
 import { Download, Edit, Eye, MoreHorizontal, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 import { SortableHead } from '@/components/table/SortableHead'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
 	DropdownMenu,
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { nextBankSort, type BankSort, type BankSortKey } from '@/lib/tests/bank-table'
+import { formatDay } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { Test } from '../../types'
@@ -32,21 +32,8 @@ interface BankTestsTableProps {
 	onDelete: (test: Test) => void
 }
 
-function updatedDate(value: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, 'dd.MM.yyyy') : '—'
-}
-
 function editorHref(test: Test): string {
 	return `/admin/tests/${test.topicSlug}/${test.slug}`
-}
-
-function StatusBadge({ published }: { published: boolean }) {
-	return (
-		<Badge variant={published ? 'default' : 'secondary'} className="rounded-full">
-			{published ? 'Опубликован' : 'Черновик'}
-		</Badge>
-	)
 }
 
 export function BankTestsTable({
@@ -117,7 +104,7 @@ export function BankTestsTable({
 								</TableCell>
 							) : null}
 							<TableCell className="hidden tab-sm:table-cell">
-								<StatusBadge published={test.isPublished} />
+								<StatusBadge on={test.isPublished}>{test.isPublished ? 'Опубликован' : 'Черновик'}</StatusBadge>
 							</TableCell>
 							<TableCell className="hidden text-right tabular-nums mob:table-cell">
 								{test.questionsCount ?? 0}
@@ -126,7 +113,7 @@ export function BankTestsTable({
 								{test.timeLimitMinutes ? `${test.timeLimitMinutes} мин` : '—'}
 							</TableCell>
 							<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-								{updatedDate(test.updatedAt)}
+								{formatDay(test.updatedAt)}
 							</TableCell>
 							<TableCell className="pr-3">
 								<DropdownMenu>

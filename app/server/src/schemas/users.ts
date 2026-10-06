@@ -35,6 +35,3 @@ export const PatchUserSchema = z.object({
 	phone: z.string().trim().max(50).optional(),
 	email: z.string().email().optional().or(z.literal('')).or(z.null()),
 })
-
-// Экспорт типов
-export type PatchUser = z.infer<typeof PatchUserSchema>

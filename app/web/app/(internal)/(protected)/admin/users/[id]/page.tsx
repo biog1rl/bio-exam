@@ -7,6 +7,7 @@ import { AccessDeniedState } from '@/components/auth/AccessDeniedState'
 import { buildLoginRedirect } from '@/lib/session/redirect'
 import { getServerMe, requireServerData, serverRequest } from '@/lib/session/server'
 import { parseUserEnvelope } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 
 export default async function AdminUserPageRedirect({ params }: { params: Promise<{ id: string }> }) {
 	const { id } = await params
@@ -26,7 +27,7 @@ export default async function AdminUserPageRedirect({ params }: { params: Promis
 		currentPath
 	)
 	if (!user.login) {
-		const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.name || 'Пользователь'
+		const name = personName(user, 'Пользователь')
 		return (
 			<div>
 				<AccessDeniedState

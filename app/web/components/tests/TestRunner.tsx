@@ -18,7 +18,8 @@ import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { AttemptQuestionView, PublicTestDetail, PublicTestQuestion, TestAttemptSummary } from '@/lib/tests/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
+import { formatDateTime } from '@/lib/utils/dates'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
 import {
@@ -46,16 +47,6 @@ type Props = {
 
 function resolveTemplate(question: PublicTestQuestion): NonNullable<PublicTestQuestion['questionUiTemplate']> | null {
 	return question.questionUiTemplate
-}
-
-function formatDate(value: string): string {
-	return new Date(value).toLocaleString('ru-RU', {
-		day: '2-digit',
-		month: '2-digit',
-		year: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit',
-	})
 }
 
 /**
@@ -432,11 +423,11 @@ function AttemptRunner({
 											>
 												{view.kind === 'pending' ? (
 													<>
-														{formatDate(attempt.submittedAt)} / <AttemptReviewLine view={view} audience="student" />
+														{formatDateTime(attempt.submittedAt)} / <AttemptReviewLine view={view} audience="student" />
 													</>
 												) : (
 													<>
-														{formatDate(attempt.submittedAt)} / {view.points.earned}/{view.points.total} /{' '}
+														{formatDateTime(attempt.submittedAt)} / {view.points.earned}/{view.points.total} /{' '}
 														{formatPercent(view.percent)} / {view.passed ? 'пройден' : 'не пройден'}
 														{view.teacherChecked ? (
 															<>

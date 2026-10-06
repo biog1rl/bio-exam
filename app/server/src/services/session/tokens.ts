@@ -2,18 +2,13 @@ import jwt from 'jsonwebtoken'
 import crypto from 'node:crypto'
 
 import { AUTH_CONFIG } from '../../config/auth.js'
+import { isUuid } from '../../lib/uuid.js'
 
 export type AccessClaims = {
 	userId: string
 	sessionId: string
 	login: string | null
 	expiresAt: Date | null
-}
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isUuid(value: unknown): value is string {
-	return typeof value === 'string' && UUID_PATTERN.test(value)
 }
 
 export function signAccessToken(input: { userId: string; sessionId: string; login: string | null }): {

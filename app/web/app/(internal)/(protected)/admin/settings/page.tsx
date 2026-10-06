@@ -5,8 +5,8 @@ import type { Metadata } from 'next'
 import { SectionDeniedState } from '@/components/auth/SectionGate'
 import { SectionCard } from '@/components/navigation/SectionCard'
 import { PageHeader } from '@/components/page/PageHeader'
+import { sectionAccess } from '@/lib/navigation/section-access'
 import { sectionDescription, settingsSections } from '@/lib/navigation/sections'
-import { sectionAccess } from '@/lib/session/section-access'
 
 export const metadata: Metadata = { title: 'Настройки' }
 

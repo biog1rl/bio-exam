@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import {
 	loadNotificationsPage,
 	notificationKeys,
@@ -158,18 +158,7 @@ export default function NotificationList({ userId, onNavigate }: NotificationLis
 					<LoadErrorAlert title="Не удалось загрузить ещё уведомления" error={moreError} onRetry={loadMore} />
 				</div>
 			) : nextCursor ? (
-				<div className="flex justify-center px-2 pb-2">
-					<button
-						type="button"
-						onClick={() => void loadMore()}
-						aria-busy={loadingMore || undefined}
-						aria-disabled={loadingMore || undefined}
-						className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-card px-5 text-sm transition-colors hover:border-primary/35 hover:bg-secondary/60 focus-visible:border-primary focus-visible:outline-none disabled:pointer-events-none disabled:opacity-70"
-					>
-						{loadingMore ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-						Показать ещё
-					</button>
-				</div>
+				<LoadMoreButton onClick={() => void loadMore()} loading={loadingMore} fullWidth className="px-2 pt-0 pb-2" />
 			) : null}
 		</div>
 	)

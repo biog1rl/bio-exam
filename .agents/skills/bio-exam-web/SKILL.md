@@ -22,8 +22,8 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 
 ## Гейты по правам
 
-- Раздел по пути и нужные права: `SECTION_PERMISSIONS`, `sectionForPath`, `canAccessSection`, `canOpenPath` живут в `packages/rbac/src/sections.ts` (их же использует Express); `app/web/lib/session/route-permissions.ts` только реэкспортирует.
-- Layout раздела оборачивает страницу в `SectionGate` (`app/web/components/auth/SectionGate.tsx`, доступ — `sectionAccess` в `app/web/lib/session/section-access.ts`): нет прав → экран «Нет доступа к разделу», HTTP 200. Это UX, а не граница данных: страница под layout выполняется параллельно, поэтому данные она берёт только через Express с правами пользователя или проверяет права сама.
+- Раздел по пути и нужные права: `SECTION_PERMISSIONS`, `sectionForPath`, `canAccessSection`, `canOpenPath` живут в `packages/rbac/src/sections.ts` (их же использует Express), web импортирует их из `@bio-exam/rbac`.
+- Layout раздела оборачивает страницу в `SectionGate` (`app/web/components/auth/SectionGate.tsx`, доступ — `sectionAccess` в `app/web/lib/navigation/section-access.ts`): нет прав → экран «Нет доступа к разделу», HTTP 200. Это UX, а не граница данных: страница под layout выполняется параллельно, поэтому данные она берёт только через Express с правами пользователя или проверяет права сама.
 - В клиенте права берутся из `useAuth().can(...)` (`app/web/components/providers/AuthProvider.tsx`), проверка по ключу права из `@bio-exam/rbac`, а не по строке роли. В web нет `pg`, `jsonwebtoken` и чтения секретов: это держит `scripts/auth-no-role-string-checks.test.mjs`.
 
 ## Навигация
@@ -44,7 +44,8 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 
 - Шапка — `PageHeader` (`app/web/components/page/PageHeader.tsx`): небольшой заголовок `h1` (serif, `text-2xl`/`text-3xl`) слева и в том же ряду справа панель: поиск `ToolbarSearch` (`app/web/components/page/ToolbarSearch.tsx`, `bg-card`, `rounded-full`) и иконочные кнопки `ToolbarButton` (`app/web/components/page/ToolbarButton.tsx`, круглые `size-10`; главное действие «+» — `tone="primary"`, остальные — контурные на `bg-card`, подсказка — `ToolbarTooltip`). Меню настроек страницы — `DropdownMenu` с `ToolbarButton` и иконкой `Settings2`.
 - В шапке нет надзаголовков, абзацев описания, плиток статистики и счётчиков. Сведения, без которых страница непонятна, — одна строка `meta` под заголовком. Отдельная карточка-обёртка вокруг шапки не ставится: отступы страницы даёт `AppLayout`.
-- Пустой список и «ничего не найдено» — `EmptyState` (`app/web/components/page/EmptyState.tsx`).
+- Пустой список и «ничего не найдено» — `EmptyState` (`app/web/components/page/EmptyState.tsx`), внутри `Panel` — `size="sm"`. Догрузка списка — `LoadMoreButton` (`app/web/components/page/LoadMoreButton.tsx`), плашка статуса в таблице — `StatusBadge` (`app/web/components/table/StatusBadge.tsx`).
+- Блок страницы с заголовком (профиль, график, настройки) — `Panel` (`app/web/components/page/Panel.tsx`): карточка `rounded-3xl`, `h2` `text-lg`, подпись `meta` под заголовком, действия `actions` справа; `titleRef` даёт фокус на заголовок после ошибки.
 - Список сущностей — таблица `app/web/components/ui/table.tsx` внутри `TableCard` (`app/web/components/table/TableCard.tsx`), `table-fixed`, у строки шапки `hover:bg-transparent`, первый столбец `pl-4`, столбец действий `w-14 pr-3`. Карточек-строк и отдельной мобильной разметки нет: на узком экране второстепенные столбцы скрываются (`hidden tab-sm:table-cell`), их значения уходят строкой `text-xs text-muted-foreground` под главную ячейку.
 - Сортировка — щелчок по заголовку, три шага (по возрастанию, по убыванию, сброс): `cycleSort` (`app/web/lib/utils/table-sort.ts`) и `SortableHead` (`app/web/components/table/SortableHead.tsx`). Числа и даты — справа, `tabular-nums`.
 - Фильтр по значениям столбца — кнопка в заголовке столбца, `ColumnFilterMenu` (`app/web/components/table/ColumnFilterMenu.tsx`): чекбоксы со счётчиками, пустой выбор значит «все»; несколько групп — `groups`, длинный список с поиском — `searchPlaceholder`, у нескольких групп обязателен общий сброс `onReset`. Сортируемый столбец с фильтром — `SortableHead` с `filter`. Пока столбец скрыт, тот же фильтр стоит в панели шапки и скрывается на той же ширине, где появляется столбец (столбец `hidden lg:table-cell` — копия `lg:hidden`).
@@ -68,7 +69,7 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 ## Результат попытки
 
 - Что показывать, решает только `attemptResultView` в `app/web/lib/tests/attempt-result-view.ts`: результат с итогом или «на проверке». Процент и баллы - `number | null`, запасного нуля нет, `null` показывается как «—» или меткой.
-- Метки результата - только компоненты `app/web/components/tests/attempt-result/`: `ReviewStatusChip`, `TeacherCheckedMark`, `AttemptReviewLine`. Экран не рисует процент, вердикт или «на проверке» мимо них.
+- Метки результата - только компоненты `app/web/components/tests/attempt-result/`: `ReviewStatusChip`, `TeacherCheckedMark`, `AttemptReviewLine`. Ячейка результата в таблице - `AttemptScore` (процент со значком вердикта, баллы «x из y» через `formatPoints`, отметка учителя или строка «на проверке»). Экран не рисует процент, вердикт или «на проверке» мимо них.
 - Фильтр `review` (`all`, `pending`, `graded`) списка попыток живёт в адресе: `app/web/lib/tests/attempts-url.ts`.
 
 ## Уведомления

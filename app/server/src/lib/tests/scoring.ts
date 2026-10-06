@@ -1,12 +1,8 @@
 import { z } from 'zod'
 
 export const SCORING_FORMULAS = ['exact_match', 'one_mistake_partial'] as const
-export type ScoringFormula = (typeof SCORING_FORMULAS)[number]
 
-export const QUESTION_TYPES = ['radio', 'checkbox', 'matching', 'short_answer', 'sequence'] as const
-export type QuestionType = (typeof QUESTION_TYPES)[number]
-
-export const QuestionScoringRuleSchema = z
+const QuestionScoringRuleSchema = z
 	.object({
 		formula: z.enum(SCORING_FORMULAS),
 		correctPoints: z.number().min(0),
@@ -21,8 +17,6 @@ export const QuestionScoringRuleSchema = z
 			})
 		}
 	})
-
-export type QuestionScoringRule = z.infer<typeof QuestionScoringRuleSchema>
 
 export const TestScoringRulesSchema = z.object({
 	radio: QuestionScoringRuleSchema,
@@ -43,8 +37,6 @@ export function createDefaultTestScoringRules(): TestScoringRules {
 		checkbox: { formula: 'one_mistake_partial', correctPoints: 2, oneMistakePoints: 1 },
 	}
 }
-
-export const DEFAULT_TEST_SCORING_RULES: TestScoringRules = createDefaultTestScoringRules()
 
 export function parseTestScoringRules(value: unknown): TestScoringRules {
 	const parsed = TestScoringRulesSchema.safeParse(value)

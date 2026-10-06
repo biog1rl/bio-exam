@@ -16,8 +16,9 @@ import { and, asc, eq, inArray } from 'drizzle-orm'
 import { db } from '../../db/index.js'
 import { answerKeys, questions } from '../../db/schema.js'
 import { logger } from '../../lib/logger.js'
+import { mapBounded } from '../../lib/map-bounded.js'
 import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
-import { mapBounded, PROMPT_READ_CONCURRENCY } from '../question-content/index.js'
+import { PROMPT_READ_CONCURRENCY } from '../question-content/index.js'
 import { toStorableFact } from './storable-fact.js'
 
 export type ExplanationReader = (question: { id: string; explanationPath: string | null }) => Promise<string | null>
@@ -43,7 +44,7 @@ export type ScoreSubmissionResult =
 	| { ok: false; reason: 'no_questions' }
 	| { ok: false; reason: 'answers_invalid'; violation: AnswerViolation }
 
-function readContent(row: { options: unknown; matchingPairs: unknown }): QuestionContent {
+export function readContent(row: { options: unknown; matchingPairs: unknown }): QuestionContent {
 	const options = OptionSchema.array().safeParse(row.options)
 	const matchingPairs = MatchingPairsSchema.safeParse(row.matchingPairs)
 	return {

@@ -1,5 +1,7 @@
+import { arrayEnvelope } from '@/lib/http/body'
 import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
 import { fetcherWith } from '@/lib/http/swr'
+import { isRecord } from '@/lib/utils/is-record'
 
 import type { GroupOwner, GroupSavePayload } from './group-form'
 
@@ -53,15 +55,6 @@ export const groupsKeys = {
 	detail: (id: string) => groupPath(id),
 	candidates: (q: string) => `/api/groups/candidates?q=${encodeURIComponent(q.trim())}`,
 	ownerOptions: () => '/api/groups/owner-options' as const,
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function arrayEnvelope<T>(body: unknown, field: string): T {
-	if (!isRecord(body) || !Array.isArray(body[field])) throw new MalformedBodyError()
-	return body as T
 }
 
 export function parseGroupsList(body: unknown): GroupsList {

@@ -13,6 +13,7 @@ import {
 	userGroups,
 	userRoles,
 } from '../../db/schema.js'
+import { isUuid } from '../../lib/uuid.js'
 
 export interface ZoneLoader {
 	topicIdsOf(userId: string): Promise<string[]>
@@ -34,14 +35,8 @@ export type ZoneSnapshot = {
 	usersWithAllowGrants?: ReadonlyArray<string>
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-export function isZoneId(value: string): boolean {
-	return UUID_PATTERN.test(value)
-}
-
 export function zoneIds(values: ReadonlyArray<string>): string[] {
-	return [...new Set(values)].filter(isZoneId)
+	return [...new Set(values)].filter(isUuid)
 }
 
 export function studentOnlyFilter(userId: AnyPgColumn): SQL {
@@ -57,7 +52,7 @@ export function studentOnlySql(userIdExpr: string, values: unknown[]): string {
 export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 	return {
 		async topicIdsOf(userId) {
-			if (!isZoneId(userId)) return []
+			if (!isUuid(userId)) return []
 			const rows = await database
 				.select({ topicId: teacherTopics.topicId })
 				.from(teacherTopics)
@@ -65,7 +60,7 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 			return rows.map((row) => row.topicId)
 		},
 		async ownedGroupIdsOf(userId) {
-			if (!isZoneId(userId)) return []
+			if (!isUuid(userId)) return []
 			const rows = await database
 				.select({ id: studentGroups.id })
 				.from(studentGroups)
@@ -73,7 +68,7 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 			return rows.map((row) => row.id)
 		},
 		async topicOfTest(testId) {
-			if (!isZoneId(testId)) return null
+			if (!isUuid(testId)) return null
 			const [row] = await database.select({ topicId: tests.topicId }).from(tests).where(eq(tests.id, testId)).limit(1)
 			return row?.topicId ?? null
 		},
@@ -89,7 +84,7 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 			return found
 		},
 		async topicOfAttempt(attemptId) {
-			if (!isZoneId(attemptId)) return null
+			if (!isUuid(attemptId)) return null
 			const [row] = await database
 				.select({ topicId: tests.topicId })
 				.from(testAttempts)
@@ -99,7 +94,7 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 			return row?.topicId ?? null
 		},
 		async groupOwnerOf(groupId) {
-			if (!isZoneId(groupId)) return null
+			if (!isUuid(groupId)) return null
 			const [row] = await database
 				.select({ ownerId: studentGroups.ownerId })
 				.from(studentGroups)
@@ -108,7 +103,7 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 			return row ? { ownerId: row.ownerId } : null
 		},
 		async isMemberOfOwnedGroup(ownerId, userId) {
-			if (!isZoneId(ownerId) || !isZoneId(userId)) return false
+			if (!isUuid(ownerId) || !isUuid(userId)) return false
 			const [row] = await database
 				.select({ userId: userGroups.userId })
 				.from(userGroups)
@@ -121,7 +116,7 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 		},
 		async studentIdsInOwnedGroups(ownerId, userIds) {
 			const wanted = zoneIds(userIds)
-			if (!isZoneId(ownerId) || wanted.length === 0) return []
+			if (!isUuid(ownerId) || wanted.length === 0) return []
 			const rows = await database
 				.selectDistinct({ userId: userGroups.userId })
 				.from(userGroups)

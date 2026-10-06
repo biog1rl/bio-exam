@@ -1,4 +1,5 @@
 import { MalformedBodyError, request, type RequestOutcome } from '@/lib/http/request'
+import { isRecord } from '@/lib/utils/is-record'
 
 export type SidebarTarget = '_self' | '_blank'
 
@@ -23,10 +24,6 @@ export const settingsKeys = {
 
 function sidebarItemPath(id: string): string {
 	return `${settingsKeys.sidebar()}/${encodeURIComponent(id)}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 export function parseSidebarItems(body: unknown): SidebarItem[] {

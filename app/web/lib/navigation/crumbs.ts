@@ -5,6 +5,26 @@ type LabelPattern = { pattern: RegExp; label: string | ((segment: string) => str
 
 const MAX_DEPTH = 12
 
+export const ASYNC_LABEL_WAIT_MS = 4000
+
+const HIDDEN_ON = /^\/login(\/|$)/
+
+const ASYNC_LABEL_ON: readonly RegExp[] = [
+	/^\/tests\/[^/]+\/[^/]+$/,
+	/^\/admin\/tests\/[^/]+$/,
+	/^\/admin\/tests\/[^/]+\/[^/]+$/,
+	/^\/admin\/tests\/question-types\/[^/]+$/,
+	/^\/admin\/tests\/[^/]+\/[^/]+\/questions\/(?:drafts\/)?[^/]+$/,
+]
+
+export function crumbsHidden(pathname: string): boolean {
+	return HIDDEN_ON.test(pathname)
+}
+
+export function waitsForAsyncLabel(href: string): boolean {
+	return ASYNC_LABEL_ON.some((pattern) => pattern.test(href))
+}
+
 const LABEL_PATTERNS: readonly LabelPattern[] = [
 	{ pattern: /^\/tests\/[^/]+\/[^/]+\/start$/, label: 'Прохождение' },
 	{ pattern: /^\/admin\/attempts\/[^/]+$/, label: 'Разбор попытки' },

@@ -1,9 +1,7 @@
 import { STUDENT_ROLE_KEY } from '@bio-exam/rbac'
 
-import { format, isValid, parseISO } from 'date-fns'
-import { ru } from 'date-fns/locale'
-
 import { FORBIDDEN_ACTION_TEXT } from '@/components/users/session-actions'
+import { formatDay } from '@/lib/utils/dates'
 
 export type AssignmentAction = 'remove' | 'locked'
 
@@ -54,11 +52,6 @@ function clean(value: string | null): string {
 	return typeof value === 'string' ? value.trim() : ''
 }
 
-function formatBirthdate(value: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, 'dd.MM.yyyy', { locale: ru }) : EMPTY_VALUE
-}
-
 export function contactRows(input: ContactInput): ContactRow[] {
 	const birthdate = clean(input.birthdate)
 	const telegram = clean(input.telegram)
@@ -67,7 +60,7 @@ export function contactRows(input: ContactInput): ContactRow[] {
 	if (!birthdate && !telegram && !phone && !email) return []
 	const phoneHref = phone.replace(/[^\d+]/g, '')
 	return [
-		{ label: 'Дата рождения', value: birthdate ? formatBirthdate(birthdate) : EMPTY_VALUE },
+		{ label: 'Дата рождения', value: birthdate ? formatDay(birthdate) : EMPTY_VALUE },
 		{ label: 'Telegram', value: telegram || EMPTY_VALUE },
 		phone && phoneHref
 			? { label: 'Телефон', value: phone, href: `tel:${phoneHref}` }

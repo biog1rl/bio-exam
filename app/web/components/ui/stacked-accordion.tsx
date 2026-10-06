@@ -5,7 +5,7 @@ import * as React from 'react'
 import { GripVerticalIcon } from 'lucide-react'
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
 
 const STACKED_ACCORDION_ITEM_CLASSNAME = cn(
 	'overflow-hidden rounded-lg border transition-all duration-300',

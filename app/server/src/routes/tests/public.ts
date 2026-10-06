@@ -13,12 +13,12 @@ import { Router, type Response } from 'express'
 
 import { db } from '../../db/index.js'
 import { questions, testAttempts, tests, topics } from '../../db/schema.js'
-import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest, testScope } from '../../services/access-policy/index.js'
 import {
 	checkAttemptAccess,
+	findVisibleTestBySlug,
 	closeExpiredSession,
 	isAssignedOrPrivileged,
 	precheckSubmit,
@@ -28,13 +28,9 @@ import {
 	visibleTestsFilter,
 	type SessionCloseReason,
 } from '../../services/attempt-sessions/index.js'
-import {
-	questionMarkdownCandidates,
-	readFirstMarkdown,
-	readQuestionTexts,
-} from '../../services/question-content/index.js'
+import { readQuestionMarkdown } from '../../services/question-content/index.js'
 import { attemptResultColumns, readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
-import { studentQuestionView } from './student-question-view.js'
+import { readStudentQuestions } from './student-question-view.js'
 
 const router = Router()
 
@@ -42,24 +38,11 @@ const router = Router()
 // Zod Schemas
 // =============================================================================
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
 const DB_RETRY_ENABLED = process.env.DB_QUERY_RETRY !== '0'
 
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function buildQuestionMarkdownCandidates(params: {
-	storedPath: string | null
-	topicSlug: string
-	testSlug: string
-	testId: string
-	questionId: string
-	fileName: 'prompt.md' | 'explanation.md'
-}): string[] {
-	return questionMarkdownCandidates(params)
-}
 
 function errorText(err: unknown): string {
 	if (err instanceof Error) {
@@ -223,62 +206,7 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 	try {
 		const { topicSlug, testSlug } = req.params as { topicSlug: string; testSlug: string }
 
-		const testRows = await withTransientDbRetry('public test by slug', () =>
-			db
-				.select({
-					id: tests.id,
-					slug: tests.slug,
-					title: tests.title,
-					description: tests.description,
-					showCorrectAnswer: tests.showCorrectAnswer,
-					timeLimitMinutes: tests.timeLimitMinutes,
-					passingScore: tests.passingScore,
-					topicId: topics.id,
-					topicSlug: topics.slug,
-					topicTitle: topics.title,
-				})
-				.from(tests)
-				.innerJoin(topics, eq(tests.topicId, topics.id))
-				.where(
-					and(
-						eq(topics.slug, topicSlug),
-						eq(topics.isActive, true),
-						eq(tests.slug, testSlug),
-						eq(tests.isPublished, true)
-					)
-				)
-				.limit(1)
-		)
-		let test = testRows[0]
-		if (!test && UUID_RE.test(testSlug)) {
-			const fallbackRows = await withTransientDbRetry('public test by id fallback', () =>
-				db
-					.select({
-						id: tests.id,
-						slug: tests.slug,
-						title: tests.title,
-						description: tests.description,
-						showCorrectAnswer: tests.showCorrectAnswer,
-						timeLimitMinutes: tests.timeLimitMinutes,
-						passingScore: tests.passingScore,
-						topicId: topics.id,
-						topicSlug: topics.slug,
-						topicTitle: topics.title,
-					})
-					.from(tests)
-					.innerJoin(topics, eq(tests.topicId, topics.id))
-					.where(
-						and(
-							eq(topics.slug, topicSlug),
-							eq(topics.isActive, true),
-							eq(tests.id, testSlug),
-							eq(tests.isPublished, true)
-						)
-					)
-					.limit(1)
-			)
-			test = fallbackRows[0]
-		}
+		const test = await withTransientDbRetry('public test by slug', () => findVisibleTestBySlug(topicSlug, testSlug))
 		if (!test) {
 			return res.status(404).json({ error: 'Test not found' })
 		}
@@ -293,44 +221,7 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 			return res.json({ test })
 		}
 
-		const questionRows = await withTransientDbRetry('public test questions list', () =>
-			db
-				.select({
-					id: questions.id,
-					type: questions.type,
-					order: questions.order,
-					points: questions.points,
-					options: questions.options,
-					matchingPairs: questions.matchingPairs,
-					promptPath: questions.promptPath,
-				})
-				.from(questions)
-				.where(eq(questions.testId, test.id))
-				.orderBy(asc(questions.order))
-		)
-		const questionTypesMap = await withTransientDbRetry('public test question types', () =>
-			getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
-		)
-
-		const promptTexts = await readQuestionTexts(
-			questionRows.map((q) => ({
-				candidates: buildQuestionMarkdownCandidates({
-					storedPath: q.promptPath,
-					topicSlug: test.topicSlug,
-					testSlug: test.slug,
-					testId: test.id,
-					questionId: q.id,
-					fileName: 'prompt.md',
-				}),
-			}))
-		)
-		const questionsWithTexts = questionRows.map((q, index) => {
-			const typeConfig = questionTypesMap[q.type]
-			if (!typeConfig) {
-				throw new Error(`Question type is not configured: ${q.type}`)
-			}
-			return studentQuestionView(q, typeConfig, promptTexts[index] ?? '')
-		})
+		const questionsWithTexts = await withTransientDbRetry('public test questions', () => readStudentQuestions(test))
 
 		res.json({
 			test,
@@ -351,40 +242,7 @@ router.get('/tests/:id', validateUUID('id'), sessionRequired(), async (req, res,
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 		const test = access.test
 
-		const questionRows = await db
-			.select({
-				id: questions.id,
-				type: questions.type,
-				order: questions.order,
-				points: questions.points,
-				options: questions.options,
-				matchingPairs: questions.matchingPairs,
-				promptPath: questions.promptPath,
-			})
-			.from(questions)
-			.where(eq(questions.testId, test.id))
-			.orderBy(asc(questions.order))
-		const questionTypesMap = await getQuestionTypeMapForTest({ testId: test.id, includeInactive: true })
-
-		const promptTexts = await readQuestionTexts(
-			questionRows.map((q) => ({
-				candidates: buildQuestionMarkdownCandidates({
-					storedPath: q.promptPath,
-					topicSlug: test.topicSlug,
-					testSlug: test.slug,
-					testId: test.id,
-					questionId: q.id,
-					fileName: 'prompt.md',
-				}),
-			}))
-		)
-		const questionsWithTexts = questionRows.map((q, index) => {
-			const typeConfig = questionTypesMap[q.type]
-			if (!typeConfig) {
-				throw new Error(`Question type is not configured: ${q.type}`)
-			}
-			return studentQuestionView(q, typeConfig, promptTexts[index] ?? '')
-		})
+		const questionsWithTexts = await readStudentQuestions(test)
 
 		res.json({
 			test,
@@ -582,16 +440,14 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			passingScore: test.passingScore,
 			readExplanation: (q) =>
 				q.explanationPath
-					? readFirstMarkdown(
-							buildQuestionMarkdownCandidates({
-								storedPath: q.explanationPath,
-								topicSlug: test.topicSlug,
-								testSlug: test.slug,
-								testId,
-								questionId: q.id,
-								fileName: 'explanation.md',
-							})
-						).then((text) => text || null)
+					? readQuestionMarkdown({
+							storedPath: q.explanationPath,
+							topicSlug: test.topicSlug,
+							testSlug: test.slug,
+							testId,
+							questionId: q.id,
+							kind: 'explanation',
+						}).then((text) => text || null)
 					: Promise.resolve(null),
 		})
 		if (!scored.ok) {

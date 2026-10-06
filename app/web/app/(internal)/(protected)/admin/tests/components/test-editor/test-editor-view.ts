@@ -1,6 +1,6 @@
 import { questionPreview } from '@/lib/tests/question-preview'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
-import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
+import { cycleSort, type TableSort, matchesNeedle, searchNeedle, sortRows } from '@/lib/utils/table-sort'
 
 import type { Question, TestFormData } from '../../types'
 
@@ -40,6 +40,17 @@ export type SavedTestSettings = {
 }
 
 export type QuestionListEntry = { question: Question; index: number }
+
+const NEW_TEST_PATH = '/admin/tests/new'
+const TOPIC_PARAM = 'topic'
+
+export function newTestHref(topicSlug?: string | null): string {
+	return topicSlug ? `${NEW_TEST_PATH}?${TOPIC_PARAM}=${encodeURIComponent(topicSlug)}` : NEW_TEST_PATH
+}
+
+export function presetTopicSlug(params: { get(name: string): string | null } | null): string | null {
+	return params?.get(TOPIC_PARAM) ?? null
+}
 
 export function parseEditorTab(value: string | null | undefined, isCreateMode: boolean): EditorTab {
 	return !isCreateMode && value === 'access' ? 'access' : 'questions'
@@ -107,7 +118,7 @@ export function questionText(question: Question): string {
 }
 
 export function filterQuestions(questions: readonly Question[], query: string): QuestionListEntry[] {
-	const needle = query.trim().toLocaleLowerCase('ru')
+	const needle = searchNeedle(query)
 	const byNumber = /^\d+$/.test(needle)
 	return questions
 		.map((question, index) => ({ question, index }))
@@ -126,8 +137,7 @@ function compareEntries(a: QuestionListEntry, b: QuestionListEntry, key: Questio
 }
 
 export function sortEntries(entries: readonly QuestionListEntry[], sort: QuestionSort): QuestionListEntry[] {
-	const sign = sort.direction === 'asc' ? 1 : -1
-	return [...entries].sort((a, b) => sign * compareEntries(a, b, sort.key) || a.index - b.index)
+	return sortRows(entries, sort, compareEntries)
 }
 
 export function nextSort(current: QuestionSort, key: QuestionSortKey): QuestionSort {
@@ -153,17 +163,9 @@ export function accessStatusCounts(rows: readonly { isActive: boolean }[]): Reco
 	return { active, inactive: rows.length - active }
 }
 
-export function studentName(row: AccessRow): string {
-	return row.name || row.login || row.userId
-}
-
 export function filterAssignments<T extends AccessRow>(rows: readonly T[], query: string, status: UserStatus): T[] {
-	const needle = query.trim().toLocaleLowerCase('ru')
-	return rows.filter((row) => {
-		if (!matchesUserStatus(row.isActive, status)) return false
-		if (!needle) return true
-		return [row.name, row.login].some((value) => value?.toLocaleLowerCase('ru').includes(needle))
-	})
+	const needle = searchNeedle(query)
+	return rows.filter((row) => matchesUserStatus(row.isActive, status) && matchesNeedle(needle, [row.name, row.login]))
 }
 
 export function totalPoints(questions: readonly Question[]): number {

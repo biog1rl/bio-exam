@@ -16,9 +16,9 @@ import {
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
-import { getInitials } from '@/helpers/getAvatarColor'
 import { versionedUrl } from '@/lib/assets/versioned-url'
 import { LOGOUT_FAILED_MESSAGE } from '@/lib/session/client'
+import { getInitials } from '@/lib/users/person-name'
 import { DEFAULT_AVATAR_COLOR, readableTextOn } from '@/lib/utils/readable-text'
 
 export function NavUser() {

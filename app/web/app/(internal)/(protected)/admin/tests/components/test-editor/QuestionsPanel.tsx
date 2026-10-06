@@ -11,18 +11,21 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 
 import { useMemo } from 'react'
 
-import { Loader2, Plus, Search, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
+import { EmptyState } from '@/components/page/EmptyState'
+import { Panel } from '@/components/page/Panel'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
+import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { SortableHead } from '@/components/table/SortableHead'
+import { TableCard } from '@/components/table/TableCard'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { formatDateTime } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { Question, QuestionDraft } from '../../types'
-import { AdminTestsSectionCard } from '../AdminTestsSectionCard'
 import { QuestionRow, questionRowId } from './QuestionRow'
 import {
 	filterQuestions,
@@ -48,35 +51,22 @@ export function QuestionsToolbar({
 }: QuestionsToolbarProps) {
 	return (
 		<div className="flex min-w-0 items-center gap-2 tab-sm:w-80">
-			<label className="relative block min-w-0 flex-1">
-				<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-				<Input
-					type="search"
-					value={query}
-					onChange={(event) => onQueryChange(event.target.value)}
-					placeholder="Текст или номер вопроса"
-					aria-label="Поиск вопросов"
-					className="h-10 rounded-full bg-card pl-9"
-				/>
-			</label>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<Button
-						size="icon"
-						className="size-10 shrink-0 rounded-full"
-						onClick={onAddQuestion}
-						disabled={creatingQuestionDraft}
-						aria-label="Добавить вопрос"
-					>
-						{creatingQuestionDraft ? (
-							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-						) : (
-							<Plus className="size-4" aria-hidden="true" />
-						)}
-					</Button>
-				</TooltipTrigger>
-				<TooltipContent>Добавить вопрос</TooltipContent>
-			</Tooltip>
+			<ToolbarSearch
+				value={query}
+				onChange={onQueryChange}
+				label="Поиск вопросов"
+				placeholder="Текст или номер вопроса"
+				className="tab-sm:w-auto tab-sm:flex-1"
+			/>
+			<ToolbarTooltip label="Добавить вопрос">
+				<ToolbarButton label="Добавить вопрос" tone="primary" onClick={onAddQuestion} disabled={creatingQuestionDraft}>
+					{creatingQuestionDraft ? (
+						<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+					) : (
+						<Plus className="size-4" aria-hidden="true" />
+					)}
+				</ToolbarButton>
+			</ToolbarTooltip>
 		</div>
 	)
 }
@@ -151,7 +141,7 @@ export function QuestionsPanel({
 	return (
 		<div className="space-y-5">
 			{questionDrafts.length > 0 ? (
-				<AdminTestsSectionCard title="Черновики вопросов" headerClassName="pb-3">
+				<Panel title="Черновики вопросов">
 					{questionDrafts.map((draft) => (
 						<div
 							key={draft.id}
@@ -163,7 +153,7 @@ export function QuestionsPanel({
 							>
 								{getQuestionDraftLabel(draft)}
 							</Link>
-							<div className="text-xs text-muted-foreground">{new Date(draft.updatedAt).toLocaleString('ru-RU')}</div>
+							<div className="text-xs text-muted-foreground">{formatDateTime(draft.updatedAt)}</div>
 							<Button
 								size="icon"
 								variant="ghost"
@@ -174,31 +164,35 @@ export function QuestionsPanel({
 							</Button>
 						</div>
 					))}
-				</AdminTestsSectionCard>
+				</Panel>
 			) : null}
 
 			{questions.length === 0 ? (
-				<div className="flex flex-col items-center gap-4 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-					<p className="text-muted-foreground">В тесте пока нет вопросов.</p>
-					<Button className="rounded-full" onClick={onAddQuestion} disabled={creatingQuestionDraft}>
-						{creatingQuestionDraft ? (
-							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-						) : (
-							<Plus className="size-4" aria-hidden="true" />
-						)}
-						Добавить первый вопрос
-					</Button>
-				</div>
+				<EmptyState
+					description="В тесте пока нет вопросов."
+					action={
+						<Button className="rounded-full" onClick={onAddQuestion} disabled={creatingQuestionDraft}>
+							{creatingQuestionDraft ? (
+								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
+							) : (
+								<Plus className="size-4" aria-hidden="true" />
+							)}
+							Добавить первый вопрос
+						</Button>
+					}
+				/>
 			) : entries.length === 0 ? (
-				<div className="flex flex-col items-center gap-4 rounded-4xl border border-dashed border-border bg-card/70 px-6 py-14 text-center">
-					<p className="text-muted-foreground">По запросу «{query.trim()}» ничего не найдено.</p>
-					<Button variant="outline" className="rounded-full" onClick={onResetQuery}>
-						Сбросить поиск
-					</Button>
-				</div>
+				<EmptyState
+					description={`По запросу «${query.trim()}» ничего не найдено.`}
+					action={
+						<Button variant="outline" className="rounded-full" onClick={onResetQuery}>
+							Сбросить поиск
+						</Button>
+					}
+				/>
 			) : (
 				<div className="space-y-2">
-					<div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-sm">
+					<TableCard>
 						<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
 							<SortableContext
 								items={entries.map((entry) => questionRowId(entry.question))}
@@ -260,7 +254,7 @@ export function QuestionsPanel({
 								</Table>
 							</SortableContext>
 						</DndContext>
-					</div>
+					</TableCard>
 					<p className="px-3 text-xs text-muted-foreground" aria-live="polite">
 						{[
 							searching ? `Показано ${entries.length} из ${questions.length}` : null,

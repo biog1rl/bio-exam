@@ -9,19 +9,6 @@ function tokenizeUnicode(source: string): string[] {
 }
 
 /**
- * Проверяет, что все слова из запроса встречаются в тексте.
- * @param {string} textLower Текст в нижнем регистре.
- * @param {string} textFold Текст после ascii-нормализации (без диакритики).
- * @param {string} query Строка запроса.
- * @returns {boolean} true, если все токены найдены; иначе false.
- */
-export function includesAllTokens(textLower: string, textFold: string, query: string): boolean {
-	const tokens = tokenizeUnicode((query || '').toLowerCase())
-	if (!tokens.length) return false
-	return tokens.every((t) => textLower.includes(t) || textFold.includes(t))
-}
-
-/**
  * Формирует HTML-сниппет вокруг первого совпадения и подсвечивает его тегом <mark>.
  * @param {string} text Исходный «плоский» текст.
  * @param {string} query Строка запроса.
@@ -110,10 +97,3 @@ const escapeHtml = (v: string) =>
 	v.replace(/[&<>"']/g, (ch) =>
 		ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '"' ? '&quot;' : '&#39;'
 	)
-
-/**
- * Экранирует спецсимволы регулярных выражений.
- * @param {string} v Входная строка.
- * @returns {string} Экранированная строка.
- */
-const escapeRegExp = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -2,12 +2,10 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 
 import { MDXRemote } from 'next-mdx-remote'
-import { serialize } from 'next-mdx-remote/serialize'
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'vitest'
 
-import { normalizeMdxSource } from './normalizeSource'
-import { buildMdxOptions } from './options'
+import { compileMdx, prepareMdxSource } from './compile'
 
 type PwnedGlobal = typeof globalThis & { __mdxPwned?: unknown; __pwn?: unknown }
 
@@ -158,10 +156,10 @@ function assertAllowlistedMarkup(html: string) {
 }
 
 async function renderUntrusted(source: string): Promise<{ html: string; compiled: boolean }> {
-	const normalized = normalizeMdxSource(source.trim())
-	let result: Awaited<ReturnType<typeof serialize>>
+	const normalized = prepareMdxSource(source)
+	let result: Awaited<ReturnType<typeof compileMdx>>
 	try {
-		result = await serialize(normalized, buildMdxOptions())
+		result = await compileMdx(normalized)
 	} catch {
 		return { html: renderToString(createElement('div', null, normalized)), compiled: false }
 	}
@@ -568,7 +566,7 @@ const STRIPPED_JSX: Array<{ name: string; source: string; forbidden: RegExp; kep
 
 for (const item of STRIPPED_JSX) {
 	test(`remarkMdxAllowlist вырезает из скомпилированного кода: ${item.name}`, async () => {
-		const { compiledSource } = await serialize(normalizeMdxSource(item.source.trim()), buildMdxOptions())
+		const { compiledSource } = await compileMdx(prepareMdxSource(item.source))
 		assert.doesNotMatch(compiledSource, item.forbidden)
 		assert.ok(compiledSource.includes(item.kept), `нет ${item.kept} в ${compiledSource}`)
 	})

@@ -36,11 +36,3 @@ export const PatchPageRuleSchema = PageRuleSchema.partial({
 	domain: true,
 	action: true,
 })
-
-// Экспорт типов
-export type Grant = z.infer<typeof GrantSchema>
-export type DeleteGrant = z.infer<typeof DeleteGrantSchema>
-export type UserGrant = z.infer<typeof UserGrantSchema>
-export type DeleteUserGrant = z.infer<typeof DeleteUserGrantSchema>
-export type PageRule = z.infer<typeof PageRuleSchema>
-export type PatchPageRule = z.infer<typeof PatchPageRuleSchema>

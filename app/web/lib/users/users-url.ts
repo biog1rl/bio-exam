@@ -1,7 +1,20 @@
 import { ROLES_LIST } from '@bio-exam/rbac'
 
 import { parseFilterList } from '@/lib/utils/column-filter'
-import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
+import {
+	cycleSort,
+	matchesNeedle,
+	parseListParam,
+	parseSortParam,
+	searchNeedle,
+	searchString,
+	sortParam,
+	sortRows,
+	type ParamsLike,
+	type TableSort,
+} from '@/lib/utils/table-sort'
+
+import { personName } from './person-name'
 
 export const USERS_PATH = '/admin/users'
 
@@ -35,19 +48,7 @@ export const DEFAULT_USERS_STATUSES: readonly UsersStatus[] = ['active']
 export const DEFAULT_USERS_SORT: UsersSort = { key: 'order', direction: 'asc' }
 
 const SORT_KEYS: readonly UsersSortKey[] = ['name', 'created']
-const MAX_ID_LENGTH = 200
 const ROLE_ORDER: readonly string[] = ROLES_LIST.map((role) => role.key)
-
-type ParamsLike = { get(name: string): string | null }
-
-function parseIds(value: string | null | undefined): string[] {
-	if (!value) return []
-	const ids = value
-		.split(',')
-		.map((part) => part.trim())
-		.filter((part) => part.length > 0 && part.length <= MAX_ID_LENGTH)
-	return [...new Set(ids)]
-}
 
 function parseStatuses(value: string | null | undefined): UsersStatus[] {
 	if (value === 'all') return []
@@ -63,36 +64,24 @@ function statusParam(statuses: readonly UsersStatus[]): string | null {
 	return isDefault ? null : statuses.join(',')
 }
 
-function parseSort(value: string | null | undefined): UsersSort {
-	if (!value) return DEFAULT_USERS_SORT
-	const direction = value.startsWith('-') ? 'desc' : 'asc'
-	const key = value.replace(/^-/, '') as UsersSortKey
-	return SORT_KEYS.includes(key) ? { key, direction } : DEFAULT_USERS_SORT
-}
-
 export function parseUsersUrl(params: ParamsLike | null | undefined): UsersUrlState {
 	return {
 		q: params?.get('q') ?? '',
-		groups: parseIds(params?.get('group')),
-		roles: parseIds(params?.get('role')),
+		groups: parseListParam(params?.get('group')),
+		roles: parseListParam(params?.get('role')),
 		statuses: parseStatuses(params?.get('status')),
-		sort: parseSort(params?.get('sort')),
+		sort: parseSortParam(params?.get('sort'), SORT_KEYS, DEFAULT_USERS_SORT),
 	}
 }
 
-function idsParam(ids: readonly string[]): string {
-	return ids.map(encodeURIComponent).join(',')
-}
-
 export function usersSearch(state: UsersUrlState): string {
-	const parts: string[] = []
-	if (state.groups.length > 0) parts.push(`group=${idsParam(state.groups)}`)
-	if (state.q.trim()) parts.push(`q=${encodeURIComponent(state.q)}`)
-	if (state.roles.length > 0) parts.push(`role=${idsParam(state.roles)}`)
-	const status = statusParam(state.statuses)
-	if (status) parts.push(`status=${status}`)
-	if (state.sort.key !== 'order') parts.push(`sort=${state.sort.direction === 'desc' ? '-' : ''}${state.sort.key}`)
-	return parts.length > 0 ? `?${parts.join('&')}` : ''
+	return searchString({
+		group: state.groups,
+		q: state.q,
+		role: state.roles,
+		status: statusParam(state.statuses),
+		sort: sortParam(state.sort, DEFAULT_USERS_SORT),
+	})
 }
 
 export function usersUrl(group: string | null): string {
@@ -112,11 +101,6 @@ export function knownOnly(requested: readonly string[], known: readonly string[]
 
 export function nextUsersSort(current: UsersSort, key: UsersSortKey): UsersSort {
 	return cycleSort(current, key, DEFAULT_USERS_SORT)
-}
-
-export function userDisplayName(user: Pick<UsersTableRow, 'firstName' | 'lastName' | 'name'>): string {
-	const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-	return fullName || user.name || '—'
 }
 
 function statusOf(user: Pick<UsersTableRow, 'isActive'>): UsersStatus {
@@ -146,29 +130,21 @@ export function filterUsers<T extends UsersTableRow>(
 	rows: readonly T[],
 	filter: Pick<UsersUrlState, 'q' | 'groups' | 'roles' | 'statuses'>
 ): T[] {
-	const needle = filter.q.trim().toLocaleLowerCase('ru')
+	const needle = searchNeedle(filter.q)
 	return rows.filter((row) => {
 		if (filter.statuses.length > 0 && !filter.statuses.includes(statusOf(row))) return false
 		if (filter.groups.length > 0 && !row.groups.some((group) => filter.groups.includes(group.id))) return false
 		if (filter.roles.length > 0 && !hasAnyRole(row.roles, filter.roles)) return false
-		if (!needle) return true
-		const fullName = [row.firstName ?? '', row.lastName ?? ''].join(' ').trim()
-		return [row.login, row.firstName, row.lastName, fullName, row.name].some((value) =>
-			value?.toLocaleLowerCase('ru').includes(needle)
-		)
+		return matchesNeedle(needle, [row.login, row.name, personName(row)])
 	})
 }
 
 function compareRows(a: UsersTableRow, b: UsersTableRow, key: UsersSortKey): number {
-	if (key === 'name') return userDisplayName(a).localeCompare(userDisplayName(b), 'ru')
+	if (key === 'name') return personName(a).localeCompare(personName(b), 'ru')
 	if (key === 'created') return Date.parse(a.createdAt) - Date.parse(b.createdAt)
 	return 0
 }
 
 export function sortUsers<T extends UsersTableRow>(rows: readonly T[], sort: UsersSort): T[] {
-	const sign = sort.direction === 'asc' ? 1 : -1
-	return rows
-		.map((row, index) => ({ row, index }))
-		.sort((a, b) => sign * compareRows(a.row, b.row, sort.key) || a.index - b.index)
-		.map((entry) => entry.row)
+	return sortRows(rows, sort, compareRows)
 }
