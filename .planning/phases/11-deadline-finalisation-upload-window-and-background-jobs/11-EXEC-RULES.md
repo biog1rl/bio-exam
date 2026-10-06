@@ -11,7 +11,8 @@
 ## Режим worktree (если в задании указано «режим worktree»)
 Этот раздел заменяет «Корень и ветка» выше.
 - Твой корень — собственный worktree, в котором ты запущен: `git rev-parse --show-toplevel` из рабочего каталога. Он лежит в `/Users/kdvornichenko/bio-exam/.claude/worktrees/` и не равен `/Users/kdvornichenko/bio-exam`. Перед первой правкой и перед возвратом проверь: `test "$(git rev-parse --show-toplevel)" != /Users/kdvornichenko/bio-exam`. Не меняй файлы основного checkout и других worktree.
-- Сначала `yarn install --immutable`, затем `yarn workspace @bio-exam/rbac build && yarn workspace @bio-exam/exam-core build`.
+- Harness создаёт worktree от `origin/HEAD` (`master`), а не от `dev`. Шаг 0, до всего остального: если `git status --short` пуст и `git rev-parse HEAD` не равен `git rev-parse dev`, выполни один раз `git reset --hard dev`. Это единственное разрешённое исключение из запрета на изменяющие git-команды. Если дерево не пустое — верни `## PLAN BLOCKED`.
+- Затем `yarn install --immutable` и `yarn workspace @bio-exam/rbac build && yarn workspace @bio-exam/exam-core build`.
 - `.planning` в worktree есть (он в git): план, CONTEXT и остальное читай оттуда. SUMMARY пиши в `.planning/phases/11-deadline-finalisation-upload-window-and-background-jobs/11-NN-SUMMARY.md` своего worktree.
 - `11-plan-files.cjs` не запускай: проверку файлов плана делает ведущая сессия.
 - Файлов `.env` в worktree нет, не копируй их: `with-test-db`, `yarn verify` и `yarn e2e` сами создают изолированное окружение, порты и базу. Если шаг требует `.env`, верни `## PLAN BLOCKED`.
