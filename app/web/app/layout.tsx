@@ -17,7 +17,6 @@ export const metadata: Metadata = {
 		template: `%s - ${siteConfig.name}`,
 	},
 	description: siteConfig.description,
-	icons: { icon: '/favicon.svg' },
 	robots: 'noindex, nofollow',
 }
 
