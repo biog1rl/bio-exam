@@ -25,6 +25,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { AttemptChart } from '@/components/charts/AttemptChart'
 import { ChartPeriodPicker } from '@/components/charts/ChartPeriodPicker'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
 import { Panel } from '@/components/page/Panel'
 import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
@@ -883,9 +884,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 						<div className="space-y-3">
 							<AttemptsTable attempts={visibleAttempts} colorBySlug={topicColorBySlug} />
 							{visibleCount < filteredAttempts.length && (
-								<Button variant="outline" className="rounded-full" onClick={() => setVisibleCount((c) => c + 5)}>
-									Загрузить ещё
-								</Button>
+								<LoadMoreButton onClick={() => setVisibleCount((c) => c + 5)} className="justify-start" />
 							)}
 						</div>
 					)}

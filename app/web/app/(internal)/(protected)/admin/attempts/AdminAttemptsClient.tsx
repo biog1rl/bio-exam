@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { DateRange } from 'react-day-picker'
 
 import { ru } from 'date-fns/locale'
-import { CalendarRange, Clock3, Loader2 } from 'lucide-react'
+import { CalendarRange, Clock3 } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
 import { ToolbarButton } from '@/components/page/ToolbarButton'
 import { ToolbarSearch } from '@/components/page/ToolbarSearch'
@@ -457,21 +458,12 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 						</TableCard>
 					</div>
 					{merged.hasMore ? (
-						<div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-							<Button
-								variant="outline"
-								className="rounded-full bg-card"
-								onClick={() => void loadMore()}
-								disabled={loadingMore || isLoading}
-								aria-busy={loadingMore || undefined}
-							>
-								{loadingMore ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-								Показать ещё
-							</Button>
-							<p className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-								Показано {merged.rows.length} из {merged.total}
-							</p>
-						</div>
+						<LoadMoreButton
+							onClick={() => void loadMore()}
+							loading={loadingMore}
+							disabled={isLoading && !loadingMore}
+							summary={`Показано ${merged.rows.length} из ${merged.total}`}
+						/>
 					) : null}
 				</div>
 			)}

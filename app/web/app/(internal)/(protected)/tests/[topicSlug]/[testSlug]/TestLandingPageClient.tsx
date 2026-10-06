@@ -8,6 +8,7 @@ import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { EmptyState } from '@/components/page/EmptyState'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
 import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
@@ -156,11 +157,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 						</Table>
 					</TableCard>
 				)}
-				{allRows.length < total && (
-					<Button variant="outline" size="sm" className="rounded-full" onClick={handleLoadMore} disabled={loadingMore}>
-						{loadingMore ? 'Загрузка...' : 'Загрузить ещё'}
-					</Button>
-				)}
+				{allRows.length < total && <LoadMoreButton onClick={() => void handleLoadMore()} loading={loadingMore} />}
 			</section>
 		</div>
 	)
