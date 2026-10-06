@@ -25,6 +25,7 @@ import {
 } from '@/lib/charts/config'
 import { failureMessage } from '@/lib/http/errors'
 import { usersKeys, usersListFetcher } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 import { isStudentOnly } from '@/lib/users/student-card'
 import { cn } from '@/lib/utils/cn'
 import type { UserRow } from '@/types/users'
@@ -59,11 +60,6 @@ function sameConfig(a: unknown, b: unknown): boolean {
 	return JSON.stringify(a) === JSON.stringify(b)
 }
 
-function displayName(user: UserRow): string {
-	const full = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-	return full || user.name || user.login
-}
-
 function StudentPicker({
 	students,
 	value,
@@ -85,7 +81,7 @@ function StudentPicker({
 					className="h-10 min-w-0 flex-1 justify-between rounded-full bg-card tab-sm:w-56 tab-sm:flex-none"
 					aria-label="Ученик для превью"
 				>
-					<span className="truncate">{selected ? displayName(selected) : 'Выберите ученика'}</span>
+					<span className="truncate">{selected ? personName(selected) : 'Выберите ученика'}</span>
 					<ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 				</Button>
 			</PopoverTrigger>
@@ -104,13 +100,13 @@ function StudentPicker({
 									{students.map((student) => (
 										<CommandItem
 											key={student.id}
-											value={`${displayName(student)} ${student.login} ${student.id}`}
+											value={`${personName(student)} ${student.login} ${student.id}`}
 											onSelect={() => {
 												onChange(student.id)
 												setOpen(false)
 											}}
 										>
-											<span className="min-w-0 flex-1 truncate">{displayName(student)}</span>
+											<span className="min-w-0 flex-1 truncate">{personName(student)}</span>
 											<span className="text-xs text-muted-foreground">{student.login}</span>
 										</CommandItem>
 									))}
@@ -189,7 +185,7 @@ export function ChartSettingsPageClient() {
 		() =>
 			(studentsQuery.data?.rows ?? [])
 				.filter((user) => isStudentOnly(user.roles))
-				.sort((a, b) => displayName(a).localeCompare(displayName(b), 'ru')),
+				.sort((a, b) => personName(a).localeCompare(personName(b), 'ru')),
 		[studentsQuery.data]
 	)
 

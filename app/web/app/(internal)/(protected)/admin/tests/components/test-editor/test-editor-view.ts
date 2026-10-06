@@ -164,10 +164,6 @@ export function accessStatusCounts(rows: readonly { isActive: boolean }[]): Reco
 	return { active, inactive: rows.length - active }
 }
 
-export function studentName(row: AccessRow): string {
-	return row.name || row.login || row.userId
-}
-
 export function filterAssignments<T extends AccessRow>(rows: readonly T[], query: string, status: UserStatus): T[] {
 	const needle = query.trim().toLocaleLowerCase('ru')
 	return rows.filter((row) => {

@@ -1,5 +1,7 @@
 import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
 
+import { personName } from '../users/person-name'
+
 export const MIN_CANDIDATE_QUERY = 2
 
 export const CANDIDATES_HINT = 'Введите минимум 2 символа'
@@ -13,12 +15,6 @@ export const TEACHER_DELETE_NOTE = 'Ученики группы пропадут
 const GENERIC_SAVE_ERROR = 'Не удалось сохранить. Попробуйте ещё раз.'
 const FORBIDDEN_ACTION = 'Недостаточно прав для этого действия. Обратитесь к администратору.'
 const STUDENTS_ONLY = 'В группу учителя можно добавить только учеников.'
-
-export type PersonName = {
-	name?: string | null
-	firstName?: string | null
-	lastName?: string | null
-}
 
 export type GroupOwner = {
 	id: string
@@ -40,13 +36,6 @@ export function candidatesState(input: {
 	if (input.query.trim() !== input.debounced.trim() || input.loading) return 'loading'
 	if (input.error) return 'error'
 	return input.count === 0 ? 'empty' : 'list'
-}
-
-export function personLabel(person: PersonName): string {
-	const name = person.name?.trim()
-	if (name) return name
-	const fullName = [person.firstName ?? '', person.lastName ?? ''].join(' ').trim()
-	return fullName || '—'
 }
 
 export function groupSaveErrorText(status?: number): string {
@@ -87,7 +76,7 @@ export function groupSavePayload(input: {
 
 export function ownerLabel(owner: GroupOwner | null | undefined): string {
 	if (!owner) return ADMINS_OWNER_LABEL
-	return personLabel(owner)
+	return personName(owner)
 }
 
 export function groupsEmptyState(input: {

@@ -13,7 +13,6 @@ import {
 	groupsSearch,
 	ownerLabel,
 	parseGroupsUrl,
-	personLabel,
 	sortGroups,
 } from './group-form'
 
@@ -48,14 +47,6 @@ test('candidatesState: подсказка, поиск, ошибка, пусто 
 	assert.equal(candidatesState({ ...base, count: 3 }), 'list')
 })
 
-test('personLabel: имя из name, иначе имя и фамилия', () => {
-	assert.equal(personLabel({ name: null, firstName: 'Анна', lastName: 'Иванова' }), 'Анна Иванова')
-	assert.equal(personLabel({ name: 'Анна И.', firstName: 'Анна', lastName: 'Иванова' }), 'Анна И.')
-	assert.equal(personLabel({ name: '  ', firstName: 'Анна', lastName: null }), 'Анна')
-	assert.equal(personLabel({ name: null, firstName: null, lastName: null }), '—')
-	assert.equal(personLabel({ name: 'Пётр' }), 'Пётр')
-})
-
 test('groupSaveErrorText: тексты ошибок сохранения группы', () => {
 	assert.equal(groupSaveErrorText(400), 'В группу учителя можно добавить только учеников.')
 	assert.equal(groupSaveErrorText(403), 'Недостаточно прав для этого действия. Обратитесь к администратору.')
@@ -87,7 +78,7 @@ test('ownerLabel: администраторы или имя учителя', ()
 	assert.equal(ownerLabel(undefined), 'Администраторы')
 	assert.equal(
 		ownerLabel({ id: 't1', name: 'Мария Петровна', firstName: 'Мария', lastName: 'Петрова' }),
-		'Мария Петровна'
+		'Мария Петрова'
 	)
 	assert.equal(ownerLabel({ id: 't1', name: null, firstName: 'Мария', lastName: 'Петрова' }), 'Мария Петрова')
 })

@@ -19,7 +19,6 @@ import {
 	savedSettings,
 	settingsDirty,
 	sortEntries,
-	studentName,
 	totalPoints,
 } from './test-editor-view'
 
@@ -141,10 +140,6 @@ describe('доступ учеников', () => {
 		{ userId: 'u3', name: 'Вера', login: null, isActive: true },
 	]
 	const userIds = (list: { userId: string }[]) => list.map((row) => row.userId)
-
-	it('имя, затем логин, затем id', () => {
-		expect(rows.map(studentName)).toEqual(['Анна Петрова', 'boris', 'Вера'])
-	})
 
 	it('отмеченные статусы: один — фильтр по нему, ни одного или оба — все', () => {
 		expect(accessUserStatus(['active'])).toBe('active')

@@ -9,18 +9,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { personName } from '@/lib/users/person-name'
 import type { UserStatus } from '@/lib/users/status-filter'
 import { assignmentAction, studentRowSubtitle } from '@/lib/users/student-card'
 import { cn } from '@/lib/utils/cn'
 import { formatDay } from '@/lib/utils/dates'
 
 import type { StudentAssignment, UserItem } from './test-editor-types'
-import { filterAssignments, studentName } from './test-editor-view'
-
-function getUserDisplayName(user: UserItem) {
-	const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ')
-	return user.name || fullName || user.login || user.id
-}
+import { filterAssignments } from './test-editor-view'
 
 interface StudentAccessToolbarProps {
 	query: string
@@ -84,7 +80,7 @@ export function StudentAccessToolbar({
 									</CommandEmpty>
 									<CommandGroup>
 										{candidates.map((user) => {
-											const name = getUserDisplayName(user)
+											const name = personName(user, user.id)
 											return (
 												<CommandItem
 													key={user.id}
@@ -184,7 +180,7 @@ export function StudentAccessPanel({
 					</TableHeader>
 					<TableBody>
 						{rows.map((row) => {
-							const name = studentName(row)
+							const name = personName(row, row.userId)
 							const subtitle = studentRowSubtitle(row)
 							const removing = removingUserId === row.userId
 							const statusText = row.isActive ? 'Активен' : 'Неактивен'

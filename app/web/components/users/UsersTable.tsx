@@ -20,7 +20,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { highlightText } from '@/lib/search/highlight'
 import { usersKeys } from '@/lib/users/api'
 import { groupsCell, groupsTitle, showReinvite } from '@/lib/users/invite-form'
-import { nextUsersSort, userDisplayName, type UsersSort, type UsersSortKey } from '@/lib/users/users-url'
+import { personName } from '@/lib/users/person-name'
+import { nextUsersSort, type UsersSort, type UsersSortKey } from '@/lib/users/users-url'
 import { cn } from '@/lib/utils/cn'
 import { formatDay } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
@@ -159,7 +160,7 @@ export function UsersTable({
 								))
 							: rows.map((user) => {
 									const href = profileHref(user)
-									const name = userDisplayName(user)
+									const name = personName(user)
 									const login = user.login || '—'
 									const active = Boolean(user.isActive)
 									const statusText = active ? 'Активен' : 'Неактивен'

@@ -91,6 +91,7 @@ import {
 	type UserAttemptRow,
 	type UserTestAssignment,
 } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
 import { usersUrl } from '@/lib/users/users-url'
 import { cn } from '@/lib/utils/cn'
@@ -666,7 +667,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		)
 	}
 
-	const displayName = user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.login
+	const displayName = personName(user)
 	const userGroups = user.groups ?? []
 	const contacts = contactRows(user)
 

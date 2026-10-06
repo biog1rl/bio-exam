@@ -3,6 +3,8 @@ import { ROLES_LIST } from '@bio-exam/rbac'
 import { parseFilterList } from '@/lib/utils/column-filter'
 import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
 
+import { personName } from './person-name'
+
 export const USERS_PATH = '/admin/users'
 
 export type UsersStatus = 'active' | 'inactive'
@@ -114,11 +116,6 @@ export function nextUsersSort(current: UsersSort, key: UsersSortKey): UsersSort 
 	return cycleSort(current, key, DEFAULT_USERS_SORT)
 }
 
-export function userDisplayName(user: Pick<UsersTableRow, 'firstName' | 'lastName' | 'name'>): string {
-	const fullName = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-	return fullName || user.name || '—'
-}
-
 function statusOf(user: Pick<UsersTableRow, 'isActive'>): UsersStatus {
 	return user.isActive ? 'active' : 'inactive'
 }
@@ -160,7 +157,7 @@ export function filterUsers<T extends UsersTableRow>(
 }
 
 function compareRows(a: UsersTableRow, b: UsersTableRow, key: UsersSortKey): number {
-	if (key === 'name') return userDisplayName(a).localeCompare(userDisplayName(b), 'ru')
+	if (key === 'name') return personName(a).localeCompare(personName(b), 'ru')
 	if (key === 'created') return Date.parse(a.createdAt) - Date.parse(b.createdAt)
 	return 0
 }
