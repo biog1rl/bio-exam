@@ -1,0 +1,72 @@
+{
+	"mode": "quick",
+	"env": {
+		"node": "v24.17.0",
+		"platform": "darwin 27.0.0 arm64",
+		"cpu": "Apple M4",
+		"cpuCount": 10,
+		"totalMemBytes": 17179869184,
+		"postgres": "17.10 (Homebrew)",
+		"pgPoolMax": 20,
+		"storage": "memory",
+		"commit": "af8410fc0343aa06335ebf00621f613058817db9"
+	},
+	"seed": {
+		"users": 2,
+		"topics": 1,
+		"tests": 1,
+		"questions": 3,
+		"prompts": 3,
+		"explanations": 1,
+		"images": 0,
+		"objects": 4,
+		"bytes": 1879,
+		"assignments": 1,
+		"groups": 0,
+		"largestTest": {
+			"id": "3c5087ec-0af5-4c01-83bc-a4711bc3ef4b",
+			"slug": "bench-1-01",
+			"topicSlug": "bench-topic-1",
+			"questions": 3
+		},
+		"largestTopic": {
+			"id": "5fe5dd12-88f9-414a-8e21-fd126ca8dadd",
+			"slug": "bench-topic-1",
+			"tests": 1,
+			"bytes": 1879
+		}
+	},
+	"search": {
+		"pgPoolMax": 20,
+		"queries": [
+			"клетка"
+		],
+		"runsPerQuery": 5,
+		"warmupCallsExcluded": 3,
+		"limit": 10,
+		"byAccess": {
+			"admin": {
+				"availableCategories": 5,
+				"queriesPerCall": {
+					"min": 5,
+					"max": 5
+				},
+				"maxConcurrentQueries": 1,
+				"calls": 5,
+				"p50Ms": 1.53,
+				"p95Ms": 1.6,
+				"minMs": 1.46,
+				"maxMs": 1.6,
+				"perQuery": {
+					"клетка": {
+						"results": 3,
+						"p50Ms": 1.53,
+						"p95Ms": 1.6,
+						"minMs": 1.46,
+						"maxMs": 1.6
+					}
+				}
+			}
+		}
+	}
+}

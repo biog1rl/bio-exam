@@ -1,0 +1,21 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/010-module-decomposition.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": true,
+  "title": "Plan 010: Decompose the auth and test-domain god modules",
+  "summary": "Plan to refactor high-churn auth and test-domain modules into focused extracted modules with unchanged public APIs.",
+  "scope": ["auth", "test-domain", "module decomposition", "admin router", "TestRunner", "route registration", "React hooks"],
+  "cross_refs": [
+    "plans/003-auth-session-security.md",
+    "plans/004-attempt-session-integrity.md",
+    "plans/005-client-draft-durability.md",
+    "plans/006-assets-user-privacy.md",
+    "plans/007-frontend-runtime.md",
+    "plans/008-proven-performance.md",
+    "plans/009-drizzle-metadata.md"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": "Classified as SPEC per manifest override. Document is a project execution plan with steps, scope, and verification criteria. Content suggests project plan or requirements document, but manifest type overrides heuristic classification."
+}

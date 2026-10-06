@@ -1,0 +1,12 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/docs/adr/0005-decompose-by-concept.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-0005: Делить код по понятиям, а не по маршрутам и типам данных",
+  "summary": "Decompose code by conceptual modules rather than routes and data types, replacing Plan 010.",
+  "scope": ["code organization", "module decomposition", "question content", "test attempt lifecycle", "routing"],
+  "cross_refs": [],
+  "locked": true,
+  "precedence": 0
+}

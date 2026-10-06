@@ -1,0 +1,29 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/004-attempt-session-integrity.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 004: Enforce assignment and atomic attempt sessions",
+  "summary": "Technical specification for enforcing test session integrity, atomicity, and authorization constraints.",
+  "scope": [
+    "session constraints",
+    "attempt atomicity",
+    "authorization",
+    "test submissions",
+    "TestRunner",
+    "database transactions",
+    "draft answers",
+    "telemetry",
+    "concurrency"
+  ],
+  "cross_refs": [
+    "plans/001",
+    "plans/003",
+    "app/server/src/routes/tests/public.ts",
+    "app/server/src/db",
+    "app/web/components/tests/TestRunner.tsx",
+    "app/web/lib/tests/api.ts"
+  ],
+  "locked": false,
+  "precedence": 3
+}

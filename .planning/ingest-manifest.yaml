@@ -1,0 +1,58 @@
+# Manifest for /gsd-ingest-docs (bio-exam, 2026-10-02).
+# Lower precedence number = higher priority.
+# ADRs are locked decisions; the 2026-10-02 review outranks the 2026-07-27 audit plans.
+docs:
+  - path: docs/adr/0001-express-owns-data-and-access-policy.md
+    type: ADR
+    precedence: 0
+  - path: docs/adr/0002-shared-exam-core-package.md
+    type: ADR
+    precedence: 0
+  - path: docs/adr/0003-verification-before-refactoring.md
+    type: ADR
+    precedence: 0
+  - path: docs/adr/0004-storage-port-two-adapters.md
+    type: ADR
+    precedence: 0
+  - path: docs/adr/0005-decompose-by-concept.md
+    type: ADR
+    precedence: 0
+  - path: plans/011-architecture-deepening.md
+    type: SPEC
+    precedence: 1
+  - path: plans/beget-migration.md
+    type: SPEC
+    precedence: 2
+  - path: plans/001-project-operating-baseline.md
+    type: SPEC
+    precedence: 3
+  - path: plans/002-dependency-security.md
+    type: SPEC
+    precedence: 3
+  - path: plans/003-auth-session-security.md
+    type: SPEC
+    precedence: 3
+  - path: plans/004-attempt-session-integrity.md
+    type: SPEC
+    precedence: 3
+  - path: plans/005-client-draft-durability.md
+    type: SPEC
+    precedence: 3
+  - path: plans/006-assets-user-privacy.md
+    type: SPEC
+    precedence: 3
+  - path: plans/007-frontend-runtime.md
+    type: SPEC
+    precedence: 3
+  - path: plans/008-proven-performance.md
+    type: SPEC
+    precedence: 3
+  - path: plans/009-drizzle-metadata.md
+    type: SPEC
+    precedence: 3
+  - path: plans/010-module-decomposition.md
+    type: SPEC
+    precedence: 3
+  - path: plans/README.md
+    type: DOC
+    precedence: 4

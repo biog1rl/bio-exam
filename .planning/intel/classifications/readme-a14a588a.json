@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/README.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Implementation Plans",
+  "summary": "Index and execution guide for 11 implementation plans with priorities, effort, dependencies, and coverage mapping.",
+  "scope": [
+    "implementation plans",
+    "execution order",
+    "dependencies",
+    "priority management",
+    "test coverage",
+    "security",
+    "technical debt",
+    "architecture",
+    "performance"
+  ],
+  "cross_refs": [
+    "ADR-0005"
+  ],
+  "locked": false,
+  "precedence": 4
+}

@@ -1,0 +1,12 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/011-architecture-deepening.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "011. Углубление модулей: архитектурный обзор",
+  "summary": "Architectural analysis identifying eight defects, eight module candidates for deepening (C1-C8), and recommended phased implementation plan.",
+  "scope": ["modules", "architecture", "RBAC", "authentication", "question templates", "attempt reviews", "storage", "user search", "test runner", "session management"],
+  "cross_refs": ["../docs/adr/0001-express-owns-data-and-access-policy.md", "../docs/adr/0005-decompose-by-concept.md", "plans/beget-migration.md"],
+  "locked": false,
+  "precedence": 1
+}

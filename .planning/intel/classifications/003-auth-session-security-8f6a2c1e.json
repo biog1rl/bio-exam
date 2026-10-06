@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/003-auth-session-security.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 003: Make authentication revocable and race-safe",
+  "summary": "Implement revocable, race-safe authentication with short-lived tokens, atomic refresh, and session revocation.",
+  "scope": ["authentication", "session management", "JWT access tokens", "refresh tokens", "RBAC", "account throttling", "logout revocation"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

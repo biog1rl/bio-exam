@@ -1,0 +1,22 @@
+{
+  "mode": "interactive",
+  "parallelization": true,
+  "commit_docs": false,
+  "model_profile": "balanced",
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "_auto_chain_active": false,
+    "nyquist_validation": true,
+    "use_worktrees": false,
+    "build_command": "yarn typecheck && yarn lint",
+    "test_command": "yarn verify",
+    "ui_phase": true
+  },
+  "granularity": "standard",
+  "graphify": {
+    "enabled": true
+  },
+  "response_language": "Russian"
+}

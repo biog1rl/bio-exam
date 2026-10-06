@@ -1,0 +1,12 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/007-frontend-runtime.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 007: Harden frontend API and editor runtime behavior",
+  "summary": "Plan to harden frontend runtime: implement typed JSON/SWR adapter, remove render-time global access, fix React Doctor errors, stabilize listeners.",
+  "scope": ["apiFetch", "JSON/SWR adapter", "CodeActionMenuPlugin", "useDebounce", "toolbar callbacks", "speech recognition", "React Doctor"],
+  "cross_refs": ["plans/001-project-operating-baseline.md", "plans/002-dependency-security.md", "plans/003-auth-session-security.md"],
+  "locked": false,
+  "precedence": 3
+}

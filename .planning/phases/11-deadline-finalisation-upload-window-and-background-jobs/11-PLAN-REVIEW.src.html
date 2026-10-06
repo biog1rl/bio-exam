@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Дедлайн и окно фото</title>
+<link rel="stylesheet" href="htmlplan.css">
+<script src="htmlplan.js" defer></script>
+<style data-mock-shared>
+  .ui { font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0a0a0a; background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; }
+  .ui.pad, .ui .pad { padding: 14px; }
+  .ui h2 { font-size: 17px; font-weight: 600; margin: 0; }
+  .ui p { margin: 6px 0 0; }
+  .ui .muted { color: #737373; }
+  .ui .dim { color: #a3a3a3; }
+  .ui .sec { border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px; background: #fff; }
+  .ui .fail { border-color: #fecdd3; background: #fff1f2; }
+  .ui.ok, .ui .ok { background: #ecfdf5; }
+  .ui .inp { border: 1px solid #e5e5e5; border-radius: 6px; padding: 7px 10px; background: #fff; }
+  .ui .ro { background: #f5f5f5; }
+  .ui .btn { display: inline-block; border: 1px solid #e5e5e5; border-radius: 6px; padding: 5px 10px; font-weight: 500; font-size: 13px; background: #fff; }
+  .ui .btn.pri { background: #0a0a0a; color: #fff; border-color: #0a0a0a; }
+  .ui .timer { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
+  .ui .red { color: #dc2626; }
+  .ui .note { border: 1px dashed #d4d4d4; border-radius: 8px; padding: 10px; background: #fff; margin-top: 10px; }
+  .ui .txt { background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; padding: 6px 10px; margin-top: 4px; white-space: pre-wrap; }
+  .ui .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ui .lbl { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .ui .hint { font-size: 12px; color: #737373; margin-top: 4px; }
+  .ui .grp { font-size: 12px; text-transform: uppercase; color: #737373; letter-spacing: .04em; margin-bottom: 8px; }
+  .ui .small { font-size: 12px; }
+</style>
+<body>
+
+<header>
+  <h1>Сдача по дедлайну и окно для фото</h1>
+  <doc-changes new="31" changed="74"></doc-changes>
+  <details class="thread"><summary>Зачем · цель фазы и решения пользователя</summary>
+    <doc-quote via="doc" from="11-CONTEXT.md · граница фазы">Сервер сам закрывает попытку теста с лимитом времени в дедлайн плюс существующий грейс, не теряя сохранённый текст; окно дозагрузки фото после окончания времени задаётся автором теста и решается одной серверной функцией по времени базы…</doc-quote>
+    <doc-quote via="doc" from="D-04 · решение пользователя">Если в черновике нет ни одного сохранённого ответа, попытка не создаётся: сессия закрывается как сейчас… Хотя бы один ответ — попытка сдаётся сервером.</doc-quote>
+    <doc-quote via="doc" from="D-07 · решение пользователя">По умолчанию окно 15 минут; автор меняет в настройках теста рядом с лимитом времени.</doc-quote>
+    <doc-quote via="doc" from="D-21 · решение пользователя">Сервер сдаёт по дедлайну только свежие сессии: дедлайн плюс льгота прошли не раньше 24 часов назад… Более старые открытые сессии… закрываются close_reason = 'expired' без попытки</doc-quote>
+    <doc-quote via="doc" from="D-14">Неотправленный локальный текст (WAL) не стирается вслепую: модуль сравнивает его с ответами, которые сервер сохранил в попытке…</doc-quote>
+  </details>
+</header>
+
+<main>
+<doc-plan>
+
+<!-- ═════ 1 · сервер сдаёт сам ═════ -->
+<doc-claim>
+  <p>Сервер сам сдаёт попытку с лимитом, когда ученик не вернулся.</p>
+  <doc-machine name="sess" caption="Зелёный пунктир — новый путь.">
+<script type="text/plain">
+machine sess initial open
+state open             # Таймер идёт. Черновик уходит на сервер.
+state grace            # Таймер вышел. Сервер ещё 2 минуты берёт черновик.
+state overdue          # Льгота прошла. Ученика нет на странице.
+state client   final   # Ученик сдал сам.
+state deadline final   # Сервер сдал черновик.
+state expired  final   # Закрыта без попытки: черновик пуст или старше 24 ч.
+
+| open   | grace | overdue | deadline |
+| client | .     | expired | .        |
+
+open    -submit-> client   : /submit
+open    -timer->  grace    : 00:00
+grace   -submit-> client   : автосдача
+grace   -late->   overdue  : +2 мин
++ overdue -due->  deadline : есть ответ
+overdue -empty->  expired  : пусто
+</script>
+    <div data-state="open"><doc-mock frame="none" w="380"><template><div class="ui pad"><div class="row"><b>Вопрос 2 из 5</b><span class="timer">03:12</span></div><div class="inp" style="margin-top:8px">митоз</div></div></template></doc-mock></div>
+    <div data-state="grace"><doc-mock frame="none" w="380"><template><div class="ui pad"><section class="sec"><h2>Время вышло</h2><p class="muted">⟳ Отправляем ответы…</p></section><div class="inp ro" style="margin-top:8px">митоз</div></div></template></doc-mock></div>
+    <div data-state="overdue"><doc-mock frame="none" w="380"><template><div class="ui pad"><span class="muted">Вкладка закрыта или нет связи. Черновик лежит на сервере.</span></div></template></doc-mock></div>
+    <div data-state="client"><doc-mock frame="none" w="380"><template><div class="ui pad ok"><h2>Результат</h2><p class="muted">4 из 5 баллов</p></div></template></doc-mock></div>
+    <div data-state="deadline"><doc-mock frame="none" w="380"><template><div class="ui pad ok"><h2>Ответ принят</h2><p>Время вышло, ответы приняты автоматически.</p></div></template></doc-mock></div>
+    <div data-state="expired"><doc-mock frame="none" w="380"><template><div class="ui pad"><h2>Время вышло, ответы не засчитаны</h2><p class="muted">Лимит времени этой попытки истёк, поэтому ответы не приняты.</p><p><span class="btn pri">Начать заново</span></p></div></template></doc-mock></div>
+  </doc-machine>
+
+  <doc-claim>
+    <p>Одна функция сдаёт черновик тем же путём, что ручная сдача.</p>
+    <doc-calls title="Сдача по дедлайну" caption="Оценка и вставка попытки — те же, что у кнопки «Завершить».">
+<script type="text/plain">
++ **finalizeSessionByDeadline**(sessionId, owner?)   @ app/server/src/services/attempt-sessions/deadline.ts:1
++   scoreSubmission({ answers: draft_answers })      @ app/server/src/services/scored-attempt/facts.ts:56
++   submitAttempt({ source: 'deadline' })            @ app/server/src/services/attempt-sessions/submit.ts:114   -- clientAttemptId deadline:<sid>
++   closeExpiredSession(sessionId)                   @ app/server/src/services/attempt-sessions/submit.ts:107   -- пусто, старше 24 ч, ошибка данных
+</script>
+    </doc-calls>
+    <doc-ask id="submitted-at">
+      <p>Какую дату сдачи сервер ставит попытке?</p>
+      <label><input type="radio" name="submittedAt" value="timer-end" checked> Конец таймера <small>started_at + лимит, дата не сдвигается</small></label>
+      <label><input type="radio" name="submittedAt" value="finalize-time"> Момент, когда сервер сдал <small>через день в истории будет «сегодня»</small></label>
+    </doc-ask>
+    <div data-if="submittedAt=finalize-time"><doc-note tone="warn">Окно для фото всё равно идёт от конца таймера. Ученик увидит сдачу «сегодня» и уже закрытое окно.</doc-note></div>
+    <doc-claim at="app/server/src/services/attempt-sessions/deadline.ts:1">
+      <p><b>deadline.ts</b> · finalizeSessionByDeadline()</p>
+      <doc-code title="deadline.ts · sketch" lang="ts">
+<script type="text/plain">
+export async function finalizeSessionByDeadline(sessionId: string, owner?: Owner) {
+  for (let i = 0; i < 3; i++) {
+    const s = await readOverdueSession(sessionId, owner)
+    if (s.kind !== 'overdue') return s
+    if (s.staleHours > DEADLINE_FINALIZE_MAX_AGE_HOURS) return closeAsExpired(sessionId)
+    const answers = keepScorableAnswers(s.draft, s.questions)
+    if (Object.keys(answers).length === 0) return closeAsExpired(sessionId)
+    try {
+      const scored = await scoreSubmission({ testId: s.testId, answers })
+      const r = await submitAttempt({ source: 'deadline', scored, expectedDraft: s.draft })
+      if (r.kind !== 'draft_changed') return toOutcome(r)
+    } catch (err) {
+      if (isTransientDbError(err)) throw err
+      logger.error({ err, sessionId }, 'deadline finalize failed')
+      return closeAsExpired(sessionId)
+    }
+  }
+  throw new Error('draft kept changing')
+}
+</script>
+        <doc-pin line="5" title="D-21: старше 24 ч — без попытки">Черновик в строке остаётся.</doc-pin>
+        <doc-pin line="6" tone="info" title="Ответ на удалённый вопрос уходит в лог"></doc-pin>
+        <doc-pin line="7" title="D-04: пустой черновик — без попытки"></doc-pin>
+        <doc-pin line="10" title="Черновик изменился — новый круг"></doc-pin>
+        <doc-pin line="15" tone="info" title="Ошибка данных закрывает сессию">Иначе каждый запрос повторяет сбой.</doc-pin>
+      </doc-code>
+    </doc-claim>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Запросы ученика сдают просроченную сессию по пути.</p>
+    <doc-calls title="Ленивые пути" caption="Каждый путь вызывает финализацию вне своей транзакции.">
+<script type="text/plain">
+~ POST /tests/:id/start                          @ app/server/src/routes/tests/public.ts:345
++   **finalizeExpiredOpenSession**(test, user)   @ app/server/src/services/attempt-sessions/deadline.ts:1   -- до транзакции старта
+    startAttemptSession()                        @ app/server/src/services/attempt-sessions/sessions.ts:80
+~ PATCH /tests/:id/sessions/:sessionId/answers   @ app/server/src/routes/tests/public.ts:360
+    saveSessionDraft()                           @ app/server/src/services/attempt-sessions/sessions.ts:124   -- не пишет в просроченную
++   finalizeSessionByDeadline(sid, owner)        @ app/server/src/services/attempt-sessions/deadline.ts:1   -- ответ 404
+~ POST /tests/:id/submit                         @ app/server/src/routes/tests/public.ts:401
++   finalizeSessionByDeadline(sid, owner)        @ app/server/src/services/attempt-sessions/deadline.ts:1   -- ответ 409 с видом попытки
++ GET /tests/:id/sessions/:sessionId             @ app/server/src/routes/tests/public.ts:358
++   **readSessionFate**(sid, owner)              @ app/server/src/services/attempt-sessions/deadline.ts:1   -- open, submitted, expired
+</script>
+    </doc-calls>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Фоновая задача раз в 30 секунд сдаёт брошенные сессии.</p>
+    <doc-calls title="Модуль фоновых задач" caption="Задачи стартуют только из index.ts, тесты их не получают.">
+<script type="text/plain">
+~ app.listen()                                     @ app/server/src/index.ts:12
++   **createBackgroundJobs**({ log }).start()      @ app/server/src/services/background-jobs/index.ts:1
+
++ **finalize-deadlines** · каждые 30 000 мс        @ app/server/src/services/background-jobs/jobs.ts:1
++   pg_try_advisory_xact_lock(ns, hashtext(name))  @ app/server/src/services/background-jobs/registry.ts:1   -- занято: пропуск
++   **closeStaleOpenSessions**()                   @ app/server/src/services/attempt-sessions/deadline.ts:1   -- старше 24 ч: expired
++   **findSessionsDueForFinalization**(50)         @ app/server/src/services/attempt-sessions/deadline.ts:1   -- льгота + 60 с
++   finalizeSessionByDeadline(sid)                 @ app/server/src/services/attempt-sessions/deadline.ts:1   -- по одной, до 20 с на прогон
+
++ **jobs:run** name                                @ app/server/src/scripts/jobs-run.ts:1   -- reconcile-outcomes только так
+</script>
+    </doc-calls>
+    <doc-ask id="unassigned">
+      <p>Сдавать ли попытку, если тест сняли с ученика во время попытки?</p>
+      <label><input type="radio" name="unassigned" value="finalize" checked> Да, сдавать <small>сессию открыли законно, черновик не пропадает</small></label>
+      <label><input type="radio" name="unassigned" value="close"> Нет, закрыть без попытки <small>задача проверяет назначение и публикацию</small></label>
+    </doc-ask>
+    <doc-claim at="app/server/src/services/background-jobs/registry.ts:1">
+      <p><b>registry.ts</b> · прогон под замком</p>
+      <doc-code title="registry.ts · sketch" lang="ts">
+<script type="text/plain">
+async function runLocked(job: Job, signal: AbortSignal): Promise<JobReport> {
+  return db.transaction(async (lockTx) => {
+    const [{ locked }] = await lockTx.execute(sql`
+      SELECT pg_try_advisory_xact_lock(${JOB_LOCK_NAMESPACE}::int, hashtext(${job.name})) AS locked`)
+    if (!locked) return { skipped: 'locked' }
+    return job.runOnce({ signal })
+  })
+}
+</script>
+        <doc-pin line="5" title="Второй экземпляр API пропускает прогон"></doc-pin>
+        <doc-pin line="6" tone="info" title="Работа идёт другими соединениями пула"></doc-pin>
+      </doc-code>
+    </doc-claim>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Три пути на одну сессию дают ровно одну попытку.</p>
+    <doc-code title="attempt-deadline.test.ts · sketch" lang="ts">
+<script type="text/plain">
+test('чтение, задача и сдача на одну сессию дают одну попытку', async () => {
+  for (let round = 0; round < 5; round++) {
+    const sid = await overdueSessionWithDraft(world, { answers: { [q1]: 'митоз' } })
+    const [fate, job, submit] = await Promise.all([
+      readFate(world, sid),
+      jobs.runNow('finalize-deadlines'),
+      postSubmit(world, sid, randomUUID()),
+    ])
+    const rows = await attemptsOfSession(world, sid)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].submitSource).toBe('deadline')
+    expect([fate.attemptId, submit.body.attemptId]).toEqual([rows[0].id, rows[0].id])
+  }
+})
+</script>
+      <doc-pin line="9" title="Одну строку дают FOR UPDATE и уникальные индексы">Замок задачи только экономит работу.</doc-pin>
+    </doc-code>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Перезапуск API ждёт запросы и прогон задачи, потом закрывает пул.</p>
+    <doc-code title="shutdown.ts · sketch" lang="ts">
+<script type="text/plain">
+export function createShutdown({ server, jobs, pool, drainMs = 25_000, log, exit }: ShutdownDeps) {
+  let started = false
+  return async (signal: string) => {
+    if (started) return exit(1)
+    started = true
+    log.info({ signal }, 'shutdown started')
+    const closed = new Promise<void>((done) => server.close(() => done()))
+    const idle = setInterval(() => server.closeIdleConnections(), 1000)
+    const drained = await Promise.race([
+      Promise.all([closed, jobs.stop()]).then(() => true),
+      sleep(drainMs).then(() => false),
+    ])
+    clearInterval(idle)
+    if (!drained) server.closeAllConnections()
+    await pool.end()
+    log.info('shutdown complete')
+    exit(0)
+  }
+}
+</script>
+      <doc-pin line="15" title="Пул закрывается последним">Сейчас index.ts:31 закрывает пул сразу после server.close().</doc-pin>
+    </doc-code>
+    <doc-note tone="warn"><strong>Шаг на сервере</strong> У сервиса api нужен stop_grace_period не меньше 30 с. У базы idle_in_transaction_session_timeout должен быть 0 или не меньше 30 с.</doc-note>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 2 · только чтение после дедлайна ═════ -->
+<doc-claim>
+  <p>После дедлайна ученик читает свой текст, но не меняет его.</p>
+  <doc-mock frame="none" w="420" caption="Состояние сбоя: связи нет, автосдача не дошла."><template>
+<div class="ui pad">
+  <section class="sec fail" data-ref="panel"><h2>Время вышло</h2><p class="small">Нет связи с сервером. Ответы, которые успели сохраниться, будут приняты в любом случае. Остальное страница отправит сама, если связь появится в течение 2 минут, — не закрывайте её. Если связь уже есть, нажмите «Отправить ответы».</p><p><span class="btn">Отправить ответы</span></p></section>
+  <div class="lbl" style="margin-top:12px">Вопрос 2. Как называется непрямое деление клетки?</div>
+  <div class="inp ro" data-ref="ro">митоз</div>
+  <div class="row" style="margin-top:10px"><span><span class="btn">Назад</span> <span class="btn">Далее</span></span><span class="timer red" data-ref="timer">00:00</span></div>
+</div></template>
+    <doc-pin ref="panel" anchor="tr" title="Панель вместо оверлея">Стоит над вопросом на всех ширинах.</doc-pin>
+    <doc-pin ref="ro" anchor="r" title="readOnly, не disabled">Текст читается и копируется.</doc-pin>
+    <doc-pin ref="timer" anchor="l" title="00:00 до исхода"></doc-pin>
+  </doc-mock>
+
+  <doc-claim>
+    <p>Дедлайн считается по часам сервера, а не устройства.</p>
+    <doc-code title="server-clock.ts · sketch" lang="ts">
+<script type="text/plain">
+export function createServerClock(deviceNow: () => number = Date.now) {
+  let offsetMs = 0
+  return {
+    anchor(serverNow: string | undefined) {
+      if (serverNow) offsetMs = Date.parse(serverNow) - deviceNow()
+    },
+    now: () => deviceNow() + offsetMs,
+    offsetMs: () => offsetMs,
+  }
+}
+</script>
+      <doc-pin line="4" title="Якорь: /start, тело 409 и судьба сессии">Ответ PATCH якорь не двигает: таймер не дёргается.</doc-pin>
+    </doc-code>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Сбой автосдачи больше не открывает поля для ввода.</p>
+    <doc-code src="app/web/components/tests/attempt-lifecycle/lifecycle.ts" lines="580-584" hl="582">
+      <doc-pin line="582" tone="risk" title="Сейчас поля снова открыты после дедлайна">После 11-11 поля остаются только для чтения. Автосдача повторяется на online и visible.</doc-pin>
+    </doc-code>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 3 · «Ответ принят» и недошедший текст ═════ -->
+<doc-claim>
+  <p>Ученик видит «Ответ принят», а недошедший текст остаётся на экране.</p>
+  <doc-mock frame="none" w="440"><template>
+<div class="ui pad ok">
+  <h2 data-ref="h">Ответ принят</h2>
+  <p>Время вышло, ответы приняты автоматически.</p>
+  <p data-ref="win">Фото можно добавить до 14:35 <span class="muted">осталось 12 мин</span></p>
+  <div class="note" data-ref="note">
+    <b>Часть ответа, набранная без связи, не дошла до сервера</b>
+    <p class="muted small">Засчитан ответ, который успел сохраниться. Ниже — текст с этого устройства, его нельзя изменить.</p>
+    <div class="row" style="margin-top:8px"><span class="small"><b>Вопрос 2</b></span><span class="btn">К вопросу 2</span></div>
+    <div class="txt">митоз — деление ядра, при котором хромосомы</div>
+  </div>
+</div></template>
+    <doc-pin ref="h" anchor="r" offset="12,0" title="Фокус на заголовке">И для ручной сдачи.</doc-pin>
+    <doc-pin ref="win" anchor="r" title="Строка окна">Только если в тесте есть открытый вопрос.</doc-pin>
+    <doc-pin ref="note" anchor="br" title="Пометка D-14">Только если текст расходится с попыткой.</doc-pin>
+  </doc-mock>
+
+  <doc-claim>
+    <p>Ответ 409 серверной сдачи несёт попытку и время сервера.</p>
+    <doc-schema id="err409" lang="ts" diff title="packages/exam-core/src/attempt-result.ts" caption="Все новые поля необязательные: старая вкладка читает новый ответ.">
+<script type="text/plain">
+ export const SubmitAttemptErrorSchema = z.object({
+ 	error: z.enum([
+ 		SUBMIT_ERROR_CODES.alreadySubmitted,
+ 		SUBMIT_ERROR_CODES.timeExpired,
+ 		SUBMIT_ERROR_CODES.answersInvalid,
+ 	]),
+ 	attemptId: z.string().uuid().nullable().optional(),
+ 	reason: z.enum(ANSWER_VIOLATION_REASONS).optional(),
+ 	limit: z.number().int().positive().optional(),
++	submitSource: z.enum(ATTEMPT_SUBMIT_SOURCES).optional(),  // 'deadline' → «Ответ принят»
++	uploadClosesAt: z.string().nullable().optional(),
++	serverNow: z.string().optional(),
++	attempt: AttemptViewSchema.optional(),                    // вид попытки ученика, как в 200
+ 	// … остальные поля без изменений
+ })
+</script>
+    </doc-schema>
+  </doc-claim>
+
+  <doc-claim>
+    <p>На возврате модуль сначала спрашивает сервер о своей сессии.</p>
+    <doc-calls title="Открытие страницы теста с лимитом" caption="Сейчас /start молча начинает новую сессию и стирает WAL.">
+<script type="text/plain">
+~ lifecycle.init()                                      @ app/web/components/tests/attempt-lifecycle/lifecycle.ts:800
++   GET /tests/:id/sessions/:sessionId                  @ app/web/lib/tests/api.ts:113   -- до /start
++   **SessionFateSchema**.parse(body)                   @ packages/exam-core/src/attempt-session.ts:30
++   submitted, deadline → «Ответ принят», сверка WAL     @ app/web/components/tests/attempt-lifecycle/lifecycle.ts:800
++   submitted, client → «Попытка уже сдана»              @ app/web/components/tests/attempt-lifecycle/lifecycle.ts:800
++   expired, текст в WAL → «Время вышло» с текстом       @ app/web/components/tests/attempt-lifecycle/lifecycle.ts:800
+    open → startTestSession() как сейчас                @ app/web/lib/tests/api.ts:113
+</script>
+    </doc-calls>
+    <doc-claim at="packages/exam-core/src/attempt-session.ts:30">
+      <p><b>attempt-session.ts</b> · SessionFateSchema</p>
+      <doc-code title="attempt-session.ts · sketch" lang="ts">
+<script type="text/plain">
+export const SessionFateSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('open'), sessionId: z.string(), startedAt: z.string(), serverNow: z.string() }),
+  z.object({
+    state: z.literal('submitted'),
+    attemptId: z.string(),
+    submitSource: z.enum(ATTEMPT_SUBMIT_SOURCES),
+    uploadClosesAt: z.string().nullable(),
+    serverNow: z.string(),
+    attempt: AttemptViewSchema,
+  }),
+  z.object({ state: z.literal('expired'), serverNow: z.string() }),
+])
+</script>
+      </doc-code>
+    </doc-claim>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Модуль стирает локальный текст только после сверки с попыткой.</p>
+    <doc-code title="wal-reconcile.ts · sketch" lang="ts">
+<script type="text/plain">
+export function unsentTexts(wal: WalAnswers, attempt: AttemptView, textIds: Set<string>): UnsentEntry[] {
+  const stored = new Map(attempt.results.map((r) => [r.questionId, String(r.userAnswer ?? '').trim()]))
+  return Object.entries(wal)
+    .filter(([id]) => textIds.has(id))
+    .map(([id, value]) => ({ id, local: String(value).trim() }))
+    .filter(({ id, local }) => local !== '' && local !== stored.get(id))
+}
+</script>
+      <doc-pin line="4" tone="info" title="Только текстовые вопросы">short_text, sequence_digits, open. Выбор не сверяется.</doc-pin>
+      <doc-pin line="6" title="Есть расхождение — запись test-unsent-">WAL удаляется только после успешной записи.</doc-pin>
+    </doc-code>
+    <doc-ask id="unsent-reload">
+      <p>Показывать ли недошедший текст после перезагрузки страницы?</p>
+      <label><input type="radio" name="unsentReload" value="no" checked> Нет, только до перезагрузки <small>запись живёт до нового старта или выхода</small></label>
+      <label><input type="radio" name="unsentReload" value="hide-button"> Да, пока ученик не нажмёт «Скрыть» <small>новая кнопка и восстановление пометки</small></label>
+    </doc-ask>
+    <div data-if="unsentReload=hide-button"><doc-note tone="info">Модуль при открытии страницы читает запись test-unsent- и показывает пометку над стартом теста. Это правка 11-13 и 11-14.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Новая сессия и «время вышло» тоже не стирают текст молча.</p>
+    <doc-code src="app/web/components/tests/attempt-lifecycle/lifecycle.ts" lines="408-420" hl="411,418" caption="422 TIME_EXPIRED тоже перестаёт стирать WAL сразу: текст виден в диалоге до «Начать заново».">
+      <doc-pin line="411" tone="warn" title="Сейчас: WAL старой сессии стирается">11-14 сначала переносит неподтверждённый текст в test-unsent-.</doc-pin>
+      <doc-pin line="418" tone="warn" title="Вторая точка удаления"></doc-pin>
+    </doc-code>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 4 · окно для фото ═════ -->
+<doc-claim>
+  <p>Автор задаёт окно для фото, и сервер принимает фото только в нём.</p>
+  <doc-mock frame="none" w="400"><template>
+<div class="ui pad">
+  <div class="grp">Прохождение</div>
+  <div class="lbl">Лимит времени, минут</div>
+  <div class="inp">40</div>
+  <div class="lbl" style="margin-top:12px" data-ref="field">Окно для фото после окончания времени, мин</div>
+  <div class="inp">15</div>
+  <div class="hint">Отсчёт — от сдачи или конца таймера, что раньше. 0 — фото только до сдачи.</div>
+</div></template>
+    <doc-pin ref="field" anchor="tr" title="Только при открытом вопросе">Тип open выключен до фазы 17.</doc-pin>
+  </doc-mock>
+
+  <doc-claim>
+    <p>Сервер считает конец окна один раз, при создании попытки.</p>
+    <doc-code title="submit.ts · sketch" lang="sql">
+<script type="text/plain">
+upload_closes_at =
+  CASE WHEN has_open_question AND window_minutes > 0
+       THEN LEAST(submitted_at, started_at + make_interval(mins => time_limit_minutes))
+            + make_interval(mins => window_minutes)
+       ELSE NULL
+  END
+</script>
+      <doc-pin line="3" title="От более раннего момента">Сдача в льготе даёт окно от конца таймера. Без лимита LEAST даёт submitted_at.</doc-pin>
+    </doc-code>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Одна функция по времени базы решает, принять ли фото.</p>
+    <doc-code title="upload-window.ts · sketch" lang="ts">
+<script type="text/plain">
+export function uploadWindowState(i: UploadWindowInput): UploadWindowState {
+  if (i.closedAt) return { open: false, reason: 'session_closed', closesAt: null }
+  if (i.submittedAt) {
+    if (!i.uploadClosesAt) return { open: false, reason: 'no_window', closesAt: null }
+    if (i.now < i.uploadClosesAt) return { open: true, closesAt: i.uploadClosesAt }
+    return { open: false, reason: 'window_closed', closesAt: i.uploadClosesAt }
+  }
+  if (i.timeLimitMinutes === null) return { open: true, closesAt: null }
+  const closesAt = addMinutes(i.startedAt, i.timeLimitMinutes + i.windowMinutes)
+  if (i.now < closesAt) return { open: true, closesAt }
+  return { open: false, reason: 'window_closed', closesAt }
+}
+</script>
+      <doc-pin line="1" tone="info" title="now — clock_timestamp() базы">photoUploadWindow() читает его тем же запросом, что строку сессии.</doc-pin>
+      <doc-pin line="6" title="Отказ: 422 UPLOAD_WINDOW_CLOSED">Окна нет или сессия закрыта — 422 UPLOAD_WINDOW_NONE.</doc-pin>
+    </doc-code>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Строка у ученика считает минуты от времени сервера.</p>
+    <doc-code title="lib/tests/upload-window.ts · sketch" lang="ts">
+<script type="text/plain">
+export function uploadWindowView(closesAt: string | null, now: number) {
+  if (!closesAt) return null
+  const left = Date.parse(closesAt) - now
+  const at = formatCloseTime(closesAt, now)
+  if (left <= 0) {
+    return { tone: 'closed', text: `Время для добавления фото закончилось в ${at}` }
+  }
+  const m = Math.ceil(left / 60_000)
+  const text = `Фото можно добавить до ${at}`
+  if (left < 60_000) {
+    return { tone: 'soon', text, count: 'закроется меньше чем через минуту' }
+  }
+  if (m <= 5) return { tone: 'soon', text, count: `закроется через ${m} мин` }
+  return { tone: 'open', text, count: `осталось ${m} мин` }
+}
+</script>
+      <doc-pin line="1" tone="info" title="now = Date.now() + serverOffsetMs"></doc-pin>
+      <doc-pin line="4" title="HH:mm, другой день — d MMM, HH:mm"></doc-pin>
+    </doc-code>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 5 · вкладки, сеть, выход ═════ -->
+<doc-claim>
+  <p>Вкладки, сеть и выход не теряют сессию и ответы ученика.</p>
+  <doc-mock frame="terminal" title="e2e · session.spec, auth.spec" w="470"><template><span class="dim">›</span> две вкладки, кука доступа удалена
+  вкладка A  <b>POST /api/auth/refresh</b>  200
+  вкладка B  ждёт замок, сессия уже новая
+<span class="g">✓</span> refresh: 1 запрос · replay: 0 · /login: нет
+<span class="dim">›</span> ученик выходит через меню
+<span class="g">✓</span> test-*-&lt;userId&gt;: 0 ключей
+<span class="g">✓</span> question-draft-wal-*-&lt;userId&gt;: 0 ключей
+<span class="g">✓</span> bio-exam:session-refresh: нет</template></doc-mock>
+
+  <doc-claim>
+    <p>Все вкладки браузера обновляют сессию одним запросом.</p>
+    <doc-calls title="Одно обновление на браузер" caption="Где Web Locks нет, поведение прежнее: один refresh на вкладку.">
+<script type="text/plain">
+~ refreshOnce()                                         @ app/web/lib/session/client.ts:78
++   **createRefreshCoordinator**().coordinate(perform)  @ app/web/lib/session/refresh-coordinator.ts:1
++     navigator.locks.request('bio-exam:session-refresh')  @ app/web/lib/session/refresh-coordinator.ts:1   -- ждёт до 20 000 мс
++     seq изменился → ok без запроса                    @ app/web/lib/session/refresh-coordinator.ts:1
++     POST /api/auth/refresh, запись seq и срока        @ app/web/lib/session/refresh-coordinator.ts:1
++ keep-alive соседней вкладки по событию storage        @ app/web/lib/session/keep-alive.ts:38   -- переносит своё продление
+</script>
+    </doc-calls>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Явный выход стирает ключи ответов этого ученика.</p>
+    <doc-code src="app/web/components/providers/AuthProvider.tsx" lines="115-122" hl="116">
+      <doc-pin line="116" title="Здесь встаёт очистка">Шесть префиксов с -&lt;userId&gt;, ещё раз на pagehide. Выход по 401 ключи не трогает.</doc-pin>
+    </doc-code>
+    <doc-ask id="logout-drain">
+      <p>Досылать ли неотправленные ответы перед выходом?</p>
+      <label><input type="radio" name="logoutDrain" value="no" checked> Нет, стирать вместе с ключами <small>выход сразу; logout отзывает сессию раньше pagehide</small></label>
+      <label><input type="radio" name="logoutDrain" value="drain"> Да, сначала досылка, потом выход <small>выход ждёт ответа сервера</small></label>
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Попытка без сессии сама получает её при возврате связи.</p>
+    <doc-code title="lifecycle.ts · sketch (CR-05)" lang="ts">
+<script type="text/plain">
+function retryStartWithoutSession(): void {
+  if (phase !== 'active' || session || timeLimitMinutes !== null) return
+  api.start(testId)
+    .then((server) => applyServerSession(server, null))
+    .then(() => queuePendingAnswers())
+}
+</script>
+      <doc-pin line="1" tone="info" title="Триггеры: online, visible, таймер SAVE_RETRY_DELAYS_MS">Счётчик визитов не растёт.</doc-pin>
+    </doc-code>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Досылка при уходе со страницы не затирает новый ответ старым.</p>
+    <doc-code title="save-queue.ts · sketch (CR-03)" lang="ts">
+<script type="text/plain">
+function drain({ keepalive }: DrainOptions): void {
+  for (const [key, entry] of pending) {
+    const olderInFlight = (inFlight.get(key)?.version ?? Infinity) < entry.version
+    send(key, entry.value, { keepalive, provisional: olderInFlight })
+  }
+}
+</script>
+      <doc-pin line="4" title="provisional: WAL не подтверждается">После ответа старого запроса очередь шлёт последнее значение ещё раз.</doc-pin>
+    </doc-code>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ shared · not changing ═════ -->
+<doc-claim aux="shared">
+  <p>Общее: одна аддитивная миграция 0030.</p>
+  <doc-schema id="m0030" lang="sql" title="app/server/drizzle/0030_attempt_upload_window.sql" caption="Старые тесты получают 15. Старые попытки получают NULL.">
+<script type="text/plain">
+SET LOCAL lock_timeout = '5s';
+
+ALTER TABLE tests
+  ADD COLUMN photo_upload_window_minutes integer NOT NULL DEFAULT 15
+  CHECK (photo_upload_window_minutes BETWEEN 0 AND 120);
+
+ALTER TABLE test_attempts
+  ADD COLUMN upload_closes_at timestamptz NULL;
+</script>
+  </doc-schema>
+</doc-claim>
+
+<doc-claim aux="scope">
+  <p>Не меняется: загрузка фото, проверка учителем, ротация токена на сервере.</p>
+  <ul>
+    <li>Маршрутов фото нет. Фазы 12 и 13 вызывают только photoUploadWindow().</li>
+    <li>Кнопки «Готово, фото загружены» нет. Это фаза 14.</li>
+    <li>Тесты без лимита времени сервер не сдаёт (D-03).</li>
+    <li>Коды и статусы 409 ATTEMPT_ALREADY_SUBMITTED, 422 TIME_EXPIRED, 404 остаются прежними.</li>
+    <li>Ротация refresh-токена на сервере и обновление сессии в proxy.ts не меняются.</li>
+  </ul>
+</doc-claim>
+
+</doc-plan>
+</main>
+</body>
+</html>
