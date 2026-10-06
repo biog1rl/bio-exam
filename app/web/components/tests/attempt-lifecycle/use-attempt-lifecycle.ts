@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
-import { saveAttemptDraft, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
+import { readTestSession, saveAttemptDraft, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import type { PublicTestDetail, PublicTestQuestion } from '@/lib/tests/types'
 
 import type { ClientAttemptStorage } from '../client-attempt-id'
@@ -106,7 +106,12 @@ function createBrowserAttemptLifecycle(input: UseAttemptLifecycleInput, channel:
 		timeLimitMinutes: input.test.timeLimitMinutes ?? null,
 		storage: browserAttemptStorage(),
 		visibility: browserVisibility(),
-		api: { start: startTestSession, saveDraft: saveAttemptDraft, submit: submitPublicTestAnswers },
+		api: {
+			start: startTestSession,
+			saveDraft: saveAttemptDraft,
+			submit: submitPublicTestAnswers,
+			readSession: readTestSession,
+		},
 		onNotice: channel.emit,
 	})
 }

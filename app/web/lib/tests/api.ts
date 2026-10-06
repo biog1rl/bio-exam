@@ -1,10 +1,12 @@
 import {
 	AttemptViewSchema,
+	SessionFateSchema,
 	SubmitAttemptErrorSchema,
 	type AttemptSession,
 	type AttemptSubmitSource,
 	type AttemptView,
 	type SaveAttemptDraftRequest,
+	type SessionFate,
 	type SubmitAttemptRequest,
 } from '@bio-exam/exam-core'
 
@@ -150,6 +152,12 @@ export async function fetchChartData(testId: string, params: { from?: string; to
 
 export async function startTestSession(testId: string): Promise<AttemptSession> {
 	return fetchAttemptJson<AttemptSession>(`/api/tests/public/tests/${segment(testId)}/start`, { method: 'POST' })
+}
+
+export async function readTestSession(testId: string, sessionId: string): Promise<SessionFate> {
+	return fetchAttemptJson<SessionFate>(`/api/tests/public/tests/${segment(testId)}/sessions/${segment(sessionId)}`, {
+		parse: (body) => SessionFateSchema.parse(body),
+	})
 }
 
 export const KEEPALIVE_BODY_LIMIT_BYTES = 60_000

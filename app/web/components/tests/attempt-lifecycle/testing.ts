@@ -2,6 +2,7 @@ import type {
 	AttemptSession,
 	AttemptView,
 	SaveAttemptDraftRequest,
+	SessionFate,
 	SubmitAttemptRequest,
 	TelemetryMap,
 } from '@bio-exam/exam-core'
@@ -168,8 +169,9 @@ export function response(status: number): AttemptDraftSaveResult {
 type StartStep = AttemptSession | Error
 type SaveStep = AttemptDraftSaveResult | Deferred<AttemptDraftSaveResult>
 type SubmitStep = AttemptView | Error | Deferred<AttemptView | Error>
+type FateStep = SessionFate | Error
 
-export function fakeAttemptApi(starts: StartStep[] = []) {
+export function fakeAttemptApi(starts: StartStep[] = [], input: { fates?: FateStep[] } = {}) {
 	const startQueue: StartStep[] = [...starts]
 	const saveQueue: SaveStep[] = []
 	const submitQueue: SubmitStep[] = []
@@ -200,12 +202,22 @@ export function fakeAttemptApi(starts: StartStep[] = []) {
 		if (value instanceof Error) throw value
 		return value
 	})
-	const api: AttemptLifecycleApi = { start, saveDraft, submit }
+	const fateQueue: FateStep[] = [...(input.fates ?? [])]
+	const readSession = vi.fn(async (_testId: string, _sessionId: string): Promise<SessionFate> => {
+		const next = fateQueue.length > 1 ? fateQueue.shift() : fateQueue[0]
+		if (!next) throw new Error('unexpected readSession')
+		if (next instanceof Error) throw next
+		return next
+	})
+	const api: AttemptLifecycleApi = input.fates
+		? { start, saveDraft, submit, readSession }
+		: { start, saveDraft, submit }
 	return {
 		api,
 		start,
 		saveDraft,
 		submit,
+		readSession,
 		queueStart(...steps: StartStep[]) {
 			startQueue.length = 0
 			startQueue.push(...steps)

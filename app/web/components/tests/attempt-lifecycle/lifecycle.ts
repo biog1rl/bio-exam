@@ -4,6 +4,7 @@ import {
 	type AttemptSession,
 	type AttemptView,
 	type SaveAttemptDraftRequest,
+	type SessionFate,
 	type SubmitAttemptRequest,
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
@@ -96,6 +97,7 @@ export type AttemptLifecycleApi = {
 		options: { keepalive: boolean }
 	): Promise<AttemptDraftSaveResult>
 	submit(testId: string, request: SubmitAttemptRequest): Promise<AttemptView>
+	readSession?: (testId: string, sessionId: string) => Promise<SessionFate>
 }
 export type AttemptVisibilityEvent = 'hidden' | 'visible' | 'pagehide' | 'online'
 export type AttemptVisibility = {
@@ -140,6 +142,13 @@ export const TIME_UP_PAUSE_MS = 1500
 export const ONE_MINUTE_LEFT_SECONDS = 60
 
 type QueueValue = AnswerValue | TelemetryMap
+type AcceptedOutcome = {
+	attemptId: string | null
+	attempt: AttemptView | null
+	uploadClosesAt: string | null
+	serverNow: string | null
+}
+type ReadSession = NonNullable<AttemptLifecycleApi['readSession']>
 
 const IDLE_QUEUE: SaveQueueState = {
 	pending: [],
@@ -425,6 +434,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	function applyServerSession(server: AttemptSession, cached: CachedSession | null): void {
 		const cachedSessionId = cached?.sessionId ?? null
 		removeStoredUnsent()
+		carryReplacedText(readWal(storage, keys.wal, cachedSessionId), server.sessionId)
 		if (session?.sessionId !== server.sessionId) deadlinePassed = false
 		if (cached && cached.sessionId !== server.sessionId) {
 			clearAttemptKeys(storage, keys, 'session-replaced')
@@ -681,7 +691,6 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			pending,
 		})
 		if (entries.length === 0) {
-			unsent = null
 			safeRemove(storage, keys.wal)
 			return
 		}
@@ -699,7 +708,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		}
 	}
 
-	function keepExpiredUnsent(): void {
+	function keepExpiredUnsent(certain: boolean): void {
 		const entries = unsentTexts({
 			local: answers,
 			stored: [],
@@ -707,7 +716,78 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			questionOrder: questionIds,
 			pending,
 		})
-		unsent = entries.length > 0 ? { certain: true, entries } : null
+		if (entries.length > 0) unsent = { certain, entries }
+	}
+
+	function carryReplacedText(wal: WalRecord | null, serverSessionId: string): void {
+		if (!wal || wal.sessionId === null || wal.sessionId === serverSessionId) return
+		const entries = unsentTexts({
+			local: wal.answers,
+			stored: null,
+			textQuestionIds,
+			questionOrder: questionIds,
+			pending: new Set(wal.pending),
+		})
+		if (entries.length === 0) return
+		unsent = { certain: false, entries }
+		writeUnsent(storage, keys.unsent, { v: 1, testId, attemptId: null, certain: false, entries })
+	}
+
+	function walHasText(sessionId: string): boolean {
+		const wal = readWal(storage, keys.wal, sessionId)
+		if (!wal || (wal.sessionId !== null && wal.sessionId !== sessionId)) return false
+		const entries = unsentTexts({
+			local: wal.answers,
+			stored: [],
+			textQuestionIds,
+			questionOrder: questionIds,
+			pending: new Set(wal.pending),
+		})
+		return entries.length > 0
+	}
+
+	function closeSession(current: CachedSession, event: 'already-submitted' | 'time-expired'): void {
+		queue?.discard()
+		clearAttemptKeys(storage, keys, event)
+		closedSession = current
+		session = null
+		pending = new Set()
+		telemetryPending = false
+	}
+
+	function applyAccepted(accepted: AcceptedOutcome, current: CachedSession): void {
+		queue?.discard()
+		clearAttemptKeys(storage, keys, 'finalized')
+		keepUnsent(accepted.attemptId, accepted.attempt)
+		closedSession = current
+		session = null
+		pending = new Set()
+		telemetryPending = false
+		serverClock.observe(accepted.serverNow)
+		result = accepted.attempt
+		uploadClosesAt = accepted.uploadClosesAt ?? accepted.attempt?.uploadClosesAt ?? null
+		acceptedAutomatically = true
+		alreadySubmittedAttemptId = accepted.attemptId
+		phase = 'submitted'
+		emit()
+		if (accepted.attempt) notice({ kind: 'submitted', result: accepted.attempt })
+	}
+
+	function applyTimeExpired(current: CachedSession, { certain }: { certain: boolean }): void {
+		keepExpiredUnsent(certain)
+		closeSession(current, 'time-expired')
+		alreadySubmittedAttemptId = null
+		phase = 'blocked'
+		blockReason = 'time-expired'
+		emit()
+	}
+
+	function applyAlreadySubmitted(current: CachedSession, attemptId: string | null): void {
+		closeSession(current, 'already-submitted')
+		alreadySubmittedAttemptId = attemptId
+		phase = 'blocked'
+		blockReason = 'already-submitted'
+		emit()
 	}
 
 	function applySubmitFailure(failure: SubmitFailure, current: CachedSession, auto: boolean): 'settled' | 'retry' {
@@ -723,33 +803,18 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			return 'settled'
 		}
 		if (failure.kind === 'finalized') {
-			queue?.discard()
-			clearAttemptKeys(storage, keys, 'finalized')
-			keepUnsent(failure.attemptId, failure.attempt)
-			closedSession = current
-			session = null
-			pending = new Set()
-			telemetryPending = false
-			serverClock.observe(failure.serverNow)
-			result = failure.attempt
-			uploadClosesAt = failure.uploadClosesAt ?? failure.attempt?.uploadClosesAt ?? null
-			acceptedAutomatically = true
-			alreadySubmittedAttemptId = failure.attemptId
-			phase = 'submitted'
-			emit()
-			if (failure.attempt) notice({ kind: 'submitted', result: failure.attempt })
+			applyAccepted(failure, current)
 			return 'settled'
 		}
-		if (failure.kind === 'already-submitted' || failure.kind === 'time-expired') {
-			if (failure.kind === 'time-expired') keepExpiredUnsent()
-			queue?.discard()
-			clearAttemptKeys(storage, keys, failure.kind)
-			closedSession = current
-			session = null
-			pending = new Set()
-			telemetryPending = false
-			alreadySubmittedAttemptId = failure.kind === 'already-submitted' ? failure.attemptId : null
-		} else if (failure.kind === 'not-found') {
+		if (failure.kind === 'already-submitted') {
+			applyAlreadySubmitted(current, failure.attemptId)
+			return 'settled'
+		}
+		if (failure.kind === 'time-expired') {
+			applyTimeExpired(current, { certain: true })
+			return 'settled'
+		}
+		if (failure.kind === 'not-found') {
 			if (auto) removeFrozen()
 			clearAttemptKeys(storage, keys, 'not-found')
 			const wal = readWal(storage, keys.wal, current.sessionId)
@@ -768,6 +833,60 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		blockReason = failure.kind === 'not-assigned' ? 'submit-not-assigned' : failure.kind
 		emit()
 		return 'settled'
+	}
+
+	function awaitFreshStart(cached: CachedSession): void {
+		removeFrozen()
+		restoreCandidate = cached
+		clearDraftState()
+		phase = 'awaitingStart'
+		emit()
+	}
+
+	function restoreLocally(cached: CachedSession, frozen: boolean): void {
+		if (isAbandonedExpired(cached)) {
+			if (walHasText(cached.sessionId)) {
+				loadLocal(cached)
+				applyTimeExpired(cached, { certain: false })
+			} else {
+				awaitFreshStart(cached)
+			}
+			return
+		}
+		loadLocal(cached)
+		phase = 'starting'
+		emit()
+		void runStart(cached, { frozen })
+	}
+
+	async function restoreFromFate(cached: CachedSession, frozen: boolean, readSession: ReadSession): Promise<void> {
+		const gen = generation
+		let fate: SessionFate
+		try {
+			fate = await readSession(testId, cached.sessionId)
+		} catch (error) {
+			if (gen !== generation) return
+			if (classifyStartFailure(error) === 'not-assigned') {
+				blockStart(cached)
+				emit()
+				return
+			}
+			restoreLocally(cached, frozen)
+			return
+		}
+		if (gen !== generation) return
+		serverClock.observe(fate.serverNow)
+		if (fate.state === 'open') {
+			await runStart(cached, { frozen })
+			return
+		}
+		if (fate.state === 'submitted') {
+			if (fate.submitSource === 'deadline') applyAccepted(fate, cached)
+			else applyAlreadySubmitted(cached, fate.attemptId)
+			return
+		}
+		if (walHasText(cached.sessionId)) applyTimeExpired(cached, { certain: true })
+		else awaitFreshStart(cached)
 	}
 
 	function reset(): void {
@@ -893,18 +1012,14 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 				void resubmit(cached, frozen)
 				return
 			}
-			if (isAbandonedExpired(cached)) {
-				removeFrozen()
-				restoreCandidate = cached
-				clearDraftState()
-				phase = 'awaitingStart'
+			if (timeLimitMinutes && api.readSession) {
+				loadLocal(cached)
+				phase = 'starting'
 				emit()
+				void restoreFromFate(cached, frozen, api.readSession)
 				return
 			}
-			loadLocal(cached)
-			phase = 'starting'
-			emit()
-			void runStart(cached, { frozen })
+			restoreLocally(cached, frozen)
 		},
 		async confirmStart() {
 			if (!initialized || phase !== 'awaitingStart') return
