@@ -36,6 +36,7 @@ import {
 	usersKeys,
 	usersListFetcher,
 } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 import type { UserRow } from '@/types/users'
 
 const RBAC_PATH = '/admin/settings/rbac'
@@ -43,10 +44,6 @@ const ROLES_VALUE = '__roles__'
 const SAVE_FAILED = 'Не удалось сохранить изменения'
 
 type UserOption = { id: string; name: string }
-
-function displayName(user: UserRow): string {
-	return [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.login || user.id
-}
 
 function editableUser(user: UserRow): boolean {
 	return user.roles.every((key) => key !== IMMUTABLE_ROLE_KEY)
@@ -94,7 +91,7 @@ export default function RbacSettingsPage() {
 		() =>
 			usersList.data?.rows
 				.filter(editableUser)
-				.map((user) => ({ id: user.id, name: displayName(user) }))
+				.map((user) => ({ id: user.id, name: personName(user) }))
 				.sort((a, b) => a.name.localeCompare(b.name, 'ru')),
 		[usersList.data]
 	)

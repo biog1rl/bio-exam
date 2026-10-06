@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
-import { instrumentPool, type PoolProbe } from '../../scripts/bench/probes.js'
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../../test-support/auth-app.js'
+import { instrumentPool, type PoolProbe } from '../../test-support/probes.js'
 
 type QuestionContentModule = typeof import('./index.js')
 type ReferenceModule = typeof import('../../test-support/export-reference.js')

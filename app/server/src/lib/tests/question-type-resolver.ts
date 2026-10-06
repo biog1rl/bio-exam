@@ -10,11 +10,11 @@ import {
 	type QuestionUiTemplate,
 } from '@bio-exam/exam-core'
 
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '../../db/index.js'
-import { questionTypes, testQuestionTypeOverrides } from '../../db/schema.js'
+import { testQuestionTypeOverrides } from '../../db/schema.js'
 
 type ValidationSchema = NonNullable<z.infer<typeof QuestionTypeValidationSchema>>
 
@@ -88,6 +88,12 @@ function applyOverride(
 	}
 }
 
+export function readTestOverrides(testId: string) {
+	return db.query.testQuestionTypeOverrides.findMany({
+		where: eq(testQuestionTypeOverrides.testId, testId),
+	})
+}
+
 export async function getGlobalQuestionTypes(params?: { includeInactive?: boolean }): Promise<RuntimeQuestionType[]> {
 	const includeInactive = params?.includeInactive === true
 	const rows = await db.query.questionTypes.findMany()
@@ -103,9 +109,7 @@ export async function getEffectiveQuestionTypesForTest(params: {
 	includeInactive?: boolean
 }): Promise<RuntimeQuestionType[]> {
 	const globalTypes = await getGlobalQuestionTypes({ includeInactive: true })
-	const overrides = await db.query.testQuestionTypeOverrides.findMany({
-		where: eq(testQuestionTypeOverrides.testId, params.testId),
-	})
+	const overrides = await readTestOverrides(params.testId)
 
 	const overridesMap = new Map<string, RuntimeQuestionTypeOverride>(
 		overrides.map((item) => [
@@ -177,57 +181,6 @@ export function validateQuestionWithType(
 		},
 		key: question.correct,
 	})
-}
-
-export async function upsertTestQuestionTypeOverride(params: {
-	testId: string
-	questionTypeKey: string
-	titleOverride?: string | null
-	scoringRuleOverride?: unknown
-	isDisabled?: boolean
-	updatedBy?: string | null
-}): Promise<void> {
-	const existing = await db.query.testQuestionTypeOverrides.findFirst({
-		where: and(
-			eq(testQuestionTypeOverrides.testId, params.testId),
-			eq(testQuestionTypeOverrides.questionTypeKey, params.questionTypeKey)
-		),
-	})
-
-	let nextScoringRule: QuestionTypeScoringRule | null = null
-	if (params.scoringRuleOverride != null) {
-		const baseType = await db.query.questionTypes.findFirst({
-			where: eq(questionTypes.key, params.questionTypeKey),
-		})
-		if (!baseType) {
-			throw new Error(`Question type not found: ${params.questionTypeKey}`)
-		}
-		nextScoringRule = parseScoringRule(params.scoringRuleOverride, baseType.uiTemplate)
-	}
-
-	if (!existing) {
-		await db.insert(testQuestionTypeOverrides).values({
-			testId: params.testId,
-			questionTypeKey: params.questionTypeKey,
-			titleOverride: params.titleOverride ?? null,
-			scoringRuleOverride: nextScoringRule,
-			isDisabled: params.isDisabled ?? false,
-			createdBy: params.updatedBy ?? null,
-			updatedBy: params.updatedBy ?? null,
-		})
-		return
-	}
-
-	await db
-		.update(testQuestionTypeOverrides)
-		.set({
-			titleOverride: params.titleOverride ?? null,
-			scoringRuleOverride: nextScoringRule,
-			isDisabled: params.isDisabled ?? false,
-			updatedAt: new Date(),
-			updatedBy: params.updatedBy ?? null,
-		})
-		.where(eq(testQuestionTypeOverrides.id, existing.id))
 }
 
 export function questionTypeToDefinition(type: RuntimeQuestionType): QuestionTypeDefinition {

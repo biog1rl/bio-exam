@@ -14,13 +14,4 @@ export {
 	sectionForPath,
 } from './sections'
 export type { Section } from './sections'
-export type { AccessRule, SubjectActionMap } from './access'
-export {
-	normaliseRoleKeys,
-	normaliseUserIdentifiers,
-	normaliseRoleAccessMap,
-	normaliseUserAccessMap,
-	createAccessRule,
-	accessRuleToSerializable,
-	normaliseActionList,
-} from './access'
+export { normaliseRoleKeys } from './access'

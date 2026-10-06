@@ -3,6 +3,7 @@ import { fetcherWith } from '@/lib/http/swr'
 import type { ProgressAttempt } from '@/lib/progress/attempt-chart'
 import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
 import type { UserPatch } from '@/lib/users/edit-user-form'
+import { isRecord } from '@/lib/utils/is-record'
 import type { UserRow } from '@/types/users'
 
 export type UserTestAssignment = {
@@ -75,10 +76,6 @@ export const usersKeys = {
 
 export function userGrantsKey(userId: string): string {
 	return `/api/rbac/user/${encodeURIComponent(userId)}/grants`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 export function parseUserEnvelope(body: unknown): UserRow {

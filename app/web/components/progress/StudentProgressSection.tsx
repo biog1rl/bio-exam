@@ -1,24 +1,18 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 
 import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { EmptyState } from '@/components/page/EmptyState'
+import { Panel } from '@/components/page/Panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChartConfigs } from '@/lib/charts/api'
 import { ATTEMPT_PERIOD_OPTIONS } from '@/lib/charts/config'
 import { filterAttemptsByPeriod, resolvePeriodBounds } from '@/lib/progress/attempt-chart'
 import { loadMyProgressAttempts } from '@/lib/progress/my-attempts'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
-
-function Note({ children }: { children: ReactNode }) {
-	return (
-		<div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-			{children}
-		</div>
-	)
-}
 
 export function StudentProgressSection() {
 	const [now] = useState(() => new Date())
@@ -41,11 +35,7 @@ export function StudentProgressSection() {
 	const failed = Boolean(testsQuery.error || attemptsQuery.error)
 
 	return (
-		<section className="rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-			<div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-				<h2 className="text-lg font-semibold text-foreground">Пройденные тесты</h2>
-				<p className="text-sm text-muted-foreground">{config.period === 'all' ? 'За всё время' : periodLabel}</p>
-			</div>
+		<Panel title="Пройденные тесты" meta={config.period === 'all' ? 'За всё время' : periodLabel}>
 			{failed ? (
 				<p role="alert" className="text-sm text-destructive">
 					Не удалось загрузить попытки
@@ -53,12 +43,12 @@ export function StudentProgressSection() {
 			) : loading ? (
 				<Skeleton className="h-72 rounded-2xl" />
 			) : attempts.length === 0 ? (
-				<Note>График появится после первой попытки.</Note>
+				<EmptyState size="sm" description="График появится после первой попытки." />
 			) : periodAttempts.length === 0 ? (
-				<Note>За этот период попыток нет.</Note>
+				<EmptyState size="sm" description="За этот период попыток нет." />
 			) : (
 				<AttemptChart attempts={periodAttempts} config={config} />
 			)}
-		</section>
+		</Panel>
 	)
 }

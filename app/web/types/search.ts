@@ -23,34 +23,3 @@ export interface SearchResponse {
 	categories: SearchCategory[]
 	total: number
 }
-
-// Legacy types kept for older result components that are no longer used by SearchDialog.
-export interface TopicResult {
-	id: string
-	title: string
-	description?: string
-	href: string
-}
-
-export interface FileResult {
-	id: string
-	title: string
-	snippet: string
-	href: string
-}
-
-export interface UserResult {
-	id: string
-	name: string
-	login: string
-	avatar?: string
-	href: string
-}
-
-export interface ContentHit {
-	id: string
-	title: string
-	snippet: string
-	href: string
-	rel?: string
-}

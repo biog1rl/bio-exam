@@ -1,8 +1,9 @@
+import type { Section } from '@bio-exam/rbac'
+
 import type { ReactNode } from 'react'
 
 import { HOME_PATH } from '@/lib/navigation/paths'
-import type { Section } from '@/lib/session/route-permissions'
-import { sectionAccess } from '@/lib/session/section-access'
+import { sectionAccess } from '@/lib/navigation/section-access'
 
 import { AccessDeniedState } from './AccessDeniedState'
 

@@ -1,32 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-
-import type { ThemeProviderProps } from 'next-themes'
-import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
-import { NuqsAdapter } from 'nuqs/adapters/next/app'
-
 import { SearchProvider } from '@/components/Search/SearchProvider'
 
-export interface ProvidersProps {
-	children: React.ReactNode
-	themeProps?: ThemeProviderProps
-}
-
-export function Providers({ children, themeProps }: ProvidersProps) {
-	const { setTheme } = useTheme()
-
-	useEffect(() => {
-		// При заходе на сайт всегда ставим светлую тему
-		setTheme('light')
-		localStorage.setItem('theme', 'light')
-	}, [setTheme])
-
-	return (
-		<NuqsAdapter>
-			<NextThemesProvider defaultTheme="light" enableSystem={false} {...themeProps}>
-				<SearchProvider>{children}</SearchProvider>
-			</NextThemesProvider>
-		</NuqsAdapter>
-	)
+export function Providers({ children }: { children: React.ReactNode }) {
+	return <SearchProvider>{children}</SearchProvider>
 }

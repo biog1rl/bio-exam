@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
-import { instrumentPool } from '../scripts/bench/probes.js'
 import { call, login, seedUser, startAuthApp, type AuthApp, type CookieJar } from '../test-support/auth-app.js'
+import { instrumentPool } from '../test-support/probes.js'
 
 const PASSWORD = 'search-limits-password-1'
 const LIMIT = 60

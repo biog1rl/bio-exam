@@ -9,6 +9,7 @@ import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { PageHeader } from '@/components/page/PageHeader'
+import { Panel } from '@/components/page/Panel'
 import { Button } from '@/components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -25,6 +26,7 @@ import {
 } from '@/lib/charts/config'
 import { failureMessage } from '@/lib/http/errors'
 import { usersKeys, usersListFetcher } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 import { isStudentOnly } from '@/lib/users/student-card'
 import { cn } from '@/lib/utils/cn'
 import type { UserRow } from '@/types/users'
@@ -59,11 +61,6 @@ function sameConfig(a: unknown, b: unknown): boolean {
 	return JSON.stringify(a) === JSON.stringify(b)
 }
 
-function displayName(user: UserRow): string {
-	const full = [user.firstName ?? '', user.lastName ?? ''].join(' ').trim()
-	return full || user.name || user.login
-}
-
 function StudentPicker({
 	students,
 	value,
@@ -85,7 +82,7 @@ function StudentPicker({
 					className="h-10 min-w-0 flex-1 justify-between rounded-full bg-card tab-sm:w-56 tab-sm:flex-none"
 					aria-label="Ученик для превью"
 				>
-					<span className="truncate">{selected ? displayName(selected) : 'Выберите ученика'}</span>
+					<span className="truncate">{selected ? personName(selected) : 'Выберите ученика'}</span>
 					<ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 				</Button>
 			</PopoverTrigger>
@@ -104,13 +101,13 @@ function StudentPicker({
 									{students.map((student) => (
 										<CommandItem
 											key={student.id}
-											value={`${displayName(student)} ${student.login} ${student.id}`}
+											value={`${personName(student)} ${student.login} ${student.id}`}
 											onSelect={() => {
 												onChange(student.id)
 												setOpen(false)
 											}}
 										>
-											<span className="min-w-0 flex-1 truncate">{displayName(student)}</span>
+											<span className="min-w-0 flex-1 truncate">{personName(student)}</span>
 											<span className="text-xs text-muted-foreground">{student.login}</span>
 										</CommandItem>
 									))}
@@ -189,7 +186,7 @@ export function ChartSettingsPageClient() {
 		() =>
 			(studentsQuery.data?.rows ?? [])
 				.filter((user) => isStudentOnly(user.roles))
-				.sort((a, b) => displayName(a).localeCompare(displayName(b), 'ru')),
+				.sort((a, b) => personName(a).localeCompare(personName(b), 'ru')),
 		[studentsQuery.data]
 	)
 
@@ -295,14 +292,10 @@ export function ChartSettingsPageClient() {
 						</Select>
 					</div>
 
-					<section className="rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">
-						<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-							<div className="min-w-0">
-								<h2 className="text-lg font-semibold text-foreground">{definition.title}</h2>
-								<p className="text-sm text-muted-foreground">
-									{definition.place} · {definition.audience}
-								</p>
-							</div>
+					<Panel
+						title={definition.title}
+						meta={`${definition.place} · ${definition.audience}`}
+						actions={
 							<Button
 								variant="ghost"
 								size="sm"
@@ -313,21 +306,16 @@ export function ChartSettingsPageClient() {
 								<RotateCcw className="size-4" aria-hidden="true" />
 								Стандартные настройки
 							</Button>
-						</div>
+						}
+					>
 						{current ? (
 							<ChartPreview chartId={chartId} configs={current} source={url.source} studentId={url.student} now={now} />
 						) : (
 							<Skeleton className="h-72 rounded-2xl" aria-label="Загрузка превью" />
 						)}
-					</section>
+					</Panel>
 
-					<section
-						aria-labelledby="chart-settings-title"
-						className="rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5"
-					>
-						<h2 id="chart-settings-title" className="mb-4 text-lg font-semibold text-foreground">
-							Настройки
-						</h2>
+					<Panel title="Настройки">
 						{!current ? (
 							<Skeleton className="h-40 rounded-2xl" />
 						) : isAttemptChart(chartId) ? (
@@ -337,7 +325,7 @@ export function ChartSettingsPageClient() {
 						) : (
 							<ActivityChartForm config={current.activity} onChange={(config) => setConfig('activity', config)} />
 						)}
-					</section>
+					</Panel>
 				</div>
 			</div>
 		</div>

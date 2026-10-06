@@ -1,5 +1,7 @@
 'use client'
 
+import { canAccessSection, sectionForPath } from '@bio-exam/rbac'
+
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef } from 'react'
 
@@ -7,7 +9,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { useAuth } from '@/components/providers/AuthProvider'
 import { buildLoginRedirect } from '@/lib/session/redirect'
-import { canAccessSection, sectionForPath } from '@/lib/session/route-permissions'
 
 type AuthGuardProps = {
 	children: ReactNode

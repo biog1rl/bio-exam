@@ -6,19 +6,25 @@ import { ApiError } from '../../lib/errors.js'
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-export type LockedTest = { id: string; slug: string; topicId: string; version: number }
+export type LockedTest = { id: string; slug: string; topicId: string; version: number; isPublished: boolean }
 
-type LockedTestRow = { id: string; slug: string; topic_id: string; version: number }
+type LockedTestRow = { id: string; slug: string; topic_id: string; version: number; is_published: boolean }
 
 type OrderRow = { id: string; order: number }
 
 export async function lockTest(tx: Tx, testId: string): Promise<LockedTest> {
 	const result = await tx.execute<LockedTestRow>(sql`
-		SELECT id, slug, topic_id, version FROM tests WHERE id = ${testId} FOR UPDATE
+		SELECT id, slug, topic_id, version, is_published FROM tests WHERE id = ${testId} FOR UPDATE
 	`)
 	const row = result.rows[0]
 	if (!row) throw new ApiError(404, ERROR_MESSAGES.TEST_NOT_FOUND)
-	return { id: row.id, slug: row.slug, topicId: row.topic_id, version: Number(row.version) }
+	return {
+		id: row.id,
+		slug: row.slug,
+		topicId: row.topic_id,
+		version: Number(row.version),
+		isPublished: row.is_published,
+	}
 }
 
 export function insertAt(ids: string[], id: string, position: number): string[] {

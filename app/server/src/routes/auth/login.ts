@@ -5,8 +5,9 @@ import { z } from 'zod'
 
 import { db } from '../../db/index.js'
 import { users } from '../../db/schema.js'
+import { clientIp } from '../../lib/client-ip.js'
 import { BCRYPT_COST, ERROR_MESSAGES } from '../../lib/constants.js'
-import { clientIp, recordSuccess, reserveAttempt } from '../../services/login-throttle/index.js'
+import { recordSuccess, reserveAttempt } from '../../services/login-throttle/index.js'
 import { openSession, setSessionCookies } from '../../services/session/index.js'
 
 const router = Router()
@@ -53,7 +54,8 @@ router.post('/', async (req, res, next) => {
 		const login = parsed.data.username.toLowerCase().trim()
 
 		const ip = clientIp(req)
-		const reserved = await reserveAttempt({ login, ip })
+		const throttleIp = ip ?? 'unknown'
+		const reserved = await reserveAttempt({ login, ip: throttleIp })
 		if (reserved.blocked) {
 			res.setHeader('Retry-After', String(reserved.retryAfterSec))
 			return res.status(429).json({ error: ERROR_MESSAGES.TOO_MANY_REQUESTS })
@@ -69,7 +71,7 @@ router.post('/', async (req, res, next) => {
 			return res.status(401).json({ error: ERROR_MESSAGES.INVALID_CREDENTIALS })
 		}
 
-		await recordSuccess({ login, ip })
+		await recordSuccess({ login, ip: throttleIp })
 
 		if (!u.isActive) {
 			return res.status(403).json({ error: ERROR_MESSAGES.ACCOUNT_NOT_ACTIVATED })
@@ -84,7 +86,7 @@ router.post('/', async (req, res, next) => {
 		const session = await openSession({
 			userId: u.id,
 			login: u.login ?? null,
-			ip: req.ip || req.socket.remoteAddress || null,
+			ip,
 		})
 		setSessionCookies(res, { accessToken: session.accessToken, refreshToken: session.refreshToken })
 

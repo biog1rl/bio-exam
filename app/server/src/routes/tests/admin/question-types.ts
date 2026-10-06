@@ -19,12 +19,17 @@ import {
 	getEffectiveQuestionTypesForTest,
 	getGlobalQuestionTypes,
 	questionTypeToDefinition,
+	readTestOverrides,
 } from '../../../lib/tests/question-type-resolver.js'
 import { requirePerm } from '../../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../../middleware/auth/session.js'
 import { validateUUID } from '../../../middleware/validateParams.js'
 import { canManageCatalog, canReadTest, canWriteTest } from '../../../services/access-policy/index.js'
-import { syncQuestionPointsForTestByTypeConfig, validateScoringRuleTemplateCompatibility } from './shared.js'
+import {
+	syncQuestionPointsForTestByTypeConfig,
+	syncQuestionPointsForTests,
+	validateScoringRuleTemplateCompatibility,
+} from './shared.js'
 
 const router = Router()
 
@@ -74,9 +79,7 @@ router.get('/question-types', sessionRequired(), requirePerm('tests', 'read'), a
 			if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 
 			const resolved = await getEffectiveQuestionTypesForTest({ testId, includeInactive })
-			const overrides = await db.query.testQuestionTypeOverrides.findMany({
-				where: eq(testQuestionTypeOverrides.testId, testId),
-			})
+			const overrides = await readTestOverrides(testId)
 			const overridesMap = new Map(overrides.map((item) => [item.questionTypeKey, item]))
 
 			return res.json({
@@ -257,10 +260,7 @@ router.patch('/question-types/:key', sessionRequired(), async (req, res, next) =
 			.where(eq(questionTypes.id, existing.id))
 			.returning()
 
-		const allTests = await db.select({ id: tests.id }).from(tests)
-		for (const test of allTests) {
-			await syncQuestionPointsForTestByTypeConfig(test.id)
-		}
+		await syncQuestionPointsForTests()
 
 		res.json({
 			questionType: {
@@ -303,10 +303,7 @@ router.delete('/question-types/:key', sessionRequired(), async (req, res, next) 
 			})
 			.where(eq(questionTypes.id, existing.id))
 
-		const allTests = await db.select({ id: tests.id }).from(tests)
-		for (const test of allTests) {
-			await syncQuestionPointsForTestByTypeConfig(test.id)
-		}
+		await syncQuestionPointsForTests()
 
 		res.json({ ok: true })
 	} catch (e) {
@@ -321,9 +318,7 @@ router.get('/question-types/tests/:id/overrides', validateUUID('id'), sessionReq
 		const test = await db.query.tests.findFirst({ where: eq(tests.id, testId) })
 		if (!test) return res.status(404).json({ error: ERROR_MESSAGES.TEST_NOT_FOUND })
 
-		const overrides = await db.query.testQuestionTypeOverrides.findMany({
-			where: eq(testQuestionTypeOverrides.testId, testId),
-		})
+		const overrides = await readTestOverrides(testId)
 		res.json({ overrides })
 	} catch (e) {
 		next(e)

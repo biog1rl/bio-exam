@@ -1,9 +1,18 @@
+import { REFRESH_THRESHOLD_SEC } from './access-token'
 import type { RefreshOutcome } from './client'
-import { refreshDelayMs } from './schedule'
 
 export const REFRESH_RETRY_MS = 30_000
 
+const REFRESH_LEAD_MS = REFRESH_THRESHOLD_SEC * 1000
+
 const MAX_TIMER_MS = 2_147_483_647
+
+export function refreshDelayMs(accessExpiresAt: string | null, nowMs: number): number | null {
+	if (accessExpiresAt === null) return null
+	const expiresAtMs = Date.parse(accessExpiresAt)
+	if (Number.isNaN(expiresAtMs)) return null
+	return Math.max(0, expiresAtMs - REFRESH_LEAD_MS - nowMs)
+}
 
 export type KeepAliveDocument = {
 	readonly visibilityState: string

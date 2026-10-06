@@ -1,12 +1,12 @@
 import { Suspense } from 'react'
 
-import LoaderComponent from '@/components/LoaderComponent'
+import { Loader2 } from 'lucide-react'
 
 import LoginPage from './LoginPageClient'
 
 export default function Page() {
 	return (
-		<Suspense fallback={<LoaderComponent />}>
+		<Suspense fallback={<Loader2 className="size-5 animate-spin" aria-hidden="true" />}>
 			<LoginPage />
 		</Suspense>
 	)

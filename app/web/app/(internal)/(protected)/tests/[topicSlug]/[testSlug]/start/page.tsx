@@ -1,5 +1,7 @@
 import TestPageClient from './TestPageClient'
 
+export const metadata = { title: 'Прохождение теста' }
+
 interface Props {
 	params: Promise<{ topicSlug: string; testSlug: string }>
 }

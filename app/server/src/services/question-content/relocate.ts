@@ -294,7 +294,7 @@ function conflictOnUniqueViolation(message: string): (error: unknown) => never {
 async function lockPlannedTest(
 	tx: Tx,
 	testId: string,
-	expected: { slug: string; topicId: string; version?: number }
+	expected: { slug: string; topicId: string; version?: number; isPublished?: boolean }
 ): Promise<void> {
 	let locked
 	try {
@@ -307,6 +307,9 @@ async function lockPlannedTest(
 		throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
 	}
 	if (expected.version !== undefined && locked.version !== expected.version) {
+		throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
+	}
+	if (expected.isPublished !== undefined && locked.isPublished !== expected.isPublished) {
 		throw new ApiError(409, CONTENT_CHANGED_MESSAGE)
 	}
 }
@@ -487,7 +490,8 @@ export async function updateTestSettings(params: {
 						eq(tests.id, testId),
 						eq(tests.slug, existingTest.slug),
 						eq(tests.topicId, existingTest.topicId),
-						eq(tests.version, existingTest.version)
+						eq(tests.version, existingTest.version),
+						eq(tests.isPublished, existingTest.isPublished)
 					)
 				)
 				.returning()
@@ -513,6 +517,7 @@ export async function updateTestSettings(params: {
 			slug: existingTest.slug,
 			topicId: existingTest.topicId,
 			version: existingTest.version,
+			isPublished: existingTest.isPublished,
 		})
 		await assertTopicSlugs(
 			tx,

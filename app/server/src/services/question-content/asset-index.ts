@@ -2,6 +2,7 @@ import { asc, eq, sql } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { questions, tests, topics } from '../../db/schema.js'
+import { escapeLike } from '../../lib/sql-like.js'
 import { isServableImageKey, storage } from '../storage/index.js'
 import { extractAssetLinks, extractAssetRefs, type AssetLink, type AssetLinkForm } from './asset-refs.js'
 import type { Tx } from './order.js'
@@ -63,10 +64,6 @@ const MARKDOWN_FILES = [
 ] as const
 
 const TEST_ASSET_KEY = /^topics\/[^/]+\/[^/]+\/assets\/./
-
-function escapeLike(value: string): string {
-	return value.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
 
 function collectKeys(texts: Array<string | null | undefined>): string[] {
 	const keys = new Set<string>()

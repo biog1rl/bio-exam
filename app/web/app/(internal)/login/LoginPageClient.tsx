@@ -2,11 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 
-import LoaderComponent from '@/components/LoaderComponent'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,22 +13,14 @@ import { Input } from '@/components/ui/input'
 import { normalizeLogin } from '@/lib/auth/validators'
 import {
 	EMPTY_CREDENTIALS_TEXT,
-	loginErrorText,
+	loginFailure,
 	NETWORK_ERROR_TEXT,
-	parseRetryAfter,
 	READY_AGAIN_TEXT,
 	TOO_MANY_LATER_TEXT,
 	TOO_MANY_WAIT_TEXT,
+	type LoginError,
 } from '@/lib/session/login-errors'
 import { isLoggedOutNotice, safeCallbackPath } from '@/lib/session/redirect'
-import { formatWait } from '@/lib/session/wait-format'
-
-type LoginError =
-	| { kind: 'none' }
-	| { kind: 'text'; text: string }
-	| { kind: 'wait'; until: number; initial: number; login: string }
-	| { kind: 'later' }
-	| { kind: 'ready' }
 
 const NO_ERROR: LoginError = { kind: 'none' }
 
@@ -123,19 +114,10 @@ export default function LoginPage() {
 				body: JSON.stringify({ username: usernameValue, password: passwordValue }),
 			})
 
-			if (r.status === 429) {
-				const retryAfter = parseRetryAfter(r.headers.get('Retry-After'))
-				if (retryAfter === null) {
-					setError({ kind: 'later' })
-				} else {
-					setRemaining(retryAfter)
-					setError({ kind: 'wait', until: Date.now() + retryAfter * 1000, initial: retryAfter, login: usernameValue })
-				}
-				return
-			}
-
 			if (!r.ok) {
-				setError({ kind: 'text', text: loginErrorText(r.status) })
+				const failure = loginFailure(r.status, r.headers.get('Retry-After'), usernameValue, Date.now())
+				if (failure.kind === 'wait') setRemaining(failure.initial)
+				setError(failure)
 				return
 			}
 
@@ -151,7 +133,7 @@ export default function LoginPage() {
 	if (me) {
 		return (
 			<div className="grid h-screen place-items-center">
-				<LoaderComponent className="size-6 animate-spin" />
+				<Loader2 className="size-6 animate-spin" aria-hidden="true" />
 			</div>
 		)
 	}
@@ -206,9 +188,9 @@ export default function LoginPage() {
 						)}
 						{error.kind === 'wait' && (
 							<p className="text-sm text-destructive">
-								<span aria-hidden="true">{TOO_MANY_WAIT_TEXT(formatWait(remaining))}</span>
+								<span aria-hidden="true">{TOO_MANY_WAIT_TEXT(remaining)}</span>
 								<span role="alert" className="sr-only">
-									{TOO_MANY_WAIT_TEXT(formatWait(error.initial))}
+									{TOO_MANY_WAIT_TEXT(error.initial)}
 								</span>
 							</p>
 						)}
@@ -221,7 +203,7 @@ export default function LoginPage() {
 						<Button type="submit" className="w-full" disabled={submitting || error.kind === 'wait'}>
 							{submitting ? (
 								<>
-									<LoaderComponent className="mr-2 size-4" />
+									<Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
 									<span className="sr-only">Вход…</span>
 								</>
 							) : (

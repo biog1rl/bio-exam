@@ -27,7 +27,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useObjectUrl } from '@/hooks/use-object-url'
 import { deleteAsset, listAssets, UPLOAD_FAILED_MESSAGE, uploadAsset } from '@/lib/assets/api'
-import { deleteErrorMessage } from '@/lib/assets/delete-error'
 import { failureMessage } from '@/lib/http/errors'
 import { RequestError } from '@/lib/http/request'
 import type { AssetFile } from '@/types/assets'
@@ -142,7 +141,7 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 		setIsDeleting(false)
 		if (!outcome.ok) {
 			if (outcome.kind === 'auth' || outcome.kind === 'aborted') return
-			setDeleteError(deleteErrorMessage(outcome.status ?? 0, outcome.body))
+			setDeleteError(outcome.message)
 			return
 		}
 		setAssets((prev) => prev.filter((a) => a.path !== target.path))

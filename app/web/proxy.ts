@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getSessionCookieCandidates, readSessionCookieValue } from '@/lib/auth/sessionCookie'
 import { needsRefresh } from '@/lib/session/access-token'
+import { expiredSessionCookies, readSessionCookieValue, REFRESH_COOKIE_NAME } from '@/lib/session/cookies'
 import { refreshForProxy, SESSION_REFRESH_HEADER, SESSION_REFRESH_UNAVAILABLE } from '@/lib/session/proxy-refresh'
 import { buildLoginRedirect } from '@/lib/session/redirect'
-
-const REFRESH_COOKIE_NAME = 'refresh_token'
 
 const PUBLIC_PATHS = new Set(['/login'])
 const PUBLIC_PREFIXES = ['/invite']
@@ -21,9 +19,8 @@ function loginRedirect(req: NextRequest): NextResponse {
 }
 
 function clearSessionCookies(response: NextResponse): void {
-	const names = [...getSessionCookieCandidates(process.env.SESSION_COOKIE_NAME), REFRESH_COOKIE_NAME]
-	for (const name of names) {
-		response.headers.append('set-cookie', `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`)
+	for (const cookie of expiredSessionCookies(process.env.SESSION_COOKIE_NAME)) {
+		response.headers.append('set-cookie', cookie)
 	}
 }
 

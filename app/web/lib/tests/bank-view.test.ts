@@ -7,7 +7,6 @@ import {
 	canManageCatalog,
 	deleteTestToast,
 	emptyBankState,
-	teacherDisplayName,
 	teacherTriggerLabel,
 	teachersCountLabel,
 	teachersLine,
@@ -48,13 +47,6 @@ test.each<[{ topicFound: boolean; zoneAll: boolean }, string]>([
 	[{ topicFound: true, zoneAll: true }, 'ok'],
 ])('topicPageState(%o) → %s', (input, expected) => {
 	assert.equal(topicPageState(input), expected)
-})
-
-test('teacherDisplayName: имя и фамилия, иначе name, иначе тире', () => {
-	assert.equal(teacherDisplayName(anna), 'Анна Иванова')
-	assert.equal(teacherDisplayName({ id: 'x', name: 'login-name', firstName: null, lastName: null }), 'login-name')
-	assert.equal(teacherDisplayName({ id: 'x', name: null, firstName: null, lastName: null }), '—')
-	assert.equal(teacherDisplayName({ id: 'x', name: null, firstName: 'Анна', lastName: null }), 'Анна')
 })
 
 test('teachersLine: пусто, один, несколько', () => {

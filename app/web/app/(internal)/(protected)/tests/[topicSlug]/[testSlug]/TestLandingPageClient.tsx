@@ -2,26 +2,26 @@
 
 import { useState } from 'react'
 
-import { format } from 'date-fns'
-import { ru } from 'date-fns/locale'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { EmptyState } from '@/components/page/EmptyState'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
+import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { TestMissingState } from '@/components/tests/TestMissingState'
-import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
-import { Badge } from '@/components/ui/badge'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { failureOf } from '@/lib/http/errors'
 import { fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
-import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
+import { formatDateTime } from '@/lib/utils/dates'
 
 import { TestResultsChart } from './TestResultsChart'
 
@@ -64,6 +64,9 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 			const data = await fetchMyTestAttempts(testId, { offset, limit: 5 })
 			setAllRows((prev) => [...prev, ...data.rows])
 			setOffset((prev) => prev + data.rows.length)
+		} catch (error) {
+			const text = failureOf(error).message
+			if (text) toast.error(text)
 		} finally {
 			setLoadingMore(false)
 		}
@@ -127,9 +130,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 									return (
 										<TableRow key={row.id}>
 											<TableCell className="py-3 pl-4">
-												<span className="font-medium tabular-nums">
-													{format(new Date(row.submittedAt), 'dd.MM.yyyy, HH:mm', { locale: ru })}
-												</span>
+												<span className="font-medium tabular-nums">{formatDateTime(row.submittedAt)}</span>
 												{final ? (
 													<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
 														{final.points.earned} / {final.points.total} · {final.passed ? 'Пройден' : 'Не пройден'}
@@ -140,22 +141,11 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 												{final ? `${final.points.earned} / ${final.points.total}` : '—'}
 											</TableCell>
 											<TableCell className="py-3 text-right">
-												{final ? (
-													<span className="inline-flex flex-col items-end gap-1">
-														<span className="tabular-nums">{formatPercent(final.percent)}</span>
-														{final.teacherChecked ? <TeacherCheckedMark /> : null}
-													</span>
-												) : view.kind === 'pending' ? (
-													<span className="inline-flex justify-end">
-														<AttemptReviewLine view={view} audience="student" />
-													</span>
-												) : null}
+												<AttemptScore view={view} audience="student" showPoints={false} />
 											</TableCell>
 											<TableCell className="hidden pr-4 tab-sm:table-cell">
 												{final ? (
-													<Badge variant={final.passed ? 'default' : 'secondary'} className="rounded-full">
-														{final.passed ? 'Пройден' : 'Не пройден'}
-													</Badge>
+													<StatusBadge on={final.passed}>{final.passed ? 'Пройден' : 'Не пройден'}</StatusBadge>
 												) : (
 													<span className="text-muted-foreground">—</span>
 												)}
@@ -167,11 +157,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 						</Table>
 					</TableCard>
 				)}
-				{allRows.length < total && (
-					<Button variant="outline" size="sm" className="rounded-full" onClick={handleLoadMore} disabled={loadingMore}>
-						{loadingMore ? 'Загрузка...' : 'Загрузить ещё'}
-					</Button>
-				)}
+				{allRows.length < total && <LoadMoreButton onClick={() => void handleLoadMore()} loading={loadingMore} />}
 			</section>
 		</div>
 	)

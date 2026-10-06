@@ -14,12 +14,13 @@ export {
 } from './producers/test-assigned.js'
 export { decodeCursor, type CursorPosition } from './cursor.js'
 export { UNKNOWN_KIND_TEXT, notificationText, type OpenContext } from './kinds.js'
-export { openNotification, type OpenResult } from './open.js'
 export {
 	countUnread,
 	listNotifications,
 	markAllRead,
 	markRead,
+	openNotification,
 	type NotificationItem,
 	type NotificationsPage,
+	type OpenResult,
 } from './read.js'

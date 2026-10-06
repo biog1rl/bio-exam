@@ -2,7 +2,7 @@ import { format, isValid, parse } from 'date-fns'
 
 import type { UserStatus } from '@/lib/users/status-filter'
 import { parseFilterList } from '@/lib/utils/column-filter'
-import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
+import { cycleSort, type TableSort, parseListParam, searchString, type ParamsLike } from '@/lib/utils/table-sort'
 
 export const ATTEMPTS_PATH = '/admin/attempts'
 
@@ -32,7 +32,6 @@ export const ATTEMPT_RESULTS: readonly AttemptResult[] = ['passed', 'failed']
 
 export const DEFAULT_ATTEMPTS_SORT: AttemptsSort = { key: 'date', direction: 'desc' }
 
-type ParamsLike = { get(name: string): string | null }
 type RecordParams = Record<string, string | string[] | undefined>
 
 const STATUSES: readonly UserStatus[] = ['active', 'inactive', 'all']
@@ -41,7 +40,6 @@ const SORT_KEYS: readonly AttemptsSortKey[] = ['date', 'score', 'student', 'test
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DAY_FORMAT = 'yyyy-MM-dd'
 const MAX_VALUE_LENGTH = 200
-const MAX_LIST_ITEMS = 50
 
 function reader(params: ParamsLike | RecordParams): (name: string) => string | null {
 	if (typeof (params as ParamsLike).get === 'function') return (name) => (params as ParamsLike).get(name)
@@ -51,27 +49,13 @@ function reader(params: ParamsLike | RecordParams): (name: string) => string | n
 	}
 }
 
-function cleanValue(value: string): string | null {
-	const trimmed = value.trim()
-	return trimmed.length > 0 && trimmed.length <= MAX_VALUE_LENGTH ? trimmed : null
-}
-
-function parseList(value: string | null, accept: (item: string) => boolean): string[] {
-	if (!value) return []
-	const items = value
-		.split(',')
-		.map(cleanValue)
-		.filter((item): item is string => item !== null && accept(item))
-	return [...new Set(items)].slice(0, MAX_LIST_ITEMS)
-}
-
 export function parseDay(value: string | null | undefined): Date | null {
 	if (!value) return null
 	const date = parse(value, DAY_FORMAT, new Date())
 	return isValid(date) && format(date, DAY_FORMAT) === value ? date : null
 }
 
-export function formatDay(date: Date): string {
+export function dayParam(date: Date): string {
 	return format(date, DAY_FORMAT)
 }
 
@@ -107,8 +91,8 @@ export function parseAttemptsUrl(params: ParamsLike | RecordParams): AttemptsUrl
 	const status = get('status')
 	const review = get('review')
 	return {
-		topics: parseList(get('topic'), () => true),
-		students: parseList(get('student'), (item) => UUID.test(item)),
+		topics: parseListParam(get('topic')),
+		students: parseListParam(get('student'), (item) => UUID.test(item)),
 		results: parseFilterList(get('result'), ATTEMPT_RESULTS),
 		status: STATUSES.includes(status as UserStatus) ? (status as UserStatus) : 'active',
 		review: REVIEW_FILTERS.includes(review as ReviewFilter) ? (review as ReviewFilter) : 'all',
@@ -118,24 +102,19 @@ export function parseAttemptsUrl(params: ParamsLike | RecordParams): AttemptsUrl
 	}
 }
 
-function listValue(values: readonly string[]): string {
-	return values.map(encodeURIComponent).join(',')
-}
-
 export function attemptsUrl(link: AttemptsLink): string {
 	const topics = link.topics ?? (link.topic ? [link.topic] : [])
 	const students = link.students ?? (link.student ? [link.student] : [])
-	const parts: string[] = []
-	if (topics.length > 0) parts.push(`topic=${listValue(topics)}`)
-	if (students.length > 0) parts.push(`student=${listValue(students)}`)
-	if (link.results && link.results.length > 0) parts.push(`result=${link.results.join(',')}`)
-	if (link.status && link.status !== 'active') parts.push(`status=${link.status}`)
-	if (link.review && link.review !== 'all') parts.push(`review=${link.review}`)
-	if (link.q?.trim()) parts.push(`q=${encodeURIComponent(link.q)}`)
-	if (link.from) {
-		parts.push(`from=${link.from}`)
-		if (link.to && link.to !== link.from) parts.push(`to=${link.to}`)
-	}
-	if (link.sort && !isDefaultAttemptsSort(link.sort)) parts.push(`sort=${link.sort.key}-${link.sort.direction}`)
-	return parts.length > 0 ? `${ATTEMPTS_PATH}?${parts.join('&')}` : ATTEMPTS_PATH
+	const from = link.from || null
+	return `${ATTEMPTS_PATH}${searchString({
+		topic: topics,
+		student: students,
+		result: link.results ?? [],
+		status: link.status && link.status !== 'active' ? link.status : null,
+		review: link.review && link.review !== 'all' ? link.review : null,
+		q: link.q ?? null,
+		from,
+		to: from && link.to && link.to !== from ? link.to : null,
+		sort: link.sort && !isDefaultAttemptsSort(link.sort) ? `${link.sort.key}-${link.sort.direction}` : null,
+	})}`
 }

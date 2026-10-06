@@ -6,18 +6,14 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
-import { HOME_PATH, backAction } from '@/lib/navigation/paths'
+import { goBack } from '@/lib/navigation/go-back'
+import { HOME_PATH } from '@/lib/navigation/paths'
 
 export default function NotFound() {
 	const router = useRouter()
 	const pathname = usePathname() || '/'
 
-	const handleBack = () => {
-		const navigation = (window as { navigation?: { canGoBack?: boolean } }).navigation
-		const action = backAction(pathname, navigation?.canGoBack ?? window.history.length > 1)
-		if (action.kind === 'history') router.back()
-		else router.push(action.href)
-	}
+	const handleBack = () => goBack(router, pathname)
 
 	return (
 		<div className="flex min-h-[70dvh] flex-col items-center justify-center gap-unit-mob px-4 text-center tab-sm:gap-unit">

@@ -3,15 +3,15 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { DateRange } from 'react-day-picker'
 
-import { format, isValid, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { CalendarRange, CheckCircle2, Clock3, Loader2, XCircle } from 'lucide-react'
+import { CalendarRange, Clock3 } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
+import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
 import { ToolbarButton } from '@/components/page/ToolbarButton'
 import { ToolbarSearch } from '@/components/page/ToolbarSearch'
@@ -20,8 +20,7 @@ import { ColumnFilterMenu, type ColumnFilterOption } from '@/components/table/Co
 import { SortableHead } from '@/components/table/SortableHead'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
-import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatusChip'
-import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -38,7 +37,7 @@ import {
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import {
 	attemptsUrl,
-	formatDay,
+	dayParam,
 	nextAttemptsSort,
 	parseAttemptsUrl,
 	parseDay,
@@ -48,6 +47,7 @@ import {
 } from '@/lib/tests/attempts-url'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cn } from '@/lib/utils/cn'
+import { formatDateTime, formatPeriod } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { AdminAttemptListItem, AdminAttemptsResponse } from './attempts-types'
@@ -81,21 +81,10 @@ function onServer() {
 	return false
 }
 
-function submittedLabel(value: string): string {
-	const date = parseISO(value)
-	return isValid(date) ? format(date, 'd MMM yyyy, HH:mm', { locale: ru }) : '—'
-}
-
 function periodRange(from: string | null, to: string | null): DateRange | undefined {
 	const start = parseDay(from)
 	if (!start) return undefined
 	return { from: start, to: parseDay(to) ?? start }
-}
-
-function periodLabel(range: DateRange): string {
-	const from = range.from ? format(range.from, 'dd.MM.yy') : ''
-	const to = range.to ? format(range.to, 'dd.MM.yy') : from
-	return from === to ? from : `${from} — ${to}`
 }
 
 function statusOfChoice(selected: readonly string[]): UserStatus {
@@ -144,41 +133,9 @@ function emptyAttemptsContent({
 }
 
 function AttemptResultCell({ attempt }: { attempt: AdminAttemptListItem }) {
-	const view = attemptResultView(attempt)
-	if (view.kind === 'pending') {
-		return (
-			<TableCell className="py-3 pr-4 text-right">
-				<span className="inline-flex justify-end">
-					<ReviewStatusChip />
-				</span>
-				{view.auto ? (
-					<p className="mt-1 text-xs text-muted-foreground tabular-nums">
-						авто {view.auto.earned} из {view.auto.total}
-					</p>
-				) : null}
-			</TableCell>
-		)
-	}
-	const Icon = view.passed ? CheckCircle2 : XCircle
-	const label = view.passed ? 'Пройден' : 'Не пройден'
 	return (
 		<TableCell className="py-3 pr-4 text-right">
-			<span className="inline-flex items-center justify-end gap-1.5" title={label}>
-				<Icon
-					className={cn('size-3.5', view.passed ? 'text-green-700 dark:text-green-400' : 'text-destructive')}
-					aria-hidden="true"
-				/>
-				<span className="font-medium text-foreground tabular-nums">{Math.round(view.percent)}%</span>
-				<span className="sr-only">{label}</span>
-			</span>
-			<p className="text-xs text-muted-foreground tabular-nums">
-				{view.points.earned}/{view.points.total}
-			</p>
-			{view.teacherChecked ? (
-				<span className="mt-1 inline-flex justify-end">
-					<TeacherCheckedMark />
-				</span>
-			) : null}
+			<AttemptScore view={attemptResultView(attempt)} audience="staff" />
 		</TableCell>
 	)
 }
@@ -249,8 +206,8 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	}
 
 	const selectPeriod = (range: DateRange | undefined) => {
-		const from = range?.from ? formatDay(range.from) : null
-		const to = range?.to ? formatDay(range.to) : null
+		const from = range?.from ? dayParam(range.from) : null
+		const to = range?.to ? dayParam(range.to) : null
 		updateUrl({ from, to: to === from ? null : to })
 		if (from && to && to !== from) setPeriodOpen(false)
 	}
@@ -381,7 +338,9 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 						/>
 						{period ? (
 							<div className="flex items-center justify-between gap-3 border-t px-3 py-2">
-								<span className="text-sm text-muted-foreground tabular-nums">{periodLabel(period)}</span>
+								<span className="text-sm text-muted-foreground tabular-nums">
+									{formatPeriod(period.from, period.to)}
+								</span>
 								<Button variant="ghost" size="sm" className="rounded-full" onClick={resetPeriod}>
 									Сбросить период
 								</Button>
@@ -481,14 +440,14 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 													</Link>
 													<p className="mt-0.5 text-xs text-muted-foreground lg:hidden">
 														{attempt.topicTitle}
-														<span className="tab-sm:hidden"> · {submittedLabel(attempt.submittedAt)}</span>
+														<span className="tab-sm:hidden"> · {formatDateTime(attempt.submittedAt)}</span>
 													</p>
 												</TableCell>
 												<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
 													{attempt.topicTitle}
 												</TableCell>
 												<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-													{submittedLabel(attempt.submittedAt)}
+													{formatDateTime(attempt.submittedAt)}
 												</TableCell>
 												<AttemptResultCell attempt={attempt} />
 											</TableRow>
@@ -499,21 +458,12 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 						</TableCard>
 					</div>
 					{merged.hasMore ? (
-						<div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-							<Button
-								variant="outline"
-								className="rounded-full bg-card"
-								onClick={() => void loadMore()}
-								disabled={loadingMore || isLoading}
-								aria-busy={loadingMore || undefined}
-							>
-								{loadingMore ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-								Показать ещё
-							</Button>
-							<p className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-								Показано {merged.rows.length} из {merged.total}
-							</p>
-						</div>
+						<LoadMoreButton
+							onClick={() => void loadMore()}
+							loading={loadingMore}
+							disabled={isLoading && !loadingMore}
+							summary={`Показано ${merged.rows.length} из ${merged.total}`}
+						/>
 					) : null}
 				</div>
 			)}

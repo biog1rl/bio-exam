@@ -39,12 +39,12 @@ import {
 	groupSaveErrorText,
 	groupSavePayload,
 	ownerLabel,
-	personLabel,
 } from '@/lib/groups/group-form'
 import { swrFetcher } from '@/lib/http/swr'
 import { usersKeys } from '@/lib/users/api'
+import { personName } from '@/lib/users/person-name'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/cn'
 import type { UserRow } from '@/types/users'
 
 export type GroupSheetGroup = Group
@@ -62,11 +62,6 @@ const ADMINS_OWNER = 'admins'
 const SEARCH_DELAY_MS = 300
 
 type UsersList = { rows: UserRow[]; total: number }
-
-const displayName = (u: UserRow) => {
-	const full = [u.firstName, u.lastName].filter(Boolean).join(' ')
-	return full || u.name || u.login
-}
 
 export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	const { can } = useAuth()
@@ -173,7 +168,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 				setPeople((prev) => {
 					const next = { ...prev }
 					for (const m of members) {
-						const label = personLabel({ name: m.name })
+						const label = personName({ name: m.name })
 						next[m.id] = { label: zoneAll && label === '—' && m.login ? m.login : label, isActive: m.isActive }
 					}
 					return next
@@ -194,7 +189,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 		() =>
 			selectedIds.flatMap((id) => {
 				const user = zoneAll ? usersById.get(id) : undefined
-				if (user) return [{ id, label: displayName(user), isActive: user.isActive }]
+				if (user) return [{ id, label: personName(user), isActive: user.isActive }]
 				const person = people[id]
 				return person ? [{ id, ...person }] : []
 			}),
@@ -206,7 +201,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 	}
 
 	const toggleCandidate = (candidate: Candidate) => {
-		setPeople((prev) => ({ ...prev, [candidate.id]: { label: personLabel(candidate), isActive: true } }))
+		setPeople((prev) => ({ ...prev, [candidate.id]: { label: personName(candidate), isActive: true } }))
 		toggleUser(candidate.id)
 	}
 
@@ -306,13 +301,13 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 													{visibleUsers.map((u) => (
 														<CommandItem
 															key={u.id}
-															value={`${displayName(u)} ${u.login}`}
+															value={`${personName(u)} ${u.login}`}
 															onSelect={() => toggleUser(u.id)}
 														>
 															<Check
 																className={cn('mr-2 h-4 w-4', selectedIds.includes(u.id) ? 'opacity-100' : 'opacity-0')}
 															/>
-															{displayName(u)}
+															{personName(u)}
 															{u.login && <span className="ml-1 text-xs text-muted-foreground">@{u.login}</span>}
 														</CommandItem>
 													))}
@@ -347,7 +342,7 @@ export function GroupSheet({ open, onOpenChange, group, onSaved }: Props) {
 																		selectedIds.includes(u.id) ? 'opacity-100' : 'opacity-0'
 																	)}
 																/>
-																<span className="truncate">{personLabel(u)}</span>
+																<span className="truncate">{personName(u)}</span>
 															</CommandItem>
 														))}
 													</CommandGroup>

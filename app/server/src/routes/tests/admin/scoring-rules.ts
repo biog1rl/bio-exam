@@ -10,7 +10,11 @@ import { requirePerm } from '../../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../../middleware/auth/session.js'
 import { validateUUID } from '../../../middleware/validateParams.js'
 import { canManageCatalog, canReadTest, canWriteTest } from '../../../services/access-policy/index.js'
-import { ensureGlobalScoringRules, syncQuestionPointsForTestByTypeConfig } from './shared.js'
+import {
+	ensureGlobalScoringRules,
+	syncQuestionPointsForTestByTypeConfig,
+	syncQuestionPointsForTests,
+} from './shared.js'
 
 const router = Router()
 
@@ -71,10 +75,7 @@ router.put('/scoring-rules/global', sessionRequired(), async (req, res, next) =>
 				},
 			})
 
-		const testsUsingGlobal = await db.select({ id: tests.id }).from(tests).where(isNull(tests.scoringRules))
-		for (const testRow of testsUsingGlobal) {
-			await syncQuestionPointsForTestByTypeConfig(testRow.id)
-		}
+		await syncQuestionPointsForTests(isNull(tests.scoringRules))
 
 		res.json({ ok: true })
 	} catch (e) {

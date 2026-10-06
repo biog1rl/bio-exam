@@ -1,5 +1,15 @@
 import { parseFilterList } from '@/lib/utils/column-filter'
-import { cycleSort, type TableSort } from '@/lib/utils/table-sort'
+import {
+	cycleSort,
+	matchesNeedle,
+	parseSortParam,
+	searchNeedle,
+	searchString,
+	sortParam,
+	sortRows,
+	type ParamsLike,
+	type TableSort,
+} from '@/lib/utils/table-sort'
 
 export type BankStatus = 'published' | 'draft'
 
@@ -22,29 +32,16 @@ export const DEFAULT_BANK_SORT: BankSort = { key: 'order', direction: 'asc' }
 export const BANK_STATUSES: readonly BankStatus[] = ['published', 'draft']
 const SORT_KEYS: readonly BankSortKey[] = ['title', 'topic', 'questions', 'updated']
 
-type ParamsLike = { get(name: string): string | null }
-
-function parseSort(value: string | null): BankSort {
-	if (!value) return DEFAULT_BANK_SORT
-	const direction = value.startsWith('-') ? 'desc' : 'asc'
-	const key = value.replace(/^-/, '') as BankSortKey
-	return SORT_KEYS.includes(key) ? { key, direction } : DEFAULT_BANK_SORT
-}
-
 export function parseBankUrl(params: ParamsLike | null | undefined): BankUrlState {
 	return {
 		statuses: parseFilterList(params?.get('status'), BANK_STATUSES),
 		q: params?.get('q') ?? '',
-		sort: parseSort(params?.get('sort') ?? null),
+		sort: parseSortParam(params?.get('sort'), SORT_KEYS, DEFAULT_BANK_SORT),
 	}
 }
 
 export function bankSearch(state: BankUrlState): string {
-	const parts: string[] = []
-	if (state.statuses.length > 0) parts.push(`status=${state.statuses.join(',')}`)
-	if (state.q.trim()) parts.push(`q=${encodeURIComponent(state.q)}`)
-	if (state.sort.key !== 'order') parts.push(`sort=${state.sort.direction === 'desc' ? '-' : ''}${state.sort.key}`)
-	return parts.length > 0 ? `?${parts.join('&')}` : ''
+	return searchString({ status: state.statuses, q: state.q, sort: sortParam(state.sort, DEFAULT_BANK_SORT) })
 }
 
 export function nextBankSort(current: BankSort, key: BankSortKey): BankSort {
@@ -65,11 +62,10 @@ export function filterBankTests<T extends BankTestRow>(
 	statuses: readonly BankStatus[],
 	q: string
 ): T[] {
-	const needle = q.trim().toLocaleLowerCase('ru')
+	const needle = searchNeedle(q)
 	return tests.filter((test) => {
 		if (statuses.length > 0 && !statuses.includes(statusOf(test))) return false
-		if (!needle) return true
-		return [test.title, test.topicTitle].some((value) => value?.toLocaleLowerCase('ru').includes(needle))
+		return matchesNeedle(needle, [test.title, test.topicTitle])
 	})
 }
 
@@ -82,9 +78,5 @@ function compareRows(a: BankTestRow, b: BankTestRow, key: BankSortKey): number {
 }
 
 export function sortBankTests<T extends BankTestRow>(tests: readonly T[], sort: BankSort): T[] {
-	const sign = sort.direction === 'asc' ? 1 : -1
-	return tests
-		.map((test, index) => ({ test, index }))
-		.sort((a, b) => sign * compareRows(a.test, b.test, sort.key) || a.index - b.index)
-		.map((entry) => entry.test)
+	return sortRows(tests, sort, compareRows)
 }

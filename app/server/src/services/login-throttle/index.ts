@@ -11,7 +11,6 @@ import {
 	type BucketKind,
 } from './progression.js'
 
-export { clientIp } from './client-ip.js'
 export {
 	FAILURE_RESET_MS,
 	IP_TRUSTED,

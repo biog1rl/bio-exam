@@ -4,7 +4,6 @@
 import { Router } from 'express'
 
 import authRouter from './auth/index.js'
-import refreshRouter from './auth/refresh.js'
 import docsAssetsRouter from './docs/assets.js'
 import groupsRouter from './groups/index.js'
 import notificationsRouter from './notifications.js'
@@ -20,7 +19,6 @@ const router = Router()
 
 router.use('/users', usersRouter)
 router.use('/auth', authRouter)
-router.use('/auth/refresh', refreshRouter)
 router.use('/rbac', rbacRouter)
 router.use('/search', searchRouter)
 router.use('/notifications', notificationsRouter)
