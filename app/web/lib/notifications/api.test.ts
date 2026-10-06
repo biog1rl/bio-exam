@@ -8,7 +8,7 @@ vi.mock('@/lib/session/client', () => ({
 
 import { MalformedBodyError } from '@/lib/http/request'
 
-import { parseUnreadCount } from './api'
+import { parseNotificationsPage, parseUnreadCount } from './api'
 
 describe('parseUnreadCount', () => {
 	test.each([
@@ -24,4 +24,30 @@ describe('parseUnreadCount', () => {
 			assert.throws(() => parseUnreadCount(body), MalformedBodyError)
 		}
 	)
+})
+
+const item = {
+	id: 'a',
+	kind: 'test.assigned',
+	text: 'Вам назначен тест',
+	read: false,
+	lastEventAt: '2026-10-06T10:00:00.000Z',
+}
+
+describe('parseNotificationsPage', () => {
+	test.each([[{ items: [item], nextCursor: 'c1' }], [{ items: [], nextCursor: null }]])('%j parses', (body) => {
+		assert.deepEqual(parseNotificationsPage(body), body)
+	})
+
+	test.each([
+		[{ items: 'x', nextCursor: null }],
+		[{ items: [{ ...item, text: undefined }], nextCursor: null }],
+		[{ items: [{ ...item, read: 'false' }], nextCursor: null }],
+		[{ items: [{ ...item, lastEventAt: 'вчера' }], nextCursor: null }],
+		[{ items: [item], nextCursor: 5 }],
+		[{ items: [item] }],
+		[null],
+	])('%j -> MalformedBodyError', (body) => {
+		assert.throws(() => parseNotificationsPage(body), MalformedBodyError)
+	})
 })
