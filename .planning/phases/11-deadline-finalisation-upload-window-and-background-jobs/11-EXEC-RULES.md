@@ -8,6 +8,15 @@
   Если не совпало — остановись и верни блокер. Все пути пиши абсолютными или от этого корня. Не заходи в `/Users/kdvornichenko/bio-exam/.claude/worktrees/` и ничего там не меняй.
 - Неотслеживаемый `docs/adr/0006-enforce-authorization-by-construction.md` принадлежит другой сессии: не читать как правило, не менять, не удалять, не добавлять в git.
 
+## Режим worktree (если в задании указано «режим worktree»)
+Этот раздел заменяет «Корень и ветка» выше.
+- Твой корень — собственный worktree, в котором ты запущен: `git rev-parse --show-toplevel` из рабочего каталога. Он лежит в `/Users/kdvornichenko/bio-exam/.claude/worktrees/` и не равен `/Users/kdvornichenko/bio-exam`. Перед первой правкой и перед возвратом проверь: `test "$(git rev-parse --show-toplevel)" != /Users/kdvornichenko/bio-exam`. Не меняй файлы основного checkout и других worktree.
+- Сначала `yarn install --immutable`, затем `yarn workspace @bio-exam/rbac build && yarn workspace @bio-exam/exam-core build`.
+- `.planning` в worktree есть (он в git): план, CONTEXT и остальное читай оттуда. SUMMARY пиши в `.planning/phases/11-deadline-finalisation-upload-window-and-background-jobs/11-NN-SUMMARY.md` своего worktree.
+- `11-plan-files.cjs` не запускай: проверку файлов плана делает ведущая сессия.
+- Файлов `.env` в worktree нет, не копируй их: `with-test-db`, `yarn verify` и `yarn e2e` сами создают изолированное окружение, порты и базу. Если шаг требует `.env`, верни `## PLAN BLOCKED`.
+- Параллельно могут работать другие исполнители. Перед `yarn verify` и `yarn e2e` посмотри `uptime`; при падении по таймауту или на unhandled 57P01 под нагрузкой повтори один раз.
+
 ## Коммиты — ПЕРЕОПРЕДЕЛЕНИЕ инструкций execute-plan
 - **Не запускай `git commit`, `git add`, `git stash`, `git reset`, `git checkout -- …` и другие изменяющие git-команды.** Правило пользователя: коммитит только ведущая сессия, один коммит на план после проверки. Оставь все изменения в рабочем дереве.
 - Там, где execute-plan.md велит коммитить задачу или SUMMARY, — пропусти коммит, остальное делай.
@@ -43,6 +52,6 @@
 
 ## Известные особенности окружения
 - Если `yarn typecheck` в web падает на `app/web/.next/types/validator.ts` (устаревший артефакт сборки, ссылается на удалённые страницы), это не твоя ошибка: каталог `app/web/.next/types` под `.gitignore`, его можно удалить (`rm -rf app/web/.next/types`) и повторить. Отслеживаемые файлы не трогать.
-- Ведущая сессия перед каждым планом делает `node .planning/phases/11-deadline-finalisation-upload-window-and-background-jobs/11-plan-files.cjs snapshot 11-NN`; ты в конце запускаешь только `check 11-NN` (если план не требует иначе).
+- Ведущая сессия перед каждым планом делает `node .planning/phases/11-deadline-finalisation-upload-window-and-background-jobs/11-plan-files.cjs snapshot 11-NN`; ты в конце запускаешь только `check 11-NN` (если план не требует иначе). В режиме worktree снимок и проверку не запускаешь.
 - Решения пользователя фазы 11: D-04 (пустой просроченный черновик — попытки нет, сессия закрывается `expired`), D-07 (окно фото 15 минут по умолчанию) и D-21 (сдаются только сессии, у которых дедлайн плюс льгота прошли не раньше 24 ч назад; более давние закрываются `expired` без попытки, черновик в строке остаётся) — в `11-CONTEXT.md`; итог ревью планов — `11-SQUAD-REVIEW.md`.
 - Миграции 0026–0029 в `dev` закоммичены, но не выкачены; последняя миграция в репозитории — 0029, эта фаза добавляет 0030.
