@@ -41,6 +41,17 @@ export type SavedTestSettings = {
 
 export type QuestionListEntry = { question: Question; index: number }
 
+const NEW_TEST_PATH = '/admin/tests/new'
+const TOPIC_PARAM = 'topic'
+
+export function newTestHref(topicSlug?: string | null): string {
+	return topicSlug ? `${NEW_TEST_PATH}?${TOPIC_PARAM}=${encodeURIComponent(topicSlug)}` : NEW_TEST_PATH
+}
+
+export function presetTopicSlug(params: { get(name: string): string | null } | null): string | null {
+	return params?.get(TOPIC_PARAM) ?? null
+}
+
 export function parseEditorTab(value: string | null | undefined, isCreateMode: boolean): EditorTab {
 	return !isCreateMode && value === 'access' ? 'access' : 'questions'
 }

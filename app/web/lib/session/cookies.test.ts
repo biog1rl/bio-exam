@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { readSessionCookieValue } from './sessionCookie'
+import { readSessionCookieValue } from './cookies'
 
 test('readSessionCookieValue: читает устаревшее имя cookie', () => {
 	const legacyCookieStore = {

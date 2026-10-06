@@ -30,7 +30,7 @@ import {
 } from '../../services/attempt-sessions/index.js'
 import {
 	questionMarkdownCandidates,
-	readFirstMarkdown,
+	readQuestionMarkdown,
 	readQuestionTexts,
 } from '../../services/question-content/index.js'
 import { attemptResultColumns, readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
@@ -49,17 +49,6 @@ const DB_RETRY_ENABLED = process.env.DB_QUERY_RETRY !== '0'
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function buildQuestionMarkdownCandidates(params: {
-	storedPath: string | null
-	topicSlug: string
-	testSlug: string
-	testId: string
-	questionId: string
-	fileName: 'prompt.md' | 'explanation.md'
-}): string[] {
-	return questionMarkdownCandidates(params)
-}
 
 function errorText(err: unknown): string {
 	if (err instanceof Error) {
@@ -314,7 +303,7 @@ router.get('/topics/:topicSlug/tests/:testSlug', sessionRequired(), async (req, 
 
 		const promptTexts = await readQuestionTexts(
 			questionRows.map((q) => ({
-				candidates: buildQuestionMarkdownCandidates({
+				candidates: questionMarkdownCandidates({
 					storedPath: q.promptPath,
 					topicSlug: test.topicSlug,
 					testSlug: test.slug,
@@ -368,7 +357,7 @@ router.get('/tests/:id', validateUUID('id'), sessionRequired(), async (req, res,
 
 		const promptTexts = await readQuestionTexts(
 			questionRows.map((q) => ({
-				candidates: buildQuestionMarkdownCandidates({
+				candidates: questionMarkdownCandidates({
 					storedPath: q.promptPath,
 					topicSlug: test.topicSlug,
 					testSlug: test.slug,
@@ -582,16 +571,14 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			passingScore: test.passingScore,
 			readExplanation: (q) =>
 				q.explanationPath
-					? readFirstMarkdown(
-							buildQuestionMarkdownCandidates({
-								storedPath: q.explanationPath,
-								topicSlug: test.topicSlug,
-								testSlug: test.slug,
-								testId,
-								questionId: q.id,
-								fileName: 'explanation.md',
-							})
-						).then((text) => text || null)
+					? readQuestionMarkdown({
+							storedPath: q.explanationPath,
+							topicSlug: test.topicSlug,
+							testSlug: test.slug,
+							testId,
+							questionId: q.id,
+							kind: 'explanation',
+						}).then((text) => text || null)
 					: Promise.resolve(null),
 		})
 		if (!scored.ok) {

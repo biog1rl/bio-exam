@@ -60,10 +60,10 @@ import {
 	emptyBankState,
 	topicPageState,
 } from '@/lib/tests/bank-view'
-import { newTestHref } from '@/lib/tests/new-test-href'
 
 import type { Test, Topic } from '../../types'
 import { TopicFormDialog } from '../TopicFormDialog'
+import { newTestHref } from '../test-editor/test-editor-view'
 import { BankTestsTable } from './BankTestsTable'
 import { BankTopicSelect, BankTopicsNav, bankTopicLinks } from './BankTopicsNav'
 

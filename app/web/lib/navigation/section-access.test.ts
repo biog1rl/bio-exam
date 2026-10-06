@@ -1,15 +1,15 @@
+import { sectionForPath, type Section } from '@bio-exam/rbac'
+
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, test, vi } from 'vitest'
 
-import { sectionForPath, type Section } from './route-permissions'
-
 const holders = vi.hoisted(() => ({ me: null as Record<string, unknown> | null }))
 
 vi.mock('server-only', () => ({}))
-vi.mock('./server', () => ({ getServerMe: async () => holders.me }))
+vi.mock('../session/server', () => ({ getServerMe: async () => holders.me }))
 
 const { sectionAccess } = await import('./section-access')
 

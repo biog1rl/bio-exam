@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { loginErrorText, parseRetryAfter } from './login-errors'
-import { formatWait } from './wait-format'
+import { formatWait, loginFailure } from './login-errors'
+
+const NOW = Date.parse('2026-10-06T10:00:00.000Z')
 
 describe('formatWait', () => {
 	it.each([
@@ -17,23 +18,26 @@ describe('formatWait', () => {
 	})
 })
 
-describe('parseRetryAfter', () => {
+describe('loginFailure', () => {
 	it.each([
 		['30', 30],
 		['900', 900],
-	])('%s -> %i', (header, expected) => {
-		expect(parseRetryAfter(header)).toBe(expected)
+	])('429 с Retry-After %s -> ожидание %i с', (header, seconds) => {
+		expect(loginFailure(429, header, 'ivan', NOW)).toEqual({
+			kind: 'wait',
+			until: NOW + seconds * 1000,
+			initial: seconds,
+			login: 'ivan',
+		})
 	})
 
 	it.each([['0'], [''], [null], [undefined], ['-5'], ['1.5'], ['Wed, 21 Oct 2026 07:28:00 GMT'], ['30s'], [' 30']])(
-		'%s -> null',
+		'429 с Retry-After %s -> later',
 		(header) => {
-			expect(parseRetryAfter(header)).toBeNull()
+			expect(loginFailure(429, header, 'ivan', NOW)).toEqual({ kind: 'later' })
 		}
 	)
-})
 
-describe('loginErrorText', () => {
 	it.each([
 		[400, 'Пожалуйста, введите логин и пароль'],
 		[401, 'Неверный логин или пароль'],
@@ -41,7 +45,7 @@ describe('loginErrorText', () => {
 		[500, 'Не удалось войти. Попробуйте ещё раз.'],
 		[502, 'Не удалось войти. Попробуйте ещё раз.'],
 		[418, 'Не удалось войти. Попробуйте ещё раз.'],
-	])('%i -> %s', (status, expected) => {
-		expect(loginErrorText(status)).toBe(expected)
+	])('%i -> %s', (status, text) => {
+		expect(loginFailure(status, null, 'ivan', NOW)).toEqual({ kind: 'text', text })
 	})
 })

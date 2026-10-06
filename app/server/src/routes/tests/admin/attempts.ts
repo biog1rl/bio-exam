@@ -13,7 +13,7 @@ import { validateUUID } from '../../../middleware/validateParams.js'
 import { canReviewAttempt, testScope, type TestScope } from '../../../services/access-policy/index.js'
 import { questionMarkdownCandidates, readQuestionTexts } from '../../../services/question-content/index.js'
 import { attemptResultColumns, readAdminAttemptView } from '../../../services/scored-attempt/index.js'
-import { escapeLike } from '../../../services/search/index.js'
+import { escapeLike } from '../../../services/search/database-search.js'
 
 const router = Router()
 

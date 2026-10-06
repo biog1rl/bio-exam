@@ -1,9 +1,16 @@
-import { PERMISSION_DOMAINS, ROLE_REGISTRY, type PermissionDomain, type PermissionKey } from '@bio-exam/rbac'
-
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { SECTION_PERMISSIONS, canAccessSection, sectionForPath, type Section } from './route-permissions'
+import {
+	PERMISSION_DOMAINS,
+	ROLE_REGISTRY,
+	SECTION_PERMISSIONS,
+	canAccessSection,
+	sectionForPath,
+	type PermissionDomain,
+	type PermissionKey,
+	type Section,
+} from './index'
 
 const ALL_SECTIONS = Object.keys(SECTION_PERMISSIONS) as Section[]
 

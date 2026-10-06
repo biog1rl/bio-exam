@@ -538,6 +538,12 @@
 	button:active {
 		@apply opacity-60 md:opacity-100;
 	}
+
+	@keyframes shimmer {
+		to {
+			translate: 100% 0;
+		}
+	}
 }
 
 .dark {

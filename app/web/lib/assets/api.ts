@@ -10,6 +10,7 @@ export type DeleteAssetBody = { path: string }
 const ASSETS_PATH = '/api/docs/assets'
 
 export const UPLOAD_FAILED_MESSAGE = 'Не удалось загрузить изображение'
+const DELETE_FAILED_MESSAGE = 'Не удалось удалить изображение'
 
 export const assetsKeys = {
 	page: (limit: number, offset: number) => `${ASSETS_PATH}?limit=${limit}&offset=${offset}`,
@@ -52,7 +53,7 @@ export function uploadAsset(form: FormData): Promise<RequestOutcome<UploadedAsse
 }
 
 export function deleteAsset(body: DeleteAssetBody): Promise<RequestOutcome<unknown>> {
-	return request(ASSETS_PATH, { method: 'DELETE', json: body })
+	return request(ASSETS_PATH, { method: 'DELETE', json: body, fallbackMessage: DELETE_FAILED_MESSAGE })
 }
 
 export function fetchSignedUrl(src: string): Promise<string> {

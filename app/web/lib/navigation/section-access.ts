@@ -1,6 +1,7 @@
 import 'server-only'
-import { canAccessSection, type Section } from './route-permissions'
-import { getServerMe, type ServerMe } from './server'
+import { canAccessSection, type Section } from '@bio-exam/rbac'
+
+import { getServerMe, type ServerMe } from '../session/server'
 
 export type SectionAccess = { kind: 'anonymous' } | { kind: 'denied'; me: ServerMe } | { kind: 'allowed'; me: ServerMe }
 

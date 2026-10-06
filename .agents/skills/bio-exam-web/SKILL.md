@@ -22,8 +22,8 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 
 ## Гейты по правам
 
-- Раздел по пути и нужные права: `SECTION_PERMISSIONS`, `sectionForPath`, `canAccessSection`, `canOpenPath` живут в `packages/rbac/src/sections.ts` (их же использует Express); `app/web/lib/session/route-permissions.ts` только реэкспортирует.
-- Layout раздела оборачивает страницу в `SectionGate` (`app/web/components/auth/SectionGate.tsx`, доступ — `sectionAccess` в `app/web/lib/session/section-access.ts`): нет прав → экран «Нет доступа к разделу», HTTP 200. Это UX, а не граница данных: страница под layout выполняется параллельно, поэтому данные она берёт только через Express с правами пользователя или проверяет права сама.
+- Раздел по пути и нужные права: `SECTION_PERMISSIONS`, `sectionForPath`, `canAccessSection`, `canOpenPath` живут в `packages/rbac/src/sections.ts` (их же использует Express), web импортирует их из `@bio-exam/rbac`.
+- Layout раздела оборачивает страницу в `SectionGate` (`app/web/components/auth/SectionGate.tsx`, доступ — `sectionAccess` в `app/web/lib/navigation/section-access.ts`): нет прав → экран «Нет доступа к разделу», HTTP 200. Это UX, а не граница данных: страница под layout выполняется параллельно, поэтому данные она берёт только через Express с правами пользователя или проверяет права сама.
 - В клиенте права берутся из `useAuth().can(...)` (`app/web/components/providers/AuthProvider.tsx`), проверка по ключу права из `@bio-exam/rbac`, а не по строке роли. В web нет `pg`, `jsonwebtoken` и чтения секретов: это держит `scripts/auth-no-role-string-checks.test.mjs`.
 
 ## Навигация

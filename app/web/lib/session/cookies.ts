@@ -1,6 +1,8 @@
 const DEFAULT_SESSION_COOKIE_CANDIDATES = ['bio_exam_session', 'bio-exam_session'] as const
 
-export function getSessionCookieCandidates(configuredName?: string | null): string[] {
+export const REFRESH_COOKIE_NAME = 'refresh_token'
+
+function getSessionCookieCandidates(configuredName?: string | null): string[] {
 	return Array.from(
 		new Set(
 			[configuredName, ...DEFAULT_SESSION_COOKIE_CANDIDATES].filter(
@@ -19,4 +21,10 @@ export function readSessionCookieValue(
 		if (value) return value
 	}
 	return null
+}
+
+export function expiredSessionCookies(configuredName?: string | null): string[] {
+	return [...getSessionCookieCandidates(configuredName), REFRESH_COOKIE_NAME].map(
+		(name) => `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`
+	)
 }

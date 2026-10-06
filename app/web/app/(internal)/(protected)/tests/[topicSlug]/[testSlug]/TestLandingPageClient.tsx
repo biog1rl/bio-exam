@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
@@ -18,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { failureOf } from '@/lib/http/errors'
 import { fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
@@ -64,6 +66,9 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 			const data = await fetchMyTestAttempts(testId, { offset, limit: 5 })
 			setAllRows((prev) => [...prev, ...data.rows])
 			setOffset((prev) => prev + data.rows.length)
+		} catch (error) {
+			const text = failureOf(error).message
+			if (text) toast.error(text)
 		} finally {
 			setLoadingMore(false)
 		}

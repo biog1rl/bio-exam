@@ -444,22 +444,6 @@ describe('модуль по умолчанию', () => {
 		const dir = fileURLToPath(new URL('.', import.meta.url))
 		for (const name of readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))) {
 			const source = readFileSync(`${dir}${name}`, 'utf8')
-			if (name === 'route-permissions.ts') {
-				assert.doesNotMatch(
-					source,
-					/jsonwebtoken|AUTH_JWT_SECRET|verify\(|buildPermissionSet|ROLE_REGISTRY|PERMISSION_DOMAINS/,
-					name
-				)
-				assert.deepEqual(
-					source
-						.split('\n')
-						.filter((line) => line.trim() !== '')
-						.filter((line) => !/^export (type )?\{[^}]+\} from '@bio-exam\/rbac'$/.test(line)),
-					[],
-					name
-				)
-				continue
-			}
 			assert.doesNotMatch(source, /jsonwebtoken|AUTH_JWT_SECRET|@bio-exam\/rbac|\bcan\(|verify\(/, name)
 		}
 	})

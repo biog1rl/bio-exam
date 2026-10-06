@@ -20,7 +20,7 @@ const mdxCache = new Map<string, MDXRemoteSerializeResult>()
 
 type MdxImageProps = ImgHTMLAttributes<HTMLImageElement>
 const IMAGE_SKELETON_CLASS =
-	'relative overflow-hidden rounded-md border border-border bg-muted shadow-inner before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/70 before:to-transparent dark:before:via-white/15'
+	'relative overflow-hidden rounded-md border border-border bg-muted shadow-inner before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.4s_infinite] before:bg-gradient-to-r motion-reduce:before:animate-none before:from-transparent before:via-white/70 before:to-transparent dark:before:via-white/15'
 
 function ImageLoadingPlaceholder({ width, height }: { width?: number; height?: number }) {
 	return (

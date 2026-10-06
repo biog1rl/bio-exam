@@ -43,7 +43,7 @@ import {
 	normalizeFormPayload,
 	resolveQuestionDraftId,
 } from './test-editor-utils'
-import { savedSettings, settingsDirty, totalPoints } from './test-editor-view'
+import { presetTopicSlug, savedSettings, settingsDirty, totalPoints } from './test-editor-view'
 
 const CANDIDATES_LIMIT = 500
 
@@ -177,15 +177,15 @@ export function useTestEditorModel({ topicSlug, testSlug }: UseTestEditorModelPa
 		setForm((prev) => ({ ...prev, ...saved }))
 	}
 
-	const presetTopicSlug = useSearchParams()?.get('topic') ?? null
+	const presetTopic = presetTopicSlug(useSearchParams())
 
 	useEffect(() => {
 		if (!isCreateMode) return
 		if (topics.length === 0 || form.topicId) return
 
-		const preset = topics.find((topic) => topic.slug === presetTopicSlug)
+		const preset = topics.find((topic) => topic.slug === presetTopic)
 		setForm((prev) => ({ ...prev, topicId: (preset ?? topics[0]).id }))
-	}, [isCreateMode, topics, form.topicId, presetTopicSlug])
+	}, [isCreateMode, topics, form.topicId, presetTopic])
 
 	const handleAssignStudent = useCallback(
 		async (userId: string) => {

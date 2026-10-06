@@ -177,7 +177,6 @@ __metadata:
     motion: "npm:^12.29.0"
     next: "npm:^16.3.8"
     next-mdx-remote: "npm:^6.0.0"
-    next-themes: "npm:^0.4.6"
     nuqs: "npm:^2.8.9"
     oxlint: "npm:1.86.0"
     postcss: "npm:^8.5.28"
@@ -9267,16 +9266,6 @@ __metadata:
   peerDependencies:
     react: ">=16"
   checksum: 10c0/b85c24034ab6139d8fc6696c66b614d7707a46814739b3e050b4878973ce7ceabf196e8e4cf3a420790811daa763a5678dbbe00d74cce5bf1c4ab6b064407a82
-  languageName: node
-  linkType: hard
-
-"next-themes@npm:^0.4.6":
-  version: 0.4.6
-  resolution: "next-themes@npm:0.4.6"
-  peerDependencies:
-    react: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
-    react-dom: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
-  checksum: 10c0/83590c11d359ce7e4ced14f6ea9dd7a691d5ce6843fe2dc520fc27e29ae1c535118478d03e7f172609c41b1ef1b8da6b8dd2d2acd6cd79cac1abbdbd5b99f2c4
   languageName: node
   linkType: hard
 

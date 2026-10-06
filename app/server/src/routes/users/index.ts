@@ -31,9 +31,8 @@ import { avatarUrl } from '../../services/storage/links.js'
 import type { UserRow } from '../../types/db/users.js'
 import { addAssignments, removeAssignment } from '../tests/assignments.js'
 import avatarRouter from './avatar.js'
-import loginThrottleRouter from './login-throttle.js'
 import profileRouter from './profile.js'
-import sessionsRouter from './sessions.js'
+import signInAssistRouter from './sign-in-assist.js'
 import { selectUserRows, serializeUserRow, userZoneFilter } from './user-rows.js'
 
 const router = Router()
@@ -41,8 +40,7 @@ const router = Router()
 // Подключаем роуты профиля
 router.use('/profile', profileRouter)
 router.use('/avatar', avatarRouter)
-router.use('/', sessionsRouter)
-router.use('/', loginThrottleRouter)
+router.use('/', signInAssistRouter)
 
 const DIRECTORY_MIN_QUERY = 2
 const DIRECTORY_DEFAULT_LIMIT = 10

@@ -14,22 +14,14 @@ import { Input } from '@/components/ui/input'
 import { normalizeLogin } from '@/lib/auth/validators'
 import {
 	EMPTY_CREDENTIALS_TEXT,
-	loginErrorText,
+	loginFailure,
 	NETWORK_ERROR_TEXT,
-	parseRetryAfter,
 	READY_AGAIN_TEXT,
 	TOO_MANY_LATER_TEXT,
 	TOO_MANY_WAIT_TEXT,
+	type LoginError,
 } from '@/lib/session/login-errors'
 import { isLoggedOutNotice, safeCallbackPath } from '@/lib/session/redirect'
-import { formatWait } from '@/lib/session/wait-format'
-
-type LoginError =
-	| { kind: 'none' }
-	| { kind: 'text'; text: string }
-	| { kind: 'wait'; until: number; initial: number; login: string }
-	| { kind: 'later' }
-	| { kind: 'ready' }
 
 const NO_ERROR: LoginError = { kind: 'none' }
 
@@ -123,19 +115,10 @@ export default function LoginPage() {
 				body: JSON.stringify({ username: usernameValue, password: passwordValue }),
 			})
 
-			if (r.status === 429) {
-				const retryAfter = parseRetryAfter(r.headers.get('Retry-After'))
-				if (retryAfter === null) {
-					setError({ kind: 'later' })
-				} else {
-					setRemaining(retryAfter)
-					setError({ kind: 'wait', until: Date.now() + retryAfter * 1000, initial: retryAfter, login: usernameValue })
-				}
-				return
-			}
-
 			if (!r.ok) {
-				setError({ kind: 'text', text: loginErrorText(r.status) })
+				const failure = loginFailure(r.status, r.headers.get('Retry-After'), usernameValue, Date.now())
+				if (failure.kind === 'wait') setRemaining(failure.initial)
+				setError(failure)
 				return
 			}
 
@@ -206,9 +189,9 @@ export default function LoginPage() {
 						)}
 						{error.kind === 'wait' && (
 							<p className="text-sm text-destructive">
-								<span aria-hidden="true">{TOO_MANY_WAIT_TEXT(formatWait(remaining))}</span>
+								<span aria-hidden="true">{TOO_MANY_WAIT_TEXT(remaining)}</span>
 								<span role="alert" className="sr-only">
-									{TOO_MANY_WAIT_TEXT(formatWait(error.initial))}
+									{TOO_MANY_WAIT_TEXT(error.initial)}
 								</span>
 							</p>
 						)}

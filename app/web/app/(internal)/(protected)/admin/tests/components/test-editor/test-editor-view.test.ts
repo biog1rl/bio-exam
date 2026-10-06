@@ -9,9 +9,11 @@ import {
 	filterAssignments,
 	filterQuestions,
 	manualOrderAllowed,
+	newTestHref,
 	nextSort,
 	parseEditorTab,
 	pointsLabel,
+	presetTopicSlug,
 	questionsCountLabel,
 	questionTypeTitle,
 	savedSettings,
@@ -183,4 +185,13 @@ describe('подписи', () => {
 		expect(questionsCountLabel(30)).toBe('30 вопросов')
 		expect(questionsCountLabel(22)).toBe('22 вопроса')
 	})
+})
+
+it('новый тест из темы передаёт тему в адресе, редактор читает её оттуда', () => {
+	expect(newTestHref()).toBe('/admin/tests/new')
+	expect(newTestHref(null)).toBe('/admin/tests/new')
+	const href = newTestHref('клетка')
+	expect(href).toBe('/admin/tests/new?topic=%D0%BA%D0%BB%D0%B5%D1%82%D0%BA%D0%B0')
+	expect(presetTopicSlug(new URLSearchParams(href.split('?')[1]))).toBe('клетка')
+	expect(presetTopicSlug(null)).toBeNull()
 })
