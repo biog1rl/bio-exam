@@ -5,11 +5,11 @@ import {
 	type QuestionUiTemplate,
 } from '@bio-exam/exam-core'
 
-import { eq } from 'drizzle-orm'
+import { eq, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '../../../db/index.js'
-import { questions, testScoringSettings } from '../../../db/schema.js'
+import { questions, tests, testScoringSettings } from '../../../db/schema.js'
 import { getQuestionTypeMapForTest } from '../../../lib/tests/question-type-resolver.js'
 import { TestScoringRulesSchema, createDefaultTestScoringRules } from '../../../lib/tests/scoring.js'
 import { resolveQuestionPoints } from '../../../services/question-content/index.js'
@@ -73,5 +73,12 @@ export async function syncQuestionPointsForTestByTypeConfig(testId: string) {
 				updatedAt: new Date(),
 			})
 			.where(eq(questions.id, question.id))
+	}
+}
+
+export async function syncQuestionPointsForTests(where?: SQL) {
+	const rows = await db.select({ id: tests.id }).from(tests).where(where)
+	for (const row of rows) {
+		await syncQuestionPointsForTestByTypeConfig(row.id)
 	}
 }

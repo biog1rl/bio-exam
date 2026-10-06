@@ -88,6 +88,12 @@ function applyOverride(
 	}
 }
 
+export function readTestOverrides(testId: string) {
+	return db.query.testQuestionTypeOverrides.findMany({
+		where: eq(testQuestionTypeOverrides.testId, testId),
+	})
+}
+
 export async function getGlobalQuestionTypes(params?: { includeInactive?: boolean }): Promise<RuntimeQuestionType[]> {
 	const includeInactive = params?.includeInactive === true
 	const rows = await db.query.questionTypes.findMany()
@@ -103,9 +109,7 @@ export async function getEffectiveQuestionTypesForTest(params: {
 	includeInactive?: boolean
 }): Promise<RuntimeQuestionType[]> {
 	const globalTypes = await getGlobalQuestionTypes({ includeInactive: true })
-	const overrides = await db.query.testQuestionTypeOverrides.findMany({
-		where: eq(testQuestionTypeOverrides.testId, params.testId),
-	})
+	const overrides = await readTestOverrides(params.testId)
 
 	const overridesMap = new Map<string, RuntimeQuestionTypeOverride>(
 		overrides.map((item) => [
