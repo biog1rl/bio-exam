@@ -47,6 +47,7 @@ GET /api/notifications  sessionRequired > <anonymous>
 GET /api/notifications/unread-count  sessionRequired > <anonymous>
 POST /api/notifications/read-all  sessionRequired > <anonymous>
 POST /api/notifications/:id/read  sessionRequired > <anonymous>
+GET /api/notifications/:id/open  sessionRequired > <anonymous>
 GET /api/sidebar  sessionRequired > <anonymous>
 GET /api/sidebar/all  sessionRequired > requirePerm(settings.manage) > <anonymous>
 POST /api/sidebar  sessionRequired > requirePerm(settings.manage) > <anonymous>

@@ -2,7 +2,15 @@ import { Router } from 'express'
 import { z } from 'zod'
 
 import { sessionRequired } from '../middleware/auth/session.js'
-import { countUnread, decodeCursor, listNotifications, markAllRead, markRead } from '../services/notifications/index.js'
+import { canReadTest } from '../services/access-policy/index.js'
+import {
+	countUnread,
+	decodeCursor,
+	listNotifications,
+	markAllRead,
+	markRead,
+	openNotification,
+} from '../services/notifications/index.js'
 
 const router = Router()
 
@@ -49,6 +57,18 @@ router.post('/:id/read', sessionRequired(), async (req, res, next) => {
 		const found = await markRead(req.authUser!.id, String(req.params.id))
 		if (!found) return res.status(404).json({ error: 'Not found' })
 		res.json({ ok: true })
+	} catch (err) {
+		next(err)
+	}
+})
+
+router.get('/:id/open', sessionRequired(), async (req, res, next) => {
+	try {
+		const result = await openNotification(req.authUser!.id, String(req.params.id), {
+			canReadTest: (testId) => canReadTest(req, testId),
+		})
+		if (!result.ok) return res.status(403).json({ error: 'NO_ACCESS' })
+		res.json({ href: result.href })
 	} catch (err) {
 		next(err)
 	}
