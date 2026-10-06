@@ -5,8 +5,9 @@ import { ReviewStatusChip } from '@/components/tests/attempt-result/ReviewStatus
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
+import { formatDateTime } from '@/lib/utils/dates'
 
-import { formatAttemptDate, formatDuration, getAttemptTelemetryStats, getQuestionView } from './attempt-review-utils'
+import { formatDuration, getAttemptTelemetryStats, getQuestionView } from './attempt-review-utils'
 
 const CHIP_CLASS = 'flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-3 py-1 text-sm'
 
@@ -36,7 +37,7 @@ export function AttemptReviewHero({
 
 	return (
 		<section className="space-y-3">
-			<PageHeader title="Разбор результата" meta={`Сдано: ${formatAttemptDate(attempt.submittedAt)}`} />
+			<PageHeader title="Разбор результата" meta={`Сдано: ${formatDateTime(attempt.submittedAt)}`} />
 			<ul aria-label="Итог попытки" className="flex flex-wrap items-center gap-2">
 				{view.kind === 'pending' ? (
 					<>

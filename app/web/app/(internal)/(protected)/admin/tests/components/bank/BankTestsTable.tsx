@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 
-import { format, isValid, parseISO } from 'date-fns'
 import { Download, Edit, Eye, MoreHorizontal, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { nextBankSort, type BankSort, type BankSortKey } from '@/lib/tests/bank-table'
+import { formatDay } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { Test } from '../../types'
@@ -30,11 +30,6 @@ interface BankTestsTableProps {
 	statusFilter: ReactNode
 	onExport: (test: Test, withAnswers: boolean) => void
 	onDelete: (test: Test) => void
-}
-
-function updatedDate(value: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, 'dd.MM.yyyy') : '—'
 }
 
 function editorHref(test: Test): string {
@@ -126,7 +121,7 @@ export function BankTestsTable({
 								{test.timeLimitMinutes ? `${test.timeLimitMinutes} мин` : '—'}
 							</TableCell>
 							<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-								{updatedDate(test.updatedAt)}
+								{formatDay(test.updatedAt)}
 							</TableCell>
 							<TableCell className="pr-3">
 								<DropdownMenu>

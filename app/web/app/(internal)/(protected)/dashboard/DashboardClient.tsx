@@ -26,6 +26,7 @@ import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
 import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
+import { formatShortDay } from '@/lib/utils/dates'
 
 type Topic = {
 	id: string
@@ -86,11 +87,6 @@ type AdminDashboardData = {
 
 async function fetchAdminJson<T>(url: string): Promise<T | null> {
 	return optionalAdminData(await request<T>(url))
-}
-
-function formatDate(value?: string) {
-	if (!value) return 'нет даты'
-	return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short' }).format(new Date(value))
 }
 
 function average(values: number[]) {
@@ -236,10 +232,12 @@ function LatestAttemptsTable({ attempts }: { attempts: DashboardAttempt[] }) {
 								<Link href={attempt.testHref} className={mainLinkClass}>
 									{attempt.testTitle}
 								</Link>
-								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">{formatDate(attempt.submittedAt)}</p>
+								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
+									{formatShortDay(attempt.submittedAt)}
+								</p>
 							</TableCell>
 							<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-								{formatDate(attempt.submittedAt)}
+								{formatShortDay(attempt.submittedAt)}
 							</TableCell>
 							<ResultCell attempt={attempt} audience="student" />
 						</TableRow>
@@ -274,14 +272,14 @@ function StudentAttemptsTable({ attempts }: { attempts: AdminDashboardAttempt[] 
 									</Link>
 									<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground lg:hidden">
 										{attempt.testTitle}
-										<span className="tab-sm:hidden"> · {formatDate(attempt.submittedAt)}</span>
+										<span className="tab-sm:hidden"> · {formatShortDay(attempt.submittedAt)}</span>
 									</p>
 								</TableCell>
 								<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
 									{attempt.testTitle}
 								</TableCell>
 								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-									{formatDate(attempt.submittedAt)}
+									{formatShortDay(attempt.submittedAt)}
 								</TableCell>
 								<ResultCell attempt={attempt} audience="staff" />
 							</TableRow>

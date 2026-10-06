@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { DateRange } from 'react-day-picker'
 
-import { format, isValid, parseISO } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { CalendarRange, CheckCircle2, Clock3, Loader2, XCircle } from 'lucide-react'
 import Link from 'next/link'
@@ -48,6 +47,7 @@ import {
 } from '@/lib/tests/attempts-url'
 import { matchesUserStatus, type UserStatus } from '@/lib/users/status-filter'
 import { cn } from '@/lib/utils/cn'
+import { formatDateTime, formatPeriod } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { AdminAttemptListItem, AdminAttemptsResponse } from './attempts-types'
@@ -81,21 +81,10 @@ function onServer() {
 	return false
 }
 
-function submittedLabel(value: string): string {
-	const date = parseISO(value)
-	return isValid(date) ? format(date, 'd MMM yyyy, HH:mm', { locale: ru }) : '—'
-}
-
 function periodRange(from: string | null, to: string | null): DateRange | undefined {
 	const start = parseDay(from)
 	if (!start) return undefined
 	return { from: start, to: parseDay(to) ?? start }
-}
-
-function periodLabel(range: DateRange): string {
-	const from = range.from ? format(range.from, 'dd.MM.yy') : ''
-	const to = range.to ? format(range.to, 'dd.MM.yy') : from
-	return from === to ? from : `${from} — ${to}`
 }
 
 function statusOfChoice(selected: readonly string[]): UserStatus {
@@ -381,7 +370,9 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 						/>
 						{period ? (
 							<div className="flex items-center justify-between gap-3 border-t px-3 py-2">
-								<span className="text-sm text-muted-foreground tabular-nums">{periodLabel(period)}</span>
+								<span className="text-sm text-muted-foreground tabular-nums">
+									{formatPeriod(period.from, period.to)}
+								</span>
 								<Button variant="ghost" size="sm" className="rounded-full" onClick={resetPeriod}>
 									Сбросить период
 								</Button>
@@ -481,14 +472,14 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 													</Link>
 													<p className="mt-0.5 text-xs text-muted-foreground lg:hidden">
 														{attempt.topicTitle}
-														<span className="tab-sm:hidden"> · {submittedLabel(attempt.submittedAt)}</span>
+														<span className="tab-sm:hidden"> · {formatDateTime(attempt.submittedAt)}</span>
 													</p>
 												</TableCell>
 												<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
 													{attempt.topicTitle}
 												</TableCell>
 												<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-													{submittedLabel(attempt.submittedAt)}
+													{formatDateTime(attempt.submittedAt)}
 												</TableCell>
 												<AttemptResultCell attempt={attempt} />
 											</TableRow>

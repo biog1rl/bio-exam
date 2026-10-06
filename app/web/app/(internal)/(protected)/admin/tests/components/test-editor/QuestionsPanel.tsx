@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { formatDateTime } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
 import type { Question, QuestionDraft } from '../../types'
@@ -163,7 +164,7 @@ export function QuestionsPanel({
 							>
 								{getQuestionDraftLabel(draft)}
 							</Link>
-							<div className="text-xs text-muted-foreground">{new Date(draft.updatedAt).toLocaleString('ru-RU')}</div>
+							<div className="text-xs text-muted-foreground">{formatDateTime(draft.updatedAt)}</div>
 							<Button
 								size="icon"
 								variant="ghost"

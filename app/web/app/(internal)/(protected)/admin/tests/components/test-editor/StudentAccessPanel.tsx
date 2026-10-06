@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
 
-import { format, isValid, parseISO } from 'date-fns'
 import { Loader2, Search, UserMinus, UserPlus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -13,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { UserStatus } from '@/lib/users/status-filter'
 import { assignmentAction, studentRowSubtitle } from '@/lib/users/student-card'
 import { cn } from '@/lib/utils/cn'
+import { formatDay } from '@/lib/utils/dates'
 
 import type { StudentAssignment, UserItem } from './test-editor-types'
 import { filterAssignments, studentName } from './test-editor-view'
@@ -20,11 +20,6 @@ import { filterAssignments, studentName } from './test-editor-view'
 function getUserDisplayName(user: UserItem) {
 	const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ')
 	return user.name || fullName || user.login || user.id
-}
-
-function assignedDate(value: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, 'dd.MM.yyyy') : '—'
 }
 
 interface StudentAccessToolbarProps {
@@ -206,7 +201,7 @@ export function StudentAccessPanel({
 										</p>
 										{subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
 										<p className="text-xs text-muted-foreground tab-sm:hidden">
-											{statusText} · доступ с {assignedDate(row.assignedAt)}
+											{statusText} · доступ с {formatDay(row.assignedAt)}
 										</p>
 									</TableCell>
 									<TableCell className="hidden whitespace-nowrap tab-sm:table-cell">
@@ -219,7 +214,7 @@ export function StudentAccessPanel({
 										</span>
 									</TableCell>
 									<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-										{assignedDate(row.assignedAt)}
+										{formatDay(row.assignedAt)}
 									</TableCell>
 									<TableCell className="pr-3">
 										{assignmentAction(row) === 'remove' ? (

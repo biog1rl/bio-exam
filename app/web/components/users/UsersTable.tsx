@@ -4,7 +4,6 @@ import { roleDisplayName } from '@bio-exam/rbac'
 
 import { useState, type ReactNode } from 'react'
 
-import { format, isValid, parseISO } from 'date-fns'
 import { Link as LinkIcon, MoreHorizontal, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { useSWRConfig } from 'swr'
@@ -23,6 +22,7 @@ import { usersKeys } from '@/lib/users/api'
 import { groupsCell, groupsTitle, showReinvite } from '@/lib/users/invite-form'
 import { nextUsersSort, userDisplayName, type UsersSort, type UsersSortKey } from '@/lib/users/users-url'
 import { cn } from '@/lib/utils/cn'
+import { formatDay } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 import type { UserRow } from '@/types/users'
 
@@ -38,11 +38,6 @@ type Props = {
 	rolesFilter: ReactNode
 	groupsFilter: ReactNode
 	statusFilter: ReactNode
-}
-
-function createdDate(value: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, 'dd.MM.yyyy') : '—'
 }
 
 function profileHref(user: UserRow): string {
@@ -221,7 +216,7 @@ export function UsersTable({
 												</Badge>
 											</TableCell>
 											<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums xl:table-cell">
-												{createdDate(user.createdAt)}
+												{formatDay(user.createdAt)}
 											</TableCell>
 											<TableCell className="hidden truncate text-muted-foreground xl:table-cell">
 												{user.createdByName ?? '—'}

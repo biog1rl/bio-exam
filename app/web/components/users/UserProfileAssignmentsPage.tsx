@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DateRange } from 'react-day-picker'
 
-import { format, isValid, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import {
 	ArrowRight,
@@ -94,6 +94,7 @@ import {
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
 import { usersUrl } from '@/lib/users/users-url'
 import { cn } from '@/lib/utils/cn'
+import { formatDateTime, formatDay, formatPeriod } from '@/lib/utils/dates'
 
 type Props = {
 	login: string
@@ -159,11 +160,6 @@ function EmptyProfileState({ children }: { children: ReactNode }) {
 	)
 }
 
-function shortDate(value: string, pattern: string): string {
-	const parsed = parseISO(value)
-	return isValid(parsed) ? format(parsed, pattern) : '—'
-}
-
 function AttemptsTable({
 	attempts,
 	colorBySlug,
@@ -186,7 +182,7 @@ function AttemptsTable({
 					{attempts.map((attempt) => {
 						const href = `/admin/attempts/${attempt.attemptId}`
 						const dotColor = colorBySlug.get(attempt.topicSlug)
-						const submitted = shortDate(attempt.submittedAt, 'dd.MM.yyyy, HH:mm')
+						const submitted = formatDateTime(attempt.submittedAt)
 						const view = attemptResultView(attempt)
 						return (
 							<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
@@ -271,7 +267,7 @@ function AssignmentsTable({
 				</TableHeader>
 				<TableBody>
 					{assignments.map((assignment) => {
-						const assigned = shortDate(assignment.assignedAt, 'dd.MM.yyyy')
+						const assigned = formatDay(assignment.assignedAt)
 						const removable = assignmentAction(assignment) === 'remove'
 						const removing = removingTestId === assignment.testId
 						return (
@@ -896,9 +892,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										className={cn('h-10 rounded-full', !(period === 'custom' && !dayDate) && 'bg-card')}
 										onClick={() => void setRange('custom')}
 									>
-										{period === 'custom' && fromDate && toDate
-											? `${format(fromDate, 'dd.MM.yy', { locale: ru })} — ${format(toDate, 'dd.MM.yy', { locale: ru })}`
-											: 'Свой диапазон'}
+										{period === 'custom' && fromDate && toDate ? formatPeriod(fromDate, toDate) : 'Свой диапазон'}
 									</Button>
 								</PopoverTrigger>
 								<PopoverContent className="w-auto p-0" align="start">

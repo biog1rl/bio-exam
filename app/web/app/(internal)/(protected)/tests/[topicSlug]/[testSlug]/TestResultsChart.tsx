@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 
-import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { CalendarRange } from 'lucide-react'
 import { useQueryState } from 'nuqs'
@@ -25,6 +24,7 @@ import {
 } from '@/lib/progress/attempt-chart'
 import { fetchChartData } from '@/lib/tests/api'
 import { cn } from '@/lib/utils/cn'
+import { formatPeriod } from '@/lib/utils/dates'
 
 const PRESET_VALUES: readonly string[] = PERIOD_PRESETS.map((preset) => preset.value)
 
@@ -93,9 +93,7 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 	const customStart = parseDateParam(customFrom)
 	const customEnd = parseDateParam(customTo)
 	const customLabel =
-		period === 'custom' && customStart && customEnd
-			? `${format(customStart, 'dd.MM.yy', { locale: ru })} — ${format(customEnd, 'dd.MM.yy', { locale: ru })}`
-			: 'Свой период'
+		period === 'custom' && customStart && customEnd ? formatPeriod(customStart, customEnd) : 'Свой период'
 
 	return (
 		<section className="rounded-3xl border border-border/80 bg-card p-4 shadow-sm tab-sm:p-5">

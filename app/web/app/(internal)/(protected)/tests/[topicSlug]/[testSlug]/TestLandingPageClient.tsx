@@ -2,8 +2,6 @@
 
 import { useState } from 'react'
 
-import { format } from 'date-fns'
-import { ru } from 'date-fns/locale'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import useSWR from 'swr'
@@ -24,6 +22,7 @@ import { fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
 import type { TestAttemptSummary } from '@/lib/tests/types'
+import { formatDateTime } from '@/lib/utils/dates'
 
 import { TestResultsChart } from './TestResultsChart'
 
@@ -132,9 +131,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 									return (
 										<TableRow key={row.id}>
 											<TableCell className="py-3 pl-4">
-												<span className="font-medium tabular-nums">
-													{format(new Date(row.submittedAt), 'dd.MM.yyyy, HH:mm', { locale: ru })}
-												</span>
+												<span className="font-medium tabular-nums">{formatDateTime(row.submittedAt)}</span>
 												{final ? (
 													<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
 														{final.points.earned} / {final.points.total} · {final.passed ? 'Пройден' : 'Не пройден'}
