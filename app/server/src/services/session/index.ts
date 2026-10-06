@@ -35,7 +35,7 @@ export type ReusedSession = {
 
 export type RotationResult =
 	| { outcome: 'rejected' }
-	| ({ outcome: 'rotated' } & IssuedSession)
+	| ({ outcome: 'rotated'; regranted: boolean } & IssuedSession)
 	| ({ outcome: 'reused' } & ReusedSession)
 	| { outcome: 'replay'; userId: string; sessionId: string }
 
@@ -120,48 +120,71 @@ export function openSession(input: {
 type SessionOwner = { userId: string; sessionId: string; login: string | null }
 
 type CaptureOutcome =
-	| { kind: 'rotated'; owner: SessionOwner }
+	| { kind: 'rotated'; owner: SessionOwner; regranted: boolean }
 	| { kind: 'reused'; owner: SessionOwner }
 	| { kind: 'replay'; userId: string; sessionId: string }
 	| { kind: 'rejected' }
 
+type RepeatOutcome =
+	| Exclude<CaptureOutcome, { kind: 'rotated' }>
+	| { kind: 'regrant'; owner: SessionOwner; tokenId: string }
+
+type RepeatState = {
+	revoked: boolean
+	used: boolean
+	within_window: boolean
+	successor_used: boolean
+	successor_recent: boolean
+}
+
 const reuseWindow = sql`now() - (${sql.raw(String(REFRESH_REUSE_WINDOW_MS))} * interval '1 millisecond')`
 
-async function classifyRepeat(tx: Tx, tokenHash: string): Promise<CaptureOutcome> {
+async function classifyRepeat(tx: Tx, tokenHash: string): Promise<RepeatOutcome> {
 	const [token] = await tx
-		.select({
-			userId: refreshTokens.userId,
-			sessionId: refreshTokens.sessionId,
-			used: sql<boolean>`${refreshTokens.usedAt} IS NOT NULL`,
-			withinWindow: sql<boolean>`coalesce(${refreshTokens.usedAt} > ${reuseWindow}, false)`,
-			successorUsed: sql<boolean>`EXISTS (SELECT 1 FROM refresh_tokens successor WHERE successor.session_id = refresh_tokens.session_id AND successor.created_at > refresh_tokens.created_at AND successor.used_at IS NOT NULL)`,
-		})
+		.select({ id: refreshTokens.id, userId: refreshTokens.userId, sessionId: refreshTokens.sessionId })
 		.from(refreshTokens)
-		.where(
-			and(
-				eq(refreshTokens.tokenHash, tokenHash),
-				isNull(refreshTokens.revokedAt),
-				gt(refreshTokens.expiresAt, sql`now()`)
-			)
-		)
+		.where(and(eq(refreshTokens.tokenHash, tokenHash), gt(refreshTokens.expiresAt, sql`now()`)))
 		.limit(1)
-	if (!token || !token.sessionId || !token.used) return { kind: 'rejected' }
+	if (!token || !token.sessionId) return { kind: 'rejected' }
 
-	const [live] = await tx
-		.select({ login: users.login, active: users.isActive })
-		.from(authSessions)
-		.innerJoin(users, eq(users.id, authSessions.userId))
-		.where(
-			and(eq(authSessions.id, token.sessionId), eq(authSessions.userId, token.userId), isNull(authSessions.revokedAt))
-		)
-		.limit(1)
-	if (!live || !live.active) return { kind: 'rejected' }
+	await tx.execute(
+		sql`SELECT id FROM refresh_tokens WHERE session_id = ${token.sessionId} AND created_at > (SELECT created_at FROM refresh_tokens WHERE id = ${token.id}) ORDER BY id FOR UPDATE`
+	)
+	const live = await tx.execute<{ login: string | null; active: boolean }>(
+		sql`SELECT u.login, u.is_active AS active FROM auth_sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ${token.sessionId} AND s.user_id = ${token.userId} AND s.revoked_at IS NULL FOR UPDATE OF s`
+	)
+	const owner = live.rows[0]
+	if (!owner || !owner.active) return { kind: 'rejected' }
 
-	if (token.withinWindow && !token.successorUsed) {
-		return { kind: 'reused', owner: { userId: token.userId, sessionId: token.sessionId, login: live.login } }
+	const states = await tx.execute<RepeatState>(
+		sql`SELECT t.revoked_at IS NOT NULL AS revoked, t.used_at IS NOT NULL AS used, coalesce(t.used_at > ${reuseWindow}, false) AS within_window, EXISTS (SELECT 1 FROM refresh_tokens s WHERE s.session_id = t.session_id AND s.created_at > t.created_at AND s.used_at IS NOT NULL) AS successor_used, EXISTS (SELECT 1 FROM refresh_tokens s WHERE s.session_id = t.session_id AND s.created_at > t.created_at AND s.created_at > ${reuseWindow}) AS successor_recent FROM refresh_tokens t WHERE t.id = ${token.id}`
+	)
+	const state = states.rows[0]
+	if (!state) return { kind: 'rejected' }
+
+	if (state.revoked || state.successor_used) {
+		await revokeSession(token.sessionId, 'replay', tx)
+		return { kind: 'replay', userId: token.userId, sessionId: token.sessionId }
 	}
-	await revokeSession(token.sessionId, 'replay', tx)
-	return { kind: 'replay', userId: token.userId, sessionId: token.sessionId }
+	if (!state.used) return { kind: 'rejected' }
+
+	const sessionOwner = { userId: token.userId, sessionId: token.sessionId, login: owner.login }
+	if (state.within_window || state.successor_recent) return { kind: 'reused', owner: sessionOwner }
+	return { kind: 'regrant', owner: sessionOwner, tokenId: token.id }
+}
+
+async function grantSuccessor(tx: Tx, owner: SessionOwner, successorHash: string, ip: string | null): Promise<void> {
+	await tx.insert(refreshTokens).values({
+		userId: owner.userId,
+		tokenHash: successorHash,
+		expiresAt: refreshExpiresAt(),
+		createdByIp: ip,
+		sessionId: owner.sessionId,
+	})
+	await tx
+		.update(authSessions)
+		.set({ lastRefreshedAt: sql`now()` })
+		.where(eq(authSessions.id, owner.sessionId))
 }
 
 export function rotateRefreshToken(input: { raw: string; ip: string | null }): Promise<RotationResult> {
@@ -187,7 +210,15 @@ export function rotateRefreshToken(input: { raw: string; ip: string | null }): P
 						userId: refreshTokens.userId,
 						sessionId: refreshTokens.sessionId,
 					})
-				if (!captured) return classifyRepeat(tx, tokenHash)
+				if (!captured) {
+					const repeat = await classifyRepeat(tx, tokenHash)
+					if (repeat.kind !== 'regrant') return repeat
+					await tx.execute(
+						sql`UPDATE refresh_tokens SET revoked_at = now() WHERE session_id = ${repeat.owner.sessionId} AND created_at > (SELECT created_at FROM refresh_tokens WHERE id = ${repeat.tokenId}) AND used_at IS NULL AND revoked_at IS NULL`
+					)
+					await grantSuccessor(tx, repeat.owner, successor.hash, input.ip)
+					return { kind: 'rotated', owner: repeat.owner, regranted: true }
+				}
 
 				let sessionId = captured.sessionId
 				if (!sessionId) {
@@ -211,18 +242,9 @@ export function rotateRefreshToken(input: { raw: string; ip: string | null }): P
 					.limit(1)
 				if (!user) throw new RotationRejected()
 
-				await tx.insert(refreshTokens).values({
-					userId: captured.userId,
-					tokenHash: successor.hash,
-					expiresAt: refreshExpiresAt(),
-					createdByIp: input.ip,
-					sessionId,
-				})
-				await tx
-					.update(authSessions)
-					.set({ lastRefreshedAt: sql`now()` })
-					.where(eq(authSessions.id, sessionId))
-				return { kind: 'rotated', owner: { userId: captured.userId, sessionId, login: user.login } }
+				const owner = { userId: captured.userId, sessionId, login: user.login }
+				await grantSuccessor(tx, owner, successor.hash, input.ip)
+				return { kind: 'rotated', owner, regranted: false }
 			})
 		} catch (error) {
 			if (error instanceof RotationRejected) return { outcome: 'rejected' }
@@ -230,7 +252,7 @@ export function rotateRefreshToken(input: { raw: string; ip: string | null }): P
 		}
 		switch (result.kind) {
 			case 'rotated':
-				return { outcome: 'rotated', ...issue(result.owner, successor.raw) }
+				return { outcome: 'rotated', regranted: result.regranted, ...issue(result.owner, successor.raw) }
 			case 'reused': {
 				const access = signAccessToken(result.owner)
 				return {
