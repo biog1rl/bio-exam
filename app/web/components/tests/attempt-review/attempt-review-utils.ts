@@ -177,7 +177,7 @@ export const ADMIN_REVIEW_NOTES: Record<AdminReviewNote, string> = {
 }
 
 export function getAdminReviewNote(view: AttemptQuestionView | null): AdminReviewNote | null {
-	if (!view) return null
+	if (!view || view.status === 'pending') return null
 	if (!view.keyVisible) return 'key-unknown'
 	if (view.verdicts == null) return 'verdicts-unavailable'
 	return null

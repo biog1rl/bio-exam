@@ -227,6 +227,16 @@ describe('PATCH черновика: входная проверка', () => {
 		assert.deepEqual((await sessionRow(sessionId)).draft_answers, { [questionId]: 'а'.repeat(200) })
 	})
 
+	test('строка сверх предела id на вопросе с выбором отвечает 400 answer_shape_invalid, черновик не меняется', async () => {
+		const { testId, questionId } = await prepareTest('time-draft-shape', null)
+		const sessionId = await startOk(testId)
+
+		const reply = await saveDraft(world, student.cookie, testId, sessionId, { questionId, value: 'a'.repeat(201) })
+		assert.equal(reply.status, 400, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: 'ANSWERS_INVALID', reason: 'answer_shape_invalid' })
+		assert.equal((await sessionRow(sessionId)).draft_answers, null)
+	})
+
 	test('25 одновременных сохранений черновика отвечают 200 без зависания', async () => {
 		const { testId, questionId } = await prepareTest('time-draft-concurrent', null)
 		const sessionId = await startOk(testId)

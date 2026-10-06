@@ -327,6 +327,21 @@ describe('POST submit: входная проверка ответов', () => {
 		assert.equal(await attemptsOf(testId, student.id), 1)
 	})
 
+	test('массив на кратком ответе отвечает 422 answer_shape_invalid, строки нет, сессия открыта', async () => {
+		const { testId, questionId } = await prepareShortAnswerTest('submit-invalid-shape')
+		const sessionId = await startOk(testId)
+
+		const reply = await submitAttempt(world, student.cookie, testId, {
+			sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [questionId]: ['а'.repeat(5000)] },
+		})
+		assert.equal(reply.status, 422, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: 'ANSWERS_INVALID', reason: 'answer_shape_invalid' })
+		assert.equal(await attemptsOf(testId, student.id), 0)
+		assert.equal((await sessionRow(sessionId)).submitted_at, null)
+	})
+
 	test('вопрос с типом вне question_types отвечает 422 unknown_question_type вместо 500', async () => {
 		const { testId, questionId } = await prepareTest('submit-invalid-unknown-type')
 		const sessionId = await startOk(testId)

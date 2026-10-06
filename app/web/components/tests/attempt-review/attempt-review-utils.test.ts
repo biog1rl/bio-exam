@@ -144,8 +144,9 @@ const matchingQuestion = {
 	},
 } as PublicTestQuestion
 
-test('getAdminReviewNote: ключ неизвестен, вердиктов нет, полный разбор и вопрос без вида', () => {
+test('getAdminReviewNote: ключ неизвестен, вердиктов нет, полный разбор, вопрос на проверке и вопрос без вида', () => {
 	assert.equal(getAdminReviewNote(view({ keyVisible: false })), 'key-unknown')
+	assert.equal(getAdminReviewNote(view({ keyVisible: false, status: 'pending' })), null)
 	assert.equal(
 		getAdminReviewNote(view({ keyVisible: true, correctAnswer: '2314', verdicts: null })),
 		'verdicts-unavailable'

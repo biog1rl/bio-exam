@@ -83,6 +83,10 @@ const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> 
 		message: 'Один из вопросов больше не поддерживается в этой версии страницы. Обновите страницу.',
 		action: 'reload',
 	},
+	answer_shape_invalid: {
+		message: 'Один из ответов сохранён в неверном виде. Обновите страницу, проверьте ответы и отправьте снова.',
+		action: 'reload',
+	},
 }
 
 const ALL_ATTEMPT_KEYS: readonly AttemptStorageKey[] = ['session', 'wal', 'frozen', 'clientAttemptId']

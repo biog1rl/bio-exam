@@ -85,7 +85,7 @@ export function QuestionInput({
 					value={typeof answer === 'string' ? answer : ''}
 					onChange={(event) => onInputTextAnswer(question.id, event.target.value)}
 					placeholder={template === 'sequence_digits' ? 'Введите последовательность цифр' : 'Введите ответ'}
-					maxLength={template === 'short_text' ? SHORT_TEXT_MAX_LENGTH : undefined}
+					maxLength={SHORT_TEXT_MAX_LENGTH}
 					disabled={disabled}
 					className="bg-white"
 				/>
