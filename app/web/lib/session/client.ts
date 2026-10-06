@@ -1,6 +1,7 @@
 import { parseAuthMe, type AuthMe } from '@/lib/auth/authMePayload'
 
 import { buildLoginRedirect } from './redirect'
+import { browserRefreshCoordinator, REFRESH_LOCK_TIMEOUT_MS, type RefreshCoordinator } from './refresh-coordinator'
 import { httpTransport, type SessionTransport } from './transport'
 
 export type { AuthMe } from '@/lib/auth/authMePayload'
@@ -25,6 +26,7 @@ export type SessionClientOptions = {
 	transport: SessionTransport
 	navigate: (url: string) => void
 	currentPath: () => string
+	coordinator?: Pick<RefreshCoordinator, 'coordinate' | 'readRecord'>
 }
 
 export type SessionClient = {
@@ -57,14 +59,19 @@ function readAccessExpiresAt(body: unknown): string | null {
 	return typeof value === 'string' ? value : null
 }
 
-export function createSessionClient({ transport, navigate, currentPath }: SessionClientOptions): SessionClient {
+export function createSessionClient({
+	transport,
+	navigate,
+	currentPath,
+	coordinator,
+}: SessionClientOptions): SessionClient {
 	let pendingRefresh: Promise<RefreshOutcome> | null = null
 	let navigated = false
 
 	async function performRefresh(): Promise<RefreshOutcome> {
 		let response: Response
 		try {
-			response = await transport.refresh()
+			response = await transport.refresh(AbortSignal.timeout(REFRESH_LOCK_TIMEOUT_MS))
 		} catch {
 			return { kind: 'unavailable' }
 		}
@@ -75,13 +82,22 @@ export function createSessionClient({ transport, navigate, currentPath }: Sessio
 		return { kind: 'ok', accessExpiresAt: readAccessExpiresAt(await readJson(response)) }
 	}
 
-	function refreshOnce(): Promise<RefreshOutcome> {
+	function seenSeq(): number | undefined {
+		return coordinator ? (coordinator.readRecord()?.seq ?? 0) : undefined
+	}
+
+	function refreshAfter(seen: number | undefined): Promise<RefreshOutcome> {
 		if (!pendingRefresh) {
-			pendingRefresh = performRefresh().finally(() => {
+			const started = coordinator ? coordinator.coordinate(performRefresh, seen) : performRefresh()
+			pendingRefresh = started.finally(() => {
 				pendingRefresh = null
 			})
 		}
 		return pendingRefresh
+	}
+
+	function refreshOnce(): Promise<RefreshOutcome> {
+		return refreshAfter(undefined)
 	}
 
 	function redirectToLogin(): void {
@@ -98,10 +114,11 @@ export function createSessionClient({ transport, navigate, currentPath }: Sessio
 	}
 
 	async function fetchWithSession(url: string, init?: RequestInit): Promise<Response> {
+		const seen = seenSeq()
 		const response = await transport.request(url, init)
 		if (response.status !== 401) return response
 
-		const outcome = await refreshOnce()
+		const outcome = await refreshAfter(seen)
 		if (outcome.kind === 'unavailable') return response
 		discard(response)
 		if (outcome.kind === 'rejected') expire()
@@ -130,10 +147,11 @@ export function createSessionClient({ transport, navigate, currentPath }: Sessio
 	}
 
 	async function loadMe(): Promise<LoadMeOutcome> {
+		const seen = seenSeq()
 		const first = await readMe()
 		if (first !== 'expired') return first
 
-		const outcome = await refreshOnce()
+		const outcome = await refreshAfter(seen)
 		if (outcome.kind !== 'ok') return { kind: outcome.kind }
 
 		const second = await readMe()
@@ -153,10 +171,13 @@ export function createSessionClient({ transport, navigate, currentPath }: Sessio
 	return { refreshOnce, fetchWithSession, loadMe, logout, redirectToLogin }
 }
 
+export const sessionRefreshCoordinator = browserRefreshCoordinator()
+
 export const sessionClient = createSessionClient({
 	transport: httpTransport,
 	navigate: (url) => window.location.assign(url),
 	currentPath: () => `${window.location.pathname}${window.location.search}`,
+	coordinator: sessionRefreshCoordinator,
 })
 
 export function apiFetch(url: string, init?: RequestInit): Promise<Response> {

@@ -105,6 +105,65 @@ test.describe.serial('D3: one /api/auth/me per load @session', () => {
 	})
 })
 
+test.describe.serial('PLAT-03: one refresh for several tabs @session', () => {
+	let context: BrowserContext | undefined
+
+	test('PLAT-03 setup: student logs in through the API @session', async ({ browser }, testInfo) => {
+		context = await loginContext(browser, testInfo, 'user')
+		expect(await cookieNames(context)).toContain(SESSION_COOKIE)
+	})
+
+	test.afterAll(async () => {
+		await context?.close()
+	})
+
+	test('PLAT-03: two tabs with an expired access token make one POST /api/auth/refresh and keep the session @session', async () => {
+		const pages = [await context!.newPage(), await context!.newPage()]
+		const loginNavigations: string[] = []
+		for (const page of pages) {
+			page.on('framenavigated', (frame) => {
+				if (frame === page.mainFrame() && new URL(frame.url()).pathname === '/login') loginNavigations.push(frame.url())
+			})
+			await page.goto('/dashboard')
+			await page.waitForLoadState('networkidle')
+			await expect(page.locator('header').getByRole('button', { name: /^Уведомления/ })).toBeVisible()
+		}
+
+		const refreshRequests: string[] = []
+		context!.on('request', (request) => {
+			if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/auth/refresh') {
+				refreshRequests.push(request.url())
+			}
+		})
+		await context!.clearCookies({ name: SESSION_COOKIE })
+
+		const loaded = pages.map((page) =>
+			page.waitForResponse(
+				(response) =>
+					new URL(response.url()).pathname === '/api/notifications/unread-count' &&
+					response.request().method() === 'GET' &&
+					response.status() === 200
+			)
+		)
+		await Promise.all(
+			pages.map((page) =>
+				page
+					.locator('header')
+					.getByRole('button', { name: /^Уведомления/ })
+					.click()
+			)
+		)
+		await Promise.all(loaded)
+		await Promise.all(pages.map((page) => page.waitForLoadState('networkidle')))
+
+		expect(refreshRequests, 'browser POST /api/auth/refresh requests from both tabs').toHaveLength(1)
+		expect(loginNavigations, 'main frame navigations to /login').toEqual([])
+		expect(pages.map((page) => new URL(page.url()).pathname)).toEqual(['/dashboard', '/dashboard'])
+		const me = await context!.request.get('/api/auth/me')
+		expect(me.status(), 'GET /api/auth/me after the shared refresh').toBe(200)
+	})
+})
+
 test.describe.serial('AUTH-04: logout revokes the access token @session', () => {
 	let context: BrowserContext | undefined
 	let oldSession = ''
