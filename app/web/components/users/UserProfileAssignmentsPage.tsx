@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import type { DateRange } from 'react-day-picker'
 
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -19,11 +18,12 @@ import {
 	X,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useQueryState } from 'nuqs'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import useSWR, { useSWRConfig } from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { ChartPeriodPicker } from '@/components/charts/ChartPeriodPicker'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { PageHeader } from '@/components/page/PageHeader'
 import { Panel } from '@/components/page/Panel'
@@ -50,7 +50,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { EditUserDialog } from '@/components/users/dialogs/EditUserDialog'
 import {
@@ -63,14 +62,13 @@ import {
 	type SessionActionKind,
 } from '@/components/users/session-actions'
 import { useChartConfigs } from '@/lib/charts/api'
+import { useChartPeriod } from '@/lib/charts/use-chart-period'
 import { failureMessage, failureOf } from '@/lib/http/errors'
+import { replaceSearchParams } from '@/lib/navigation/search-params'
 import {
 	assignTopicColors,
 	filterAttemptsByPeriod,
-	parseDateParam,
 	parseDayParam,
-	parsePeriod,
-	PERIOD_PRESETS,
 	resolvePeriodBounds,
 } from '@/lib/progress/attempt-chart'
 import { adminTestsKeys, adminTestsListFetcher, type AdminTestListItem } from '@/lib/tests/admin-api'
@@ -93,7 +91,7 @@ import { personName } from '@/lib/users/person-name'
 import { assignmentAction, assignmentErrorText, contactRows } from '@/lib/users/student-card'
 import { usersUrl } from '@/lib/users/users-url'
 import { cn } from '@/lib/utils/cn'
-import { formatDateTime, formatDay, formatPeriod } from '@/lib/utils/dates'
+import { formatDateTime, formatDay } from '@/lib/utils/dates'
 
 type Props = {
 	login: string
@@ -402,21 +400,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	const clearButtonRef = useRef<HTMLButtonElement>(null)
 	const [assigningTestId, setAssigningTestId] = useState<string | null>(null)
 	const [removingTestId, setRemovingTestId] = useState<string | null>(null)
-	const [search, setSearch] = useQueryState('q', { defaultValue: '' })
-	const [topicFilter, setTopicFilter] = useQueryState('topic', { defaultValue: 'all' })
-	const [testsParam, setTestsParam] = useQueryState('tests', { defaultValue: '' })
+	const searchParams = useSearchParams()
+	const search = searchParams?.get('q') ?? ''
+	const topicFilter = searchParams?.get('topic') ?? 'all'
+	const testsParam = searchParams?.get('tests') ?? ''
 	const [visibleCount, setVisibleCount] = useState(5)
 
-	// Date range filter state
 	const chartConfig = useChartConfigs().profileAttempts
-	const [range, setRange] = useQueryState('range', { defaultValue: '' })
-	const [customFrom, setCustomFrom] = useQueryState('from', { defaultValue: '' })
-	const [customTo, setCustomTo] = useQueryState('to', { defaultValue: '' })
-	const [calendarOpen, setCalendarOpen] = useState(false)
-	const [calendarRange, setCalendarRange] = useState<DateRange>({ from: undefined, to: undefined })
-
-	// Single day state
-	const [selectedDay, setSelectedDay] = useQueryState('day', { defaultValue: '' })
+	const chartPeriod = useChartPeriod(chartConfig.period)
+	const { period, day: selectedDay } = chartPeriod
 	const [dayCalendarOpen, setDayCalendarOpen] = useState(false)
 
 	const selectedTestIds = useMemo(() => new Set(testsParam ? testsParam.split(',').filter(Boolean) : []), [testsParam])
@@ -467,18 +459,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 	}, [attempts, search, topicFilter, activeTestIds])
 
 	const [now] = useState(() => new Date())
-	const period = range ? parsePeriod(range) : chartConfig.period
 	const dayDate = useMemo(() => parseDayParam(selectedDay), [selectedDay])
-	const fromDate = useMemo(() => parseDateParam(customFrom), [customFrom])
-	const toDate = useMemo(() => parseDateParam(customTo), [customTo])
 
 	const periodAttempts = useMemo(
 		() =>
 			filterAttemptsByPeriod(
 				filteredAttempts,
-				resolvePeriodBounds({ period, from: customFrom, to: customTo, day: selectedDay }, now)
+				resolvePeriodBounds({ period, from: chartPeriod.from, to: chartPeriod.to, day: selectedDay }, now)
 			),
-		[filteredAttempts, period, customFrom, customTo, selectedDay, now]
+		[filteredAttempts, period, chartPeriod.from, chartPeriod.to, selectedDay, now]
 	)
 
 	const chartAttempts = useMemo(
@@ -535,37 +524,18 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 		const next = new Set(selectedTestIds)
 		if (next.has(testId)) next.delete(testId)
 		else next.add(testId)
-		void setTestsParam(next.size > 0 ? Array.from(next).join(',') : null)
+		replaceSearchParams({ tests: next.size > 0 ? Array.from(next).join(',') : null })
 		setVisibleCount(5)
-	}
-
-	const handlePresetChange = (value: string) => {
-		if (!value) return
-		void setRange(value)
-		void setCustomFrom('')
-		void setCustomTo('')
-		void setSelectedDay(null)
-	}
-
-	const handleCalendarSelect = (selected: DateRange | undefined) => {
-		if (!selected) return
-		setCalendarRange(selected)
-		if (selected.from && selected.to) {
-			void setCustomFrom(selected.from.toISOString())
-			void setCustomTo(selected.to.toISOString())
-			void setSelectedDay(null)
-			setCalendarOpen(false)
-		}
 	}
 
 	const handleDaySelect = (date: Date | undefined) => {
 		if (!date) return
-		void setSelectedDay(format(date, 'yyyy-MM-dd'))
+		chartPeriod.chooseDay(format(date, 'yyyy-MM-dd'))
 		setDayCalendarOpen(false)
 	}
 
 	const clearDay = () => {
-		void setSelectedDay(null)
+		chartPeriod.chooseDay(null)
 	}
 
 	const sessionActions = sessionActionsState({
@@ -645,8 +615,6 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			: selectedTestIds.size === 1
 				? (testOptions.find((t) => selectedTestIds.has(t.id))?.title ?? '1 тест')
 				: `${selectedTestIds.size} теста выбрано`
-
-	const presetValue = !dayDate && PERIOD_PRESETS.some((preset) => preset.value === period) ? period : ''
 
 	return (
 		<div className="space-y-4">
@@ -761,7 +729,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<ToolbarSearch
 								value={search}
 								onChange={(value) => {
-									void setSearch(value)
+									replaceSearchParams({ q: value })
 									setVisibleCount(5)
 								}}
 								label="Поиск по тесту"
@@ -772,8 +740,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 							<Select
 								value={topicFilter}
 								onValueChange={(v) => {
-									void setTopicFilter(v)
-									void setTestsParam(null)
+									replaceSearchParams({ topic: v === 'all' ? null : v, tests: null })
 									setVisibleCount(5)
 								}}
 							>
@@ -803,7 +770,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 											<button
 												className="flex w-full items-center gap-2 rounded-2xl px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70"
 												onClick={() => {
-													void setTestsParam(null)
+													replaceSearchParams({ tests: null })
 													setVisibleCount(5)
 												}}
 											>
@@ -834,47 +801,15 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 					{/* Date range controls */}
 					{attempts.length > 0 && (
-						<div className="flex flex-wrap items-center gap-2">
-							<ToggleGroup
-								type="single"
-								aria-label="Период"
-								className="flex-wrap justify-start gap-1 rounded-full border border-border/80 bg-card p-1"
-								value={presetValue}
-								onValueChange={handlePresetChange}
-							>
-								{PERIOD_PRESETS.map((preset) => (
-									<ToggleGroupItem
-										key={preset.value}
-										value={preset.value}
-										className="h-8 rounded-full px-3 text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-									>
-										{preset.label}
-									</ToggleGroupItem>
-								))}
-							</ToggleGroup>
-
-							{/* Custom date range */}
-							<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-								<PopoverTrigger asChild>
-									<Button
-										variant={period === 'custom' && !dayDate ? 'default' : 'outline'}
-										className={cn('h-10 rounded-full', !(period === 'custom' && !dayDate) && 'bg-card')}
-										onClick={() => void setRange('custom')}
-									>
-										{period === 'custom' && fromDate && toDate ? formatPeriod(fromDate, toDate) : 'Свой диапазон'}
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-auto p-0" align="start">
-									<Calendar
-										mode="range"
-										selected={calendarRange}
-										onSelect={handleCalendarSelect}
-										locale={ru}
-										numberOfMonths={2}
-									/>
-								</PopoverContent>
-							</Popover>
-
+						<ChartPeriodPicker
+							period={period}
+							from={chartPeriod.fromDate}
+							to={chartPeriod.toDate}
+							onPreset={chartPeriod.choosePreset}
+							onRange={chartPeriod.chooseRange}
+							inactive={Boolean(dayDate)}
+							align="start"
+						>
 							<div className="h-5 w-px bg-border" />
 
 							{/* Single day picker */}
@@ -912,7 +847,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 									<X className="size-4" aria-hidden="true" />
 								</Button>
 							)}
-						</div>
+						</ChartPeriodPicker>
 					)}
 
 					{!dayDate && chartAttempts.length > 0 && (

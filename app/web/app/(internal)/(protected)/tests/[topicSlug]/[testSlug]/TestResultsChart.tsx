@@ -1,33 +1,17 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import type { DateRange } from 'react-day-picker'
 
-import { ru } from 'date-fns/locale'
-import { CalendarRange } from 'lucide-react'
-import { useQueryState } from 'nuqs'
 import useSWR from 'swr'
 
 import { AttemptChart } from '@/components/charts/AttemptChart'
+import { ChartPeriodPicker } from '@/components/charts/ChartPeriodPicker'
 import { Panel } from '@/components/page/Panel'
-import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useChartSettingsState } from '@/lib/charts/api'
-import {
-	PERIOD_PRESETS,
-	parseDateParam,
-	resolvePeriodBounds,
-	type PeriodValue,
-	type ProgressAttempt,
-} from '@/lib/progress/attempt-chart'
+import { useChartPeriod } from '@/lib/charts/use-chart-period'
+import { resolvePeriodBounds, type ProgressAttempt } from '@/lib/progress/attempt-chart'
 import { fetchChartData } from '@/lib/tests/api'
-import { cn } from '@/lib/utils/cn'
-import { formatPeriod } from '@/lib/utils/dates'
-
-const PRESET_VALUES: readonly string[] = PERIOD_PRESETS.map((preset) => preset.value)
 
 type TestMeta = { id: string; title: string; slug: string; topicSlug: string; topicTitle: string }
 
@@ -35,23 +19,17 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 	const { configs, loaded } = useChartSettingsState()
 	const config = configs.testResults
 	const [now] = useState(() => new Date())
-	const [range, setRange] = useQueryState('range', { defaultValue: '' })
-	const [customFrom, setCustomFrom] = useQueryState('from', { defaultValue: '' })
-	const [customTo, setCustomTo] = useQueryState('to', { defaultValue: '' })
-	const [calendarOpen, setCalendarOpen] = useState(false)
-	const [calendarRange, setCalendarRange] = useState<DateRange>({ from: undefined, to: undefined })
-
-	const period: PeriodValue =
-		range === 'custom' || PRESET_VALUES.includes(range) ? (range as PeriodValue) : config.period
+	const chartPeriod = useChartPeriod(config.period)
+	const { period } = chartPeriod
 	const bounds = useMemo(
-		() => resolvePeriodBounds({ period, from: customFrom, to: customTo }, now),
-		[period, customFrom, customTo, now]
+		() => resolvePeriodBounds({ period, from: chartPeriod.from, to: chartPeriod.to }, now),
+		[period, chartPeriod.from, chartPeriod.to, now]
 	)
 	const from = bounds.start?.toISOString()
 	const to = bounds.end?.toISOString()
 
 	const { data, isLoading, error } = useSWR(
-		loaded || range !== '' ? `test-chart:${test.id}:${from ?? ''}:${to ?? ''}` : null,
+		loaded || chartPeriod.explicit ? `test-chart:${test.id}:${from ?? ''}:${to ?? ''}` : null,
 		() => fetchChartData(test.id, { from, to }),
 		{ revalidateOnFocus: false, keepPreviousData: true }
 	)
@@ -73,66 +51,17 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 		[data, test]
 	)
 
-	const choosePreset = (value: string) => {
-		if (!value) return
-		void setRange(value)
-		void setCustomFrom(null)
-		void setCustomTo(null)
-	}
-
-	const chooseDates = (selected: DateRange | undefined) => {
-		if (!selected) return
-		setCalendarRange(selected)
-		if (selected.from && selected.to && selected.from.getTime() !== selected.to.getTime()) {
-			void setRange('custom')
-			void setCustomFrom(selected.from.toISOString())
-			void setCustomTo(selected.to.toISOString())
-			setCalendarOpen(false)
-		}
-	}
-
-	const customStart = parseDateParam(customFrom)
-	const customEnd = parseDateParam(customTo)
-	const customLabel =
-		period === 'custom' && customStart && customEnd ? formatPeriod(customStart, customEnd) : 'Свой период'
-
 	return (
 		<Panel
 			title="Мои результаты"
 			actions={
-				<div className="flex flex-wrap items-center gap-2">
-					<ToggleGroup
-						type="single"
-						value={period === 'custom' ? '' : period}
-						onValueChange={choosePreset}
-						aria-label="Период графика"
-						className="flex-wrap justify-start gap-1 rounded-full border border-border/80 bg-card p-1"
-					>
-						{PERIOD_PRESETS.map((preset) => (
-							<ToggleGroupItem
-								key={preset.value}
-								value={preset.value}
-								className="h-8 rounded-full px-3 text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-							>
-								{preset.label}
-							</ToggleGroupItem>
-						))}
-					</ToggleGroup>
-					<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-						<PopoverTrigger asChild>
-							<Button
-								variant={period === 'custom' ? 'default' : 'outline'}
-								className={cn('h-10 rounded-full', period !== 'custom' && 'bg-card')}
-							>
-								<CalendarRange className="size-4" aria-hidden="true" />
-								{customLabel}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="end">
-							<Calendar mode="range" selected={calendarRange} onSelect={chooseDates} locale={ru} numberOfMonths={2} />
-						</PopoverContent>
-					</Popover>
-				</div>
+				<ChartPeriodPicker
+					period={period}
+					from={chartPeriod.fromDate}
+					to={chartPeriod.toDate}
+					onPreset={chartPeriod.choosePreset}
+					onRange={chartPeriod.chooseRange}
+				/>
 			}
 		>
 			<div className="transition-opacity duration-300" style={{ opacity: isLoading && data ? 0.4 : 1 }}>
