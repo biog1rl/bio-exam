@@ -196,6 +196,79 @@ describe('правило удаления пользователя: поведе
 		assert.equal(assignment.rows[0]?.assigned_by, null)
 	})
 
+	test('удаление получателя удаляет его уведомления и доставки, удаление автора события обнуляет actor_id', async () => {
+		assert.ok(ctx && world)
+		const { db, schema } = ctx
+		const actor = await seedUser(ctx, { login: 'deletion_notif_actor', roles: ['admin'], password: world.password })
+		const recipient = await seedStudent(world, 'deletion_notif_recipient')
+		const bystander = await seedStudent(world, 'deletion_notif_bystander')
+		const subjectId = crypto.randomUUID()
+		const [recipientEvent] = await db
+			.insert(schema.notificationEvents)
+			.values({
+				recipientId: recipient.id,
+				actorId: actor,
+				kind: 'test.assigned',
+				subjectType: 'test',
+				subjectId,
+				dedupeKey: `test.assigned:${subjectId}`,
+				params: { testTitle: 'Удаление' },
+			})
+			.returning({ id: schema.notificationEvents.id })
+		const [bystanderEvent] = await db
+			.insert(schema.notificationEvents)
+			.values({
+				recipientId: bystander.id,
+				actorId: actor,
+				kind: 'test.assigned',
+				subjectType: 'test',
+				subjectId,
+				dedupeKey: `test.assigned:${subjectId}`,
+				params: { testTitle: 'Удаление' },
+			})
+			.returning({ id: schema.notificationEvents.id })
+		assert.ok(recipientEvent && bystanderEvent)
+		await db.insert(schema.notificationDeliveries).values([
+			{ eventId: recipientEvent.id, channel: 'inbox', status: 'sent' },
+			{ eventId: bystanderEvent.id, channel: 'inbox', status: 'sent' },
+		])
+
+		await ctx.pgPool.query('DELETE FROM users WHERE id = $1', [actor])
+
+		const afterActor = await ctx.pgPool.query<{ id: string; actor_id: string | null }>(
+			'SELECT id, actor_id FROM notification_events WHERE id = ANY($1)',
+			[[recipientEvent.id, bystanderEvent.id]]
+		)
+		assert.equal(afterActor.rowCount, 2)
+		assert.deepEqual(
+			afterActor.rows.map((row) => row.actor_id),
+			[null, null]
+		)
+
+		await ctx.pgPool.query('DELETE FROM users WHERE id = $1', [recipient.id])
+
+		assert.equal(
+			await count('SELECT count(*)::int AS count FROM notification_events WHERE id = $1', [recipientEvent.id]),
+			0
+		)
+		assert.equal(
+			await count('SELECT count(*)::int AS count FROM notification_deliveries WHERE event_id = $1', [
+				recipientEvent.id,
+			]),
+			0
+		)
+		assert.equal(
+			await count('SELECT count(*)::int AS count FROM notification_events WHERE id = $1', [bystanderEvent.id]),
+			1
+		)
+		assert.equal(
+			await count('SELECT count(*)::int AS count FROM notification_deliveries WHERE event_id = $1', [
+				bystanderEvent.id,
+			]),
+			1
+		)
+	})
+
 	test('удаление пользователя, пригласившего другого, обнуляет created_by приглашённого', async () => {
 		assert.ok(ctx && world)
 		const inviter = await seedUser(ctx, { login: 'deletion_inviter', roles: ['teacher'], password: world.password })

@@ -24,6 +24,7 @@ import {
 } from 'drizzle-orm/pg-core'
 
 import type { TestScoringRules } from '../lib/tests/scoring.js'
+import type { NotificationParams } from '../services/notifications/record.js'
 
 const jsonbParsedByDriver = customType<{ data: unknown; driverData: unknown }>({
 	dataType() {
@@ -750,6 +751,65 @@ export const loginThrottle = pgTable(
 	},
 	(t) => ({
 		loginIdx: index('idx_login_throttle_login').on(t.login),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
+export const notificationEvents = pgTable(
+	'notification_events',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		recipientId: uuid('recipient_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+		kind: text('kind').notNull(),
+		subjectType: text('subject_type').notNull(),
+		subjectId: uuid('subject_id').notNull(),
+		dedupeKey: text('dedupe_key').notNull(),
+		collapseKey: text('collapse_key'),
+		params: jsonb('params')
+			.$type<NotificationParams>()
+			.notNull()
+			.default(sql`'{}'::jsonb`),
+		refSeq: integer('ref_seq').notNull().default(1),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull().defaultNow(),
+		readAt: timestamp('read_at', { withTimezone: true }),
+		expiresAt: timestamp('expires_at', { withTimezone: true }),
+	},
+	(t) => ({
+		recipientDedupeUniq: uniqueIndex('notification_events_recipient_dedupe_uniq').on(t.recipientId, t.dedupeKey),
+		recipientFeedIdx: index('notification_events_recipient_feed_idx').on(
+			t.recipientId,
+			t.lastEventAt.desc().nullsFirst(),
+			t.id.desc().nullsFirst()
+		),
+		recipientUnreadIdx: index('notification_events_recipient_unread_idx')
+			.on(t.recipientId)
+			.where(sql`${t.readAt} IS NULL`),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
+export const notificationDeliveries = pgTable(
+	'notification_deliveries',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		eventId: uuid('event_id')
+			.notNull()
+			.references(() => notificationEvents.id, { onDelete: 'cascade' }),
+		channel: text('channel').notNull(),
+		status: text('status').notNull().default('pending'),
+		attempts: integer('attempts').notNull().default(0),
+		nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+		leaseUntil: timestamp('lease_until', { withTimezone: true }),
+		sentAt: timestamp('sent_at', { withTimezone: true }),
+		lastError: text('last_error'),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		eventChannelUniq: uniqueIndex('notification_deliveries_event_channel_uniq').on(t.eventId, t.channel),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

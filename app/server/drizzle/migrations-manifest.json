@@ -216,6 +216,14 @@
       "sha256": "79a09926d095a95c2a17b26aaffe09c02ba1d23816e1786028a82d666ac65b7e",
       "when": 1791239364196,
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "tag": "0027_notification_journal",
+      "file": "0027_notification_journal.sql",
+      "sha256": "86dd934e63a955cc83d27968b2e19a9f08dadbf594372abc99d2e7aeedf252f5",
+      "when": 1791264404526,
+      "breakpoints": true
     }
   ]
 }
