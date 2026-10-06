@@ -68,9 +68,16 @@ test('LIFE-05: тест с лимитом показывает таймер, т�
 		expect(body.totalPoints).toBe(2)
 
 		await page.clock.fastForward('00:10')
-		await expect(page.getByRole('heading', { name: 'Результат' })).toBeVisible()
+		const accepted = page.getByRole('heading', { name: 'Ответ принят' })
+		await expect(accepted).toBeVisible()
+		await expect(accepted).toBeFocused()
+		const acceptedLine = page.getByText('Время вышло, ответы приняты автоматически.')
+		await expect(acceptedLine).toBeVisible()
 		await expect(page.getByText('Баллы: 1 / 2')).toBeVisible()
 		await expect(page.getByText('Время вышло', { exact: true })).toHaveCount(0)
+		const acceptedRatio = await contrastOf(acceptedLine)
+		console.log(`contrast: accepted line ${acceptedRatio.toFixed(2)}`)
+		expect(acceptedRatio).toBeGreaterThanOrEqual(4.5)
 		expect(await attemptIdsOf(page, own.id)).toHaveLength(1)
 	} finally {
 		await closeOpenSession(page, own.id)
@@ -194,7 +201,8 @@ test('дедлайн без связи: текст только для чтен�
 		await page.context().setOffline(false)
 		expect((await resubmitted).status(), 'auto-submit retried on online without a click').toBe(200)
 		await page.clock.fastForward('00:02')
-		await expect(page.getByRole('heading', { name: 'Результат' })).toBeVisible()
+		await expect(page.getByRole('heading', { name: 'Ответ принят' })).toBeVisible()
+		await expect(page.getByText('Время вышло', { exact: true })).toHaveCount(0)
 		expect(await attemptIdsOf(page, own.id)).toHaveLength(1)
 	} finally {
 		await page.context().setOffline(false)

@@ -26,6 +26,8 @@ import {
 	TEST_ID,
 } from './testing'
 
+const CLOSES_AT = '2026-10-04T10:20:00.000Z'
+
 async function activeWithAnswer(input: Parameters<typeof setupLifecycle>[0] = {}) {
 	const setup = setupLifecycle(input)
 	setup.lifecycle.init()
@@ -322,7 +324,7 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.equal(fakeApi.start.mock.calls.length, 1)
 	})
 
-	test('характеризация: 409 ATTEMPT_ALREADY_SUBMITTED на автосдачу теста с лимитом — blocked already-submitted, удалены все четыре ключа (до D-13/D-14)', async () => {
+	test('характеризация: 409 ATTEMPT_ALREADY_SUBMITTED на автосдачу теста с лимитом — blocked already-submitted, удалены все четыре ключа (источник не deadline)', async () => {
 		const fakeApi = fakeAttemptApi([sessionOf('s1')])
 		const { lifecycle, storage } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10 })
 		lifecycle.init()
@@ -335,6 +337,99 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		assert.equal(snapshot.blockReason, 'already-submitted')
 		assert.equal(snapshot.alreadySubmittedAttemptId, ATTEMPT_ID)
 		assert.deepEqual(presentKeys(storage), [])
+	})
+
+	test.each([
+		{ name: 'автосдача', auto: true },
+		{ name: 'ручная сдача', auto: false },
+	])(
+		'$name, 409 deadline с видом: submitted, результат из тела, acceptedAutomatically, окно и время сервера, ключей нет',
+		async ({ auto }) => {
+			const fakeApi = fakeAttemptApi([sessionOf('s1')])
+			const { lifecycle, storage, onNotice } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10 })
+			lifecycle.init()
+			await lifecycle.confirmStart()
+			lifecycle.answer(Q1, 'a')
+			const view = attemptViewOf(ATTEMPT_ID, { submitSource: 'deadline', uploadClosesAt: CLOSES_AT })
+			fakeApi.queueSubmit(
+				requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+					submitSource: 'deadline',
+					serverNow: new Date(START + 90_000).toISOString(),
+					attempt: view,
+				})
+			)
+			await lifecycle.submit({ auto })
+			const snapshot = lifecycle.getSnapshot()
+			assert.equal(snapshot.phase, 'submitted')
+			assert.equal(snapshot.blockReason, null)
+			assert.equal(snapshot.result?.attemptId, ATTEMPT_ID)
+			assert.equal(snapshot.acceptedAutomatically, true)
+			assert.equal(snapshot.uploadClosesAt, CLOSES_AT)
+			assert.equal(snapshot.serverOffsetMs, 90_000)
+			assert.equal(snapshot.alreadySubmittedAttemptId, ATTEMPT_ID)
+			assert.deepEqual(presentKeys(storage), [])
+			assert.deepEqual(onNotice.mock.calls.at(-1)?.[0], { kind: 'submitted', result: view })
+		}
+	)
+
+	test('409 deadline без вида: submitted без результата, acceptedAutomatically, id попытки из тела, ключей нет', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage, onNotice } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 10 })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		lifecycle.answer(Q1, 'a')
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				uploadClosesAt: CLOSES_AT,
+			})
+		)
+		await lifecycle.submit({ auto: true })
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'submitted')
+		assert.equal(snapshot.result, null)
+		assert.equal(snapshot.acceptedAutomatically, true)
+		assert.equal(snapshot.alreadySubmittedAttemptId, ATTEMPT_ID)
+		assert.equal(snapshot.uploadClosesAt, CLOSES_AT)
+		assert.deepEqual(presentKeys(storage), [])
+		assert.equal(
+			onNotice.mock.calls.some(([value]) => value.kind === 'submitted'),
+			false
+		)
+	})
+
+	test.each([
+		{ name: 'ручная сдача 200', auto: false, accepted: false },
+		{ name: 'автосдача 200', auto: true, accepted: true },
+	])('$name: acceptedAutomatically $accepted, окно из вида', async ({ auto, accepted }) => {
+		const { lifecycle, fakeApi } = await activeWithAnswer()
+		fakeApi.queueSubmit(attemptViewOf(ATTEMPT_ID, { uploadClosesAt: CLOSES_AT }))
+		const submitting = lifecycle.submit({ auto })
+		await vi.advanceTimersByTimeAsync(1500)
+		await submitting
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'submitted')
+		assert.equal(snapshot.acceptedAutomatically, accepted)
+		assert.equal(snapshot.uploadClosesAt, CLOSES_AT)
+	})
+
+	test('retake после исхода finalized: acceptedAutomatically и окно сброшены', async () => {
+		const { lifecycle, fakeApi } = await activeWithAnswer()
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				uploadClosesAt: CLOSES_AT,
+				attempt: attemptViewOf(),
+			})
+		)
+		await lifecycle.submit()
+		fakeApi.queueStart(sessionOf('s2'))
+		lifecycle.retake()
+		await settle()
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.acceptedAutomatically, false)
+		assert.equal(snapshot.uploadClosesAt, null)
+		assert.equal(snapshot.result, null)
 	})
 
 	test('404 на отправку: blocked not-found, удалены session и clientAttemptId, WAL без сессии; новый модуль досылает ответы в s3', async () => {

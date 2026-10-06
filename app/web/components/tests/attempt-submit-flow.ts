@@ -4,11 +4,19 @@ import {
 	SHORT_TEXT_MAX_LENGTH,
 	SUBMIT_ERROR_CODES,
 	type AnswerViolationReason,
+	type AttemptView,
 } from '@bio-exam/exam-core'
 
 import { AttemptRequestError } from '@/lib/tests/api'
 
 export type SubmitFailure =
+	| {
+			kind: 'finalized'
+			attemptId: string | null
+			attempt: AttemptView | null
+			uploadClosesAt: string | null
+			serverNow: string | null
+	  }
 	| { kind: 'already-submitted'; attemptId: string | null }
 	| { kind: 'time-expired' }
 	| { kind: 'not-assigned' }
@@ -28,6 +36,7 @@ export type AttemptStorageKey = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
 
 export type AttemptStorageEvent =
 	| 'success'
+	| 'finalized'
 	| 'already-submitted'
 	| 'time-expired'
 	| 'not-found'
@@ -93,6 +102,7 @@ const ALL_ATTEMPT_KEYS: readonly AttemptStorageKey[] = ['session', 'wal', 'froze
 
 const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorageKey[]> = {
 	success: ALL_ATTEMPT_KEYS,
+	finalized: ALL_ATTEMPT_KEYS,
 	'already-submitted': ALL_ATTEMPT_KEYS,
 	'time-expired': ALL_ATTEMPT_KEYS,
 	'not-found': ['session', 'clientAttemptId'],
@@ -104,6 +114,15 @@ const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorage
 export function classifySubmitFailure(error: unknown): SubmitFailure {
 	if (!(error instanceof AttemptRequestError)) return { kind: 'retry' }
 	if (error.status === 409 && error.code === SUBMIT_ERROR_CODES.alreadySubmitted) {
+		if (error.submitSource === 'deadline') {
+			return {
+				kind: 'finalized',
+				attemptId: error.attemptId,
+				attempt: error.attempt,
+				uploadClosesAt: error.uploadClosesAt,
+				serverNow: error.serverNow,
+			}
+		}
 		return { kind: 'already-submitted', attemptId: error.attemptId }
 	}
 	if (error.status === 422 && error.code === SUBMIT_ERROR_CODES.timeExpired) return { kind: 'time-expired' }

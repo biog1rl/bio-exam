@@ -1,6 +1,8 @@
 import {
+	AttemptViewSchema,
 	SubmitAttemptErrorSchema,
 	type AttemptSession,
+	type AttemptSubmitSource,
 	type AttemptView,
 	type SaveAttemptDraftRequest,
 	type SubmitAttemptRequest,
@@ -12,19 +14,31 @@ import type { PublicTestDetail, PublicTestListItem, PublicTestQuestion, TestAtte
 
 const segment = encodeURIComponent
 
+export type AttemptRequestErrorDetails = {
+	submitSource?: AttemptSubmitSource | null
+	uploadClosesAt?: string | null
+	serverNow?: string | null
+	attempt?: AttemptView | null
+}
+
 export class AttemptRequestError extends Error {
 	readonly status: number
 	readonly code: string | null
 	readonly attemptId: string | null
 	readonly reason: string | null
 	readonly limit: number | null
+	readonly submitSource: AttemptSubmitSource | null
+	readonly uploadClosesAt: string | null
+	readonly serverNow: string | null
+	readonly attempt: AttemptView | null
 
 	constructor(
 		status: number,
 		code: string | null,
 		attemptId: string | null,
 		reason: string | null = null,
-		limit: number | null = null
+		limit: number | null = null,
+		details: AttemptRequestErrorDetails = {}
 	) {
 		super(`HTTP ${status}`)
 		this.name = 'AttemptRequestError'
@@ -33,25 +47,49 @@ export class AttemptRequestError extends Error {
 		this.attemptId = attemptId
 		this.reason = reason
 		this.limit = limit
+		this.submitSource = details.submitSource ?? null
+		this.uploadClosesAt = details.uploadClosesAt ?? null
+		this.serverNow = details.serverNow ?? null
+		this.attempt = details.attempt ?? null
 	}
 }
 
-function readAttemptErrorBody(body: unknown): {
+const SubmitAttemptErrorEnvelopeSchema = SubmitAttemptErrorSchema.omit({ attempt: true })
+
+type AttemptErrorBody = {
 	code: string | null
 	attemptId: string | null
 	reason: string | null
 	limit: number | null
-} {
+	details: Required<AttemptRequestErrorDetails>
+}
+
+const EMPTY_DETAILS: Required<AttemptRequestErrorDetails> = {
+	submitSource: null,
+	uploadClosesAt: null,
+	serverNow: null,
+	attempt: null,
+}
+
+function readAttemptErrorBody(body: unknown): AttemptErrorBody {
 	if (!body || typeof body !== 'object' || Array.isArray(body)) {
-		return { code: null, attemptId: null, reason: null, limit: null }
+		return { code: null, attemptId: null, reason: null, limit: null, details: EMPTY_DETAILS }
 	}
 	const record = body as Record<string, unknown>
-	const parsed = SubmitAttemptErrorSchema.safeParse(body)
+	const parsed = SubmitAttemptErrorEnvelopeSchema.safeParse(body)
+	const envelope = parsed.success ? parsed.data : null
+	const attempt = AttemptViewSchema.safeParse(record.attempt)
 	return {
 		code: typeof record.error === 'string' ? record.error : null,
 		attemptId: typeof record.attemptId === 'string' ? record.attemptId : null,
-		reason: parsed.success ? (parsed.data.reason ?? null) : null,
-		limit: parsed.success ? (parsed.data.limit ?? null) : null,
+		reason: envelope?.reason ?? null,
+		limit: envelope?.limit ?? null,
+		details: {
+			submitSource: envelope?.submitSource ?? null,
+			uploadClosesAt: envelope?.uploadClosesAt ?? null,
+			serverNow: envelope?.serverNow ?? null,
+			attempt: attempt.success ? attempt.data : null,
+		},
 	}
 }
 
@@ -59,8 +97,8 @@ async function fetchAttemptJson<T>(url: string, options: RequestOptions<T>): Pro
 	const outcome = await request<T>(url, options)
 	if (outcome.ok) return outcome.data
 	if (outcome.kind === 'http' && outcome.status !== undefined) {
-		const { code, attemptId, reason, limit } = readAttemptErrorBody(outcome.body)
-		throw new AttemptRequestError(outcome.status, code, attemptId, reason, limit)
+		const { code, attemptId, reason, limit, details } = readAttemptErrorBody(outcome.body)
+		throw new AttemptRequestError(outcome.status, code, attemptId, reason, limit, details)
 	}
 	throw new RequestError(outcome)
 }

@@ -79,6 +79,9 @@ export type AttemptSnapshot = {
 	saveIndicator: SaveIndicatorKind | null
 	interactionDisabled: boolean
 	deadlinePassed: boolean
+	acceptedAutomatically: boolean
+	uploadClosesAt: string | null
+	serverOffsetMs: number
 }
 export type AttemptLifecycleApi = {
 	start(testId: string): Promise<AttemptSession>
@@ -190,6 +193,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	let submitRejection: SubmitRejection | null = null
 	let alreadySubmittedAttemptId: string | null = null
 	let result: AttemptView | null = null
+	let acceptedAutomatically = false
+	let uploadClosesAt: string | null = null
 	let showTimeUp = false
 	let timeUpPause: { handle: unknown; resolve: () => void } | null = null
 	let restoreCandidate: CachedSession | null = null
@@ -649,6 +654,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			showTimeUp = false
 		}
 		result = view
+		acceptedAutomatically = auto
+		uploadClosesAt = view.uploadClosesAt ?? null
 		phase = 'submitted'
 		emit()
 		notice({ kind: 'submitted', result: view })
@@ -665,6 +672,23 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			submitRejection = { reason: failure.reason, limit: failure.limit }
 			enterActive(false)
 			emit()
+			return 'settled'
+		}
+		if (failure.kind === 'finalized') {
+			queue?.discard()
+			clearAttemptKeys(storage, keys, 'finalized')
+			closedSession = current
+			session = null
+			pending = new Set()
+			telemetryPending = false
+			serverClock.observe(failure.serverNow)
+			result = failure.attempt
+			uploadClosesAt = failure.uploadClosesAt ?? failure.attempt?.uploadClosesAt ?? null
+			acceptedAutomatically = true
+			alreadySubmittedAttemptId = failure.attemptId
+			phase = 'submitted'
+			emit()
+			if (failure.attempt) notice({ kind: 'submitted', result: failure.attempt })
 			return 'settled'
 		}
 		if (failure.kind === 'already-submitted' || failure.kind === 'time-expired') {
@@ -715,6 +739,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		submitFailed = false
 		submitRejection = null
 		result = null
+		acceptedAutomatically = false
+		uploadClosesAt = null
 		showTimeUp = false
 		clearDraftState()
 		if (timeLimitMinutes) {
@@ -772,6 +798,9 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			saveIndicator: saveIndicatorKind(indicatorInput()),
 			interactionDisabled: DISABLED_PHASES.has(phase) || deadlinePassed,
 			deadlinePassed,
+			acceptedAutomatically,
+			uploadClosesAt,
+			serverOffsetMs: serverClock.offsetMs(),
 		}
 	}
 
@@ -785,6 +814,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			submitFailed = false
 			submitRejection = null
 			result = null
+			acceptedAutomatically = false
+			uploadClosesAt = null
 			showTimeUp = false
 			segmentStartedAt = null
 			warned = false

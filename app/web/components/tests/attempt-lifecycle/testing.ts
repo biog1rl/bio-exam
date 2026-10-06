@@ -8,7 +8,7 @@ import type {
 
 import { vi } from 'vitest'
 
-import { AttemptRequestError, type AttemptDraftSaveResult } from '@/lib/tests/api'
+import { AttemptRequestError, type AttemptDraftSaveResult, type AttemptRequestErrorDetails } from '@/lib/tests/api'
 
 import type { ClientAttemptStorage } from '../client-attempt-id'
 import {
@@ -110,14 +110,15 @@ export function requestError(
 	status: number,
 	code: string | null = null,
 	attemptId: string | null = null,
-	extra: { reason?: string; limit?: number } = {}
+	extra: { reason?: string; limit?: number } & AttemptRequestErrorDetails = {}
 ): AttemptRequestError {
-	return new AttemptRequestError(status, code, attemptId, extra.reason ?? null, extra.limit ?? null)
+	const { reason, limit, ...details } = extra
+	return new AttemptRequestError(status, code, attemptId, reason ?? null, limit ?? null, details)
 }
 
 export const ATTEMPT_ID = '44444444-4444-4444-8444-444444444444'
 
-export function attemptViewOf(attemptId: string = ATTEMPT_ID): AttemptView {
+export function attemptViewOf(attemptId: string = ATTEMPT_ID, extra: Partial<AttemptView> = {}): AttemptView {
 	return {
 		attemptId,
 		submittedAt: '2026-10-04T10:05:00.000Z',
@@ -129,6 +130,7 @@ export function attemptViewOf(attemptId: string = ATTEMPT_ID): AttemptView {
 		autoEarnedPoints: 1,
 		autoTotalPoints: 3,
 		results: [],
+		...extra,
 	}
 }
 

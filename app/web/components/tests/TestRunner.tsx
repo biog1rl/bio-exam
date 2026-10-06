@@ -2,7 +2,7 @@
 
 import { isAnswered } from '@bio-exam/exam-core'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -13,6 +13,7 @@ import { QuestionInput } from '@/components/tests/QuestionInput'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { UploadWindowLine } from '@/components/tests/attempt-result/UploadWindowLine'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
 import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
@@ -148,8 +149,15 @@ function AttemptRunner({
 	const interactionDisabled = snapshot.interactionDisabled
 	const deadlinePassed = snapshot.deadlinePassed
 	const navigationDisabled = interactionDisabled && !deadlinePassed
+	const acceptedWithoutResult = snapshot.phase === 'submitted' && !submitResult && snapshot.acceptedAutomatically
+	const outcomeShown = submitResult !== null || acceptedWithoutResult
+	const outcomeKey = submitResult ? submitResult.attemptId : acceptedWithoutResult ? 'accepted' : null
+	const outcomeHeadingRef = useRef<HTMLHeadingElement>(null)
+	useEffect(() => {
+		if (outcomeKey !== null) outcomeHeadingRef.current?.focus()
+	}, [outcomeKey])
 	const deadlinePanelState =
-		deadlinePassed && !submitResult && snapshot.phase !== 'blocked'
+		deadlinePassed && !outcomeShown && snapshot.phase !== 'blocked'
 			? snapshot.submitFailed && snapshot.phase === 'active'
 				? 'failed'
 				: 'sending'
@@ -288,7 +296,13 @@ function AttemptRunner({
 							resultView?.kind === 'pending' ? 'border-border bg-secondary' : 'border-emerald-200 bg-emerald-50'
 						)}
 					>
-						<h2 className="mb-2 text-lg font-semibold">Результат</h2>
+						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
+							{snapshot.acceptedAutomatically ? 'Ответ принят' : 'Результат'}
+						</h2>
+						{snapshot.acceptedAutomatically ? (
+							<p className="text-sm">Время вышло, ответы приняты автоматически.</p>
+						) : null}
+						<UploadWindowLine uploadClosesAt={snapshot.uploadClosesAt} serverOffsetMs={snapshot.serverOffsetMs} />
 						{resultView?.kind === 'pending' ? (
 							<>
 								<AttemptReviewLine view={resultView} audience="student" chipClassName="bg-card" />
@@ -314,6 +328,19 @@ function AttemptRunner({
 								<Link href="/tests">Ко всем тестам</Link>
 							</Button>
 						</div>
+					</section>
+				) : null}
+
+				{acceptedWithoutResult ? (
+					<section className="rounded-lg border border-border bg-secondary p-4">
+						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
+							Ответ принят
+						</h2>
+						<p className="text-sm">Время вышло, ответы приняты автоматически.</p>
+						<p className="mt-2 text-sm">Результат появится в списке «Мои попытки» после обновления страницы.</p>
+						<Button type="button" variant="outline" className="mt-3" onClick={() => window.location.reload()}>
+							К результатам
+						</Button>
 					</section>
 				) : null}
 
@@ -454,7 +481,7 @@ function AttemptRunner({
 
 			{/* Панель навигации по вопросам и прогресс */}
 			<section className="h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4 tab:sticky tab:top-4 tab:w-48">
-				{secondsLeft !== null && !submitResult && (
+				{secondsLeft !== null && !outcomeShown && (
 					<div
 						role="timer"
 						className={cn(
