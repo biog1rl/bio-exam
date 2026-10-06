@@ -1,4 +1,3 @@
-import { storageKeysToClear, type AttemptStorageEvent } from '../attempt-submit-flow'
 import { clientAttemptIdKey, forgetClientAttemptId, type ClientAttemptStorage } from '../client-attempt-id'
 import {
 	ATTEMPT_FROZEN_KEY_PREFIX,
@@ -6,6 +5,7 @@ import {
 	ATTEMPT_UNSENT_KEY_PREFIX,
 	ATTEMPT_WAL_KEY_PREFIX,
 } from './user-storage'
+import { detachWal, readWal } from './wal'
 import type { UnsentRecord } from './wal-reconcile'
 
 export type AttemptStorageKeys = {
@@ -31,7 +31,64 @@ export function attemptStorageKeys(testId: string, userId: string): AttemptStora
 	}
 }
 
-export function safeRemove(storage: ClientAttemptStorage, key: string): void {
+export type AttemptStorageEvent =
+	| 'submitted'
+	| 'retake'
+	| 'accepted'
+	| 'already-submitted'
+	| 'time-expired'
+	| 'not-found'
+	| 'submit-not-assigned'
+	| 'start-not-assigned'
+	| 'submit-failed'
+	| 'session-replaced'
+	| 'fresh-start'
+	| 'started'
+	| 'foreign-wal'
+
+export type StorageEffects = {
+	session: boolean
+	clientAttemptId: boolean
+	unsent: boolean
+	frozen: boolean | 'if-auto'
+	wal: 'keep' | 'remove' | 'detach' | 'to-unsent'
+}
+
+export type StorageEffectsContext = {
+	auto?: boolean
+	sessionId?: string | null
+	unsent?: UnsentRecord | null
+}
+
+const KEEP_ALL: StorageEffects = { session: false, clientAttemptId: false, unsent: false, frozen: false, wal: 'keep' }
+const REMOVE_ALL: StorageEffects = { session: true, clientAttemptId: true, unsent: true, frozen: true, wal: 'remove' }
+
+export const STORAGE_EFFECTS: Record<AttemptStorageEvent, StorageEffects> = {
+	submitted: REMOVE_ALL,
+	retake: REMOVE_ALL,
+	accepted: { session: true, clientAttemptId: true, unsent: false, frozen: true, wal: 'to-unsent' },
+	'already-submitted': { session: true, clientAttemptId: true, unsent: false, frozen: true, wal: 'remove' },
+	'time-expired': { session: true, clientAttemptId: true, unsent: false, frozen: true, wal: 'keep' },
+	'not-found': { session: true, clientAttemptId: true, unsent: false, frozen: 'if-auto', wal: 'detach' },
+	'submit-not-assigned': { ...KEEP_ALL, frozen: 'if-auto' },
+	'start-not-assigned': { session: true, clientAttemptId: true, unsent: false, frozen: 'if-auto', wal: 'detach' },
+	'submit-failed': { ...KEEP_ALL, frozen: 'if-auto' },
+	'session-replaced': { session: false, clientAttemptId: true, unsent: false, frozen: true, wal: 'remove' },
+	'fresh-start': { ...KEEP_ALL, frozen: true },
+	started: { ...KEEP_ALL, unsent: true },
+	'foreign-wal': { ...KEEP_ALL, wal: 'remove' },
+}
+
+function present(storage: ClientAttemptStorage, key: string): boolean {
+	try {
+		return storage.getItem(key) !== null
+	} catch {
+		return false
+	}
+}
+
+function removePresent(storage: ClientAttemptStorage, key: string): void {
+	if (!present(storage, key)) return
 	try {
 		storage.removeItem(key)
 	} catch {
@@ -39,15 +96,43 @@ export function safeRemove(storage: ClientAttemptStorage, key: string): void {
 	}
 }
 
-export function clearAttemptKeys(
+function applyWalEffect(
 	storage: ClientAttemptStorage,
 	keys: AttemptStorageKeys,
-	event: AttemptStorageEvent
+	effect: StorageEffects['wal'],
+	context: StorageEffectsContext
 ): void {
-	for (const key of storageKeysToClear(event)) {
-		if (key === 'clientAttemptId') forgetClientAttemptId(storage, keys.clientAttemptId)
-		else safeRemove(storage, keys[key])
+	if (effect === 'keep') return
+	if (effect === 'remove') {
+		removePresent(storage, keys.wal)
+		return
 	}
+	if (effect === 'detach') {
+		const sessionId = context.sessionId ?? null
+		const wal = readWal(storage, keys.wal, sessionId)
+		if (wal && (wal.sessionId === null || wal.sessionId === sessionId)) detachWal(storage, keys.wal, sessionId)
+		return
+	}
+	const record = context.unsent ?? null
+	if (record === null || writeUnsent(storage, keys.unsent, record)) removePresent(storage, keys.wal)
+}
+
+export function applyStorageEffects(
+	storage: ClientAttemptStorage,
+	keys: AttemptStorageKeys,
+	event: AttemptStorageEvent,
+	context: StorageEffectsContext = {}
+): void {
+	const effects = STORAGE_EFFECTS[event]
+	if (effects.session) removePresent(storage, keys.session)
+	if (effects.clientAttemptId && present(storage, keys.clientAttemptId)) {
+		forgetClientAttemptId(storage, keys.clientAttemptId)
+	}
+	if (effects.unsent) removePresent(storage, keys.unsent)
+	if (effects.frozen === true || (effects.frozen === 'if-auto' && context.auto === true)) {
+		removePresent(storage, keys.frozen)
+	}
+	applyWalEffect(storage, keys, effects.wal, context)
 }
 
 export function readCachedSession(storage: ClientAttemptStorage, key: string): CachedSession | null {

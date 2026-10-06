@@ -39,7 +39,7 @@ import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { type AttemptNotice, saveIndicatorView, setMatchingPair, toggleOption } from './attempt-lifecycle'
 import { useAttemptLifecycle } from './attempt-lifecycle/use-attempt-lifecycle'
-import { answersInvalidBanner, type AttemptBanner, bannerFor, SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
+import { SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
 
 type Props = {
 	test: PublicTestDetail
@@ -112,7 +112,6 @@ function AttemptRunner({
 		})
 	}, [initialAttempts])
 	const [showUnansweredDialog, setShowUnansweredDialog] = useState(false)
-	const [alreadySubmittedClosed, setAlreadySubmittedClosed] = useState(false)
 
 	const onNotice = (notice: AttemptNotice) => {
 		if (notice.kind === 'session-restored') toast.info('Сессия восстановлена')
@@ -150,19 +149,14 @@ function AttemptRunner({
 	const interactionDisabled = snapshot.interactionDisabled
 	const deadlinePassed = snapshot.deadlinePassed
 	const navigationDisabled = interactionDisabled && !deadlinePassed
-	const acceptedWithoutResult = snapshot.phase === 'submitted' && !submitResult && snapshot.acceptedAutomatically
-	const outcomeShown = submitResult !== null || acceptedWithoutResult
-	const outcomeKey = submitResult ? submitResult.attemptId : acceptedWithoutResult ? 'accepted' : null
+	const outcome = snapshot.display.outcome
+	const outcomeKey =
+		outcome === null ? null : outcome.kind === 'result' ? (submitResult?.attemptId ?? null) : 'accepted'
 	const outcomeHeadingRef = useRef<HTMLHeadingElement>(null)
 	useEffect(() => {
 		if (outcomeKey !== null) outcomeHeadingRef.current?.focus()
 	}, [outcomeKey])
-	const deadlinePanelState =
-		deadlinePassed && !outcomeShown && snapshot.phase !== 'blocked'
-			? snapshot.submitFailed && snapshot.phase === 'active'
-				? 'failed'
-				: 'sending'
-			: null
+	const deadlinePanelState = snapshot.display.deadlinePanel
 	const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT
 	const showHours = (test.timeLimitMinutes ?? 0) > 60
 
@@ -261,31 +255,14 @@ function AttemptRunner({
 	}
 
 	const handleRetake = () => {
-		setAlreadySubmittedClosed(false)
 		lifecycle.retake()
 	}
 
 	const closeAlreadySubmitted = () => {
-		setAlreadySubmittedClosed(true)
+		lifecycle.dismissAlreadySubmitted()
 	}
 
-	const blockReason = snapshot.blockReason
-	const alreadySubmittedOpen = blockReason === 'already-submitted' && !alreadySubmittedClosed
-	const banner: AttemptBanner | null =
-		blockReason === 'start-not-assigned' || blockReason === 'submit-not-assigned' || blockReason === 'not-found'
-			? blockReason
-			: blockReason === 'already-submitted'
-				? alreadySubmittedClosed
-					? 'already-submitted'
-					: null
-				: snapshot.submitFailed && !deadlinePassed
-					? 'retry'
-					: null
-	const bannerView = snapshot.submitRejection
-		? answersInvalidBanner(snapshot.submitRejection)
-		: banner
-			? bannerFor(banner)
-			: null
+	const bannerView = snapshot.display.banner
 	const saveIndicator = snapshot.saveIndicator ? saveIndicatorView(snapshot.saveIndicator) : null
 
 	return (
@@ -307,7 +284,7 @@ function AttemptRunner({
 					<DeadlinePanel state={deadlinePanelState} onRetry={() => void lifecycle.submit({ auto: true })} />
 				) : null}
 
-				{submitResult ? (
+				{outcome?.kind === 'result' ? (
 					<section
 						className={cn(
 							'rounded-lg border p-4',
@@ -315,11 +292,9 @@ function AttemptRunner({
 						)}
 					>
 						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
-							{snapshot.acceptedAutomatically ? 'Ответ принят' : 'Результат'}
+							{outcome.accepted ? 'Ответ принят' : 'Результат'}
 						</h2>
-						{snapshot.acceptedAutomatically ? (
-							<p className="text-sm">Время вышло, ответы приняты автоматически.</p>
-						) : null}
+						{outcome.accepted ? <p className="text-sm">Время вышло, ответы приняты автоматически.</p> : null}
 						<UploadWindowLine uploadClosesAt={snapshot.uploadClosesAt} serverOffsetMs={snapshot.serverOffsetMs} />
 						{snapshot.unsent ? (
 							<UnsentTextNote
@@ -356,7 +331,7 @@ function AttemptRunner({
 					</section>
 				) : null}
 
-				{acceptedWithoutResult ? (
+				{outcome?.kind === 'accepted-without-result' ? (
 					<section className="rounded-lg border border-border bg-secondary p-4">
 						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
 							Ответ принят
@@ -511,7 +486,7 @@ function AttemptRunner({
 
 			{/* Панель навигации по вопросам и прогресс */}
 			<section className="h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4 tab:sticky tab:top-4 tab:w-48">
-				{secondsLeft !== null && !outcomeShown && (
+				{snapshot.display.timer && secondsLeft !== null && (
 					<div
 						role="timer"
 						className={cn(
@@ -578,7 +553,7 @@ function AttemptRunner({
 				</Button>
 			</section>
 
-			<AlertDialog open={snapshot.phase === 'awaitingStart'}>
+			<AlertDialog open={snapshot.display.dialog === 'start'}>
 				<AlertDialogContent overlayClassName="bg-black/60 backdrop-blur-xl">
 					<AlertDialogHeader>
 						<AlertDialogTitle>Начать тест?</AlertDialogTitle>
@@ -594,7 +569,7 @@ function AttemptRunner({
 				</AlertDialogContent>
 			</AlertDialog>
 
-			<AlertDialog open={blockReason === 'time-expired'}>
+			<AlertDialog open={snapshot.display.dialog === 'time-expired'}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle className="font-medium">{SUBMIT_FLOW_TEXT.timeExpiredTitle}</AlertDialogTitle>
@@ -633,7 +608,7 @@ function AttemptRunner({
 			</AlertDialog>
 
 			<Dialog
-				open={alreadySubmittedOpen}
+				open={snapshot.display.dialog === 'already-submitted'}
 				onOpenChange={(open) => {
 					if (!open) closeAlreadySubmitted()
 				}}

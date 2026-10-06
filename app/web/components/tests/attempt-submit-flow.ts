@@ -32,18 +32,6 @@ export type AttemptBanner = 'start-not-assigned' | 'submit-not-assigned' | 'alre
 
 export type AttemptBannerView = { message: string; action: 'retry' | 'reload' | null }
 
-export type AttemptStorageKey = 'session' | 'wal' | 'frozen' | 'clientAttemptId' | 'unsent'
-
-export type AttemptStorageEvent =
-	| 'success'
-	| 'finalized'
-	| 'already-submitted'
-	| 'time-expired'
-	| 'not-found'
-	| 'start-not-assigned'
-	| 'submit-not-assigned'
-	| 'session-replaced'
-
 export const SUBMIT_FLOW_TEXT = {
 	alreadySubmittedTitle: 'Попытка уже сдана',
 	alreadySubmittedDescription:
@@ -98,19 +86,6 @@ const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> 
 	},
 }
 
-const ALL_ATTEMPT_KEYS: readonly AttemptStorageKey[] = ['session', 'wal', 'frozen', 'clientAttemptId']
-
-const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorageKey[]> = {
-	success: [...ALL_ATTEMPT_KEYS, 'unsent'],
-	finalized: ['session', 'frozen', 'clientAttemptId'],
-	'already-submitted': ALL_ATTEMPT_KEYS,
-	'time-expired': ['session', 'frozen', 'clientAttemptId'],
-	'not-found': ['session', 'clientAttemptId'],
-	'start-not-assigned': ['session', 'clientAttemptId'],
-	'submit-not-assigned': [],
-	'session-replaced': ['wal', 'frozen', 'clientAttemptId'],
-}
-
 export function classifySubmitFailure(error: unknown): SubmitFailure {
 	if (!(error instanceof AttemptRequestError)) return { kind: 'retry' }
 	if (error.status === 409 && error.code === SUBMIT_ERROR_CODES.alreadySubmitted) {
@@ -146,8 +121,4 @@ export function bannerFor(banner: AttemptBanner): AttemptBannerView {
 
 export function answersInvalidBanner(rejection: SubmitRejection): AttemptBannerView {
 	return ANSWERS_INVALID_BANNERS[rejection.reason]
-}
-
-export function storageKeysToClear(event: AttemptStorageEvent): readonly AttemptStorageKey[] {
-	return STORAGE_KEYS_BY_EVENT[event]
 }
