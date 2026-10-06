@@ -2,11 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 
-import LoaderComponent from '@/components/LoaderComponent'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -134,7 +133,7 @@ export default function LoginPage() {
 	if (me) {
 		return (
 			<div className="grid h-screen place-items-center">
-				<LoaderComponent className="size-6 animate-spin" />
+				<Loader2 className="size-6 animate-spin" aria-hidden="true" />
 			</div>
 		)
 	}
@@ -204,7 +203,7 @@ export default function LoginPage() {
 						<Button type="submit" className="w-full" disabled={submitting || error.kind === 'wait'}>
 							{submitting ? (
 								<>
-									<LoaderComponent className="mr-2 size-4" />
+									<Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
 									<span className="sr-only">Вход…</span>
 								</>
 							) : (

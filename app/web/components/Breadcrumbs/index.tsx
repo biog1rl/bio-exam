@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react'
 
+import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -23,7 +24,6 @@ import {
 } from '@/lib/navigation/crumbs'
 import { HOME_PATH } from '@/lib/navigation/paths'
 
-import LoaderComponent from '../LoaderComponent'
 import { useBreadcrumbs } from './BreadcrumbsContext'
 
 const LABEL_CLASS = 'block max-w-40 truncate tab-sm:max-w-64'
@@ -66,7 +66,7 @@ export default function Breadcrumbs() {
 						<BreadcrumbItem>
 							{item.waiting ? (
 								<BreadcrumbPage aria-label="Загрузка названия">
-									<LoaderComponent />
+									<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 								</BreadcrumbPage>
 							) : item.last ? (
 								<BreadcrumbPage className={LABEL_CLASS}>{item.label}</BreadcrumbPage>
