@@ -1,46 +1,27 @@
-/**
- * Точка входа для локальной разработки.
- * Запускает Express сервер на указанном порту.
- */
 import app from './app.js'
 import { pgPool } from './db/index.js'
 import { DEFAULTS } from './lib/constants.js'
 import logger from './lib/logger.js'
+import { createShutdown, SHUTDOWN_DRAIN_MS } from './lib/shutdown.js'
+import { createBackgroundJobs } from './services/background-jobs/index.js'
 
 const PORT = Number(process.env.PORT ?? DEFAULTS.PORT)
 
+const jobs = createBackgroundJobs({ log: logger })
+
 const server = app.listen(PORT, () => {
 	logger.info({ port: PORT }, 'bio-exam API started')
+	jobs.start()
 })
 
-// Обработчик graceful shutdown
-async function gracefulShutdown(signal: string) {
-	logger.info({ signal }, 'Получен сигнал завершения, закрываем соединения...')
+const shutdown = createShutdown({
+	server,
+	jobs,
+	pool: pgPool,
+	drainMs: SHUTDOWN_DRAIN_MS,
+	log: logger,
+	exit: (code) => process.exit(code),
+})
 
-	// Прекращаем принимать новые соединения
-	server.close((err) => {
-		if (err) {
-			logger.error({ err }, 'Ошибка закрытия HTTP сервера')
-		} else {
-			logger.info('HTTP сервер закрыт')
-		}
-	})
-
-	// Закрываем пул соединений БД
-	try {
-		await pgPool.end()
-		logger.info('Пул соединений БД закрыт')
-	} catch (err) {
-		logger.error({ err }, 'Ошибка закрытия пула БД')
-	}
-
-	// Даём время на завершение pending запросов
-	setTimeout(() => {
-		logger.info('Завершение работы')
-		process.exit(0)
-	}, 5000)
-}
-
-// Обработка сигналов завершения
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
-process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))

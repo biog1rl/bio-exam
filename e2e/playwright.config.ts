@@ -72,6 +72,7 @@ export default defineConfig({
 				ALLOWED_ORIGIN: webOrigin,
 				BIO_EXAM_ISOLATED_ENV: '1',
 				ACCESS_TOKEN_EXPIRES_SEC: '3600',
+				PG_POOL_MAX: '4',
 			},
 			reuseExistingServer: false,
 			timeout: 120_000,
