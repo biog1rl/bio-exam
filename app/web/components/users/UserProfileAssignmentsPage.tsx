@@ -119,7 +119,7 @@ function ProfileSectionCard({
 	const failed = failedSources(sources)
 
 	return (
-		<Card className="rounded-4xl border-border/80 bg-card/90">
+		<Card className="min-w-0 rounded-4xl border-border/80 bg-card/90">
 			<CardHeader className="flex flex-wrap items-end justify-between gap-3">
 				<div>
 					<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>

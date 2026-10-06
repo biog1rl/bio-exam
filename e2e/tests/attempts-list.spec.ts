@@ -229,7 +229,7 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 	})
 
 	test('the review filter lives in the address, resets with «Сбросить» and has its own empty states', async ({
-		adminPage: browserPage,
+		teacherPage: browserPage,
 	}) => {
 		await browserPage.goto('/admin/attempts?review=pending')
 		await expect(browserPage.getByRole('combobox', { name: 'Проверка' })).toHaveText('На проверке')

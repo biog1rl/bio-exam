@@ -193,7 +193,7 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 			{/* Attempts widget */}
 			<section className="space-y-2">
 				<h2 className="text-lg font-medium">История попыток</h2>
-				<ScrollArea className="h-70 rounded-md border">
+				<ScrollArea className="h-70 rounded-md border" viewportClassName="overflow-x-auto!">
 					{attemptsLoading ? (
 						<div className="space-y-2 p-4">
 							{[...Array(3)].map((_, i) => (

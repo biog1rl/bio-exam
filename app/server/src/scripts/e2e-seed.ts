@@ -9,7 +9,9 @@
  * Пишет в базу роли, активных пользователей (bcrypt-хэши тестового пароля), роли
  * пользователей, тему, тесты, вопросы, ключи ответов версии 1 и назначения, а в локальное
  * хранилище — промпт каждого вопроса через модуль содержимого.
- * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n>
+ * Попытки блока attempts создаются тем же путём, что сдача по HTTP (scoreSubmission и submitAttempt),
+ * проверенные дополнительно проходят через materializeAttemptOutcome.
+ * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n>
  */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -25,7 +27,7 @@ type SeedQuestion = {
 	prompt: string
 	options?: { id: string; text: string }[]
 	matchingPairs?: { left: { id: string; text: string }[]; right: { id: string; text: string }[] }
-	correct: string | string[] | Record<string, string>
+	correct?: string | string[] | Record<string, string>
 }
 
 type SeedTest = {
@@ -35,6 +37,13 @@ type SeedTest = {
 	published: boolean
 	assignedTo: string[]
 	questions: SeedQuestion[]
+}
+
+type SeedAttempt = {
+	test: string
+	student: string
+	answers: Record<string, string>
+	grade?: Record<string, number>
 }
 
 type SeedTopic = { slug: string; title: string; description: string; teachers?: string[] }
@@ -48,7 +57,10 @@ type SeedFile = {
 	topic: SeedTopic
 	topics?: SeedTopic[]
 	bulkUsers?: SeedBulkUsers
-	projects: Record<string, { accounts: SeedAccount[]; tests: SeedTest[]; groups?: SeedGroup[] }>
+	projects: Record<
+		string,
+		{ accounts: SeedAccount[]; tests: SeedTest[]; groups?: SeedGroup[]; attempts?: SeedAttempt[] }
+	>
 }
 
 /** Отказ до любого подключения: сид работает только в изолированном e2e-окружении */
@@ -101,6 +113,8 @@ async function main(): Promise<void> {
 	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
 	const { syncQuestionDerived, writeContentFiles } = await import('../services/question-content/index.js')
 	const { setGroupOwner, setTopicTeachers } = await import('../services/access-policy/index.js')
+	const { startAttemptSession, submitAttempt } = await import('../services/attempt-sessions/index.js')
+	const { materializeAttemptOutcome, scoreSubmission } = await import('../services/scored-attempt/index.js')
 
 	try {
 		const passwordHash = await bcrypt.hash(seed.password, 10)
@@ -109,6 +123,12 @@ async function main(): Promise<void> {
 		const topicSlugOf = (seedTestItem: SeedTest): string => seedTestItem.topic ?? seed.topic.slug
 
 		const planned = new Map<SeedQuestion, { id: string; promptPath: string; explanationPath: string | null }>()
+		const questionIds = new Map<string, string>()
+		const questionIdOf = (testSlug: string, key: string): string => {
+			const id = questionIds.get(`${testSlug}:${key}`)
+			if (!id) throw new Error(`seed attempt: unknown question ${key} in test ${testSlug}`)
+			return id
+		}
 		for (const project of projects) {
 			for (const seedTestItem of project.tests) {
 				for (const item of seedTestItem.questions) {
@@ -124,6 +144,7 @@ async function main(): Promise<void> {
 						promptText: item.prompt,
 					})
 					planned.set(item, { id, promptPath: files.promptPath, explanationPath: files.explanationPath })
+					questionIds.set(`${seedTestItem.slug}:${item.key}`, id)
 				}
 			}
 		}
@@ -188,6 +209,7 @@ async function main(): Promise<void> {
 				}
 			}
 
+			const testRows = new Map<string, { id: string; passingScore: number | null }>()
 			let questionCount = 0
 			let testCount = 0
 			let order = 0
@@ -213,6 +235,7 @@ async function main(): Promise<void> {
 						})
 						.returning()
 					testCount++
+					testRows.set(seedTestItem.slug, { id: test.id, passingScore: test.passingScore })
 
 					for (const [index, item] of seedTestItem.questions.entries()) {
 						const builtin = getBuiltinQuestionTypeByKey(item.type)
@@ -230,13 +253,16 @@ async function main(): Promise<void> {
 							explanationPath: content.explanationPath,
 						})
 
-						await tx.insert(answerKeys).values({
-							questionId: content.id,
-							version: 1,
-							correctAnswer: item.correct,
-							isActive: true,
-							createdBy: authorId,
-						})
+						if (item.template !== 'open') {
+							if (item.correct === undefined) throw new Error(`seed question ${item.key}: correct is required`)
+							await tx.insert(answerKeys).values({
+								questionId: content.id,
+								version: 1,
+								correctAnswer: item.correct,
+								isActive: true,
+								createdBy: authorId,
+							})
+						}
 
 						await syncQuestionDerived(tx, {
 							questionId: content.id,
@@ -275,11 +301,61 @@ async function main(): Promise<void> {
 				}
 			}
 
-			return { users: userIds.size + bulkCount, tests: testCount, questions: questionCount }
+			return { users: userIds.size + bulkCount, tests: testCount, questions: questionCount, testRows, userIds }
 		})
 
+		let attemptCount = 0
+		for (const project of projects) {
+			for (const seedAttempt of project.attempts ?? []) {
+				const testRow = result.testRows.get(seedAttempt.test)
+				if (!testRow) throw new Error(`seed attempt: unknown test ${seedAttempt.test}`)
+				const userId = result.userIds.get(seedAttempt.student)
+				if (!userId) throw new Error(`seed attempt: unknown student ${seedAttempt.student}`)
+				const answers = Object.fromEntries(
+					Object.entries(seedAttempt.answers).map(([key, value]) => [questionIdOf(seedAttempt.test, key), value])
+				)
+
+				const session = await startAttemptSession({ testId: testRow.id, userId, timeLimitMinutes: null })
+				const scored = await scoreSubmission({
+					testId: testRow.id,
+					answers,
+					passingScore: testRow.passingScore,
+					readExplanation: async () => null,
+				})
+				if (!scored.ok) throw new Error(`seed attempt ${seedAttempt.test}: scoring failed (${scored.reason})`)
+				const submitted = await submitAttempt({
+					testId: testRow.id,
+					userId,
+					testSessionId: session.sessionId,
+					clientAttemptId: crypto.randomUUID(),
+					answers,
+					scored: {
+						results: scored.facts,
+						resultsVersion: 2,
+						earnedPoints: scored.earnedPoints,
+						totalPoints: scored.totalPoints,
+						scorePercentage: scored.scorePercentage,
+						passed: scored.passed,
+						outcome: scored.outcome,
+						passingScore: scored.passingScore,
+					},
+				})
+				if (submitted.kind !== 'created') {
+					throw new Error(`seed attempt ${seedAttempt.test}: submit returned ${submitted.kind}`)
+				}
+
+				if (seedAttempt.grade) {
+					const latestScores = new Map(
+						Object.entries(seedAttempt.grade).map(([key, value]) => [questionIdOf(seedAttempt.test, key), value])
+					)
+					await db.transaction((tx) => materializeAttemptOutcome(tx, { attemptId: submitted.attemptId, latestScores }))
+				}
+				attemptCount++
+			}
+		}
+
 		console.log(
-			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size}`
+			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount}`
 		)
 	} finally {
 		await pgPool.end()

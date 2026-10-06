@@ -21,12 +21,12 @@ export type SeedAccount = {
 
 export type SeedQuestion = {
 	key: string
-	template: 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits'
+	template: 'single_choice' | 'multi_choice' | 'matching' | 'short_text' | 'sequence_digits' | 'open'
 	type: string
 	prompt: string
 	options?: { id: string; text: string }[]
 	matchingPairs?: { left: { id: string; text: string }[]; right: { id: string; text: string }[] }
-	correct: string | string[] | Record<string, string>
+	correct?: string | string[] | Record<string, string>
 }
 
 export type SeedTest = {

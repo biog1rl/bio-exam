@@ -28,6 +28,11 @@
 			"slug": "e2e-assign-mobile",
 			"title": "E2E: тема без учителя mobile",
 			"description": "Тему закрепляет администратор в сценарии учителя mobile"
+		},
+		{
+			"slug": "e2e-review",
+			"title": "E2E: проверка открытых ответов",
+			"description": "Тема для попыток на проверке"
 		}
 	],
 	"bulkUsers": { "prefix": "bulk-user", "count": 110, "name": "Массовый пользователь" },
@@ -68,6 +73,12 @@
 					"login": "zone-student-desktop",
 					"role": "user",
 					"name": "Ученик учителя desktop",
+					"storageState": true
+				},
+				{
+					"login": "review-student-desktop",
+					"role": "user",
+					"name": "Ученик проверки desktop",
 					"storageState": true
 				}
 			],
@@ -351,6 +362,102 @@
 							"correct": "1"
 						}
 					]
+				},
+				{
+					"slug": "review-pending-desktop",
+					"title": "Открытый ответ ожидает проверки (desktop)",
+					"topic": "e2e-review",
+					"published": true,
+					"assignedTo": ["review-student-desktop"],
+					"questions": [
+						{
+							"key": "rp-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "rp-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
+						}
+					]
+				},
+				{
+					"slug": "review-graded-desktop",
+					"title": "Открытый ответ проверен учителем (desktop)",
+					"topic": "e2e-review",
+					"published": true,
+					"assignedTo": ["review-student-desktop"],
+					"questions": [
+						{
+							"key": "rg-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "rg-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
+						}
+					]
+				},
+				{
+					"slug": "review-submit-desktop",
+					"title": "Открытый ответ для живой сдачи (desktop)",
+					"topic": "e2e-review",
+					"published": true,
+					"assignedTo": ["review-student-desktop"],
+					"questions": [
+						{
+							"key": "rs-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "rs-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
+						}
+					]
 				}
 			],
 			"groups": [
@@ -358,6 +465,25 @@
 					"name": "E2E группа desktop",
 					"owner": "teacher-desktop",
 					"members": ["zone-student-desktop"]
+				}
+			],
+			"attempts": [
+				{
+					"test": "review-pending-desktop",
+					"student": "review-student-desktop",
+					"answers": {
+						"rp-choice": "1"
+					}
+				},
+				{
+					"test": "review-graded-desktop",
+					"student": "review-student-desktop",
+					"answers": {
+						"rg-choice": "1"
+					},
+					"grade": {
+						"rg-open": 2
+					}
 				}
 			]
 		},
@@ -397,6 +523,12 @@
 					"login": "zone-student-mobile",
 					"role": "user",
 					"name": "Ученик учителя mobile",
+					"storageState": true
+				},
+				{
+					"login": "review-student-mobile",
+					"role": "user",
+					"name": "Ученик проверки mobile",
 					"storageState": true
 				}
 			],
@@ -680,6 +812,102 @@
 							"correct": "1"
 						}
 					]
+				},
+				{
+					"slug": "review-pending-mobile",
+					"title": "Открытый ответ ожидает проверки (mobile)",
+					"topic": "e2e-review",
+					"published": true,
+					"assignedTo": ["review-student-mobile"],
+					"questions": [
+						{
+							"key": "rp-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "rp-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
+						}
+					]
+				},
+				{
+					"slug": "review-graded-mobile",
+					"title": "Открытый ответ проверен учителем (mobile)",
+					"topic": "e2e-review",
+					"published": true,
+					"assignedTo": ["review-student-mobile"],
+					"questions": [
+						{
+							"key": "rg-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "rg-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
+						}
+					]
+				},
+				{
+					"slug": "review-submit-mobile",
+					"title": "Открытый ответ для живой сдачи (mobile)",
+					"topic": "e2e-review",
+					"published": true,
+					"assignedTo": ["review-student-mobile"],
+					"questions": [
+						{
+							"key": "rs-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "rs-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Объясните, какую роль хлоропласт играет в фотосинтезе."
+						}
+					]
 				}
 			],
 			"groups": [
@@ -687,6 +915,25 @@
 					"name": "E2E группа mobile",
 					"owner": "teacher-mobile",
 					"members": ["zone-student-mobile"]
+				}
+			],
+			"attempts": [
+				{
+					"test": "review-pending-mobile",
+					"student": "review-student-mobile",
+					"answers": {
+						"rp-choice": "1"
+					}
+				},
+				{
+					"test": "review-graded-mobile",
+					"student": "review-student-mobile",
+					"answers": {
+						"rg-choice": "1"
+					},
+					"grade": {
+						"rg-open": 2
+					}
 				}
 			]
 		}
