@@ -7,11 +7,11 @@ import useSWR from 'swr'
 import { AttemptChart } from '@/components/charts/AttemptChart'
 import { ActivityChart, ContentChart } from '@/components/charts/DashboardCharts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { dashboardActivityFetcher, dashboardActivityKey } from '@/lib/charts/api'
 import { isAttemptChart, type ChartConfigs, type ChartId } from '@/lib/charts/config'
 import { demoActivity, demoAttempts, demoContent } from '@/lib/charts/demo'
 import { filterAttemptsByPeriod, resolvePeriodBounds, type ProgressAttempt } from '@/lib/progress/attempt-chart'
 import { adminTestsKeys, adminTestsListFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
+import { adminDashboardFetcher, adminDashboardKey } from '@/lib/tests/dashboard-api'
 import { userAttemptToProgress, userAttemptsFetcher, usersKeys } from '@/lib/users/api'
 
 export type PreviewSource = 'demo' | 'real'
@@ -48,7 +48,7 @@ export function ChartPreview({ chartId, configs, source, studentId, now }: Chart
 	)
 	const topics = useSWR(real && chartId === 'content' ? adminTestsKeys.topics() : null, topicsListFetcher)
 	const tests = useSWR(real && chartId === 'content' ? adminTestsKeys.list() : null, adminTestsListFetcher)
-	const activity = useSWR(real && chartId === 'activity' ? dashboardActivityKey() : null, dashboardActivityFetcher)
+	const activity = useSWR(real && chartId === 'activity' ? adminDashboardKey() : null, adminDashboardFetcher)
 	const demo = useMemo(
 		() => ({ attempts: demoAttempts(now), content: demoContent(), activity: demoActivity(now) }),
 		[now]
@@ -95,5 +95,11 @@ export function ChartPreview({ chartId, configs, source, studentId, now }: Chart
 
 	if (real && activity.error) return <Message>Не удалось загрузить активность учеников.</Message>
 	if (real && !activity.data) return <Skeleton className="h-72 rounded-2xl" />
-	return <ActivityChart days={real ? (activity.data ?? []) : demo.activity} config={configs.activity} now={now} />
+	return (
+		<ActivityChart
+			days={real ? (activity.data?.dailyActivity ?? []) : demo.activity}
+			config={configs.activity}
+			now={now}
+		/>
+	)
 }

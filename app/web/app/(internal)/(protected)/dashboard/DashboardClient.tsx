@@ -19,34 +19,16 @@ import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { dashboardUrl, useChartConfigs } from '@/lib/charts/api'
-import { request } from '@/lib/http/request'
+import { useChartConfigs } from '@/lib/charts/api'
+import { deniedAsNull } from '@/lib/http/swr'
 import { quickLinkSections } from '@/lib/navigation/sections'
-import { optionalAdminData } from '@/lib/tests/admin-optional'
+import { adminTestsKeys, adminTestsListFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
 import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
+import { adminDashboardFetcher, adminDashboardKey, type AdminDashboardAttempt } from '@/lib/tests/dashboard-api'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
 import { formatShortDay } from '@/lib/utils/dates'
-
-type Topic = {
-	id: string
-	title: string
-	isActive: boolean
-	testsCount?: number
-}
-
-type AdminTest = {
-	id: string
-	slug?: string
-	title: string
-	topicId: string
-	topicSlug?: string
-	topicTitle?: string
-	isPublished: boolean
-	questionsCount?: number
-	updatedAt?: string
-}
 
 type AttemptBundle = {
 	test: PublicTestListItem
@@ -57,37 +39,6 @@ type AttemptBundle = {
 type DashboardAttempt = TestAttemptSummary & {
 	testTitle: string
 	testHref: string
-}
-
-type AdminDashboardAttempt = AttemptResultFields & {
-	attemptId: string
-	testId: string
-	testTitle: string
-	testSlug: string
-	topicSlug: string
-	topicTitle: string
-	studentId: string
-	studentName: string
-	submittedAt: string
-}
-
-type AdminDashboardData = {
-	summary: {
-		totalAttempts: number
-		activeStudents: number
-		averageScore: number | null
-		passedAttempts: number
-	}
-	latestAttempts: AdminDashboardAttempt[]
-	dailyActivity: Array<{
-		date: string
-		attempts: number
-		averageScore: number | null
-	}>
-}
-
-async function fetchAdminJson<T>(url: string): Promise<T | null> {
-	return optionalAdminData(await request<T>(url))
 }
 
 function average(values: number[]) {
@@ -317,15 +268,9 @@ export default function DashboardClient() {
 			)
 	)
 
-	const adminTopicsQuery = useSWR(canReadTests ? 'dashboard-admin-topics' : null, () =>
-		fetchAdminJson<{ topics: Topic[] }>('/api/tests/topics')
-	)
-	const adminTestsQuery = useSWR(canReadTests ? 'dashboard-admin-tests' : null, () =>
-		fetchAdminJson<{ tests: AdminTest[] }>('/api/tests')
-	)
-	const adminDashboardQuery = useSWR(canReadTests ? 'dashboard-admin-summary' : null, () =>
-		fetchAdminJson<AdminDashboardData>(dashboardUrl())
-	)
+	const adminTopicsQuery = useSWR(canReadTests ? adminTestsKeys.topics() : null, deniedAsNull(topicsListFetcher))
+	const adminTestsQuery = useSWR(canReadTests ? adminTestsKeys.list() : null, deniedAsNull(adminTestsListFetcher))
+	const adminDashboardQuery = useSWR(canReadTests ? adminDashboardKey() : null, deniedAsNull(adminDashboardFetcher))
 
 	const attemptBundles = attemptsQuery.data ?? []
 	const allAttempts: DashboardAttempt[] = attemptBundles.flatMap((bundle) =>
