@@ -501,6 +501,32 @@
 							"correct": "1"
 						}
 					]
+				},
+				{
+					"slug": "notify-draft-desktop",
+					"title": "Черновик для уведомлений (desktop)",
+					"topic": "e2e-notif",
+					"published": false,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "nd-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Где у эукариот хранится основная часть ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "В ядре"
+								},
+								{
+									"id": "2",
+									"text": "В рибосоме"
+								}
+							],
+							"correct": "1"
+						}
+					]
 				}
 			],
 			"groups": [
@@ -1005,6 +1031,32 @@
 					"questions": [
 						{
 							"key": "nt-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Где у эукариот хранится основная часть ДНК?",
+							"options": [
+								{
+									"id": "1",
+									"text": "В ядре"
+								},
+								{
+									"id": "2",
+									"text": "В рибосоме"
+								}
+							],
+							"correct": "1"
+						}
+					]
+				},
+				{
+					"slug": "notify-draft-mobile",
+					"title": "Черновик для уведомлений (mobile)",
+					"topic": "e2e-notif",
+					"published": false,
+					"assignedTo": [],
+					"questions": [
+						{
+							"key": "nd-choice",
 							"template": "single_choice",
 							"type": "radio",
 							"prompt": "Где у эукариот хранится основная часть ДНК?",

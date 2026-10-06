@@ -53,6 +53,13 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 - Метки результата - только компоненты `app/web/components/tests/attempt-result/`: `ReviewStatusChip`, `TeacherCheckedMark`, `AttemptReviewLine`. Экран не рисует процент, вердикт или «на проверке» мимо них.
 - Фильтр `review` (`all`, `pending`, `graded`) списка попыток живёт в адресе: `app/web/lib/tests/attempts-url.ts`.
 
+## Уведомления
+
+- Компоненты `app/web/components/notifications/`: `NotificationBell` в шапке `AppLayout` (кнопка с числом и поповер), `NotificationList` (грузится через `next/dynamic`, у загрузки `NotificationListSkeleton`), `UnreadTitlePrefix` (префикс «(N) » в заголовке вкладки, держит `MutationObserver`).
+- Запросы и ключи SWR - `app/web/lib/notifications/api.ts`: `notifications/unread-count/<userId>` и `notifications/list/<userId>` (с `userId`, чтобы смена пользователя не показывала чужие данные), `refreshNotifications` обновляет оба. Число обновляется раз в 60 секунд, по фокусу окна и при открытии поповера.
+- Тексты и форматы: `format.ts` (число, «9+», имя кнопки, префикс, `isInternalHref`), `time.ts` (относительное время). Число приходит только с сервера, «9+» только в интерфейсе; имя кнопки несёт точное число.
+- Страница `app/web/app/(internal)/(protected)/notifications/[id]/` вызывает `GET /api/notifications/:id/open` один раз из клиентского эффекта: внутренний `href` (`isInternalHref`) открывается через `router.replace`, отказ показывает «Нет доступа к материалу» без данных объекта, сбой - ошибку с повтором. Чужой `href` считается отказом.
+
 ## Черновик вопроса
 
 - Автосохранение: `createQuestionDraftAutosave` (`app/web/lib/drafts/question-draft-autosave.ts`) поверх `createSaveQueue` с `lockVersion` сервера.

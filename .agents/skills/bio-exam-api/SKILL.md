@@ -46,6 +46,17 @@ Express владеет данными и политикой доступа (`doc
 - `testAttempts.results` читается только в `app/server/src/services/scored-attempt`; маршруты попытки не читают `answer_keys` и назначения напрямую: это держит `scripts/attempt-integrity-guards.test.mjs`.
 - Маршруты: `app/server/src/routes/tests/public.ts` (ученик); дашборд, список попыток и разбор попытки у персонала - `app/server/src/routes/tests/admin/attempts.ts`.
 
+## Уведомления
+
+- Модуль `app/server/src/services/notifications`, вход `index.ts`; про `Request` не знает: права на объект ему передаёт маршрут.
+- Запись - `recordNotification` и `recordNotifications` (`record.ts`), только внутри транзакции причины (`NotificationTx`): откат причины откатывает событие. Повтор той же причины (`dedupe_key` у получателя) поднимает `ref_seq` и `last_event_at` той же строки и снова делает её непрочитанной, второй строки нет.
+- Каналы доставки - `DELIVERY_CHANNELS` в `channels.ts` (сейчас один, `inbox`); каждое событие получает строку `notification_deliveries` по каждому каналу в той же транзакции.
+- Производитель `test.assigned` (`app/server/src/services/notifications/producers/test-assigned.ts`): `addAssignments` (`app/server/src/routes/tests/assignments.ts`) для всех трёх путей назначения в одной транзакции вставляет назначения и вызывает `recordTestAssigned` только для вставленных строк и только для видимого теста (опубликован, тема активна). Назначение на черновик события не создаёт.
+- Публикация: `updateTestSettings` (`app/server/src/services/question-content/relocate.ts`) при переходе `is_published` из false в true в своей транзакции вызывает `recordTestPublished`: событие всем уже назначенным с тем же `dedupe_key`. Включение темы событий не создаёт.
+- Таблица видов - `kinds.ts`: на вид запись с текстом строки и обработчиком `open`. Неизвестный вид показывается как «Новое уведомление», его `open` отвечает `NO_ACCESS`. Новый вид - запись в `kinds.ts` и производитель в транзакции причины.
+- Маршруты `app/server/src/routes/notifications.ts`: `GET /api/notifications` (курсор, `limit` до 50), `GET /api/notifications/unread-count`, `POST /api/notifications/read-all`, `POST /api/notifications/:id/read`, `GET /api/notifications/:id/open`. Все читают и меняют только события текущего пользователя (`ownedBy` в `read.ts`).
+- `open` отмечает событие прочитанным и заново проверяет доступ: обработчик вида в `kinds.ts` вызывает `checkAttemptAccess` из `attempt-sessions`, а `canReadTest(req, testId)` ему передаёт маршрут. Ответ - `{ href }` или 403 `{ error: 'NO_ACCESS' }` без данных объекта.
+
 ## Маршруты тестов
 
 - `/api/tests` собирает `app/server/src/routes/tests/index.ts`: только импорты, `Router()`, `router.use(...)` по порядку и `export default router`, без обработчиков и импортов базы, `drizzle-orm`, хранилища и `services/question-content`. Это держит `scripts/tests-router-composition.test.mjs`.

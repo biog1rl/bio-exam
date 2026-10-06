@@ -112,16 +112,35 @@ async function listScroll(dialog: Locator): Promise<{ scrollHeight: number; clie
 	})
 }
 
-async function assignNotifyTest(admin: Page, student: Page, testInfo: TestInfo): Promise<void> {
-	const key = projectKey(testInfo)
-	const testId = await idOf(
+async function notifyTestId(admin: Page, testInfo: TestInfo, kind: 'test' | 'draft' = 'test'): Promise<string> {
+	return idOf(
 		admin,
-		`/api/tests/by-slug/e2e-notif/notify-test-${key}`,
+		`/api/tests/by-slug/e2e-notif/notify-${kind}-${projectKey(testInfo)}`,
 		(body: { test: { id: string } }) => body.test.id
 	)
-	const userId = await idOf(student, '/api/auth/me', (body: { user: { id: string } }) => body.user.id)
+}
+
+async function currentUserId(page: Page): Promise<string> {
+	return idOf(page, '/api/auth/me', (body: { user: { id: string } }) => body.user.id)
+}
+
+async function assignTo(admin: Page, testId: string, userId: string): Promise<void> {
 	const response = await admin.request.post(`/api/tests/${testId}/assignments`, { data: { userId } })
-	expect(response.ok(), 'assign notify test').toBe(true)
+	expect(response.ok(), 'assign test').toBe(true)
+}
+
+async function unassignFrom(admin: Page, testId: string, userId: string): Promise<void> {
+	const response = await admin.request.delete(`/api/tests/${testId}/assignments/${userId}`)
+	expect(response.ok(), 'unassign test').toBe(true)
+}
+
+async function assignNotifyTest(admin: Page, student: Page, testInfo: TestInfo): Promise<void> {
+	await assignTo(admin, await notifyTestId(admin, testInfo), await currentUserId(student))
+}
+
+async function readAll(page: Page): Promise<void> {
+	const response = await page.request.post('/api/notifications/read-all')
+	expect(response.ok(), 'read all').toBe(true)
 }
 
 test.describe('notify-student', () => {
@@ -143,6 +162,115 @@ test.describe('notify-student', () => {
 		await expect(bell).toHaveAccessibleName('Уведомления, 1 непрочитанное')
 		await expect(bell).toHaveText('1')
 		await expect(page).toHaveTitle(/^\(1\) /)
+	})
+
+	test('a row opens the assigned test, the number goes away and «Назад» skips the notification page', async ({
+		notifyStudentPage: page,
+	}, testInfo) => {
+		const key = projectKey(testInfo)
+		const title = `Тест для уведомлений (${key})`
+		await page.goto('/dashboard')
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления, 1 непрочитанное')
+		const dialog = await openBell(page)
+		await dialog.getByRole('link', { name: `Вам назначен тест «${title}»` }).click()
+		await expect(page).toHaveURL(new RegExp(`/tests/e2e-notif/notify-test-${key}$`))
+		await expect(page.getByRole('heading', { name: title })).toBeVisible()
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления')
+		await expect(bellButton(page)).toHaveText('')
+		await expect(page).not.toHaveTitle(/^\(/)
+		await page.goBack()
+		await expect(page).toHaveURL(/\/dashboard$/)
+		expect(page.url()).not.toContain('/notifications/')
+	})
+
+	test('reassignment updates the bell on tab focus', async ({ adminPage, notifyStudentPage: page }, testInfo) => {
+		const key = projectKey(testInfo)
+		const testId = await notifyTestId(adminPage, testInfo)
+		const userId = await currentUserId(page)
+		await page.goto('/dashboard')
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления')
+		await unassignFrom(adminPage, testId, userId)
+		await assignTo(adminPage, testId, userId)
+		const bellName = expect.poll(
+			async () => {
+				await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+				return bellButton(page).getAttribute('aria-label')
+			},
+			{ intervals: [1000], timeout: 20_000 }
+		)
+		await bellName.toBe('Уведомления, 1 непрочитанное')
+		await expect(page).toHaveTitle(/^\(1\) /)
+		const dialog = await openBell(page)
+		const rows = dialog.getByRole('link')
+		await expect(rows.first()).toContainText(`Вам назначен тест «Тест для уведомлений (${key})»`)
+		await expect(rows.first().getByText('Непрочитанное:')).toBeAttached()
+		await expect(dialog.getByText('Непрочитанное:')).toHaveCount(1)
+		await expect(rows.filter({ hasText: `Тест для уведомлений (${key})` })).toHaveCount(1)
+	})
+
+	test('periodic refresh updates the bell without focus', async ({ adminPage, notifyStudentPage: page }, testInfo) => {
+		const testId = await notifyTestId(adminPage, testInfo)
+		const userId = await currentUserId(page)
+		await readAll(page)
+		await page.clock.install()
+		const firstCount = page.waitForResponse(
+			(response) => new URL(response.url()).pathname === '/api/notifications/unread-count'
+		)
+		await page.goto('/dashboard')
+		await firstCount
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления')
+		await unassignFrom(adminPage, testId, userId)
+		await assignTo(adminPage, testId, userId)
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления')
+		await page.clock.fastForward(3_000)
+		await page.clock.fastForward(61_000)
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления, 1 непрочитанное')
+		await expect(page).toHaveTitle(/^\(1\) /)
+	})
+
+	test('after the assignment is removed the row leads to «Нет доступа к материалу»', async ({
+		adminPage,
+		notifyStudentPage: page,
+	}, testInfo) => {
+		const key = projectKey(testInfo)
+		const testId = await notifyTestId(adminPage, testInfo)
+		const userId = await currentUserId(page)
+		await unassignFrom(adminPage, testId, userId)
+		await page.goto('/dashboard')
+		const dialog = await openBell(page)
+		await dialog.getByRole('link', { name: `Вам назначен тест «Тест для уведомлений (${key})»` }).click()
+		const main = page.locator('main')
+		await expect(main.getByRole('heading', { name: 'Нет доступа к материалу' })).toBeVisible()
+		await expect(main.getByText('Возможно, назначение снято.')).toBeVisible()
+		await expect(main).not.toContainText('Тест для уведомлений')
+	})
+
+	test('assignment to a draft notifies only after publication (D-18)', async ({
+		adminPage,
+		notifyStudentPage: page,
+	}, testInfo) => {
+		const key = projectKey(testInfo)
+		const title = `Черновик для уведомлений (${key})`
+		await readAll(page)
+		const draft = await adminPage.request.get(`/api/tests/by-slug/e2e-notif/notify-draft-${key}`)
+		expect(draft.ok(), 'read draft').toBe(true)
+		const { id, topicId, slug } = ((await draft.json()) as { test: { id: string; topicId: string; slug: string } }).test
+		await assignTo(adminPage, id, await currentUserId(page))
+		await page.goto('/dashboard')
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления')
+		const unread = await page.request.get('/api/notifications/unread-count')
+		expect(unread.ok(), 'read unread-count').toBe(true)
+		expect(await unread.json()).toEqual({ count: 0 })
+		const published = await adminPage.request.patch(`/api/tests/${id}/settings`, {
+			data: { topicId, title, slug, isPublished: true },
+		})
+		expect(published.ok(), 'publish draft').toBe(true)
+		await page.reload()
+		await expect(bellButton(page)).toHaveAccessibleName('Уведомления, 1 непрочитанное')
+		const dialog = await openBell(page)
+		await dialog.getByRole('link', { name: `Вам назначен тест «${title}»` }).click()
+		await expect(page).toHaveURL(new RegExp(`/tests/e2e-notif/notify-draft-${key}$`))
+		await expect(page.getByRole('heading', { name: title })).toBeVisible()
 	})
 })
 
