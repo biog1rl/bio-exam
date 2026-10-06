@@ -5,7 +5,7 @@ import type { DateRange } from 'react-day-picker'
 
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ArrowRight, CalendarIcon, CheckCircle2, Clock3, FileText, Loader2, Search, XCircle } from 'lucide-react'
+import { ArrowRight, CalendarIcon, CheckCircle2, Clock3, Eye, FileText, Loader2, Search, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -369,7 +369,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 
 				<div className="mt-6 grid gap-3 tab-sm:grid-cols-3 tab:grid-cols-5">
 					<StatTile label="всего в базе" value={scopeTotal} icon={FileText} />
-					<StatTile label="показано" value={shown} icon={Clock3} />
+					<StatTile label="показано" value={shown} icon={Eye} />
 					<StatTile label="пройдено" value={data ? data.summary.passed : '—'} icon={CheckCircle2} />
 					<ReviewTile
 						value={pendingTotal}

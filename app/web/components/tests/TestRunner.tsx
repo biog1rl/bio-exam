@@ -285,7 +285,7 @@ function AttemptRunner({
 						<h2 className="mb-2 text-lg font-semibold">Результат</h2>
 						{resultView?.kind === 'pending' ? (
 							<>
-								<AttemptReviewLine view={resultView} audience="student" />
+								<AttemptReviewLine view={resultView} audience="student" chipClassName="bg-card" />
 								<p className="mt-2 text-sm text-muted-foreground">Процент и итог появятся после проверки учителем.</p>
 							</>
 						) : resultView ? (
@@ -424,7 +424,10 @@ function AttemptRunner({
 									{attempts.map((attempt) => {
 										const view = attemptResultView(attempt)
 										return (
-											<li key={attempt.id} className="rounded border bg-muted/30 p-2">
+											<li
+												key={attempt.id}
+												className="flex flex-wrap items-center gap-x-1 rounded border bg-muted/30 p-2"
+											>
 												{view.kind === 'pending' ? (
 													<>
 														{formatDate(attempt.submittedAt)} / <AttemptReviewLine view={view} audience="student" />

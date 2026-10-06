@@ -7,14 +7,16 @@ export type AttemptReviewAudience = 'student' | 'staff'
 export function AttemptReviewLine({
 	view,
 	audience,
+	chipClassName,
 }: {
 	view: Extract<AttemptResultView, { kind: 'pending' }>
 	audience: AttemptReviewAudience
+	chipClassName?: string
 }) {
 	const { auto } = view
 	return (
 		<span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-			<ReviewStatusChip />
+			<ReviewStatusChip className={chipClassName} />
 			{auto ? (
 				audience === 'student' ? (
 					<>

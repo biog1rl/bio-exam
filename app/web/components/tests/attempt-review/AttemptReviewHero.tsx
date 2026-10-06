@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, FileText, Trophy, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock3, FileText, Timer, Trophy, XCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
@@ -89,7 +89,7 @@ export function AttemptReviewHero({
 				<MetricTile
 					label="время"
 					value={telemetryStats ? formatDuration(telemetryStats.totalMs) : 'нет'}
-					icon={Clock3}
+					icon={Timer}
 				/>
 			</div>
 		</section>

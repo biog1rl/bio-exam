@@ -68,7 +68,7 @@ const THOUSANDS = new Intl.NumberFormat('ru-RU')
 
 const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> = {
 	short_text_too_long: {
-		message: `Краткий ответ не может быть длиннее ${THOUSANDS.format(SHORT_TEXT_MAX_LENGTH)} знаков. Сократите ответ и отправьте снова.`,
+		message: `Ответ не может быть длиннее ${THOUSANDS.format(SHORT_TEXT_MAX_LENGTH)} знаков. Сократите ответ и отправьте снова.`,
 		action: null,
 	},
 	open_text_too_long: {
@@ -84,7 +84,7 @@ const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> 
 		action: 'reload',
 	},
 	answer_shape_invalid: {
-		message: 'Один из ответов сохранён в неверном виде. Обновите страницу, проверьте ответы и отправьте снова.',
+		message: 'Один из ответов не удалось принять. Обновите страницу и отправьте ответы снова.',
 		action: 'reload',
 	},
 }

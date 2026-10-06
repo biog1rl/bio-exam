@@ -480,7 +480,7 @@ export default function DashboardClient() {
 													</span>
 												) : (
 													<span className="flex shrink-0 items-center gap-2">
-														<ReviewStatusChip />
+														<ReviewStatusChip className="bg-card" />
 														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
 													</span>
 												)}
@@ -536,7 +536,7 @@ export default function DashboardClient() {
 													</span>
 												) : (
 													<span className="flex shrink-0 items-center gap-2">
-														<ReviewStatusChip />
+														<ReviewStatusChip className="bg-card" />
 														<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
 													</span>
 												)}

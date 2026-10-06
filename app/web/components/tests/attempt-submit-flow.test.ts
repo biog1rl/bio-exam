@@ -76,7 +76,7 @@ describe('answers-invalid', () => {
 			{
 				name: 'краткий ответ',
 				reason: 'short_text_too_long' as const,
-				message: `Краткий ответ не может быть длиннее ${THOUSANDS.format(SHORT_TEXT_MAX_LENGTH)} знаков. Сократите ответ и отправьте снова.`,
+				message: `Ответ не может быть длиннее ${THOUSANDS.format(SHORT_TEXT_MAX_LENGTH)} знаков. Сократите ответ и отправьте снова.`,
 				action: null,
 			},
 			{
