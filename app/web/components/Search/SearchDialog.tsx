@@ -1,13 +1,13 @@
 'use client'
 
 import type { PermissionKey } from '@bio-exam/rbac'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { BookOpen, ClipboardCheck, FileQuestion, FolderOpen, UserIcon, UsersIcon } from 'lucide-react'
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { useRouter } from 'next/navigation'
+import { VisuallyHidden } from 'radix-ui'
 
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { NAV_ICONS } from '@/components/navigation/nav-icons'
@@ -334,10 +334,12 @@ export default function SearchDialog() {
 					className="h-[min(720px,calc(100dvh-2rem))] rounded-2xl border bg-background/95 shadow-[0_24px_90px_rgba(34,45,24,0.22)] backdrop-blur-xl"
 				>
 					<DialogTitle>
-						<VisuallyHidden>Поиск</VisuallyHidden>
+						<VisuallyHidden.Root>Поиск</VisuallyHidden.Root>
 					</DialogTitle>
 					<DialogDescription>
-						<VisuallyHidden>Начните печатать. ↑/↓ — навигация, Enter — открыть, Esc — закрыть.</VisuallyHidden>
+						<VisuallyHidden.Root>
+							Начните печатать. ↑/↓ — навигация, Enter — открыть, Esc — закрыть.
+						</VisuallyHidden.Root>
 					</DialogDescription>
 
 					<div className="border-b border-border/70 px-4 pt-4 pb-3 sm:px-5">
