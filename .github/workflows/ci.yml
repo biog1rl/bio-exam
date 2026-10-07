@@ -78,8 +78,13 @@ jobs:
         run: yarn workspace @bio-exam/exam-core build
       - name: Check exam-core dist
         run: node scripts/check-exam-core-dist.mjs
-      - name: Build server
-        run: yarn workspace @bio-exam/server build
+      - parallel:
+          - name: Build server
+            run: yarn workspace @bio-exam/server build
+          - name: Build web
+            env:
+              API_ORIGIN: http://127.0.0.1:4000
+            run: yarn workspace @bio-exam/web build
       # Боевая (неизолированная) ветка старта сервера: NODE_ENV=production, сборка app/server/dist.
       # /healthz не обращается к базе, поэтому PostgreSQL не нужен; значения заведомо фиктивные (R3).
       - name: Production start smoke
@@ -113,15 +118,15 @@ jobs:
             exit 1
           fi
           echo 'production start smoke: OK'
-      - name: Build web
-        env:
-          API_ORIGIN: http://127.0.0.1:4000
-        run: yarn workspace @bio-exam/web build
       - name: Check editor bundle budget
         run: yarn editor:budget
 
   e2e:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium-desktop, chromium-mobile]
     services:
       postgres:
         image: postgres:17
@@ -158,4 +163,4 @@ jobs:
       - name: Install Playwright Chromium
         run: yarn playwright install --with-deps chromium
       - name: End-to-end
-        run: yarn e2e
+        run: yarn e2e --project=${{ matrix.project }}

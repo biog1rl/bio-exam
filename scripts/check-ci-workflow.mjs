@@ -62,8 +62,8 @@ const JOB_ORDER = {
 		},
 		{ label: 'check-exam-core-dist', pattern: /run:\s*node scripts\/check-exam-core-dist\.mjs\b/ },
 		{ label: 'yarn workspace @bio-exam/server build', pattern: /run:\s*yarn workspace @bio-exam\/server build\b/ },
-		{ label: '/healthz', pattern: /\/healthz\b/ },
 		{ label: 'yarn workspace @bio-exam/web build', pattern: /run:\s*yarn workspace @bio-exam\/web build\b/ },
+		{ label: '/healthz', pattern: /\/healthz\b/ },
 	],
 	e2e: [
 		{ label: 'yarn playwright install', pattern: /run:\s*yarn playwright install\b/ },
