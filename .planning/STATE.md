@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v3.0
 milestone_name: Открытые задания с фото и ручной проверкой
-current_phase: 11
-current_phase_name: Deadline finalisation, upload window and background jobs
-status: executing
-stopped_at: Completed 11-21-PLAN.md
-last_updated: "2026-10-06T16:29:50.338Z"
-last_activity: 2026-10-06
-last_activity_desc: Phase 11 execution started
-state_head: 76f3d0a6e564467d5fc2796f4340c23617181bed
+current_phase: 12
+current_phase_name: Photos on session authentication
+status: planning
+stopped_at: Phase 11 complete, ready to plan Phase 12
+last_updated: "2026-10-13T15:57:07.122Z"
+last_activity: 2026-10-13
+last_activity_desc: Phase 11 complete, transitioned to Phase 12
+state_head: 186f2f4da5e327186a5860b43347320d8de22e50
 progress:
   total_phases: 12
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 50
-  completed_plans: 48
-  percent: 17
+  completed_plans: 50
+  percent: 25
 ---
 
 # Project State
@@ -29,17 +29,17 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 
 ## Current Position
 
-Phase: 11 (Deadline finalisation, upload window and background jobs) — EXECUTING
-Plan: 18 of 18
-Status: Ready to execute
-Last activity: 2026-10-06 — Phase 11 execution started
+Phase: 12 — Photos on session authentication
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-13 — Phase 11 complete, transitioned to Phase 12
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 170
+- Total plans completed: 192
 - Average duration: n/a
 - Total execution time: 0.0 hours
 
@@ -58,6 +58,7 @@ Progress: [██░░░░░░░░] 17%
 | 8 | 30 | - | - |
 | 9 | 19 | - | - |
 | 10 | 9 | - | - |
+| 11 | 22 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: none yet
@@ -249,7 +250,7 @@ Items acknowledged and deferred at milestone close, most recent first. In v3.0 t
 ## Session Continuity
 
 Last session: 2026-10-06T16:29:50.306Z
-Stopped at: Completed 11-21-PLAN.md
+Stopped at: Phase 11 complete, ready to plan Phase 12
 Resume file: None
 
 ## Operator Next Steps

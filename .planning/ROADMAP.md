@@ -44,7 +44,7 @@
 
 - [x] **Phase 9: Result foundation and readers** - Stored result = immutable auto facts + appended reviews; one shared function; every reader handles "на проверке" (completed 2026-10-06)
 - [x] **Phase 10: Notification journal and bell** - General notification-event journal, header bell with unread count and deep links, first real producer (completed 2026-10-06)
-- [ ] **Phase 11: Deadline finalisation, upload window and background jobs** - Server closes a timed attempt at the deadline without losing text; one rule for the photo window; background jobs, clean shutdown, one refresh per browser (research phase)
+- [x] **Phase 11: Deadline finalisation, upload window and background jobs** - Server closes a timed attempt at the deadline without losing text; one rule for the photo window; background jobs, clean shutdown, one refresh per browser (research phase) (completed 2026-10-13)
 - [ ] **Phase 12: Photos on session authentication** - Up to 5 processed photos per open answer from the computer, private delivery, bounded memory (research phase)
 - [ ] **Phase 13: Token, QR and phone page** - Sign-in-free phone upload page through a scoped link and a QR code in the runner (research phase)
 - [ ] **Phase 14: Authoring and submitting open questions** - Open question editor, text and photo answers, "на проверке" after submit
@@ -172,12 +172,12 @@ Plans:
 
 **Folded-in work**: CR-03 (bfcache) and CR-05 (repeated start without a session) from the v1.0 deferred findings, because they touch the client attempt-lifecycle module changed here (part of DEBT-08, which is mapped to Phase 18). PLAT-04 is v1.0 SEC-02, a release precondition.
 **User steps (outside the repository)**: confirm on the server that the container stop timeout (Compose `stop_grace_period`; the Compose file is on the server) is at least the API's drain time; release this phase when no timed attempt is running (existing deploy protection).
-**Plans**: 20/22 plans executed in 10 waves
+**Plans**: 22/22 plans complete in 10 waves
 Plans:
 - [x] 11-19-PLAN.md
 - [x] 11-20-PLAN.md
 - [x] 11-21-PLAN.md
-- [ ] 11-22-PLAN.md
+- [x] 11-22-PLAN.md
 
 **Wave 1**
 - [x] 11-01-PLAN.md — exam-core contract: `serverNow`, optional `uploadClosesAt`/`submitSource`, 409 body, `SessionFateSchema`, upload-window codes; `serverNow` on `/start` (wave 1)
@@ -215,7 +215,7 @@ Plans:
 - [x] 11-17-PLAN.md — logout clears the user's draft keys (wave 9)
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 11-18-PLAN.md — e2e of criteria 1–3, docs and skills, user steps, phase gates (wave 10)
+- [x] 11-18-PLAN.md — e2e of criteria 1–3, docs and skills, user steps, phase gates (wave 10)
 
 **UI hint**: yes
 
@@ -385,7 +385,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 14.1 �
 |-------|----------------|--------|-----------|
 | 9. Result foundation and readers | 19/19 | Complete    | 2026-10-06 |
 | 10. Notification journal and bell | 9/9 | Complete    | 2026-10-06 |
-| 11. Deadline finalisation, upload window and background jobs | 20/22 | In Progress|  |
+| 11. Deadline finalisation, upload window and background jobs | 22/22 | Complete    | 2026-10-13 |
 | 12. Photos on session authentication | 0/TBD | Not started | - |
 | 13. Token, QR and phone page | 0/TBD | Not started | - |
 | 14. Authoring and submitting open questions | 0/TBD | Not started | - |
