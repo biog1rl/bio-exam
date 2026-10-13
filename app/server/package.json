@@ -19,6 +19,7 @@
 		"assets:refs": "tsx src/scripts/asset-refs.ts",
 		"assets:inline-images": "tsx src/scripts/inline-images.ts",
 		"storage:reconcile": "tsx src/scripts/storage-reconcile.ts",
+		"jobs:run": "tsx src/scripts/jobs-run.ts",
 		"bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts",
 		"routes:inventory": "tsx src/scripts/routes-inventory.ts"
 	},

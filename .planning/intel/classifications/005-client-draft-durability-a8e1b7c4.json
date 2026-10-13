@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/005-client-draft-durability.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 005: Make answer and editor drafts durable",
+  "summary": "Technical plan to ensure answer and question editor drafts persist correctly through navigation and debouncing.",
+  "scope": ["answer persistence", "WAL synchronization", "debouncing", "question draft autosave", "navigation handling", "TestRunner", "localStorage"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

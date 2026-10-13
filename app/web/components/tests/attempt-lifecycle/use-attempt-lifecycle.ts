@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
-import { saveAttemptDraft, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
+import { readTestSession, saveAttemptDraft, startTestSession, submitPublicTestAnswers } from '@/lib/tests/api'
 import type { PublicTestDetail, PublicTestQuestion } from '@/lib/tests/types'
 
 import type { ClientAttemptStorage } from '../client-attempt-id'
@@ -47,12 +47,17 @@ export function browserVisibility(): AttemptVisibility {
 			const onVisibilityChange = () => listener(document.visibilityState === 'hidden' ? 'hidden' : 'visible')
 			const onPageHide = () => listener('pagehide')
 			const onOnline = () => listener('online')
+			const onPageShow = (event: PageTransitionEvent) => {
+				if (event.persisted) listener('visible')
+			}
 			document.addEventListener('visibilitychange', onVisibilityChange)
 			window.addEventListener('pagehide', onPageHide)
+			window.addEventListener('pageshow', onPageShow)
 			window.addEventListener('online', onOnline)
 			return () => {
 				document.removeEventListener('visibilitychange', onVisibilityChange)
 				window.removeEventListener('pagehide', onPageHide)
+				window.removeEventListener('pageshow', onPageShow)
 				window.removeEventListener('online', onOnline)
 			}
 		},
@@ -87,15 +92,31 @@ function orderedQuestionIds(questions: readonly PublicTestQuestion[]): string[] 
 	return [...questions].sort((a, b) => a.order - b.order).map((question) => question.id)
 }
 
+const TEXT_TEMPLATES: ReadonlySet<PublicTestQuestion['questionUiTemplate']> = new Set([
+	'short_text',
+	'sequence_digits',
+	'open',
+])
+
+function textQuestionIdsOf(questions: readonly PublicTestQuestion[]): string[] {
+	return questions.filter((question) => TEXT_TEMPLATES.has(question.questionUiTemplate)).map((question) => question.id)
+}
+
 function createBrowserAttemptLifecycle(input: UseAttemptLifecycleInput, channel: NoticeChannel): AttemptLifecycle {
 	return createAttemptLifecycle({
 		testId: input.test.id,
 		userId: input.userId,
 		questionIds: orderedQuestionIds(input.questions),
+		textQuestionIds: textQuestionIdsOf(input.questions),
 		timeLimitMinutes: input.test.timeLimitMinutes ?? null,
 		storage: browserAttemptStorage(),
 		visibility: browserVisibility(),
-		api: { start: startTestSession, saveDraft: saveAttemptDraft, submit: submitPublicTestAnswers },
+		api: {
+			start: startTestSession,
+			saveDraft: saveAttemptDraft,
+			submit: submitPublicTestAnswers,
+			readSession: readTestSession,
+		},
 		onNotice: channel.emit,
 	})
 }
@@ -108,12 +129,13 @@ export function useAttemptLifecycle(input: UseAttemptLifecycleInput): {
 	const [lifecycle] = useState(() => createBrowserAttemptLifecycle(input, channel))
 	const { onNotice, questions } = input
 	const questionIds = useMemo(() => orderedQuestionIds(questions), [questions])
+	const textQuestionIds = useMemo(() => textQuestionIdsOf(questions), [questions])
 	useEffect(() => {
 		channel.setHandler(onNotice)
 	}, [channel, onNotice])
 	useEffect(() => {
-		lifecycle.setQuestionIds(questionIds)
-	}, [lifecycle, questionIds])
+		lifecycle.setQuestionIds(questionIds, textQuestionIds)
+	}, [lifecycle, questionIds, textQuestionIds])
 	useEffect(() => {
 		lifecycle.init()
 		return () => lifecycle.dispose()

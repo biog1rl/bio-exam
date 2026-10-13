@@ -1,4 +1,4 @@
-import { computeAttemptOutcome, projectionOf, type AttemptOutcome } from '@bio-exam/exam-core'
+import { computeAttemptOutcome, projectionOf, type AttemptOutcome, type ReviewStatus } from '@bio-exam/exam-core'
 
 import { asc, eq, gt, sql } from 'drizzle-orm'
 
@@ -164,6 +164,7 @@ async function readBatch(afterId: string | null, limit: number): Promise<Reconci
 export async function reconcileOutcomes(input: {
 	loadLatestScores: LoadLatestScores
 	repair?: boolean
+	repairOnly?: ReviewStatus
 	batchSize?: number
 }): Promise<ReconcileResult> {
 	const batchSize = input.batchSize ?? DEFAULT_BATCH_SIZE
@@ -193,6 +194,7 @@ export async function reconcileOutcomes(input: {
 			if (sameProjection(stored, expected.values)) continue
 			result.mismatched.push({ attemptId: row.id, stored, expected: expected.values })
 			if (!input.repair) continue
+			if (input.repairOnly !== undefined && row.reviewStatus !== input.repairOnly) continue
 			if (expected.fromFacts) await repairFromFacts(row)
 			else
 				await db.transaction((tx) =>

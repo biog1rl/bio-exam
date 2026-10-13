@@ -2,82 +2,86 @@ import {
 	mergeTelemetryMaps,
 	projectionOf,
 	type AnswerValue,
-	type AttemptOutcome,
+	type AttemptSubmitSource,
 	type TelemetryMap,
 } from '@bio-exam/exam-core'
 
-import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, eq, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { testAttempts, testSessions } from '../../db/schema.js'
-import { sessionExpired } from './sessions.js'
+import type { ScoreSubmissionResult } from '../scored-attempt/index.js'
+import { classifySubmitted, type SessionOutcomeOf, type SessionOwner, type SessionTest } from './outcome.js'
+import { closeSessionsAsExpired, sessionExpired, sessionFilter } from './sessions.js'
 
-export type SessionCloseReason = 'expired' | 'superseded'
+export type ScoredSubmission = Extract<ScoreSubmissionResult, { ok: true }>
 
-export type ScoredAttemptFacts = {
-	results: unknown[]
-	resultsVersion: 1 | 2
-	earnedPoints: number
-	totalPoints: number
-	scorePercentage: number
-	passed: boolean
-	outcome: AttemptOutcome
-	passingScore: number | null
-}
+export type DraftChanged = { kind: 'draft_changed' }
 
-export type PrecheckSubmitParams = {
-	testId: string
-	userId: string
-	testSessionId: string
-	clientAttemptId: string
-	timeLimitMinutes: number | null
-}
+type SubmitOutcome = SessionOutcomeOf<'accepted' | 'finalized' | 'submitted' | 'expired' | 'superseded' | 'not_found'>
 
-export type PrecheckSubmitResult =
-	| { kind: 'not_found' }
-	| { kind: 'submitted'; attemptId: string | null; sameClient: boolean }
-	| { kind: 'closed'; reason: SessionCloseReason }
-	| { kind: 'expired' }
-	| { kind: 'open' }
+type PrecheckOutcome = { kind: 'writable' } | { kind: 'past_deadline' } | SubmitOutcome
 
-export type SubmitAttemptParams = {
-	testId: string
-	userId: string
-	testSessionId: string
+type SubmitAttemptParams = {
+	owner: SessionOwner
+	sessionId: string
 	clientAttemptId: string
 	answers: Record<string, AnswerValue>
 	telemetry?: TelemetryMap
-	scored: ScoredAttemptFacts
+	scored: ScoredSubmission
+	test: Pick<SessionTest, 'timeLimitMinutes' | 'photoUploadWindowMinutes'>
+	source: AttemptSubmitSource
 }
 
-export type SubmitAttemptOutcome =
-	| { kind: 'created'; attemptId: string }
-	| { kind: 'replayed'; attemptId: string }
-	| { kind: 'conflict'; attemptId: string | null }
-	| { kind: 'closed'; reason: SessionCloseReason }
-	| { kind: 'not_found' }
-
 class ClientAttemptConflict extends Error {
-	constructor(readonly attemptId: string) {
+	constructor(
+		readonly attemptId: string,
+		readonly submitSource: AttemptSubmitSource | null
+	) {
 		super('client attempt id belongs to another attempt')
 	}
 }
 
-function closeReasonOf(value: string | null): SessionCloseReason {
-	return value === 'superseded' ? 'superseded' : 'expired'
+function closedOutcome(closeReason: string | null): SessionOutcomeOf<'expired' | 'superseded'> {
+	return closeReason === 'superseded' ? { kind: 'superseded' } : { kind: 'expired' }
 }
 
-function sessionOfPair(testSessionId: string, testId: string, userId: string): SQL | undefined {
-	return and(eq(testSessions.id, testSessionId), eq(testSessions.testId, testId), eq(testSessions.userId, userId))
+function timerEndsAtOf(startedAt: Date, timeLimitMinutes: number | null): SQL {
+	return timeLimitMinutes == null
+		? sql`NULL`
+		: sql`${startedAt}::timestamptz + make_interval(mins => ${timeLimitMinutes}::int)`
 }
 
-export async function precheckSubmit({
-	testId,
-	userId,
-	testSessionId,
-	clientAttemptId,
-	timeLimitMinutes,
-}: PrecheckSubmitParams): Promise<PrecheckSubmitResult> {
+function submittedAtOf(source: AttemptSubmitSource, startedAt: Date, timeLimitMinutes: number | null): SQL {
+	if (source === 'deadline' && timeLimitMinutes != null) {
+		return sql`(${timerEndsAtOf(startedAt, timeLimitMinutes)})::timestamptz`
+	}
+	return sql`now()`
+}
+
+function uploadClosesAtOf(params: {
+	submittedAt: SQL
+	startedAt: Date
+	timeLimitMinutes: number | null
+	uploadWindowMinutes: number
+	hasOpenQuestion: boolean
+}): SQL | null {
+	const { submittedAt, startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
+	if (!hasOpenQuestion || uploadWindowMinutes <= 0) return null
+	return sql`LEAST(${submittedAt}, (${timerEndsAtOf(startedAt, timeLimitMinutes)})::timestamptz) + make_interval(mins => ${uploadWindowMinutes}::int)`
+}
+
+function draftMatchesOf(expectedDraft: unknown): SQL<boolean> {
+	if (expectedDraft === undefined) return sql<boolean>`true`
+	if (expectedDraft === null) return sql<boolean>`${testSessions.draftAnswers} IS NULL`
+	return sql<boolean>`${testSessions.draftAnswers} IS NOT DISTINCT FROM ${JSON.stringify(expectedDraft)}::jsonb`
+}
+
+export async function precheckSubmit(
+	owner: SessionOwner,
+	request: { sessionId: string; clientAttemptId: string },
+	timeLimitMinutes: number | null
+): Promise<PrecheckOutcome> {
 	const [row] = await db
 		.select({
 			submittedAt: testSessions.submittedAt,
@@ -86,42 +90,50 @@ export async function precheckSubmit({
 			closeReason: testSessions.closeReason,
 			pastDeadline: sessionExpired(timeLimitMinutes),
 			attemptClientId: testAttempts.clientAttemptId,
+			attemptSubmitSource: testAttempts.submitSource,
 		})
 		.from(testSessions)
 		.leftJoin(testAttempts, eq(testAttempts.id, testSessions.attemptId))
-		.where(sessionOfPair(testSessionId, testId, userId))
+		.where(sessionFilter({ sessionId: request.sessionId, owner }))
 		.limit(1)
 	if (!row) return { kind: 'not_found' }
 	if (row.submittedAt) {
-		return {
-			kind: 'submitted',
-			attemptId: row.attemptId,
-			sameClient: row.attemptId !== null && row.attemptClientId === clientAttemptId,
+		if (row.attemptId !== null && row.attemptClientId === request.clientAttemptId) {
+			return { kind: 'accepted', attemptId: row.attemptId }
 		}
+		return classifySubmitted({
+			id: row.attemptId,
+			submitSource: row.attemptSubmitSource as AttemptSubmitSource | null,
+		})
 	}
-	if (row.closedAt) return { kind: 'closed', reason: closeReasonOf(row.closeReason) }
-	if (row.pastDeadline) return { kind: 'expired' }
-	return { kind: 'open' }
+	if (row.closedAt) return closedOutcome(row.closeReason)
+	if (row.pastDeadline) return { kind: 'past_deadline' }
+	return { kind: 'writable' }
 }
 
-export async function closeExpiredSession(testSessionId: string): Promise<void> {
-	await db
-		.update(testSessions)
-		.set({ closedAt: sql`now()`, closeReason: 'expired' })
-		.where(and(eq(testSessions.id, testSessionId), isNull(testSessions.submittedAt), isNull(testSessions.closedAt)))
+export function closeSessionAsExpired(testSessionId: string): Promise<string[]> {
+	return closeSessionsAsExpired(db, sessionFilter({ sessionId: testSessionId }))
 }
 
+export function submitAttempt(
+	params: SubmitAttemptParams & { expectedDraft: unknown }
+): Promise<SubmitOutcome | DraftChanged>
+export function submitAttempt(params: SubmitAttemptParams): Promise<SubmitOutcome>
 export async function submitAttempt({
-	testId,
-	userId,
-	testSessionId,
+	owner,
+	sessionId,
 	clientAttemptId,
 	answers,
 	telemetry,
 	scored,
-}: SubmitAttemptParams): Promise<SubmitAttemptOutcome> {
+	test,
+	source,
+	expectedDraft,
+}: SubmitAttemptParams & { expectedDraft?: unknown }): Promise<SubmitOutcome | DraftChanged> {
+	const { testId, userId } = owner
+	const { timeLimitMinutes, photoUploadWindowMinutes } = test
 	try {
-		return await db.transaction(async (tx): Promise<SubmitAttemptOutcome> => {
+		return await db.transaction(async (tx): Promise<SubmitOutcome | DraftChanged> => {
 			const [session] = await tx
 				.select({
 					submittedAt: testSessions.submittedAt,
@@ -129,42 +141,58 @@ export async function submitAttempt({
 					closeReason: testSessions.closeReason,
 					attemptId: testSessions.attemptId,
 					draftTelemetry: testSessions.draftTelemetry,
+					startedAt: testSessions.startedAt,
+					draftMatches: draftMatchesOf(expectedDraft),
 				})
 				.from(testSessions)
-				.where(sessionOfPair(testSessionId, testId, userId))
+				.where(sessionFilter({ sessionId, owner }))
 				.for('update')
 			if (!session) return { kind: 'not_found' }
 
 			if (session.submittedAt) {
-				if (!session.attemptId) return { kind: 'conflict', attemptId: null }
+				if (!session.attemptId) return classifySubmitted({ id: null, submitSource: null })
 				const [stored] = await tx
-					.select({ clientAttemptId: testAttempts.clientAttemptId })
+					.select({ clientAttemptId: testAttempts.clientAttemptId, submitSource: testAttempts.submitSource })
 					.from(testAttempts)
 					.where(eq(testAttempts.id, session.attemptId))
-				if (stored?.clientAttemptId === clientAttemptId) return { kind: 'replayed', attemptId: session.attemptId }
-				return { kind: 'conflict', attemptId: session.attemptId }
+				if (stored?.clientAttemptId === clientAttemptId) return { kind: 'accepted', attemptId: session.attemptId }
+				return classifySubmitted({
+					id: session.attemptId,
+					submitSource: (stored?.submitSource ?? null) as AttemptSubmitSource | null,
+				})
 			}
 
-			if (session.closedAt) return { kind: 'closed', reason: closeReasonOf(session.closeReason) }
+			if (session.closedAt) return closedOutcome(session.closeReason)
 
+			if (!session.draftMatches) return { kind: 'draft_changed' }
+
+			const submittedAt = submittedAtOf(source, session.startedAt, timeLimitMinutes)
 			const mergedTelemetry = mergeTelemetryMaps(session.draftTelemetry, telemetry)
 			const [inserted] = await tx
 				.insert(testAttempts)
 				.values({
 					testId,
 					userId,
-					sessionId: testSessionId,
+					sessionId,
 					clientAttemptId,
 					answers,
-					results: scored.results,
-					resultsVersion: scored.resultsVersion,
+					results: scored.facts,
+					resultsVersion: 2,
 					earnedPoints: scored.outcome.submitted.earnedPoints,
 					totalPoints: scored.outcome.submitted.totalPoints,
 					scorePercentage: scored.outcome.submitted.scorePercentage,
 					passed: scored.outcome.submitted.passed,
 					...projectionOf(scored.outcome),
 					passingScore: scored.passingScore,
-					submitSource: 'client',
+					submittedAt,
+					submitSource: source,
+					uploadClosesAt: uploadClosesAtOf({
+						submittedAt,
+						startedAt: session.startedAt,
+						timeLimitMinutes,
+						uploadWindowMinutes: photoUploadWindowMinutes,
+						hasOpenQuestion: scored.facts.some((fact) => fact.template === 'open'),
+					}),
 					gradedAt: null,
 					telemetry: Object.keys(mergedTelemetry).length > 0 ? mergedTelemetry : null,
 				})
@@ -173,29 +201,33 @@ export async function submitAttempt({
 
 			if (!inserted) {
 				const [existing] = await tx
-					.select({ id: testAttempts.id })
+					.select({ id: testAttempts.id, submitSource: testAttempts.submitSource })
 					.from(testAttempts)
 					.where(and(eq(testAttempts.userId, userId), eq(testAttempts.clientAttemptId, clientAttemptId)))
 					.limit(1)
-				if (existing) throw new ClientAttemptConflict(existing.id)
+				if (existing) {
+					throw new ClientAttemptConflict(existing.id, existing.submitSource as AttemptSubmitSource | null)
+				}
 				throw new Error('submitAttempt: attempt insert was skipped without a client attempt conflict')
 			}
 
 			await tx
 				.update(testSessions)
 				.set({
-					submittedAt: sql`now()`,
+					submittedAt,
 					attemptId: inserted.id,
 					draftAnswers: null,
 					draftLastQuestionId: null,
 					draftTelemetry: null,
 					draftUpdatedAt: null,
 				})
-				.where(eq(testSessions.id, testSessionId))
-			return { kind: 'created', attemptId: inserted.id }
+				.where(eq(testSessions.id, sessionId))
+			return { kind: 'accepted', attemptId: inserted.id }
 		})
 	} catch (error) {
-		if (error instanceof ClientAttemptConflict) return { kind: 'conflict', attemptId: error.attemptId }
+		if (error instanceof ClientAttemptConflict) {
+			return classifySubmitted({ id: error.attemptId, submitSource: error.submitSource })
+		}
 		throw error
 	}
 }

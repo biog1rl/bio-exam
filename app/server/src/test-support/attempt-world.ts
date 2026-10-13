@@ -174,3 +174,46 @@ export async function countRows(world: AttemptWorld, text: string, params: unkno
 	const result = await world.ctx.pgPool.query<{ count: number | string }>(text, params)
 	return Number(result.rows[0]?.count ?? 0)
 }
+
+export async function shiftStartedAt(ctx: AuthApp, sessionId: string, interval: string): Promise<void> {
+	await ctx.pgPool.query('UPDATE test_sessions SET started_at = now() - $2::interval WHERE id = $1', [
+		sessionId,
+		interval,
+	])
+}
+
+export async function insertOpenQuestion(ctx: AuthApp, testId: string, options: { order: number }): Promise<string> {
+	const { db, schema } = ctx
+	const [question] = await db
+		.insert(schema.questions)
+		.values({ testId, type: 'open', order: options.order, points: 3, promptPath: null })
+		.returning({ id: schema.questions.id })
+	assert.ok(question, 'insertOpenQuestion: question was not created')
+	return question.id
+}
+
+export type AttemptRowFacts = {
+	submitSource: string
+	clientAttemptId: string | null
+	submittedAt: Date
+	uploadClosesAt: Date | null
+}
+
+export async function attemptRowOf(ctx: AuthApp, attemptId: string): Promise<AttemptRowFacts> {
+	const result = await ctx.pgPool.query<{
+		submit_source: string
+		client_attempt_id: string | null
+		submitted_at: Date
+		upload_closes_at: Date | null
+	}>('SELECT submit_source, client_attempt_id, submitted_at, upload_closes_at FROM test_attempts WHERE id = $1', [
+		attemptId,
+	])
+	const row = result.rows[0]
+	assert.ok(row, `attemptRowOf: attempt ${attemptId} not found`)
+	return {
+		submitSource: row.submit_source,
+		clientAttemptId: row.client_attempt_id,
+		submittedAt: row.submitted_at,
+		uploadClosesAt: row.upload_closes_at,
+	}
+}

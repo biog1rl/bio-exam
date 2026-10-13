@@ -106,6 +106,7 @@ GET /api/tests/public/tests/:id  validateUUID(id) > sessionRequired > <anonymous
 GET /api/tests/public/tests/:id/attempts/me  validateUUID(id) > sessionRequired > <anonymous>
 GET /api/tests/public/tests/:id/chart-data  validateUUID(id) > sessionRequired > <anonymous>
 POST /api/tests/public/tests/:id/start  validateUUID(id) > sessionRequired > <anonymous>
+GET /api/tests/public/tests/:id/sessions/:sessionId  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 POST /api/tests/public/tests/:id/submit  validateUUID(id) > sessionRequired > <anonymous>
 GET /api/settings/charts  sessionRequired > <anonymous>

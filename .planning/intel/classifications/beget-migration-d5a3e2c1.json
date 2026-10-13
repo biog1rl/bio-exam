@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/beget-migration.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Переезд bio-exam с Vercel и Supabase на один VPS",
+  "summary": "Technical specification for migrating bio-exam from Vercel/Supabase to a single VPS with Docker, PostgreSQL, CI/CD and verification procedures.",
+  "scope": ["PostgreSQL migration", "Docker Compose", "GitHub Actions", "Storage migration", "VPS infrastructure", "Authentication", "Backup/recovery", "Monitoring", "Network architecture", "Beget VPS", "CI/CD pipeline"],
+  "cross_refs": ["../package.json", "../app/server/src/app.ts", "../app/server/src/db/index.ts", "../app/server/src/db/schema.ts", "../app/server/src/services/storage/storage.ts", "../app/web/next.config.ts", "009-drizzle-metadata.md"],
+  "locked": false,
+  "precedence": 2,
+  "notes": ""
+}

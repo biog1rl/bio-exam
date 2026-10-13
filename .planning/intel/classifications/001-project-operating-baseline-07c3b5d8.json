@@ -1,0 +1,26 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/001-project-operating-baseline.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 001: Establish the project operating baseline",
+  "summary": "Establish repository-wide test/verification, CI workflow, onboarding docs, and project agent skills baseline.",
+  "scope": ["monorepo", "test verification", "CI workflow", "documentation", "agent skills", "env contract"],
+  "cross_refs": [
+    "package.json",
+    "turbo.json",
+    ".github/workflows",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "app/server/README.md",
+    "app/web/.env.example",
+    "docs/adr/",
+    ".agents/skills/bio-exam-web",
+    ".agents/skills/bio-exam-api",
+    ".agents/skills/bio-exam-data"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": "Classified per manifest as SPEC with precedence 3. Document contains implementation steps and verification gates (Git diff checks, env contract validation, skill validation) which align with SPEC definition of implementation contracts."
+}

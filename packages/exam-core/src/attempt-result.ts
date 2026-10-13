@@ -16,22 +16,13 @@ export const SUBMIT_ERROR_CODES = {
 	answersInvalid: 'ANSWERS_INVALID',
 } as const
 
+export const ATTEMPT_SUBMIT_SOURCES = ['client', 'deadline'] as const
+
 export const SubmitAttemptRequestSchema = z.object({
 	sessionId: z.string().uuid(),
 	clientAttemptId: z.string().uuid(),
 	answers: z.record(z.string().uuid(), AnswerValueSchema),
 	telemetry: TelemetryMapSchema.optional(),
-})
-
-export const SubmitAttemptErrorSchema = z.object({
-	error: z.enum([
-		SUBMIT_ERROR_CODES.alreadySubmitted,
-		SUBMIT_ERROR_CODES.timeExpired,
-		SUBMIT_ERROR_CODES.answersInvalid,
-	]),
-	attemptId: z.string().uuid().nullable().optional(),
-	reason: z.enum(ANSWER_VIOLATION_REASONS).optional(),
-	limit: z.number().int().positive().optional(),
 })
 
 const VerdictMistakesSchema = z.number().int().nonnegative()
@@ -162,6 +153,8 @@ const AttemptViewObjectSchema = z.object({
 	autoEarnedPoints: z.number(),
 	autoTotalPoints: z.number(),
 	results: z.array(AttemptQuestionViewSchema),
+	uploadClosesAt: z.string().nullable().optional(),
+	submitSource: z.enum(ATTEMPT_SUBMIT_SOURCES).optional(),
 })
 
 const ATTEMPT_VIEW_NULL_MISMATCH =
@@ -181,6 +174,21 @@ function requireResultNullsOnlyWhenPending(
 
 export const AttemptViewSchema = AttemptViewObjectSchema.superRefine(requireResultNullsOnlyWhenPending)
 
+export const SubmitAttemptErrorSchema = z.object({
+	error: z.enum([
+		SUBMIT_ERROR_CODES.alreadySubmitted,
+		SUBMIT_ERROR_CODES.timeExpired,
+		SUBMIT_ERROR_CODES.answersInvalid,
+	]),
+	attemptId: z.string().uuid().nullable().optional(),
+	reason: z.enum(ANSWER_VIOLATION_REASONS).optional(),
+	limit: z.number().int().positive().optional(),
+	submitSource: z.enum(ATTEMPT_SUBMIT_SOURCES).optional(),
+	uploadClosesAt: z.string().nullable().optional(),
+	serverNow: z.string().optional(),
+	attempt: AttemptViewSchema.optional(),
+})
+
 export const AdminAttemptViewSchema = AttemptViewObjectSchema.extend({
 	testId: z.string().uuid(),
 	userId: z.string().uuid(),
@@ -196,4 +204,5 @@ export type AttemptQuestionView = z.infer<typeof AttemptQuestionViewSchema>
 export type AttemptView = z.infer<typeof AttemptViewSchema>
 export type AdminAttemptView = z.infer<typeof AdminAttemptViewSchema>
 export type SubmitAttemptRequest = z.infer<typeof SubmitAttemptRequestSchema>
+export type AttemptSubmitSource = (typeof ATTEMPT_SUBMIT_SOURCES)[number]
 export type SubmitAttemptError = z.infer<typeof SubmitAttemptErrorSchema>

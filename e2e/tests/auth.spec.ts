@@ -18,6 +18,26 @@ import {
 	storageStatePath,
 	type ProjectKey,
 } from '../fixtures/accounts'
+import { createOwnTest, currentUserId, deleteOwnTest, newSessionContext } from '../fixtures/exam'
+
+const USER_KEY_PREFIXES = [
+	'test-session-',
+	'test-answers-wal-',
+	'test-frozen-',
+	'test-client-attempt-',
+	'test-unsent-',
+	'question-draft-wal-',
+]
+const SESSION_REFRESH_RECORD_KEY = 'bio-exam:session-refresh'
+const ANSWER_PATCH = /\/api\/tests\/public\/tests\/[^/]+\/sessions\/[^/]+\/answers$/
+
+async function localStorageKeys(page: Page): Promise<string[]> {
+	return page.evaluate(() => Object.keys(window.localStorage).sort())
+}
+
+function userKeys(keys: string[], userId: string): string[] {
+	return keys.filter((key) => USER_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)) && key.endsWith(`-${userId}`))
+}
 
 function projectKey(testInfo: TestInfo): ProjectKey {
 	return projectKeyFromName(testInfo.project.name)
@@ -131,5 +151,65 @@ test.describe('flow 1: login, logout and protected-page redirect', () => {
 
 		await logOut(page, testInfo, login)
 		await expectRedirectToLogin(page)
+	})
+
+	test('logout from a test page removes the student draft keys from localStorage @flow1', async ({
+		browser,
+		page,
+	}, testInfo) => {
+		const { login } = loginAccount(projectKey(testInfo), 'user')
+		await logIn(page, login)
+		const userId = await currentUserId(page)
+		const adminContext = await newSessionContext(browser, testInfo, 'admin')
+		const admin = await adminContext.newPage()
+		const own = await createOwnTest(admin, page, {
+			prefix: `logout-clear-${projectKey(testInfo)}`,
+			questions: [
+				{ type: 'short_answer', prompt: 'Как называется деление с сохранением числа хромосом?', correct: 'митоз' },
+			],
+		})
+		try {
+			await page.goto(`/tests/${own.topicSlug}/${own.slug}/start`)
+			await expect(page.getByText('Отвечено: 0 / 1')).toBeVisible()
+			const saved = page.waitForResponse(
+				(response) => response.request().method() === 'PATCH' && ANSWER_PATCH.test(new URL(response.url()).pathname)
+			)
+			await page.getByPlaceholder('Введите ответ').fill('митоз')
+			expect((await saved).status()).toBe(200)
+			await expect
+				.poll(async () => userKeys(await localStorageKeys(page), userId))
+				.toContain(`test-answers-wal-${own.id}-${userId}`)
+
+			const foreignKey = `test-answers-wal-${own.id}-${userId}0`
+			await page.evaluate(
+				({ seeded, foreign, refreshKey }) => {
+					for (const key of seeded) window.localStorage.setItem(key, '{}')
+					window.localStorage.setItem(foreign, '{}')
+					window.localStorage.setItem(refreshKey, '{}')
+				},
+				{
+					seeded: [
+						`test-frozen-${own.id}-${userId}`,
+						`test-client-attempt-${own.id}-${userId}`,
+						`test-unsent-${own.id}-${userId}`,
+						`question-draft-wal-e2e-${userId}`,
+					],
+					foreign: foreignKey,
+					refreshKey: SESSION_REFRESH_RECORD_KEY,
+				}
+			)
+			const before = await localStorageKeys(page)
+			console.log(`localStorage before logout: ${before.join(', ')}`)
+
+			await logOut(page, testInfo, login)
+			const after = await localStorageKeys(page)
+			console.log(`localStorage after logout: ${after.join(', ')}`)
+			expect(userKeys(after, userId)).toEqual([])
+			expect(after).not.toContain(SESSION_REFRESH_RECORD_KEY)
+			expect(after).toContain(foreignKey)
+		} finally {
+			await deleteOwnTest(admin, own)
+			await adminContext.close()
+		}
 	})
 })

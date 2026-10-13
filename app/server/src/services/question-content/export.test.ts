@@ -216,6 +216,7 @@ describe('ZIP теста', () => {
 			'scoringRules',
 			'useGlobalScoringRules',
 			'timeLimitMinutes',
+			'photoUploadWindowMinutes',
 			'redThresholdMinutes',
 			'warningThresholdMinutes',
 			'passingScore',
@@ -228,6 +229,7 @@ describe('ZIP теста', () => {
 		assert.equal(settings.useGlobalScoringRules, true)
 		assert.ok(settings.scoringRules && typeof settings.scoringRules === 'object')
 		assert.equal(settings.updatedAt, updatedAt)
+		assert.equal(settings.photoUploadWindowMinutes, 15)
 		assert.equal(reply.entries.has('missing-files.txt'), false)
 		assert.equal(reply.entries.has('answer_keys.json'), false)
 	})

@@ -12,6 +12,7 @@ export type AttemptTest = {
 	description: string | null
 	showCorrectAnswer: boolean
 	timeLimitMinutes: number | null
+	photoUploadWindowMinutes: number
 	passingScore: number | null
 	topicId: string
 	topicSlug: string
@@ -33,6 +34,7 @@ const attemptTestColumns = {
 	description: tests.description,
 	showCorrectAnswer: tests.showCorrectAnswer,
 	timeLimitMinutes: tests.timeLimitMinutes,
+	photoUploadWindowMinutes: tests.photoUploadWindowMinutes,
 	passingScore: tests.passingScore,
 	topicId: topics.id,
 	topicSlug: topics.slug,

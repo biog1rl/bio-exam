@@ -142,21 +142,46 @@ Express API платформы тестирования Bio-Exam: данные, 
   отфильтрованному набору, `scopeTotal` и `facets` (`topics`, `students`) по всей зоне без фильтров.
 - `POST /api/tests/public/tests/:id/start` возвращает открытую сессию пары (тест, пользователь) или открывает новую
   (`test_sessions`). У пары открыта не больше одной сессии: частичный уникальный индекс `test_sessions_open_uniq` по
-  строкам без `submitted_at` и `closed_at`. Ответ: `sessionId`, `startedAt` и черновик.
+  строкам без `submitted_at` и `closed_at`. Ответ: `sessionId`, `startedAt`, `serverNow` (время базы) и черновик.
 - `PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers` сохраняет ответ и телеметрию в черновик открытой
-  сессии под блокировкой строки. Сданная или закрытая сессия — 404.
+  сессии под блокировкой строки и отвечает `{ ok: true, serverNow }`. Сданная или закрытая сессия, а также сессия
+  после льготы — 404.
 - Сессия теста с `time_limit_minutes` просрочена, когда `now()` базы позже `started_at` плюс лимит плюс 2 минуты
-  (`ATTEMPT_GRACE_PERIOD_MINUTES` в `@bio-exam/exam-core`). Срок проверяется на момент прихода submit, до оценки:
-  долгая оценка не превращает принятую отправку в 422. Просроченная сессия закрывается с `close_reason = 'expired'` при
-  submit или при `start`, который затем открывает новую сессию. `close_reason = 'superseded'` у лишних открытых сессий
-  пары, закрытых миграцией 0022 (открытой осталась самая поздняя).
+  (`ATTEMPT_GRACE_PERIOD_MINUTES` в `@bio-exam/exam-core`). Одну формулу даёт `sessionExpired(limit, marginSeconds)` в
+  `src/services/attempt-sessions/sessions.ts`: её берут ленивые пути, задача и правило давности. Срок проверяется на
+  момент прихода submit, до оценки: долгая оценка не превращает принятую отправку в 422.
+  `close_reason = 'superseded'` у лишних открытых сессий пары, закрытых миграцией 0022 (открытой осталась самая
+  поздняя).
+- Просроченную сессию теста с лимитом сервер сам сдаёт по черновику (`finalizeSessionByDeadline`): попытка получает
+  `submit_source = 'deadline'`, `submitted_at` — конец таймера (`started_at` плюс лимит), `client_attempt_id` —
+  `deadline:<sessionId>`. Ответы из черновика проходят то же правило, что PATCH; ответ, не прошедший правило, отбрасывается
+  с записью в лог. Пустой черновик (после отбора ответов) попытки не даёт: сессия закрывается `expired`. Сессии,
+  у которых дедлайн плюс льгота прошли не раньше 24 ч назад (`DEADLINE_FINALIZE_MAX_AGE_HOURS` в `sessions.ts`),
+  сдаются; более давние закрываются `expired` без попытки, `draft_answers` в строке остаётся. Ошибка данных при
+  финализации (например, вопрос неизвестного типа) пишется в лог и закрывает сессию `expired`; временная ошибка базы
+  пробрасывается и повторяется. Черновик, изменившийся за время оценки, оценивается заново (до трёх раундов). Попытка
+  одна на сессию при любой гонке путей.
+- Финализацию запускают ленивые пути — `/start`, PATCH черновика, `/submit` и чтение судьбы сессии — и задача
+  `finalize-deadlines` (запас 60 с после льготы, нижняя граница 24 ч, предел прогона 20 с). Команды входа
+  (`startAttemptSession`, `saveSessionDraft`, `submitSession`) решают сами, когда финализировать; маршрут переводит
+  исход в HTTP функцией `sendSessionOutcome`.
+- `GET /api/tests/public/tests/:id/sessions/:sessionId` отдаёт судьбу сессии пары и при необходимости финализирует её:
+  `{ state: 'open', sessionId, startedAt, serverNow }`, `{ state: 'submitted', attemptId, submitSource, uploadClosesAt,
+serverNow, attempt }` или `{ state: 'expired', serverNow }`; чужая, закрытая как `superseded` или несуществующая
+  сессия — 404.
+- Окно для добавления фото после конца времени: `tests.photo_upload_window_minutes` (0…120, по умолчанию 15, поле
+  принимают создание и настройки теста) и `test_attempts.upload_closes_at`, который база считает при записи попытки
+  как `LEAST(момент сдачи, конец таймера)` плюс окно. Правило `photoUploadWindow` (`upload-window.ts`) решает на времени
+  базы; отказ — 422 `UPLOAD_WINDOW_CLOSED` или `UPLOAD_WINDOW_NONE` с `uploadClosesAt`. Уменьшение лимита теста во
+  время попытки сокращает её: условие просрочки берёт текущий лимит.
 - `POST /api/tests/public/tests/:id/submit`, тело `{ sessionId, clientAttemptId, answers, telemetry? }`
   (`SubmitAttemptRequestSchema`). `sessionId` и `clientAttemptId` — обязательные UUID, `clientAttemptId` создаёт
   клиент один раз на отправку. Ответы:
   - 400 — тело не прошло схему;
   - 403 — тест не назначен;
   - 404 — тест не виден, сессии нет у пары или она закрыта как `superseded`;
-  - 409 `{ error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId }` — сессия уже сдана с другим `clientAttemptId`;
+  - 409 `{ error: 'ATTEMPT_ALREADY_SUBMITTED', attemptId }` — сессия уже сдана с другим `clientAttemptId`; если её сдал
+    сервер по дедлайну, тело несёт ещё `submitSource: 'deadline'`, `uploadClosesAt`, `serverNow` и `attempt` (вид попытки);
   - 422 `{ error: 'TIME_EXPIRED' }` — сессия просрочена или закрыта как `expired`;
   - 200 — вид попытки. Повтор с теми же `sessionId` и `clientAttemptId` отвечает 200 с видом уже сохранённой попытки
     и новой не создаёт. На сессию приходится не больше одной попытки: уникальный индекс
@@ -302,6 +327,7 @@ yarn workspace @bio-exam/server drizzle:generate
 yarn workspace @bio-exam/server drizzle:migrate
 yarn workspace @bio-exam/server seed
 yarn workspace @bio-exam/server bootstrap:admin
+yarn workspace @bio-exam/server jobs:run finalize-deadlines
 ```
 
 - `dev` запускает сервер с перезагрузкой, `build` и `start` собирают и запускают `dist`.
@@ -309,6 +335,16 @@ yarn workspace @bio-exam/server bootstrap:admin
   `DATABASE_URL`. Применённые миграции не редактируются.
 - `seed` создаёт роли из `packages/rbac`, `bootstrap:admin` создаёт первого администратора по `ADMIN_BOOTSTRAP_*`.
 - Против боевой базы миграции не запускают из разработки: это отдельная осознанная операция.
+- Фоновые задачи API стартуют только из `src/index.ts`. `finalize-deadlines` запускается раз в 30 с: финализирует
+  сессии тестов с лимитом времени через 60 с после конца льготы, если конец льготы был не раньше 24 ч назад. Более
+  давние открытые сессии закрываются `expired` без попытки, черновик в строке остаётся. Прогон длится не дольше 20 с.
+  `reconcile-outcomes` запускается только по команде и чинит проекцию исхода попыток со статусом `none`.
+- Два экземпляра API не выполняют одну задачу одновременно: прогон держит замок в базе.
+- `jobs:run <имя>` выполняет задачу один раз и печатает отчёт. Неизвестное имя — список задач и код выхода 1, код 75 —
+  задача уже выполняется другим экземпляром. В собранном образе задачу запускают так: `node dist/scripts/jobs-run.js <имя>`.
+- Остановка по `SIGTERM` или `SIGINT`: сервер перестаёт принимать новые соединения, запросы в полёте и задачи
+  дожидаются до 25 с, оставшиеся соединения после предела обрываются, затем закрывается пул базы. Повторный сигнал
+  завершает процесс сразу с кодом 1.
 
 ## Тесты
 

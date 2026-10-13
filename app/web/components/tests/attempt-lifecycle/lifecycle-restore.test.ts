@@ -1,4 +1,5 @@
 import { ATTEMPT_GRACE_PERIOD_MINUTES, SUBMIT_ERROR_CODES } from '@bio-exam/exam-core'
+import type { AttemptView, SessionFate } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
@@ -22,6 +23,9 @@ import {
 	settle,
 	setupLifecycle,
 	START,
+	STARTED_AT,
+	TEST_ID,
+	textResult,
 } from './testing'
 
 const LIMIT = 10
@@ -77,11 +81,11 @@ describe('восстановление: сначала submit с сохранё�
 	test.each(
 		[
 			{
-				name: '422 TIME_EXPIRED: blocked time-expired, /start не вызывался',
+				name: '422 TIME_EXPIRED: blocked time-expired, /start не вызывался, WAL остаётся до «Начать заново»',
 				failure: () => requestError(422, SUBMIT_ERROR_CODES.timeExpired),
 				blockReason: 'time-expired',
 				attemptId: undefined as string | undefined,
-				keys: [] as string[],
+				keys: ['wal'] as string[],
 				detachedWal: false,
 			},
 			{
@@ -429,5 +433,356 @@ describe('CR-05: «полное время» только при новой се
 		assert.equal(lifecycle.getSnapshot().phase, 'active')
 		assert.deepEqual(lifecycle.getSnapshot().answers, { [Q1]: 'a' })
 		assert.deepEqual(noticeKinds(onNotice), ['session-restored'])
+	})
+})
+
+describe('TIME-06: судьба сессии до /start', () => {
+	const IN_TIME = START + 60_000
+
+	function serverNow(): string {
+		return new Date(Date.now()).toISOString()
+	}
+
+	function submittedFate(submitSource: 'deadline' | 'client', attempt: AttemptView = attemptViewOf()): SessionFate {
+		return {
+			state: 'submitted',
+			attemptId: ATTEMPT_ID,
+			submitSource,
+			uploadClosesAt: null,
+			serverNow: serverNow(),
+			attempt,
+		}
+	}
+
+	function openFate(now: string = serverNow()): SessionFate {
+		return { state: 'open', sessionId: 's1', startedAt: STARTED_AT, serverNow: now }
+	}
+
+	function expiredFate(): SessionFate {
+		return { state: 'expired', serverNow: serverNow() }
+	}
+
+	function cachedStorage(answers: Record<string, unknown> = { [Q1]: 'набрано' }, pending?: string[]) {
+		return seededStorage({ session: { sessionId: 's1' }, wal: { sessionId: 's1', answers, pending } })
+	}
+
+	test('трассер: submitted + deadline, текст WAL совпал с попыткой → «Ответ принят» без /start, ключей нет', async () => {
+		vi.setSystemTime(WITHIN_GRACE)
+		const storage = cachedStorage()
+		const view = attemptViewOf(ATTEMPT_ID, { results: [textResult(Q1, 'набрано')] })
+		const fakeApi = fakeAttemptApi([sessionOf('s2')], { fates: [submittedFate('deadline', view)] })
+		const { lifecycle, onNotice } = setupLifecycle({
+			storage,
+			api: fakeApi,
+			timeLimitMinutes: LIMIT,
+			textQuestionIds: [Q1],
+		})
+		lifecycle.init()
+		await settle()
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'submitted')
+		assert.equal(snapshot.acceptedAutomatically, true)
+		assert.deepEqual(snapshot.result, view)
+		assert.equal(snapshot.unsent, null)
+		assert.deepEqual(fakeApi.readSession.mock.calls, [[TEST_ID, 's1']])
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+		assert.equal(fakeApi.submit.mock.calls.length, 0)
+		assert.deepEqual(presentKeys(storage), [])
+		assert.deepEqual(noticeKinds(onNotice), ['submitted'])
+	})
+
+	test('submitted + deadline, текст WAL расходится с попыткой → пометка в снимке и запись unsent', async () => {
+		vi.setSystemTime(WITHIN_GRACE)
+		const storage = cachedStorage({ [Q1]: 'набрано полностью' })
+		const view = attemptViewOf(ATTEMPT_ID, { results: [textResult(Q1, 'наб')] })
+		const fakeApi = fakeAttemptApi([sessionOf('s2')], { fates: [submittedFate('deadline', view)] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		const entries = [{ questionId: Q1, number: 1, text: 'набрано полностью' }]
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: true, entries })
+		assert.deepEqual(presentKeys(storage), ['unsent'])
+		assert.deepEqual(readJson(storage, KEYS.unsent), {
+			v: 1,
+			testId: TEST_ID,
+			attemptId: ATTEMPT_ID,
+			certain: true,
+			entries,
+		})
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+	})
+
+	test('после «Ответ принят» перезагрузка: «Начать тест?» с пометкой из test-unsent-, старт нового прохождения её стирает', async () => {
+		vi.setSystemTime(IN_TIME)
+		const entries = [{ questionId: Q1, number: 1, text: 'набрано полностью' }]
+		const record = { v: 1, testId: TEST_ID, attemptId: ATTEMPT_ID, certain: true, entries }
+		const storage = memoryStorage({ [KEYS.unsent]: JSON.stringify(record) })
+		const fakeApi = fakeAttemptApi([sessionOf('s2', new Date(IN_TIME).toISOString())])
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: true, entries })
+		assert.deepEqual(readJson(storage, KEYS.unsent), record)
+
+		await lifecycle.confirmStart()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+		assert.equal(storage.data.has(KEYS.unsent), false)
+	})
+
+	test("submitted + 'client' → диалог «Попытка уже сдана», /start не вызван", async () => {
+		vi.setSystemTime(IN_TIME)
+		const storage = cachedStorage()
+		const fakeApi = fakeAttemptApi([sessionOf('s2')], { fates: [submittedFate('client')] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
+		assert.equal(lifecycle.getSnapshot().blockReason, 'already-submitted')
+		assert.equal(lifecycle.getSnapshot().alreadySubmittedAttemptId, ATTEMPT_ID)
+		assert.equal(lifecycle.getSnapshot().acceptedAutomatically, false)
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+		assert.deepEqual(presentKeys(storage), [])
+	})
+
+	test("'open' → /start с той же s1, фаза active, session-restored", async () => {
+		vi.setSystemTime(IN_TIME)
+		const storage = cachedStorage({ [Q1]: 'a' }, [])
+		const fakeApi = fakeAttemptApi([sessionOf('s1', undefined, { answers: { [Q1]: 'a' } })], { fates: [openFate()] })
+		const { lifecycle, onNotice } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
+		lifecycle.init()
+		await settle()
+		assert.equal(fakeApi.readSession.mock.calls.length, 1)
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.deepEqual(lifecycle.getSnapshot().answers, { [Q1]: 'a' })
+		assert.deepEqual(readJson(storage, KEYS.session), { sessionId: 's1', startedAt: STARTED_AT })
+		assert.deepEqual(noticeKinds(onNotice), ['session-restored'])
+	})
+
+	test.each([
+		{ name: 'без textQuestionIds', textQuestionIds: undefined as string[] | undefined, answers: { [Q1]: 'набрано' } },
+		{ name: 'в WAL только ответ выбора', textQuestionIds: [Q1], answers: { [Q2]: 'b' } as Record<string, unknown> },
+	])("'expired', $name → «Начать тест?» без /start, confirmStart → /start", async ({ textQuestionIds, answers }) => {
+		vi.setSystemTime(BEYOND_GRACE)
+		const storage = cachedStorage(answers)
+		const fakeApi = fakeAttemptApi([sessionOf('s2')], { fates: [expiredFate()] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+		assert.equal(lifecycle.getSnapshot().blockReason, null)
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+		assert.deepEqual(lifecycle.getSnapshot().answers, {})
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+		await lifecycle.confirmStart()
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+	})
+
+	test.each(
+		[
+			{ failure: () => new TypeError('Failed to fetch'), label: 'сбой сети' },
+			{ failure: () => requestError(404), label: '404' },
+			{ failure: () => requestError(503), label: '503' },
+			{ failure: () => new Error('malformed'), label: 'невалидное тело' },
+		].flatMap((row) => [
+			{ ...row, clock: 'в пределах льготы', now: IN_TIME, phase: 'active', starts: 1 },
+			{ ...row, clock: 'за льготой', now: BEYOND_GRACE, phase: 'awaitingStart', starts: 0 },
+		])
+	)('чтение судьбы: $label, часы $clock → прежний путь', async ({ failure, now, phase, starts }) => {
+		vi.setSystemTime(now)
+		const storage = cachedStorage({ [Q2]: 'b' })
+		const fakeApi = fakeAttemptApi([sessionOf('s1')], { fates: [failure()] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(fakeApi.readSession.mock.calls.length, 1)
+		assert.equal(fakeApi.start.mock.calls.length, starts)
+		assert.equal(lifecycle.getSnapshot().phase, phase)
+		assert.equal(lifecycle.getSnapshot().blockReason, null)
+	})
+
+	test('403 чтения судьбы → blocked start-not-assigned, /start не вызван', async () => {
+		vi.setSystemTime(IN_TIME)
+		const storage = cachedStorage()
+		const fakeApi = fakeAttemptApi([sessionOf('s1')], { fates: [requestError(403)] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
+		assert.equal(lifecycle.getSnapshot().blockReason, 'start-not-assigned')
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+	})
+
+	test('тест без лимита с кэшем сессии: readSession не вызван, /start как раньше', async () => {
+		const storage = cachedStorage({ [Q1]: 'a' }, [])
+		const fakeApi = fakeAttemptApi([sessionOf('s1')], { fates: [openFate()] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi })
+		lifecycle.init()
+		await settle()
+		assert.equal(fakeApi.readSession.mock.calls.length, 0)
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+	})
+
+	test('сохранённый clientAttemptId: первым идёт submit, readSession не вызван', async () => {
+		vi.setSystemTime(IN_TIME)
+		const storage = resubmitStorage()
+		const fakeApi = fakeAttemptApi([sessionOf('s1')], { fates: [submittedFate('deadline')] })
+		const view = attemptViewOf()
+		fakeApi.queueSubmit(view)
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
+		lifecycle.init()
+		await settle()
+		assert.equal(fakeApi.submit.mock.calls.length, 1)
+		assert.equal(fakeApi.readSession.mock.calls.length, 0)
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+	})
+
+	test('serverNow судьбы на 5 минут раньше часов устройства → secondsLeft по серверу', async () => {
+		vi.setSystemTime(START + 5 * 60_000)
+		const storage = cachedStorage({ [Q1]: 'a' }, [])
+		const fakeApi = fakeAttemptApi([sessionOf('s1')], { fates: [openFate(STARTED_AT)] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(lifecycle.getSnapshot().secondsLeft, LIMIT * 60)
+	})
+})
+
+describe('R2: судьба expired, запасной путь и замена сессии не стирают текст WAL молча', () => {
+	const IN_TIME = START + 60_000
+	const TYPED = [{ questionId: Q1, number: 1, text: 'набрано' }]
+
+	function expiredFate(): SessionFate {
+		return { state: 'expired', serverNow: new Date(Date.now()).toISOString() }
+	}
+
+	function openFate(): SessionFate {
+		return { state: 'open', sessionId: 's1', startedAt: STARTED_AT, serverNow: new Date(Date.now()).toISOString() }
+	}
+
+	function typedStorage() {
+		return seededStorage({ session: { sessionId: 's1' }, wal: { sessionId: 's1', answers: { [Q1]: 'набрано' } } })
+	}
+
+	test("'expired' с текстом в WAL → диалог «Время вышло» с пометкой, WAL до «Начать заново», без /start", async () => {
+		vi.setSystemTime(BEYOND_GRACE)
+		const storage = typedStorage()
+		const fakeApi = fakeAttemptApi([sessionOf('s2')], { fates: [expiredFate()] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
+		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: true, entries: TYPED })
+		assert.deepEqual(presentKeys(storage), ['wal'])
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+		lifecycle.retake()
+		assert.deepEqual(presentKeys(storage), [])
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+	})
+
+	test.each([
+		{ name: 'сбой сети чтения', fates: [new TypeError('Failed to fetch')] as (SessionFate | Error)[] | undefined },
+		{ name: 'без readSession', fates: undefined },
+	])('$name, часы за льготой, текст в WAL → «Время вышло» с пометкой «могла», без /start', async ({ fates }) => {
+		vi.setSystemTime(BEYOND_GRACE)
+		const storage = typedStorage()
+		const fakeApi = fakeAttemptApi([sessionOf('s2')], { fates })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
+		assert.equal(lifecycle.getSnapshot().blockReason, 'time-expired')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: false, entries: TYPED })
+		assert.deepEqual(presentKeys(storage), ['wal'])
+		assert.equal(fakeApi.start.mock.calls.length, 0)
+	})
+
+	async function replacedSession() {
+		vi.setSystemTime(IN_TIME)
+		const storage = seededStorage({
+			session: { sessionId: 's1' },
+			wal: { sessionId: 's1', answers: { [Q1]: 'не дошло', [Q3]: 'дошло' }, pending: [Q1] },
+		})
+		const fakeApi = fakeAttemptApi([sessionOf('s2', new Date(IN_TIME).toISOString())], { fates: [openFate()] })
+		const setup = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1, Q3] })
+		setup.lifecycle.init()
+		await settle()
+		return { ...setup, fakeApi }
+	}
+
+	const CARRIED = [{ questionId: Q1, number: 1, text: 'не дошло' }]
+
+	test('замена сессии: pending-текст s1 переносится в test-unsent- до удаления WAL', async () => {
+		const { lifecycle, storage, onNotice } = await replacedSession()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.deepEqual(noticeKinds(onNotice), ['session-replaced'])
+		assert.ok(KEYS.unsent.startsWith('test-unsent-'))
+		assert.deepEqual(readJson(storage, KEYS.unsent), {
+			v: 1,
+			testId: TEST_ID,
+			attemptId: null,
+			certain: false,
+			entries: CARRIED,
+		})
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: false, entries: CARRIED })
+		assert.equal((readJson(storage, KEYS.wal) as { sessionId: string }).sessionId, 's2')
+	})
+
+	test('после переноса: ручная сдача s2 → 200, пометка «могла» остаётся в снимке, ключ стёрт; retake обнуляет', async () => {
+		const { lifecycle, storage, fakeApi } = await replacedSession()
+		fakeApi.queueSubmit(attemptViewOf())
+		await lifecycle.submit()
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: false, entries: CARRIED })
+		assert.equal(storage.data.has(KEYS.unsent), false)
+		lifecycle.retake()
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+	})
+
+	test('после переноса: 409 deadline с пустой своей сверкой оставляет перенесённую пометку и запись', async () => {
+		const { lifecycle, storage, fakeApi } = await replacedSession()
+		fakeApi.queueSubmit(
+			requestError(409, SUBMIT_ERROR_CODES.alreadySubmitted, ATTEMPT_ID, {
+				submitSource: 'deadline',
+				attempt: attemptViewOf(),
+			})
+		)
+		await lifecycle.submit()
+		assert.equal(lifecycle.getSnapshot().phase, 'submitted')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: false, entries: CARRIED })
+		assert.equal((readJson(storage, KEYS.unsent) as { attemptId: string | null }).attemptId, null)
+	})
+
+	test('WAL чужой сессии без кэша: «Начать тест?» → /start s2 → pending-текст s1 в test-unsent-', async () => {
+		vi.setSystemTime(IN_TIME)
+		const storage = seededStorage({ wal: { sessionId: 's1', answers: { [Q1]: 'набрано' }, pending: [Q1] } })
+		const fakeApi = fakeAttemptApi([sessionOf('s2', new Date(IN_TIME).toISOString())], { fates: [openFate()] })
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+		await lifecycle.confirmStart()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(fakeApi.readSession.mock.calls.length, 0)
+		assert.deepEqual(readJson(storage, KEYS.unsent), {
+			v: 1,
+			testId: TEST_ID,
+			attemptId: null,
+			certain: false,
+			entries: TYPED,
+		})
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: false, entries: TYPED })
+		assert.equal((readJson(storage, KEYS.wal) as { sessionId: string }).sessionId, 's2')
 	})
 })

@@ -87,7 +87,8 @@ next-env.d.ts
 # Misc
 .turbo
 .contentlayer
-.planning
+.planning/graphs/
+.planning/commit-snapshots/
 
 # Uploads
 app/web/public/uploads/**

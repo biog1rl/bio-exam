@@ -1,30 +1,5 @@
 import { validateQuestion } from '../../question-validation'
-import type { Question, QuestionDraft, QuestionTypeDefinition, TestFormData } from '../../types'
-import { normalizeQuestionForSave } from '../../types'
-
-export function createInitialTestForm(): TestFormData {
-	return {
-		topicId: '',
-		title: '',
-		slug: '',
-		description: '',
-		isPublished: false,
-		showCorrectAnswer: true,
-		timeLimitMinutes: null,
-		redThresholdMinutes: null,
-		warningThresholdMinutes: null,
-		passingScore: null,
-		order: 0,
-		questions: [],
-	}
-}
-
-export function normalizeFormPayload(payload: TestFormData): TestFormData {
-	return {
-		...payload,
-		questions: payload.questions.map((question) => normalizeQuestionForSave(question)),
-	}
-}
+import type { Question, QuestionDraft, QuestionTypeDefinition } from '../../types'
 
 export function resolveQuestionDraftId(data: unknown): string | null {
 	if (!data || typeof data !== 'object') return null
@@ -45,16 +20,6 @@ export function resolveQuestionDraftLabel(draft: QuestionDraft): string {
 	if (!prompt) return 'Черновик вопроса'
 	const singleLine = prompt.replace(/\s+/g, ' ')
 	return singleLine.slice(0, 64) + (singleLine.length > 64 ? '...' : '')
-}
-
-export function getBaseValidationError(form: Pick<TestFormData, 'topicId' | 'title' | 'slug'>): string | null {
-	if (!form.topicId) return 'Выберите тему'
-	if (!form.title) return 'Введите название теста'
-	if (!form.slug) return 'Введите slug'
-	if (form.slug.length < 2 || form.slug.length > 100 || !/^[a-z0-9-]+$/.test(form.slug)) {
-		return 'Slug: только латинские буквы, цифры и дефисы (2-100 символов)'
-	}
-	return null
 }
 
 export function getCreateQuestionsValidationError(

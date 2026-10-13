@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/002-dependency-security.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 002: Remove reachable dependency vulnerabilities",
+  "summary": "Specification for resolving production dependency vulnerabilities in Next, Multer, Sharp, Drizzle, TinyMCE, PostCSS, Lodash, and next-mdx-remote with verification criteria.",
+  "scope": ["Next.js", "Multer", "Sharp", "Drizzle", "TinyMCE", "PostCSS", "Lodash", "next-mdx-remote", "package management", "dependency security", "vulnerability remediation"],
+  "cross_refs": ["plans/001-project-operating-baseline.md"],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

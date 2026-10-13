@@ -9,14 +9,15 @@
  * Пишет в базу роли, активных пользователей (bcrypt-хэши тестового пароля), роли
  * пользователей, тему, тесты, вопросы, ключи ответов версии 1 и назначения, а в локальное
  * хранилище — промпт каждого вопроса через модуль содержимого.
- * Попытки блока attempts создаются тем же путём, что сдача по HTTP (scoreSubmission и submitAttempt),
+ * Попытки блока attempts создаются командами startAttemptSession и submitSession модуля сессии попытки,
  * проверенные дополнительно проходят через materializeAttemptOutcome.
- * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n> notifications=<n>
+ * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n> notifications=<n> sessions=<n>
  */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 
 import { isIsolatedEnv } from '../config/test-database-url.js'
+import type { SessionTest } from '../services/attempt-sessions/index.js'
 
 type SeedAccount = { login: string; role: string; name: string; storageState: boolean }
 
@@ -35,6 +36,8 @@ type SeedTest = {
 	title: string
 	topic?: string
 	published: boolean
+	timeLimitMinutes?: number
+	photoUploadWindowMinutes?: number
 	assignedTo: string[]
 	questions: SeedQuestion[]
 }
@@ -44,6 +47,14 @@ type SeedAttempt = {
 	student: string
 	answers: Record<string, string>
 	grade?: Record<string, number>
+}
+
+type SeedSession = {
+	id: string
+	test: string
+	student: string
+	startedMinutesAgo: number
+	draft: Record<string, string>
 }
 
 type SeedNotification = { recipient: string; kind: string; testTitles?: string[] }
@@ -66,6 +77,7 @@ type SeedFile = {
 			tests: SeedTest[]
 			groups?: SeedGroup[]
 			attempts?: SeedAttempt[]
+			sessions?: SeedSession[]
 			notifications?: SeedNotification[]
 		}
 	>
@@ -116,13 +128,24 @@ async function main(): Promise<void> {
 	const { ROLE_KEYS } = await import('@bio-exam/rbac')
 	const bcrypt = (await import('bcryptjs')).default
 	const { db, pgPool } = await import('../db/index.js')
-	const { answerKeys, questions, roles, studentGroups, testAssignments, tests, topics, userGroups, userRoles, users } =
-		await import('../db/schema.js')
+	const {
+		answerKeys,
+		questions,
+		roles,
+		studentGroups,
+		testAssignments,
+		testSessions,
+		tests,
+		topics,
+		userGroups,
+		userRoles,
+		users,
+	} = await import('../db/schema.js')
 	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
 	const { syncQuestionDerived, writeContentFiles } = await import('../services/question-content/index.js')
 	const { setGroupOwner, setTopicTeachers } = await import('../services/access-policy/index.js')
-	const { startAttemptSession, submitAttempt } = await import('../services/attempt-sessions/index.js')
-	const { materializeAttemptOutcome, scoreSubmission } = await import('../services/scored-attempt/index.js')
+	const { startAttemptSession, submitSession } = await import('../services/attempt-sessions/index.js')
+	const { materializeAttemptOutcome } = await import('../services/scored-attempt/index.js')
 	const { recordNotifications } = await import('../services/notifications/index.js')
 
 	try {
@@ -218,7 +241,7 @@ async function main(): Promise<void> {
 				}
 			}
 
-			const testRows = new Map<string, { id: string; passingScore: number | null }>()
+			const testRows = new Map<string, SessionTest>()
 			let questionCount = 0
 			let testCount = 0
 			let order = 0
@@ -236,6 +259,12 @@ async function main(): Promise<void> {
 							slug: seedTestItem.slug,
 							title: seedTestItem.title,
 							isPublished: seedTestItem.published,
+							...(seedTestItem.timeLimitMinutes === undefined
+								? {}
+								: { timeLimitMinutes: seedTestItem.timeLimitMinutes }),
+							...(seedTestItem.photoUploadWindowMinutes === undefined
+								? {}
+								: { photoUploadWindowMinutes: seedTestItem.photoUploadWindowMinutes }),
 							showCorrectAnswer: true,
 							version: seedTestItem.published ? 1 : 0,
 							order: order++,
@@ -244,7 +273,14 @@ async function main(): Promise<void> {
 						})
 						.returning()
 					testCount++
-					testRows.set(seedTestItem.slug, { id: test.id, passingScore: test.passingScore })
+					testRows.set(seedTestItem.slug, {
+						id: test.id,
+						slug: test.slug,
+						topicSlug: topicSlugOf(seedTestItem),
+						timeLimitMinutes: test.timeLimitMinutes,
+						photoUploadWindowMinutes: test.photoUploadWindowMinutes,
+						passingScore: test.passingScore,
+					})
 
 					for (const [index, item] of seedTestItem.questions.entries()) {
 						const builtin = getBuiltinQuestionTypeByKey(item.type)
@@ -324,32 +360,14 @@ async function main(): Promise<void> {
 					Object.entries(seedAttempt.answers).map(([key, value]) => [questionIdOf(seedAttempt.test, key), value])
 				)
 
-				const session = await startAttemptSession({ testId: testRow.id, userId, timeLimitMinutes: null })
-				const scored = await scoreSubmission({
-					testId: testRow.id,
-					answers,
-					passingScore: testRow.passingScore,
-					readExplanation: async () => null,
-				})
-				if (!scored.ok) throw new Error(`seed attempt ${seedAttempt.test}: scoring failed (${scored.reason})`)
-				const submitted = await submitAttempt({
-					testId: testRow.id,
-					userId,
-					testSessionId: session.sessionId,
+				const pair = { test: testRow, userId }
+				const { session } = await startAttemptSession(pair)
+				const submitted = await submitSession(pair, {
+					sessionId: session.sessionId,
 					clientAttemptId: crypto.randomUUID(),
 					answers,
-					scored: {
-						results: scored.facts,
-						resultsVersion: 2,
-						earnedPoints: scored.earnedPoints,
-						totalPoints: scored.totalPoints,
-						scorePercentage: scored.scorePercentage,
-						passed: scored.passed,
-						outcome: scored.outcome,
-						passingScore: scored.passingScore,
-					},
 				})
-				if (submitted.kind !== 'created') {
+				if (submitted.kind !== 'accepted') {
 					throw new Error(`seed attempt ${seedAttempt.test}: submit returned ${submitted.kind}`)
 				}
 
@@ -360,6 +378,29 @@ async function main(): Promise<void> {
 					await db.transaction((tx) => materializeAttemptOutcome(tx, { attemptId: submitted.attemptId, latestScores }))
 				}
 				attemptCount++
+			}
+		}
+
+		let sessionCount = 0
+		for (const project of projects) {
+			for (const seedSession of project.sessions ?? []) {
+				const testRow = result.testRows.get(seedSession.test)
+				if (!testRow) throw new Error(`seed session: unknown test ${seedSession.test}`)
+				const userId = result.userIds.get(seedSession.student)
+				if (!userId) throw new Error(`seed session: unknown student ${seedSession.student}`)
+				const draftAnswers = Object.fromEntries(
+					Object.entries(seedSession.draft).map(([key, value]) => [questionIdOf(seedSession.test, key), value])
+				)
+				const now = Date.now()
+				await db.insert(testSessions).values({
+					id: seedSession.id,
+					testId: testRow.id,
+					userId,
+					startedAt: new Date(now - seedSession.startedMinutesAgo * 60_000),
+					draftAnswers,
+					draftUpdatedAt: new Date(now - Math.max(seedSession.startedMinutesAgo - 1, 0) * 60_000),
+				})
+				sessionCount++
 			}
 		}
 
@@ -388,7 +429,7 @@ async function main(): Promise<void> {
 		}
 
 		console.log(
-			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount} notifications=${notificationCount}`
+			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount} notifications=${notificationCount} sessions=${sessionCount}`
 		)
 	} finally {
 		await pgPool.end()

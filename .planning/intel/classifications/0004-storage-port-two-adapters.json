@@ -1,0 +1,12 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/docs/adr/0004-storage-port-two-adapters.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-0004: Хранилище файлов: один интерфейс, два адаптера",
+  "summary": "Centralize file storage through a module with two adapters—Supabase and local disk—to enable VPS migration.",
+  "scope": ["storage module", "Supabase adapter", "local disk adapter", "routes", "VPS", "containment checking", "key normalization"],
+  "cross_refs": [],
+  "locked": true,
+  "precedence": 0
+}

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 
-import { AttemptSessionSchema, SaveAttemptDraftRequestSchema } from './attempt-session'
+import { AttemptSessionSchema, SaveAttemptDraftRequestSchema, SessionFateSchema } from './attempt-session'
+import { UploadWindowRefusalSchema } from './upload-window'
 
 const Q1 = '22222222-2222-4222-8222-222222222222'
 const SESSION = '33333333-3333-4333-8333-333333333333'
@@ -67,4 +68,53 @@ test('AttemptSessionSchema отклоняет объект без sessionId', ()
 		draftTelemetry: null,
 	})
 	assert.equal(parsed.success, false)
+})
+
+const ISO = '2026-10-06T10:00:00.000Z'
+const ATTEMPT = '11111111-1111-4111-8111-111111111111'
+
+const fateAttempt = {
+	attemptId: ATTEMPT,
+	submittedAt: ISO,
+	earnedPoints: 1,
+	totalPoints: 1,
+	scorePercentage: 100,
+	passed: true,
+	reviewStatus: 'none',
+	autoEarnedPoints: 1,
+	autoTotalPoints: 1,
+	results: [],
+}
+
+test.each([
+	{ name: 'open', body: { state: 'open', sessionId: SESSION, startedAt: ISO, serverNow: ISO }, ok: true },
+	{
+		name: 'submitted',
+		body: {
+			state: 'submitted',
+			attemptId: ATTEMPT,
+			submitSource: 'deadline',
+			uploadClosesAt: null,
+			serverNow: ISO,
+			attempt: fateAttempt,
+		},
+		ok: true,
+	},
+	{ name: 'expired', body: { state: 'expired', serverNow: ISO }, ok: true },
+	{ name: 'неизвестное состояние', body: { state: 'closed', serverNow: ISO }, ok: false },
+	{
+		name: 'submitted без attempt',
+		body: { state: 'submitted', attemptId: ATTEMPT, submitSource: 'client', uploadClosesAt: null, serverNow: ISO },
+		ok: false,
+	},
+])('SessionFateSchema: $name', ({ body, ok }) => {
+	assert.equal(SessionFateSchema.safeParse(body).success, ok)
+})
+
+test.each([
+	{ name: 'окно закрыто', body: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: ISO }, ok: true },
+	{ name: 'окна нет', body: { error: 'UPLOAD_WINDOW_NONE', uploadClosesAt: null }, ok: true },
+	{ name: 'неизвестный код', body: { error: 'UPLOAD_WINDOW_OPEN', uploadClosesAt: null }, ok: false },
+])('UploadWindowRefusalSchema: $name', ({ body, ok }) => {
+	assert.equal(UploadWindowRefusalSchema.safeParse(body).success, ok)
 })

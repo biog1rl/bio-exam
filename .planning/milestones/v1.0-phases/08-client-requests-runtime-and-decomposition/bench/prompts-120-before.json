@@ -1,0 +1,79 @@
+{
+	"mode": "prod",
+	"env": {
+		"node": "v24.17.0",
+		"platform": "darwin 27.0.0 arm64",
+		"cpu": "Apple M4",
+		"cpuCount": 10,
+		"totalMemBytes": 17179869184,
+		"postgres": "17.10 (Homebrew)",
+		"pgPoolMax": 20,
+		"storage": "memory",
+		"commit": "4514c933d6bb8f09141f37207c90f4db551aa083"
+	},
+	"seed": {
+		"users": 31,
+		"topics": 6,
+		"tests": 63,
+		"questions": 1834,
+		"prompts": 1834,
+		"explanations": 612,
+		"images": 254,
+		"objects": 2700,
+		"bytes": 38797312,
+		"assignments": 478,
+		"groups": 1,
+		"largestTest": {
+			"id": "33dbbde8-f142-45a3-8f69-6365309da910",
+			"slug": "bench-1-01",
+			"topicSlug": "bench-topic-1",
+			"questions": 123
+		},
+		"largestTopic": {
+			"id": "ff034705-6d8f-4957-bfef-f4309d562406",
+			"slug": "bench-topic-1",
+			"tests": 16,
+			"bytes": 22874267
+		}
+	},
+	"only": "prompts",
+	"prompts": {
+		"readDelayMs": 120,
+		"runs": 5,
+		"warmupRunsExcluded": 1,
+		"test": {
+			"slug": "bench-1-01",
+			"questions": 123
+		},
+		"pass": {
+			"maxConcurrentReads": 123,
+			"reads": 123,
+			"queries": 9,
+			"medianMs": 134.77,
+			"minMs": 131.56,
+			"maxMs": 136.54,
+			"timesMs": [
+				131.56,
+				136.54,
+				135.26,
+				134.77,
+				134.11
+			]
+		},
+		"admin": {
+			"maxConcurrentReads": 5,
+			"reads": 164,
+			"queries": 6,
+			"medianMs": 4033.31,
+			"minMs": 4030.27,
+			"maxMs": 4037.76,
+			"timesMs": [
+				4031.4,
+				4036.58,
+				4037.76,
+				4033.31,
+				4030.27
+			]
+		}
+	}
+}

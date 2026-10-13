@@ -1,0 +1,164 @@
+{
+	"readDelayMs": 120,
+	"runs": 5,
+	"questions": 123,
+	"test": "bench-1-01",
+	"rule": "after.ms <= before.ms * 1.2",
+	"limitMs": 161.72,
+	"before": {
+		"ms": 134.77,
+		"maxConcurrentReads": 123,
+		"timesMs": [
+			131.56,
+			136.54,
+			135.26,
+			134.77,
+			134.11
+		],
+		"adminMs": 4033.31,
+		"adminMaxConcurrentReads": 5,
+		"file": "bench/prompts-120-before.json"
+	},
+	"trials": [
+		{
+			"ceiling": 6,
+			"ms": 2572.1,
+			"maxConcurrentReads": 6,
+			"timesMs": [
+				2572.1,
+				2580.22,
+				2572.01,
+				2576.25,
+				2568.1
+			],
+			"adminMs": 3418.21,
+			"file": "bench/prompts-120-after-6.json"
+		},
+		{
+			"ceiling": 8,
+			"ms": 1964.19,
+			"maxConcurrentReads": 8,
+			"timesMs": [
+				1964.19,
+				1964.35,
+				1961.97,
+				1968.73,
+				1963.07
+			],
+			"adminMs": 2568.29,
+			"file": "bench/prompts-120-after-8.json"
+		},
+		{
+			"ceiling": 12,
+			"ms": 1353.03,
+			"maxConcurrentReads": 12,
+			"timesMs": [
+				1355.6,
+				1365.03,
+				1349.82,
+				1351.71,
+				1353.03
+			],
+			"adminMs": 1712.46,
+			"file": "bench/prompts-120-after-12.json"
+		},
+		{
+			"ceiling": 16,
+			"ms": 991.28,
+			"maxConcurrentReads": 16,
+			"timesMs": [
+				991.28,
+				988.32,
+				982.98,
+				991.33,
+				991.32
+			],
+			"adminMs": 1349.94,
+			"file": "bench/prompts-120-after-16.json"
+		},
+		{
+			"ceiling": 24,
+			"ms": 747.43,
+			"maxConcurrentReads": 24,
+			"timesMs": [
+				747.43,
+				754.94,
+				747.57,
+				742.8,
+				740.71
+			],
+			"adminMs": 862.83,
+			"file": "bench/prompts-120-after-24.json"
+		},
+		{
+			"ceiling": 32,
+			"ms": 503.21,
+			"maxConcurrentReads": 32,
+			"timesMs": [
+				501.83,
+				506.51,
+				502.81,
+				507.62,
+				503.21
+			],
+			"adminMs": 737.56,
+			"file": "bench/prompts-120-after-32.json"
+		},
+		{
+			"ceiling": 48,
+			"ms": 379.52,
+			"maxConcurrentReads": 48,
+			"timesMs": [
+				380.81,
+				387.01,
+				375.66,
+				379.49,
+				379.52
+			],
+			"adminMs": 495.93,
+			"file": "bench/prompts-120-after-48.json"
+		},
+		{
+			"ceiling": 64,
+			"ms": 260.09,
+			"maxConcurrentReads": 64,
+			"timesMs": [
+				260.09,
+				260.65,
+				256.27,
+				257.94,
+				269.16
+			],
+			"adminMs": 374.64,
+			"file": "bench/prompts-120-after-64.json"
+		},
+		{
+			"ceiling": 123,
+			"ms": 131.7,
+			"maxConcurrentReads": 123,
+			"timesMs": [
+				130.76,
+				130.16,
+				131.7,
+				137.19,
+				134.03
+			],
+			"adminMs": 251.89,
+			"file": "bench/prompts-120-after-123.json"
+		}
+	],
+	"after": {
+		"ceiling": 123,
+		"ms": 131.7,
+		"maxConcurrentReads": 123,
+		"timesMs": [
+			130.76,
+			130.16,
+			131.7,
+			137.19,
+			134.03
+		],
+		"adminMs": 251.89,
+		"file": "bench/prompts-120-after-123.json"
+	}
+}

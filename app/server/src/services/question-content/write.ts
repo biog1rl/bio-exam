@@ -454,6 +454,7 @@ export async function createTestWithQuestions(params: {
 					showCorrectAnswer: data.showCorrectAnswer,
 					scoringRules: data.scoringRules ?? null,
 					timeLimitMinutes: data.timeLimitMinutes,
+					...(data.photoUploadWindowMinutes != null ? { photoUploadWindowMinutes: data.photoUploadWindowMinutes } : {}),
 					redThresholdMinutes: data.redThresholdMinutes ?? null,
 					warningThresholdMinutes: data.warningThresholdMinutes ?? null,
 					passingScore: data.passingScore,

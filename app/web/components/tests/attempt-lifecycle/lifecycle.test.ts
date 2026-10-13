@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 
+import { SAVE_RETRY_DELAYS_MS } from '@/lib/drafts/save-queue'
+
 import {
 	attemptViewOf,
 	deferred,
@@ -21,6 +23,7 @@ import {
 	START,
 	STARTED_AT,
 	TEST_ID,
+	walTelemetry,
 } from './testing'
 
 beforeEach(() => {
@@ -746,5 +749,181 @@ describe('CR-11: список вопросов меняется во время 
 		lifecycle.subscribe(listener)
 		lifecycle.setQuestionIds([Q1, Q2, Q3])
 		assert.equal(listener.mock.calls.length, 0)
+	})
+})
+
+describe('CR-05: попытка без сессии сама повторяет /start', () => {
+	const RETRY_FIRST = SAVE_RETRY_DELAYS_MS[0] ?? 0
+	const RETRY_SECOND = SAVE_RETRY_DELAYS_MS[1] ?? 0
+
+	test('CR-05: первый /start упал, событие online даёт сессию s1, ответ уходит PATCH, индикатор offline → saved, визит не растёт', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle, page, storage } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(lifecycle.getSnapshot().startedAt, null)
+		lifecycle.answer(Q1, 'a')
+		assert.equal(lifecycle.getSnapshot().saveIndicator, 'offline')
+		assert.equal(fakeApi.saveDraft.mock.calls.length, 0)
+		assert.equal(walTelemetry(storage)?.[Q1]?.visitCount, 1)
+		fakeApi.queueStart(sessionOf('s1'))
+		page.emit('online')
+		await settle()
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+		assert.equal(lifecycle.getSnapshot().startedAt, STARTED_AT)
+		assert.deepEqual(readJson(storage, KEYS.session), { sessionId: 's1', startedAt: STARTED_AT })
+		await vi.advanceTimersByTimeAsync(600)
+		assert.deepEqual(fakeApi.savedBodies(), [
+			{ questionId: Q1, value: 'a' },
+			{ telemetry: { [Q1]: { timeSpentMs: 0, focusLossCount: 0, visitCount: 1 } } },
+		])
+		for (const call of fakeApi.saveDraft.mock.calls) assert.equal(call[1], 's1')
+		assert.equal(lifecycle.getSnapshot().saveIndicator, 'saved')
+		const wal = readJson(storage, KEYS.wal) as { sessionId: string; pending: string[] }
+		assert.equal(wal.sessionId, 's1')
+		assert.deepEqual(wal.pending, [])
+		assert.equal(walTelemetry(storage)?.[Q1]?.visitCount, 1)
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+	})
+
+	test('CR-05: после повтора /start текущий вопрос остаётся прежним, позиция в WAL новой сессии', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle, page, storage } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		lifecycle.navigate(Q3)
+		lifecycle.answer(Q3, 'c')
+		fakeApi.queueStart(sessionOf('s1'))
+		page.emit('online')
+		await settle()
+		assert.equal(lifecycle.getSnapshot().startedAt, STARTED_AT)
+		assert.equal(lifecycle.getSnapshot().currentQuestionId, Q3)
+		const wal = readJson(storage, KEYS.wal) as { sessionId: string; position: string | null }
+		assert.equal(wal.sessionId, 's1')
+		assert.equal(wal.position, Q3)
+	})
+
+	test('CR-05: без событий повтор /start через SAVE_RETRY_DELAYS_MS[0], после новой неудачи — через SAVE_RETRY_DELAYS_MS[1]', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+		await vi.advanceTimersByTimeAsync(RETRY_FIRST - 1)
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+		await vi.advanceTimersByTimeAsync(1)
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+		await vi.advanceTimersByTimeAsync(RETRY_SECOND - 1)
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+		fakeApi.queueStart(sessionOf('s1'))
+		await vi.advanceTimersByTimeAsync(1)
+		assert.equal(fakeApi.start.mock.calls.length, 3)
+		assert.equal(lifecycle.getSnapshot().startedAt, STARTED_AT)
+		await vi.advanceTimersByTimeAsync(60_000)
+		assert.equal(fakeApi.start.mock.calls.length, 3)
+	})
+
+	test('CR-05: повтор уже в полёте — второе событие не шлёт ещё один /start', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle, page } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		const gate = deferred<ReturnType<typeof sessionOf>>()
+		fakeApi.start.mockImplementationOnce(() => gate.promise)
+		page.emit('online')
+		page.emit('visible')
+		await settle()
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+		gate.resolve(sessionOf('s1'))
+		await settle()
+		assert.equal(lifecycle.getSnapshot().startedAt, STARTED_AT)
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+	})
+
+	test('CR-05: 403 на повтор /start — blocked start-not-assigned, повторов больше нет', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		fakeApi.queueStart(requestError(403))
+		await vi.advanceTimersByTimeAsync(RETRY_FIRST)
+		assert.equal(lifecycle.getSnapshot().phase, 'blocked')
+		assert.equal(lifecycle.getSnapshot().blockReason, 'start-not-assigned')
+		await vi.advanceTimersByTimeAsync(60_000)
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+	})
+
+	test('CR-05: dispose снимает таймер повтора', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		lifecycle.dispose()
+		await vi.advanceTimersByTimeAsync(60_000)
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+	})
+
+	test('CR-05: retake снимает таймер повтора, после удачного /start повторов нет', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle } = setupLifecycle({ api: fakeApi })
+		lifecycle.init()
+		await settle()
+		fakeApi.queueStart(sessionOf('s1'))
+		lifecycle.retake()
+		await settle()
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+		assert.equal(lifecycle.getSnapshot().startedAt, STARTED_AT)
+		await vi.advanceTimersByTimeAsync(60_000)
+		assert.equal(fakeApi.start.mock.calls.length, 2)
+	})
+
+	test('CR-05: у теста с лимитом повтора нет, остаётся «Начать тест?»', async () => {
+		const fakeApi = fakeAttemptApi([new Error('network')])
+		const { lifecycle, page } = setupLifecycle({ api: fakeApi, timeLimitMinutes: 30 })
+		lifecycle.init()
+		await lifecycle.confirmStart()
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+		page.emit('online')
+		await vi.advanceTimersByTimeAsync(60_000)
+		assert.equal(fakeApi.start.mock.calls.length, 1)
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+	})
+})
+
+describe('CR-03: предварительная досылка при pagehide', () => {
+	test('CR-03: Q1 «ab» в полёте, ответ «abc», pagehide, ответ на «abc» приходит первым — WAL не подтверждён, после ответа «ab» «abc» уходит ещё раз и подтверждается', async () => {
+		const fakeApi = fakeAttemptApi([sessionOf('s1')])
+		const { lifecycle, storage, page } = await activeLifecycle(fakeApi)
+		await vi.advanceTimersByTimeAsync(600)
+		const first = deferred<typeof OK>()
+		const drained = deferred<typeof OK>()
+		fakeApi.queueSave(first, drained)
+		lifecycle.answer(Q1, 'ab')
+		await vi.advanceTimersByTimeAsync(600)
+		lifecycle.answer(Q1, 'abc')
+		page.emit('pagehide')
+		const sent = fakeApi.saveDraft.mock.calls.length
+		const drainCall = fakeApi.saveDraft.mock.calls.find((call) => {
+			const body = call[2] as { value?: unknown }
+			return body.value === 'abc'
+		})
+		assert.deepEqual(drainCall, [TEST_ID, 's1', { questionId: Q1, value: 'abc' }, { keepalive: true }])
+		drained.resolve(OK)
+		await settle()
+		assert.deepEqual((readJson(storage, KEYS.wal) as { pending: string[] }).pending, [Q1])
+		assert.equal(fakeApi.saveDraft.mock.calls.length, sent)
+		first.resolve(OK)
+		await settle()
+		assert.deepEqual(fakeApi.saveDraft.mock.calls.at(-1), [
+			TEST_ID,
+			's1',
+			{ questionId: Q1, value: 'abc' },
+			{ keepalive: false },
+		])
+		await settle()
+		const wal = readJson(storage, KEYS.wal) as { answers: object; pending: string[] }
+		assert.deepEqual(wal.answers, { [Q1]: 'abc' })
+		assert.deepEqual(wal.pending, [])
 	})
 })

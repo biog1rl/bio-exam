@@ -11,7 +11,7 @@ export type SaveQueueClock = {
 }
 
 export type SaveQueueOptions<V> = {
-	send: (key: string, value: V, options: { keepalive: boolean }) => Promise<SaveOutcome>
+	send: (key: string, value: V, options: { keepalive: boolean; provisional?: boolean }) => Promise<SaveOutcome>
 	debounceMs: number
 	maxWaitMs: number
 	retryDelaysMs?: readonly number[]
@@ -128,9 +128,10 @@ export function createSaveQueue<V>(options: SaveQueueOptions<V>): SaveQueue<V> {
 		if (failure?.kind === 'retrying') failure = null
 	}
 
-	function invoke(key: string, value: V, keepalive: boolean): Promise<SaveOutcome> {
+	function invoke(key: string, value: V, keepalive: boolean, provisional = false): Promise<SaveOutcome> {
 		try {
-			return Promise.resolve(send(key, value, { keepalive })).catch(() => RETRY)
+			const sendOptions = provisional ? { keepalive, provisional: true } : { keepalive }
+			return Promise.resolve(send(key, value, sendOptions)).catch(() => RETRY)
 		} catch {
 			return Promise.resolve(RETRY)
 		}
@@ -255,8 +256,17 @@ export function createSaveQueue<V>(options: SaveQueueOptions<V>): SaveQueue<V> {
 		kick()
 	}
 
-	function settleDrained(gen: number, key: string, version: number, outcome: SaveOutcome): void {
+	function settleDrained(gen: number, key: string, version: number, outcome: SaveOutcome, provisional: boolean): void {
 		if (gen !== generation || disposed) return
+		if (outcome.kind === 'ok' && provisional) {
+			const entry = entries.get(key)
+			if (entry && entry.version === version) entry.due = true
+			clearRetrying()
+			notify()
+			if (retryTimer !== null) kick()
+			else pump()
+			return
+		}
 		if (outcome.kind === 'ok') {
 			acknowledge(key, version)
 			clearRetrying()
@@ -314,10 +324,13 @@ export function createSaveQueue<V>(options: SaveQueueOptions<V>): SaveQueue<V> {
 			const gen = generation
 			for (const [key, entry] of entries) {
 				if (!keepalive && isSendingLatest(key, entry)) continue
+				const provisional = inFlight !== null && inFlight.key === key && inFlight.version !== entry.version
 				entry.due = false
 				entry.sentVersion = entry.version
 				const version = entry.version
-				void invoke(key, entry.value, keepalive).then((outcome) => settleDrained(gen, key, version, outcome))
+				void invoke(key, entry.value, keepalive, provisional).then((outcome) =>
+					settleDrained(gen, key, version, outcome, provisional)
+				)
 			}
 			notify()
 		},

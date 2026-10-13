@@ -5,8 +5,10 @@ type StoredClientAttempt = {
 	clientAttemptId: string
 }
 
+export const CLIENT_ATTEMPT_KEY_PREFIX = 'test-client-attempt-'
+
 export function clientAttemptIdKey(testId: string, userId: string): string {
-	return `test-client-attempt-${testId}-${userId}`
+	return `${CLIENT_ATTEMPT_KEY_PREFIX}${testId}-${userId}`
 }
 
 function readStoredClientAttempt(storage: ClientAttemptStorage, key: string): StoredClientAttempt | null {

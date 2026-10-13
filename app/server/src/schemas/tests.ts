@@ -2,7 +2,12 @@
  * Zod-схемы для эндпоинтов тестов
  */
 
-import { MatchingPairsSchema, OptionSchema, QuestionKeyPayloadSchema } from '@bio-exam/exam-core'
+import {
+	MatchingPairsSchema,
+	OptionSchema,
+	PHOTO_UPLOAD_WINDOW_MAX_MINUTES,
+	QuestionKeyPayloadSchema,
+} from '@bio-exam/exam-core'
 
 import { z } from 'zod'
 
@@ -38,6 +43,7 @@ export const SaveTestSchema = z
 		showCorrectAnswer: z.boolean().default(true),
 		scoringRules: TestScoringRulesSchema.optional(),
 		timeLimitMinutes: z.number().int().positive().optional().nullable(),
+		photoUploadWindowMinutes: z.number().int().min(0).max(PHOTO_UPLOAD_WINDOW_MAX_MINUTES).nullable().optional(),
 		redThresholdMinutes: z.number().int().positive().optional().nullable(),
 		warningThresholdMinutes: z.number().int().positive().optional().nullable(),
 		passingScore: z.number().min(0).max(100).optional().nullable(),
@@ -67,6 +73,7 @@ export const UpdateTestSettingsSchema = z.object({
 	showCorrectAnswer: z.boolean().default(true),
 	scoringRules: TestScoringRulesSchema.optional(),
 	timeLimitMinutes: z.number().int().positive().optional().nullable(),
+	photoUploadWindowMinutes: z.number().int().min(0).max(PHOTO_UPLOAD_WINDOW_MAX_MINUTES).nullable().optional(),
 	redThresholdMinutes: z.number().int().positive().optional().nullable(),
 	warningThresholdMinutes: z.number().int().positive().optional().nullable(),
 	passingScore: z.number().min(0).max(100).optional().nullable(),

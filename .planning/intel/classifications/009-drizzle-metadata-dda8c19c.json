@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/009-drizzle-metadata.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": true,
+  "title": "Plan 009: Restore Drizzle migration metadata continuity",
+  "summary": "Reconcile Drizzle schema migration metadata and verify consistency via disposable-DB testing.",
+  "scope": ["Drizzle schema", "PostgreSQL database", "SQL migrations", "_journal.json", "schema.ts", "Drizzle tooling", "CI check"],
+  "cross_refs": ["app/server/src/db/schema.ts", "app/server/drizzle", "app/server/drizzle.config.ts", "plans/001", "plans/002"],
+  "locked": false,
+  "precedence": 3,
+  "notes": "Document is structured as a plan/task with steps and done criteria but classified per manifest as SPEC. Contains technical constraints and implementation procedures for Drizzle migration verification."
+}

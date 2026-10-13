@@ -2,7 +2,7 @@
 
 import { isAnswered } from '@bio-exam/exam-core'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -11,7 +11,10 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
+import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
+import { UnsentTextNote } from '@/components/tests/attempt-result/UnsentTextNote'
+import { UploadWindowLine } from '@/components/tests/attempt-result/UploadWindowLine'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
 import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
@@ -36,7 +39,7 @@ import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { type AttemptNotice, saveIndicatorView, setMatchingPair, toggleOption } from './attempt-lifecycle'
 import { useAttemptLifecycle } from './attempt-lifecycle/use-attempt-lifecycle'
-import { answersInvalidBanner, type AttemptBanner, bannerFor, SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
+import { SUBMIT_FLOW_TEXT } from './attempt-submit-flow'
 
 type Props = {
 	test: PublicTestDetail
@@ -109,7 +112,6 @@ function AttemptRunner({
 		})
 	}, [initialAttempts])
 	const [showUnansweredDialog, setShowUnansweredDialog] = useState(false)
-	const [alreadySubmittedClosed, setAlreadySubmittedClosed] = useState(false)
 
 	const onNotice = (notice: AttemptNotice) => {
 		if (notice.kind === 'session-restored') toast.info('Сессия восстановлена')
@@ -145,6 +147,16 @@ function AttemptRunner({
 	const secondsLeft = snapshot.secondsLeft
 	const submitting = snapshot.phase === 'submitting' || snapshot.phase === 'autoSubmitting'
 	const interactionDisabled = snapshot.interactionDisabled
+	const deadlinePassed = snapshot.deadlinePassed
+	const navigationDisabled = interactionDisabled && !deadlinePassed
+	const outcome = snapshot.display.outcome
+	const outcomeKey =
+		outcome === null ? null : outcome.kind === 'result' ? (submitResult?.attemptId ?? null) : 'accepted'
+	const outcomeHeadingRef = useRef<HTMLHeadingElement>(null)
+	useEffect(() => {
+		if (outcomeKey !== null) outcomeHeadingRef.current?.focus()
+	}, [outcomeKey])
+	const deadlinePanelState = snapshot.display.deadlinePanel
 	const redThresholdSeconds = RED_THRESHOLD_SECONDS_DEFAULT
 	const showHours = (test.timeLimitMinutes ?? 0) > 60
 
@@ -195,6 +207,23 @@ function AttemptRunner({
 		lifecycle.navigate(q.id)
 	}
 
+	const questionNumberRef = useRef<HTMLParagraphElement>(null)
+	const focusQuestionNumberRef = useRef(false)
+	useEffect(() => {
+		if (!focusQuestionNumberRef.current) return
+		focusQuestionNumberRef.current = false
+		questionNumberRef.current?.focus()
+	}, [currentQuestionId])
+
+	const goToUnsentQuestion = (questionId: string) => {
+		if (questionId === currentQuestionId) {
+			questionNumberRef.current?.focus()
+			return
+		}
+		focusQuestionNumberRef.current = true
+		lifecycle.navigate(questionId)
+	}
+
 	const goPrev = () => goToQuestion(currentIndex - 1)
 	const goNext = () => goToQuestion(currentIndex + 1)
 
@@ -226,31 +255,14 @@ function AttemptRunner({
 	}
 
 	const handleRetake = () => {
-		setAlreadySubmittedClosed(false)
 		lifecycle.retake()
 	}
 
 	const closeAlreadySubmitted = () => {
-		setAlreadySubmittedClosed(true)
+		lifecycle.dismissAlreadySubmitted()
 	}
 
-	const blockReason = snapshot.blockReason
-	const alreadySubmittedOpen = blockReason === 'already-submitted' && !alreadySubmittedClosed
-	const banner: AttemptBanner | null =
-		blockReason === 'start-not-assigned' || blockReason === 'submit-not-assigned' || blockReason === 'not-found'
-			? blockReason
-			: blockReason === 'already-submitted'
-				? alreadySubmittedClosed
-					? 'already-submitted'
-					: null
-				: snapshot.submitFailed
-					? 'retry'
-					: null
-	const bannerView = snapshot.submitRejection
-		? answersInvalidBanner(snapshot.submitRejection)
-		: banner
-			? bannerFor(banner)
-			: null
+	const bannerView = snapshot.display.banner
 	const saveIndicator = snapshot.saveIndicator ? saveIndicatorView(snapshot.saveIndicator) : null
 
 	return (
@@ -268,14 +280,29 @@ function AttemptRunner({
 					</div>
 				</div>
 
-				{submitResult ? (
+				{deadlinePanelState ? (
+					<DeadlinePanel state={deadlinePanelState} onRetry={() => void lifecycle.submit({ auto: true })} />
+				) : null}
+
+				{outcome?.kind === 'result' ? (
 					<section
 						className={cn(
 							'rounded-lg border p-4',
 							resultView?.kind === 'pending' ? 'border-border bg-secondary' : 'border-emerald-200 bg-emerald-50'
 						)}
 					>
-						<h2 className="mb-2 text-lg font-semibold">Результат</h2>
+						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
+							{outcome.accepted ? 'Ответ принят' : 'Результат'}
+						</h2>
+						{outcome.accepted ? <p className="text-sm">Время вышло, ответы приняты автоматически.</p> : null}
+						<UploadWindowLine uploadClosesAt={snapshot.uploadClosesAt} serverOffsetMs={snapshot.serverOffsetMs} />
+						{snapshot.unsent ? (
+							<UnsentTextNote
+								entries={snapshot.unsent.entries}
+								certain={snapshot.unsent.certain}
+								onGoToQuestion={goToUnsentQuestion}
+							/>
+						) : null}
 						{resultView?.kind === 'pending' ? (
 							<>
 								<AttemptReviewLine view={resultView} audience="student" chipClassName="bg-card" />
@@ -304,6 +331,22 @@ function AttemptRunner({
 					</section>
 				) : null}
 
+				{outcome?.kind === 'accepted-without-result' ? (
+					<section className="rounded-lg border border-border bg-secondary p-4">
+						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
+							Ответ принят
+						</h2>
+						<p className="text-sm">Время вышло, ответы приняты автоматически.</p>
+						{snapshot.unsent ? (
+							<UnsentTextNote entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
+						) : null}
+						<p className="mt-2 text-sm">Результат появится в списке «Мои попытки» после обновления страницы.</p>
+						<Button type="button" variant="outline" className="mt-3" onClick={() => window.location.reload()}>
+							К результатам
+						</Button>
+					</section>
+				) : null}
+
 				{bannerView ? (
 					<section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
 						<span role="alert" className="text-sm">
@@ -321,15 +364,6 @@ function AttemptRunner({
 					</section>
 				) : null}
 
-				{snapshot.showTimeUp ? (
-					<section className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-						<div className="mx-4 rounded-lg bg-white p-6 text-center shadow-xl tab-sm:p-8">
-							<p className="text-2xl font-semibold">Время вышло</p>
-							<p className="mt-2 text-sm text-muted-foreground">Отправка ответов...</p>
-						</div>
-					</section>
-				) : null}
-
 				{(() => {
 					const question = orderedQuestions[currentIndex]
 					if (!question) return null
@@ -343,7 +377,9 @@ function AttemptRunner({
 							id={`question-${question.id}`}
 							className="grid scroll-mt-24 gap-unit-mob tab:gap-unit"
 						>
-							<p className="text-lg font-medium">{currentIndex + 1}.</p>
+							<p ref={questionNumberRef} tabIndex={-1} className="text-lg font-medium outline-none">
+								{currentIndex + 1}.
+							</p>
 							<div className="flex-1 space-y-4 rounded-lg border bg-secondary p-4">
 								<div className="space-y-2">
 									<MdxRenderer source={question.promptText} className="prose max-w-none text-sm select-none" />
@@ -354,6 +390,7 @@ function AttemptRunner({
 										question={question}
 										answer={answers[question.id]}
 										disabled={interactionDisabled}
+										readOnly={deadlinePassed}
 										onSelectRadio={onSelectRadio}
 										onToggleCheckbox={onToggleCheckbox}
 										onInputTextAnswer={onInputTextAnswer}
@@ -389,16 +426,16 @@ function AttemptRunner({
 
 							{/* Navigation buttons */}
 							<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || interactionDisabled}>
+								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || navigationDisabled}>
 									Назад
 								</Button>
 								{currentIndex < orderedQuestions.length - 1 ? (
-									<Button variant="outline" onClick={goNext} disabled={interactionDisabled}>
+									<Button variant="outline" onClick={goNext} disabled={navigationDisabled}>
 										Далее
 									</Button>
 								) : (
 									<Button onClick={handleSubmit} disabled={submitting || interactionDisabled}>
-										{submitting ? 'Отправка...' : 'Завершить'}
+										{submitting ? 'Отправка…' : 'Завершить'}
 									</Button>
 								)}
 							</div>
@@ -449,13 +486,15 @@ function AttemptRunner({
 
 			{/* Панель навигации по вопросам и прогресс */}
 			<section className="h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4 tab:sticky tab:top-4 tab:w-48">
-				{secondsLeft !== null && !submitResult && (
+				{snapshot.display.timer && secondsLeft !== null && (
 					<div
+						role="timer"
 						className={cn(
 							'text-right font-mono text-sm font-medium',
 							secondsLeft < redThresholdSeconds ? 'text-red-600' : 'text-muted-foreground'
 						)}
 					>
+						<span className="sr-only">{'Осталось времени: '}</span>
 						{formatTime(secondsLeft, showHours)}
 					</div>
 				)}
@@ -510,11 +549,11 @@ function AttemptRunner({
 				</div>
 
 				<Button type="button" onClick={handleSubmit} disabled={submitting || interactionDisabled} className="w-full">
-					{submitting ? 'Отправка...' : 'Завершить'}
+					{submitting ? 'Отправка…' : 'Завершить'}
 				</Button>
 			</section>
 
-			<AlertDialog open={snapshot.phase === 'awaitingStart'}>
+			<AlertDialog open={snapshot.display.dialog === 'start'}>
 				<AlertDialogContent overlayClassName="bg-black/60 backdrop-blur-xl">
 					<AlertDialogHeader>
 						<AlertDialogTitle>Начать тест?</AlertDialogTitle>
@@ -523,6 +562,9 @@ function AttemptRunner({
 							перезагрузке страницы.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{snapshot.unsent ? (
+						<UnsentTextNote compact entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
+					) : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel onClick={() => window.history.back()}>Назад</AlertDialogCancel>
 						<AlertDialogAction onClick={() => void lifecycle.confirmStart()}>Начать</AlertDialogAction>
@@ -530,12 +572,15 @@ function AttemptRunner({
 				</AlertDialogContent>
 			</AlertDialog>
 
-			<AlertDialog open={blockReason === 'time-expired'}>
+			<AlertDialog open={snapshot.display.dialog === 'time-expired'}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle className="font-medium">{SUBMIT_FLOW_TEXT.timeExpiredTitle}</AlertDialogTitle>
 						<AlertDialogDescription>{SUBMIT_FLOW_TEXT.timeExpiredDescription}</AlertDialogDescription>
 					</AlertDialogHeader>
+					{snapshot.unsent ? (
+						<UnsentTextNote compact entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
+					) : null}
 					<AlertDialogFooter>
 						<AlertDialogAction onClick={handleRetake}>{SUBMIT_FLOW_TEXT.timeExpiredAction}</AlertDialogAction>
 					</AlertDialogFooter>
@@ -566,7 +611,7 @@ function AttemptRunner({
 			</AlertDialog>
 
 			<Dialog
-				open={alreadySubmittedOpen}
+				open={snapshot.display.dialog === 'already-submitted'}
 				onOpenChange={(open) => {
 					if (!open) closeAlreadySubmitted()
 				}}

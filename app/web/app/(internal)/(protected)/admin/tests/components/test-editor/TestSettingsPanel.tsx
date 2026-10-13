@@ -1,3 +1,5 @@
+import { PHOTO_UPLOAD_WINDOW_MAX_MINUTES } from '@bio-exam/exam-core'
+
 import type { ReactNode } from 'react'
 
 import { FolderPlus } from 'lucide-react'
@@ -11,10 +13,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { NO_TOPICS_FOR_TEST, testTopicPickerState } from '@/lib/tests/bank-view'
+import { cn } from '@/lib/utils/cn'
 import { transliterate } from '@/lib/utils/transliterate'
 
 import type { TestFormData, Topic } from '../../types'
+import { photoWindowHint } from './photo-window'
 import type { TestFormSetter } from './test-editor-types'
+import { photoWindowField } from './test-settings-form'
 
 export interface TestSettingsPanelProps {
 	form: TestFormData
@@ -28,6 +33,8 @@ export interface TestSettingsPanelProps {
 	testSlug?: string
 	testSlugError: string | null
 	setTestSlugError: (error: string | null) => void
+	photoWindowServerError: string | null
+	setPhotoWindowServerError: (error: string | null) => void
 	canManageCatalog: boolean
 	onCreateTopic: () => void
 }
@@ -89,9 +96,12 @@ export function TestSettingsPanel({
 	testSlug,
 	testSlugError,
 	setTestSlugError,
+	photoWindowServerError,
+	setPhotoWindowServerError,
 	canManageCatalog,
 	onCreateTopic,
 }: TestSettingsPanelProps) {
+	const { visible: photoWindowVisible, error: photoWindowFieldError } = photoWindowField(form, photoWindowServerError)
 	const topicPicker = testTopicPickerState({ topics: topics.length, canManage: canManageCatalog })
 	return (
 		<div className="space-y-5">
@@ -218,6 +228,34 @@ export function TestSettingsPanel({
 						</p>
 					)}
 				</div>
+
+				{photoWindowVisible ? (
+					<div className="space-y-2">
+						<Label htmlFor="test-settings-photo-window">Окно для фото после окончания времени, мин</Label>
+						<Input
+							id="test-settings-photo-window"
+							type="number"
+							inputMode="numeric"
+							min={0}
+							max={PHOTO_UPLOAD_WINDOW_MAX_MINUTES}
+							step={1}
+							value={form.photoUploadWindowMinutes ?? ''}
+							onChange={(e) => {
+								setPhotoWindowServerError(null)
+								setForm({ ...form, photoUploadWindowMinutes: e.target.value === '' ? null : Number(e.target.value) })
+							}}
+							aria-invalid={photoWindowFieldError ? true : undefined}
+							aria-describedby="test-settings-photo-window-hint"
+							className={photoWindowFieldError ? 'border-destructive focus-visible:ring-destructive' : ''}
+						/>
+						<p
+							id="test-settings-photo-window-hint"
+							className={cn('text-xs', photoWindowFieldError ? 'text-destructive' : 'text-muted-foreground')}
+						>
+							{photoWindowFieldError ?? photoWindowHint(form.timeLimitMinutes)}
+						</p>
+					</div>
+				) : null}
 
 				{form.timeLimitMinutes ? (
 					<>

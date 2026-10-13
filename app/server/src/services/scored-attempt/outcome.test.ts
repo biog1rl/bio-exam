@@ -19,6 +19,7 @@ import { startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 
 type OutcomeModule = typeof import('./outcome.js')
 type ReadModule = typeof import('./read.js')
+type BackgroundJobsModule = typeof import('../background-jobs/index.js')
 
 type StoredRow = {
 	review_status: string
@@ -42,6 +43,7 @@ let student: { id: string; cookie: string }
 let testId = ''
 let outcomeModule: OutcomeModule
 let readModule: ReadModule
+let jobsModule: BackgroundJobsModule
 
 const noScores = async () => new Map<string, Map<string, number>>()
 
@@ -106,6 +108,7 @@ beforeAll(async () => {
 		.where((await import('drizzle-orm')).eq(ctx.schema.tests.id, testId))
 	outcomeModule = await import('./outcome.js')
 	readModule = await import('./read.js')
+	jobsModule = await import('../background-jobs/index.js')
 })
 
 afterEach(async () => {
@@ -307,6 +310,62 @@ describe('reconcileOutcomes', () => {
 		assert.equal(repaired.repaired, 1)
 		assert.equal((await rowOf(attemptId)).final_passed, false)
 		assert.deepEqual((await outcomeModule.reconcileOutcomes({ loadLatestScores: noScores })).mismatched, [])
+	})
+})
+
+describe('reconcileOutcomes с repairOnly none', () => {
+	async function corruptedNone(): Promise<string> {
+		const attemptId = await insert([fact('single_choice', 1, 1), fact('single_choice', 1, 0)])
+		await ctx.pgPool.query('UPDATE test_attempts SET final_passed = true WHERE id = $1', [attemptId])
+		return attemptId
+	}
+
+	async function gradedByTeacher(): Promise<string> {
+		const open = fact('open', 3, 0)
+		const attemptId = await insert([fact('single_choice', 1, 1), open])
+		await ctx.db.transaction((tx) =>
+			outcomeModule.materializeAttemptOutcome(tx, { attemptId, latestScores: new Map([[open.questionId, 2]]) })
+		)
+		assert.equal((await rowOf(attemptId)).review_status, 'graded')
+		return attemptId
+	}
+
+	async function corruptedPending(): Promise<string> {
+		const attemptId = await insert([fact('single_choice', 1, 1), fact('open', 3, 0)])
+		await ctx.pgPool.query('UPDATE test_attempts SET auto_total_points = 99 WHERE id = $1', [attemptId])
+		assert.equal((await rowOf(attemptId)).review_status, 'pending')
+		return attemptId
+	}
+
+	test('чинится только none, расхождения graded и pending в отчёте, строки не меняются', async () => {
+		const noneId = await corruptedNone()
+		const gradedId = await gradedByTeacher()
+		const pendingId = await corruptedPending()
+		const gradedBefore = await rowOf(gradedId)
+		const pendingBefore = await rowOf(pendingId)
+
+		const result = await outcomeModule.reconcileOutcomes({
+			loadLatestScores: noScores,
+			repair: true,
+			repairOnly: 'none',
+		})
+		assert.deepEqual(new Set(result.mismatched.map((item) => item.attemptId)), new Set([noneId, gradedId, pendingId]))
+		assert.equal(result.repaired, 1)
+		assert.equal((await rowOf(noneId)).final_passed, false)
+		assert.deepEqual(await rowOf(gradedId), gradedBefore)
+		assert.deepEqual(await rowOf(pendingId), pendingBefore)
+	})
+
+	test('runNow reconcile-outcomes отдаёт отчёт и чинит только none', async () => {
+		const noneId = await corruptedNone()
+		const gradedId = await gradedByTeacher()
+		const gradedBefore = await rowOf(gradedId)
+		const jobs = jobsModule.createBackgroundJobs({ log: { info: () => {}, warn: () => {}, error: () => {} } })
+
+		const report = await jobs.runNow(jobsModule.RECONCILE_OUTCOMES_JOB)
+		assert.deepEqual(report, { checked: 2, mismatched: 2, repaired: 1 })
+		assert.equal((await rowOf(noneId)).final_passed, false)
+		assert.deepEqual(await rowOf(gradedId), gradedBefore)
 	})
 })
 

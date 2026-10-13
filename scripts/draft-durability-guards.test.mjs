@@ -100,7 +100,7 @@ const BEFORE_UNLOAD_CHECKS = [
 	},
 ]
 
-const ATTEMPT_KEY_CHECKS = ['test-answers-wal-', 'test-session-', 'test-frozen-'].map((fragment) => ({
+const ATTEMPT_KEY_CHECKS = ['test-answers-wal-', 'test-session-', 'test-frozen-', 'test-unsent-'].map((fragment) => ({
 	label: `ключ попытки ${fragment} вне components/tests/attempt-lifecycle`,
 	match: (line) => line.includes(fragment),
 }))

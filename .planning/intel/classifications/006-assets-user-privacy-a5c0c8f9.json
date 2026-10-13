@@ -1,0 +1,22 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/006-assets-user-privacy.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 006: Secure assets and user-directory privacy",
+  "summary": "Specification for asset upload/delete authorization, path normalization, RBAC permission split, and user data privacy.",
+  "scope": [
+    "asset upload/delete authorization",
+    "path normalization",
+    "RBAC permission split",
+    "user directory privacy",
+    "minimal/admin user DTOs"
+  ],
+  "cross_refs": [
+    "plans/001-*",
+    "plans/003-*"
+  ],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

@@ -4,11 +4,19 @@ import {
 	SHORT_TEXT_MAX_LENGTH,
 	SUBMIT_ERROR_CODES,
 	type AnswerViolationReason,
+	type AttemptView,
 } from '@bio-exam/exam-core'
 
 import { AttemptRequestError } from '@/lib/tests/api'
 
 export type SubmitFailure =
+	| {
+			kind: 'finalized'
+			attemptId: string | null
+			attempt: AttemptView | null
+			uploadClosesAt: string | null
+			serverNow: string | null
+	  }
 	| { kind: 'already-submitted'; attemptId: string | null }
 	| { kind: 'time-expired' }
 	| { kind: 'not-assigned' }
@@ -23,17 +31,6 @@ export type StartFailure = 'not-assigned' | 'failed'
 export type AttemptBanner = 'start-not-assigned' | 'submit-not-assigned' | 'already-submitted' | 'not-found' | 'retry'
 
 export type AttemptBannerView = { message: string; action: 'retry' | 'reload' | null }
-
-export type AttemptStorageKey = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
-
-export type AttemptStorageEvent =
-	| 'success'
-	| 'already-submitted'
-	| 'time-expired'
-	| 'not-found'
-	| 'start-not-assigned'
-	| 'submit-not-assigned'
-	| 'session-replaced'
 
 export const SUBMIT_FLOW_TEXT = {
 	alreadySubmittedTitle: 'Попытка уже сдана',
@@ -89,21 +86,18 @@ const ANSWERS_INVALID_BANNERS: Record<AnswerViolationReason, AttemptBannerView> 
 	},
 }
 
-const ALL_ATTEMPT_KEYS: readonly AttemptStorageKey[] = ['session', 'wal', 'frozen', 'clientAttemptId']
-
-const STORAGE_KEYS_BY_EVENT: Record<AttemptStorageEvent, readonly AttemptStorageKey[]> = {
-	success: ALL_ATTEMPT_KEYS,
-	'already-submitted': ALL_ATTEMPT_KEYS,
-	'time-expired': ALL_ATTEMPT_KEYS,
-	'not-found': ['session', 'clientAttemptId'],
-	'start-not-assigned': ['session', 'clientAttemptId'],
-	'submit-not-assigned': [],
-	'session-replaced': ['wal', 'frozen', 'clientAttemptId'],
-}
-
 export function classifySubmitFailure(error: unknown): SubmitFailure {
 	if (!(error instanceof AttemptRequestError)) return { kind: 'retry' }
 	if (error.status === 409 && error.code === SUBMIT_ERROR_CODES.alreadySubmitted) {
+		if (error.submitSource === 'deadline') {
+			return {
+				kind: 'finalized',
+				attemptId: error.attemptId,
+				attempt: error.attempt,
+				uploadClosesAt: error.uploadClosesAt,
+				serverNow: error.serverNow,
+			}
+		}
 		return { kind: 'already-submitted', attemptId: error.attemptId }
 	}
 	if (error.status === 422 && error.code === SUBMIT_ERROR_CODES.timeExpired) return { kind: 'time-expired' }
@@ -127,8 +121,4 @@ export function bannerFor(banner: AttemptBanner): AttemptBannerView {
 
 export function answersInvalidBanner(rejection: SubmitRejection): AttemptBannerView {
 	return ANSWERS_INVALID_BANNERS[rejection.reason]
-}
-
-export function storageKeysToClear(event: AttemptStorageEvent): readonly AttemptStorageKey[] {
-	return STORAGE_KEYS_BY_EVENT[event]
 }

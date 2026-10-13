@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/plans/008-proven-performance.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Plan 008: Remove proven search, storage, editor, and export bottlenecks",
+  "summary": "Technical specification for removing bottlenecks in search, storage, editor, and export through concurrent queries, bounded downloads, and streaming.",
+  "scope": ["search", "storage", "editor", "export", "performance", "latency", "concurrency", "ZIP streaming"],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 3,
+  "notes": ""
+}

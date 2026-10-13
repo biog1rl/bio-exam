@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/kdvornichenko/bio-exam/docs/adr/0003-verification-before-refactoring.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "ADR-0003: Сначала проверки, потом рефакторинг",
+  "summary": "Establish comprehensive testing and verification infrastructure before refactoring architectural modules.",
+  "scope": ["verification", "testing", "Vitest", "CI/CD", "package management", "Yarn", "refactoring", "Drizzle", "test infrastructure"],
+  "cross_refs": ["ADR-0001", "ADR-0002", "ADR-0004", "ADR-0005", "plans/001", "plans/009"],
+  "locked": true,
+  "precedence": 0,
+  "notes": ""
+}

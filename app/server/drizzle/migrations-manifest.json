@@ -240,6 +240,14 @@
       "sha256": "21f85c337307cce287cd5f237772c86c2f73c497413a4d094c68cff8f1ae1537",
       "when": 1791268928915,
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "tag": "0030_attempt_upload_window",
+      "file": "0030_attempt_upload_window.sql",
+      "sha256": "4d147eccdc0f58e777037ff4cabddb80a84f851d94f8bd4db76ff1f9bc445f44",
+      "when": 1791292874244,
+      "breakpoints": true
     }
   ]
 }

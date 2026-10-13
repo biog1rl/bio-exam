@@ -1,0 +1,24 @@
+{
+	"statsFile": "app/web/.next/diagnostics/route-bundle-stats.json",
+	"marker": "grinning face with big eyes",
+	"routes": [
+		{
+			"route": "/admin/tests/[topicSlug]/[testSlug]/questions/[questionId]",
+			"firstLoadChunks": 30,
+			"firstLoadRawBytes": 2602999,
+			"firstLoadGzipBytes": 733445,
+			"nextFirstLoadUncompressedJsBytes": 2602999,
+			"emojiInFirstLoad": false,
+			"emojiChunks": []
+		},
+		{
+			"route": "/admin/tests/[topicSlug]/[testSlug]/questions/drafts/[draftId]",
+			"firstLoadChunks": 30,
+			"firstLoadRawBytes": 2602999,
+			"firstLoadGzipBytes": 733445,
+			"nextFirstLoadUncompressedJsBytes": 2602999,
+			"emojiInFirstLoad": false,
+			"emojiChunks": []
+		}
+	]
+}

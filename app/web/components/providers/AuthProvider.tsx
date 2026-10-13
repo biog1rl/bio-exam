@@ -5,10 +5,13 @@ import { can as canRbac } from '@bio-exam/rbac'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
+import { clearUserAttemptStorage } from '@/components/tests/attempt-lifecycle/user-storage'
 import { versionedUrl } from '@/lib/assets/versioned-url'
-import { sessionClient, type AuthMe, type LoadMeOutcome } from '@/lib/session/client'
+import { forgetUserQuestionDraftCopies } from '@/lib/drafts/question-draft-copy'
+import { sessionClient, sessionRefreshCoordinator, type AuthMe, type LoadMeOutcome } from '@/lib/session/client'
 import { createKeepAlive, type KeepAlive } from '@/lib/session/keep-alive'
 import { LOGGED_OUT_PATH } from '@/lib/session/redirect'
+import { SESSION_REFRESH_RECORD_KEY } from '@/lib/session/refresh-coordinator'
 
 type Me = AuthMe
 
@@ -28,6 +31,23 @@ type AuthContextValue = {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
+function clearUserBrowserStorage(userId: string): void {
+	try {
+		const storage = window.localStorage
+		clearUserAttemptStorage(storage, userId)
+		forgetUserQuestionDraftCopies(storage, userId)
+		storage.removeItem(SESSION_REFRESH_RECORD_KEY)
+	} catch {
+		return
+	}
+}
+
+function clearUserBrowserStorageNowAndOnLeave(userId: string | null): void {
+	if (!userId) return
+	clearUserBrowserStorage(userId)
+	window.addEventListener('pagehide', () => clearUserBrowserStorage(userId), { once: true })
+}
 
 async function fetchMeOnce(): Promise<LoadMeOutcome> {
 	try {
@@ -112,8 +132,16 @@ export function AuthProvider({
 		keepAliveRef.current?.update(accessExpiresAt)
 	}, [accessExpiresAt])
 
+	const userIdRef = useRef<string | null>(me?.id ?? null)
+
+	useEffect(() => {
+		userIdRef.current = me?.id ?? null
+	}, [me?.id])
+
 	const logout = useCallback(async () => {
+		const userId = userIdRef.current
 		if (!(await sessionClient.logout())) return false
+		clearUserBrowserStorageNowAndOnLeave(userId)
 		setMe(null)
 		localStorage.setItem('logout', Date.now().toString())
 		localStorage.removeItem('logout')
@@ -124,7 +152,19 @@ export function AuthProvider({
 	// Автоматический рефреш при разлогинивании
 	useEffect(() => {
 		const handleStorageChange = (e: StorageEvent) => {
-			if (e.key === 'logout' || e.key === 'auth-change' || e.key === 'avatar-changed') {
+			if (e.key === SESSION_REFRESH_RECORD_KEY) {
+				const nextExpiresAt = sessionRefreshCoordinator.readRecord()?.accessExpiresAt ?? null
+				if (nextExpiresAt === null) return
+				keepAliveRef.current?.update(nextExpiresAt)
+				setMe((current) => (current ? { ...current, accessExpiresAt: nextExpiresAt } : current))
+				return
+			}
+			if (e.key === 'logout') {
+				clearUserBrowserStorageNowAndOnLeave(userIdRef.current)
+				void refresh()
+				return
+			}
+			if (e.key === 'auth-change' || e.key === 'avatar-changed') {
 				void refresh()
 			}
 		}

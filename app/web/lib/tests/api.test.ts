@@ -22,6 +22,23 @@ import {
 const apiFetchMock = vi.mocked(apiFetch)
 
 const Q1 = '22222222-2222-4222-8222-222222222222'
+const ATTEMPT = '44444444-4444-4444-8444-444444444444'
+const CLOSES_AT = '2026-10-04T10:20:00.000Z'
+const SERVER_NOW = '2026-10-04T10:05:00.000Z'
+const DEADLINE_VIEW = {
+	attemptId: ATTEMPT,
+	submittedAt: SERVER_NOW,
+	earnedPoints: 1,
+	totalPoints: 3,
+	scorePercentage: 33,
+	passed: false,
+	reviewStatus: 'none',
+	autoEarnedPoints: 1,
+	autoTotalPoints: 3,
+	results: [],
+	uploadClosesAt: CLOSES_AT,
+	submitSource: 'deadline',
+}
 
 function json(status: number, body: unknown): Response {
 	return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -129,6 +146,43 @@ describe('startTestSession и submitPublicTestAnswers', () => {
 			assert.equal(init?.body, JSON.stringify(request))
 			assert.equal(new Headers(init?.headers).get('Content-Type'), 'application/json')
 		}
+	})
+
+	test.each(
+		[
+			{
+				name: '409 deadline с испорченным видом: поля конверта на месте, attempt null',
+				attempt: { attemptId: 1 } as unknown,
+				attemptId: null as string | null,
+			},
+			{
+				name: '409 deadline с видом попытки: attempt разобран',
+				attempt: DEADLINE_VIEW as unknown,
+				attemptId: ATTEMPT as string | null,
+			},
+		].map((row): [string, typeof row] => [row.name, row])
+	)('%s', async (_name, { attempt, attemptId }) => {
+		apiFetchMock.mockResolvedValueOnce(
+			json(409, {
+				error: 'ATTEMPT_ALREADY_SUBMITTED',
+				attemptId: ATTEMPT,
+				submitSource: 'deadline',
+				uploadClosesAt: CLOSES_AT,
+				serverNow: SERVER_NOW,
+				attempt,
+			})
+		)
+		const { error } = await settle(
+			submitPublicTestAnswers('t1', { sessionId: 's1', clientAttemptId: 'c1', answers: {} } as never)
+		)
+		assert.ok(error instanceof AttemptRequestError)
+		assert.equal(error.status, 409)
+		assert.equal(error.code, 'ATTEMPT_ALREADY_SUBMITTED')
+		assert.equal(error.attemptId, ATTEMPT)
+		assert.equal(error.submitSource, 'deadline')
+		assert.equal(error.uploadClosesAt, CLOSES_AT)
+		assert.equal(error.serverNow, SERVER_NOW)
+		assert.equal(error.attempt?.attemptId ?? null, attemptId)
 	})
 
 	test('отказ без тела — AttemptRequestError без кода', async () => {

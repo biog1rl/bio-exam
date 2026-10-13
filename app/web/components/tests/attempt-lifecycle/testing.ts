@@ -2,13 +2,14 @@ import type {
 	AttemptSession,
 	AttemptView,
 	SaveAttemptDraftRequest,
+	SessionFate,
 	SubmitAttemptRequest,
 	TelemetryMap,
 } from '@bio-exam/exam-core'
 
 import { vi } from 'vitest'
 
-import { AttemptRequestError, type AttemptDraftSaveResult } from '@/lib/tests/api'
+import { AttemptRequestError, type AttemptDraftSaveResult, type AttemptRequestErrorDetails } from '@/lib/tests/api'
 
 import type { ClientAttemptStorage } from '../client-attempt-id'
 import {
@@ -110,14 +111,15 @@ export function requestError(
 	status: number,
 	code: string | null = null,
 	attemptId: string | null = null,
-	extra: { reason?: string; limit?: number } = {}
+	extra: { reason?: string; limit?: number } & AttemptRequestErrorDetails = {}
 ): AttemptRequestError {
-	return new AttemptRequestError(status, code, attemptId, extra.reason ?? null, extra.limit ?? null)
+	const { reason, limit, ...details } = extra
+	return new AttemptRequestError(status, code, attemptId, reason ?? null, limit ?? null, details)
 }
 
 export const ATTEMPT_ID = '44444444-4444-4444-8444-444444444444'
 
-export function attemptViewOf(attemptId: string = ATTEMPT_ID): AttemptView {
+export function attemptViewOf(attemptId: string = ATTEMPT_ID, extra: Partial<AttemptView> = {}): AttemptView {
 	return {
 		attemptId,
 		submittedAt: '2026-10-04T10:05:00.000Z',
@@ -129,6 +131,23 @@ export function attemptViewOf(attemptId: string = ATTEMPT_ID): AttemptView {
 		autoEarnedPoints: 1,
 		autoTotalPoints: 3,
 		results: [],
+		...extra,
+	}
+}
+
+export function textResult(questionId: string, userAnswer: unknown): AttemptView['results'][number] {
+	return {
+		questionId,
+		isCorrect: false,
+		points: 1,
+		earnedPoints: 0,
+		userAnswer,
+		correctAnswer: null,
+		explanationText: null,
+		status: 'wrong',
+		keyVisible: false,
+		mistakes: null,
+		verdicts: null,
 	}
 }
 
@@ -150,8 +169,9 @@ export function response(status: number): AttemptDraftSaveResult {
 type StartStep = AttemptSession | Error
 type SaveStep = AttemptDraftSaveResult | Deferred<AttemptDraftSaveResult>
 type SubmitStep = AttemptView | Error | Deferred<AttemptView | Error>
+type FateStep = SessionFate | Error
 
-export function fakeAttemptApi(starts: StartStep[] = []) {
+export function fakeAttemptApi(starts: StartStep[] = [], input: { fates?: FateStep[] } = {}) {
 	const startQueue: StartStep[] = [...starts]
 	const saveQueue: SaveStep[] = []
 	const submitQueue: SubmitStep[] = []
@@ -182,12 +202,22 @@ export function fakeAttemptApi(starts: StartStep[] = []) {
 		if (value instanceof Error) throw value
 		return value
 	})
-	const api: AttemptLifecycleApi = { start, saveDraft, submit }
+	const fateQueue: FateStep[] = [...(input.fates ?? [])]
+	const readSession = vi.fn(async (_testId: string, _sessionId: string): Promise<SessionFate> => {
+		const next = fateQueue.length > 1 ? fateQueue.shift() : fateQueue[0]
+		if (!next) throw new Error('unexpected readSession')
+		if (next instanceof Error) throw next
+		return next
+	})
+	const api: AttemptLifecycleApi = input.fates
+		? { start, saveDraft, submit, readSession }
+		: { start, saveDraft, submit }
 	return {
 		api,
 		start,
 		saveDraft,
 		submit,
+		readSession,
 		queueStart(...steps: StartStep[]) {
 			startQueue.length = 0
 			startQueue.push(...steps)
@@ -223,6 +253,7 @@ export function setupLifecycle(
 		visibility?: ReturnType<typeof fakeVisibility>
 		timeLimitMinutes?: number | null
 		createId?: () => string
+		textQuestionIds?: readonly string[]
 	} = {}
 ) {
 	const storage = input.storage ?? memoryStorage()
@@ -233,6 +264,7 @@ export function setupLifecycle(
 		testId: TEST_ID,
 		userId: USER_ID,
 		questionIds: QUESTION_IDS,
+		textQuestionIds: input.textQuestionIds,
 		timeLimitMinutes: input.timeLimitMinutes ?? null,
 		storage,
 		api: fakeApi.api,
@@ -249,7 +281,7 @@ export async function settle(): Promise<void> {
 	await vi.advanceTimersByTimeAsync(0)
 }
 
-export type AttemptKeyName = 'session' | 'wal' | 'frozen' | 'clientAttemptId'
+export type AttemptKeyName = 'session' | 'wal' | 'frozen' | 'clientAttemptId' | 'unsent'
 
 export function walTelemetry(storage: MemoryStorage): TelemetryMap | undefined {
 	const wal = readJson(storage, KEYS.wal) as { telemetry?: TelemetryMap } | undefined
@@ -262,7 +294,7 @@ export function walTelemetryPending(storage: MemoryStorage): boolean | undefined
 }
 
 export function presentKeys(storage: MemoryStorage): AttemptKeyName[] {
-	const names: AttemptKeyName[] = ['session', 'wal', 'frozen', 'clientAttemptId']
+	const names: AttemptKeyName[] = ['session', 'wal', 'frozen', 'clientAttemptId', 'unsent']
 	return names.filter((name) => storage.data.has(KEYS[name]))
 }
 

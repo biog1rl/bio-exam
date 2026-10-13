@@ -35,7 +35,7 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 - Страницы прокручиваются не окном, а внутренним блоком `app/web/components/AppLayout/MainScrollArea.tsx` (у `<html>` `overflow: hidden`): он открывает новую страницу сверху и восстанавливает положение при «Назад»; `window.scrollTo` и `scrollRestoration` до контента не доходят.
 - Банк заданий `/admin/tests` и `/admin/tests/[topic]` — один компонент `app/web/app/(internal)/(protected)/admin/tests/components/bank/BankExplorer.tsx` (темы слева, таблица тестов справа); фильтры, поиск и сортировка — в адресе (`app/web/lib/tests/bank-table.ts`).
 - Диалоги и боковые панели из `components/ui` (`dialog`, `alert-dialog`, `sheet`) сами возвращают фокус на элемент, который их открыл (`components/ui/use-return-focus.ts`); у Radix без этого фокус возвращается только на `*Trigger`.
-- Настройки типа вопроса для одного теста — одна строка `test_question_type_overrides`, PUT заменяет её целиком: страница баллов меняет только формулу, страница типа — только название и отключение, каждая отправляет чужие поля как есть (`testOverrideSteps` в `app/web/lib/tests/admin-api.ts`).
+- Настройки типа вопроса для одного теста — одна строка `test_question_type_overrides`; её владелец — сервер. Сейчас PUT заменяет строку целиком, и web досылает чужие поля сам (`testOverrideSteps` в `app/web/lib/tests/admin-api.ts`) — это долг: `docs/adr/0008-question-type-catalog-module.md` переводит запись на частичный PATCH (фаза 11.1), после чего каждая страница отправляет только своё поле.
 - Цвета оболочки — токены `app/web/styles/globals.css`; контраст пар токенов держит `app/web/styles/token-contrast.test.ts`, контраст и переполнение страниц — `e2e/tests/navigation.spec.ts`.
 
 ## Страница: шапка и таблица
@@ -65,6 +65,15 @@ description: Факты веб-клиента bio-exam (Next.js, app/web). Пр�
 - Локальная копия ответов: `wal.ts`; восстановление: `restore.ts`; строка состояния сохранения: `save-indicator.ts`; ключи хранилища: `storage-keys.ts`.
 - Ответы и телеметрия уходят через очередь `createSaveQueue` (`app/web/lib/drafts/save-queue.ts`) с паузой `ATTEMPT_SAVE_DEBOUNCE_MS` и пределом ожидания `ATTEMPT_SAVE_MAX_WAIT_MS`; при `pagehide` очередь досылается с `keepalive`.
 - Схемы ответов и сессии попытки берутся из `@bio-exam/exam-core`.
+- Серверное время: `server-clock.ts` (`createServerClock`) держит смещение `serverNow` минус часы устройства; якорь ставят ответы `/start`, `/submit`, 409 и чтения судьбы сессии. Таймер, переход в чтение и отсчёт окна фото считаются по этим часам, абсолютное `ЧЧ:ММ` окна - от `uploadClosesAt` в поясе браузера.
+- После дедлайна снимок несёт `deadlinePassed`: `answer()` ничего не меняет, текстовые поля `readOnly` (не `disabled`: контраст), панель `DeadlinePanel` вверху колонки заменяет оверлей, сбой автосдачи повторяется кнопкой и сам на `online` и `visible`.
+- Что показывать, решает `attemptDisplay` в `outcome-rules.ts` (исход, панель дедлайна, плашки, диалоги, таймер) от полей снимка; `TestRunner` рисует `snapshot.display`. Стирание ключей по исходам - таблица `STORAGE_EFFECTS` и исполнитель `applyStorageEffects` в `storage-keys.ts`; новый исход - строка таблицы.
+- При открытии страницы с кэшем сессии тест с лимитом читает судьбу (`readTestSession`, `GET …/sessions/:sessionId`): `submitted` + `deadline` ведёт к исходу «Ответ принят» без диалога «Начать тест?», `expired` - к диалогу «Время вышло» или «Начать тест?».
+- Исход «Ответ принят» (автосдача и серверная финализация, заголовок в фокусе) несёт строку окна фото: `uploadWindowView` в `app/web/lib/tests/upload-window.ts` и `UploadWindowLine` (отсчёт обновляется на границах минуты, объявляются только переходы состояний).
+- Сверка локального текста с принятым ответом: `wal-reconcile.ts` (`unsentTexts`). Расхождение остаётся в ключе `test-unsent-<testId>-<userId>` и показывается пометкой `UnsentTextNote` с «К вопросу N»; запись стирается при новом старте теста и при выходе.
+- Обновление сессии входа в нескольких вкладках: `app/web/lib/session/refresh-coordinator.ts` (Web Locks, общая запись `bio-exam:session-refresh` в `localStorage`), два одновременных 401 дают один `POST /api/auth/refresh`.
+- Выход стирает ключи попытки пользователя: `clearUserAttemptStorage` в `app/web/components/tests/attempt-lifecycle/user-storage.ts` (префиксы ключей попытки, окончание `-<userId>`), `AuthProvider` вызывает её на явном выходе и `pagehide`.
+- Форма настроек теста - `test-settings-form.ts` в `admin/tests/components/test-editor`; поле «Окно для фото» (`photo-window.ts`) видно только при открытом вопросе, ноль - допустимое значение «окна нет».
 
 ## Результат попытки
 

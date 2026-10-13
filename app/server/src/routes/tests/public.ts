@@ -13,23 +13,23 @@ import { Router, type Response } from 'express'
 
 import { db } from '../../db/index.js'
 import { questions, testAttempts, tests, topics } from '../../db/schema.js'
+import { isTransientDbError } from '../../lib/db-errors.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest, testScope } from '../../services/access-policy/index.js'
 import {
 	checkAttemptAccess,
+	databaseNow,
 	findVisibleTestBySlug,
-	closeExpiredSession,
+	finalizeSessionByDeadline,
 	isAssignedOrPrivileged,
-	precheckSubmit,
 	saveSessionDraft,
 	startAttemptSession,
-	submitAttempt,
+	submitSession,
 	visibleTestsFilter,
-	type SessionCloseReason,
+	type SessionOutcome,
 } from '../../services/attempt-sessions/index.js'
-import { readQuestionMarkdown } from '../../services/question-content/index.js'
-import { attemptResultColumns, readAttemptView, scoreSubmission } from '../../services/scored-attempt/index.js'
+import { attemptResultColumns, readAttemptView, type AttemptViewer } from '../../services/scored-attempt/index.js'
 import { readStudentQuestions } from './student-question-view.js'
 
 const router = Router()
@@ -43,27 +43,6 @@ const DB_RETRY_ENABLED = process.env.DB_QUERY_RETRY !== '0'
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function errorText(err: unknown): string {
-	if (err instanceof Error) {
-		const parts = [err.message]
-		const cause = (err as Error & { cause?: unknown }).cause
-		if (cause instanceof Error) parts.push(cause.message)
-		return parts.join(' | ')
-	}
-	return String(err)
-}
-
-function isTransientDbError(err: unknown): boolean {
-	const message = errorText(err).toLowerCase()
-	return (
-		message.includes('connection terminated unexpectedly') ||
-		message.includes('query read timeout') ||
-		message.includes('econnreset') ||
-		message.includes('etimedout') ||
-		message.includes('eai_again')
-	)
-}
 
 function answersInvalidBody(violation: AnswerViolation) {
 	return {
@@ -82,17 +61,79 @@ function sessionNotFound(res: Response) {
 	return res.status(404).json({ error: 'Session not found' })
 }
 
-function attemptAlreadySubmitted(res: Response, attemptId: string | null) {
-	return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
+async function submittedBody(attemptId: string, viewer: AttemptViewer) {
+	const view = await readAttemptView(attemptId, viewer)
+	return {
+		attemptId,
+		submitSource: view.submitSource ?? 'client',
+		uploadClosesAt: view.uploadClosesAt ?? null,
+		serverNow: await databaseNow(),
+		attempt: view,
+	}
 }
 
-function timeExpired(res: Response) {
-	return res.status(422).json({ error: SUBMIT_ERROR_CODES.timeExpired })
+function studentViewer(test: { showCorrectAnswer: boolean }): AttemptViewer {
+	return { kind: 'student', showCorrectAnswer: test.showCorrectAnswer }
 }
 
-function rejectClosedSession(res: Response, reason: SessionCloseReason) {
-	if (reason === 'superseded') return sessionNotFound(res)
-	return timeExpired(res)
+function draftNotSaved(res: Response) {
+	return res.status(404).json({ error: 'Session not found or already submitted' })
+}
+
+type OutcomeRoute = 'start' | 'draft' | 'fate' | 'submit'
+
+async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: SessionOutcome, viewer: AttemptViewer) {
+	switch (outcome.kind) {
+		case 'open':
+			if (route === 'start') return res.json(outcome.session)
+			if (route === 'draft') return draftNotSaved(res)
+			return res.json({
+				state: 'open',
+				sessionId: outcome.session.sessionId,
+				startedAt: outcome.session.startedAt,
+				serverNow: outcome.session.serverNow,
+			})
+		case 'saved':
+			if (route === 'draft') return res.json({ ok: true, serverNow: outcome.serverNow })
+			break
+		case 'accepted':
+			if (route === 'submit') return res.json(await readAttemptView(outcome.attemptId, viewer))
+			break
+		case 'finalized':
+		case 'submitted':
+			if (route === 'draft') return draftNotSaved(res)
+			if (route === 'fate') {
+				if (outcome.attemptId === null) return sessionNotFound(res)
+				return res.json({ state: 'submitted', ...(await submittedBody(outcome.attemptId, viewer)) })
+			}
+			if (route === 'submit') {
+				if (outcome.kind === 'submitted') {
+					return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId: outcome.attemptId })
+				}
+				return res
+					.status(409)
+					.json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, ...(await submittedBody(outcome.attemptId, viewer)) })
+			}
+			break
+		case 'expired':
+			if (route === 'draft') return draftNotSaved(res)
+			if (route === 'fate') return res.json({ state: 'expired', serverNow: await databaseNow() })
+			if (route === 'submit') return res.status(422).json({ error: SUBMIT_ERROR_CODES.timeExpired })
+			break
+		case 'superseded':
+		case 'not_found':
+			if (route === 'draft') return draftNotSaved(res)
+			if (route === 'fate' || route === 'submit') return sessionNotFound(res)
+			break
+		case 'answers_invalid':
+			if (route === 'draft') return res.status(400).json(answersInvalidBody(outcome.violation))
+			if (route === 'submit') return res.status(422).json(answersInvalidBody(outcome.violation))
+			break
+		case 'no_questions':
+			if (route === 'submit') return res.status(404).json({ error: 'Questions not found' })
+			break
+	}
+	throw new Error(`sendSessionOutcome: outcome ${outcome.kind} is not expected on ${route}`)
 }
 
 async function withTransientDbRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
@@ -350,11 +391,34 @@ router.post('/tests/:id/start', validateUUID('id'), sessionRequired(), async (re
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 
-		res.json(await startAttemptSession({ testId, userId, timeLimitMinutes: access.test.timeLimitMinutes }))
+		const outcome = await startAttemptSession({ test: access.test, userId })
+		return sendSessionOutcome(res, 'start', outcome, studentViewer(access.test))
 	} catch (e) {
 		next(e)
 	}
 })
+
+router.get(
+	'/tests/:id/sessions/:sessionId',
+	validateUUID('id'),
+	validateUUID('sessionId'),
+	sessionRequired(),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const sessionId = req.params.sessionId as string
+			const userId = req.authUser!.id
+
+			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+			if (!access.ok) return denyAttemptAccess(res, access.status)
+
+			const outcome = await finalizeSessionByDeadline(sessionId, { testId, userId })
+			return sendSessionOutcome(res, 'fate', outcome, studentViewer(access.test))
+		} catch (e) {
+			next(e)
+		}
+	}
+)
 
 // PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers - промежуточное сохранение черновика ответов в БД
 router.patch(
@@ -372,25 +436,11 @@ router.patch(
 			if (!parsed.success) {
 				return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 			}
-			const { questionId, value, telemetry } = parsed.data
-
 			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 			if (!access.ok) return denyAttemptAccess(res, access.status)
 
-			const saved = await saveSessionDraft({
-				testId,
-				userId,
-				testSessionId: sessionId,
-				questionId,
-				value,
-				telemetry,
-			})
-			if (saved === 'not_found') {
-				return res.status(404).json({ error: 'Session not found or already submitted' })
-			}
-			if (saved !== 'saved') return res.status(400).json(answersInvalidBody(saved.violation))
-
-			res.json({ ok: true })
+			const outcome = await saveSessionDraft({ test: access.test, userId }, sessionId, parsed.data)
+			return sendSessionOutcome(res, 'draft', outcome, studentViewer(access.test))
 		} catch (e) {
 			next(e)
 		}
@@ -409,75 +459,11 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 		}
 
-		const { sessionId, clientAttemptId, answers: userAnswers, telemetry } = parsed.data
-
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
-		const test = access.test
-		const viewer = { kind: 'student' as const, showCorrectAnswer: test.showCorrectAnswer }
 
-		const precheck = await precheckSubmit({
-			testId,
-			userId,
-			testSessionId: sessionId,
-			clientAttemptId,
-			timeLimitMinutes: test.timeLimitMinutes,
-		})
-		if (precheck.kind === 'not_found') return sessionNotFound(res)
-		if (precheck.kind === 'submitted') {
-			if (precheck.sameClient && precheck.attemptId) return res.json(await readAttemptView(precheck.attemptId, viewer))
-			return attemptAlreadySubmitted(res, precheck.attemptId)
-		}
-		if (precheck.kind === 'closed') return rejectClosedSession(res, precheck.reason)
-		if (precheck.kind === 'expired') {
-			await closeExpiredSession(sessionId)
-			return timeExpired(res)
-		}
-
-		const scored = await scoreSubmission({
-			testId,
-			answers: userAnswers,
-			passingScore: test.passingScore,
-			readExplanation: (q) =>
-				q.explanationPath
-					? readQuestionMarkdown({
-							storedPath: q.explanationPath,
-							topicSlug: test.topicSlug,
-							testSlug: test.slug,
-							testId,
-							questionId: q.id,
-							kind: 'explanation',
-						}).then((text) => text || null)
-					: Promise.resolve(null),
-		})
-		if (!scored.ok) {
-			if (scored.reason === 'no_questions') return res.status(404).json({ error: 'Questions not found' })
-			return res.status(422).json(answersInvalidBody(scored.violation))
-		}
-		const { facts, outcome: scoredOutcome, passingScore, earnedPoints, totalPoints, scorePercentage, passed } = scored
-
-		const outcome = await submitAttempt({
-			testId,
-			userId,
-			testSessionId: sessionId,
-			clientAttemptId,
-			answers: userAnswers,
-			telemetry,
-			scored: {
-				results: facts,
-				resultsVersion: 2,
-				earnedPoints,
-				totalPoints,
-				scorePercentage,
-				passed,
-				outcome: scoredOutcome,
-				passingScore,
-			},
-		})
-		if (outcome.kind === 'not_found') return sessionNotFound(res)
-		if (outcome.kind === 'conflict') return attemptAlreadySubmitted(res, outcome.attemptId)
-		if (outcome.kind === 'closed') return rejectClosedSession(res, outcome.reason)
-		res.json(await readAttemptView(outcome.attemptId, viewer))
+		const outcome = await submitSession({ test: access.test, userId }, parsed.data)
+		return sendSessionOutcome(res, 'submit', outcome, studentViewer(access.test))
 	} catch (e) {
 		next(e)
 	}

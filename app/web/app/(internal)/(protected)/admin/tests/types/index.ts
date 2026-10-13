@@ -10,6 +10,8 @@ import type {
 	QuestionUiTemplate,
 } from '@bio-exam/exam-core'
 
+import type { TestSettings } from '../components/test-editor/test-settings-form'
+
 export {
 	ALLOWED_MISTAKE_METRICS_BY_TEMPLATE,
 	createDefaultScoringRuleForTemplate as createDefaultQuestionTypeScoringRule,
@@ -144,6 +146,7 @@ export interface Test {
 	redThresholdMinutes: number | null
 	warningThresholdMinutes: number | null
 	passingScore: number | null
+	photoUploadWindowMinutes?: number
 	order: number
 	createdAt: string
 	updatedAt: string
@@ -179,18 +182,8 @@ export interface TopicFormData {
 	isActive: boolean
 }
 
-export interface TestFormData {
-	topicId: string
-	title: string
-	slug: string
-	description: string
-	isPublished: boolean
-	showCorrectAnswer: boolean
+export interface TestFormData extends TestSettings {
 	scoringRules?: TestScoringRules
-	timeLimitMinutes: number | null
-	redThresholdMinutes: number | null
-	warningThresholdMinutes: number | null
-	passingScore: number | null
 	order: number
 	questions: Question[]
 }

@@ -74,6 +74,21 @@ export function forgetQuestionDraftCopies(
 	}
 }
 
+export function forgetUserQuestionDraftCopies(
+	storage: Pick<Storage, 'length' | 'key' | 'removeItem'>,
+	userId: string
+): void {
+	const suffix = `-${userId}`
+	try {
+		for (let index = storage.length - 1; index >= 0; index -= 1) {
+			const key = storage.key(index)
+			if (key !== null && key.startsWith(COPY_KEY_PREFIX) && key.endsWith(suffix)) storage.removeItem(key)
+		}
+	} catch {
+		return
+	}
+}
+
 export function resolveInitialDraftPayload(input: {
 	copy: QuestionDraftCopy | null
 	serverPayload: unknown

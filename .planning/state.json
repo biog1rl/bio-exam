@@ -1,0 +1,68 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v3.0 — Открытые задания с фото и ручной проверкой",
+  "phases": [
+    {
+      "number": "9",
+      "name": "Result foundation and readers",
+      "status": "complete"
+    },
+    {
+      "number": "10",
+      "name": "Notification journal and bell",
+      "status": "complete"
+    },
+    {
+      "number": "11",
+      "name": "Deadline finalisation, upload window and background jobs",
+      "status": "in_progress"
+    },
+    {
+      "number": "12",
+      "name": "Photos on session authentication",
+      "status": "pending"
+    },
+    {
+      "number": "13",
+      "name": "Token, QR and phone page",
+      "status": "pending"
+    },
+    {
+      "number": "14",
+      "name": "Authoring and submitting open questions",
+      "status": "pending"
+    },
+    {
+      "number": "15",
+      "name": "Review",
+      "status": "pending"
+    },
+    {
+      "number": "16",
+      "name": "Retention and cleanup",
+      "status": "pending"
+    },
+    {
+      "number": "17",
+      "name": "Enabling and acceptance",
+      "status": "pending"
+    },
+    {
+      "number": "18",
+      "name": "Remaining v1.0 tech debt",
+      "status": "pending"
+    },
+    {
+      "number": "19",
+      "name": "Decommission of Supabase and Vercel",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 11 of 12 · 17% · executing"
+  },
+  "updated_at": "2026-10-06T15:34:38.347Z"
+}

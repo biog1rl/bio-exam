@@ -1,9 +1,12 @@
-import { loginAccount, seedTest, sessionAccount } from '../fixtures/accounts'
+import { loginAccount, seedTest, seedTopic, sessionAccount } from '../fixtures/accounts'
 import { expect, projectKey, test, TOPIC_SLUG } from '../fixtures/exam'
 import { horizontalOverflow, lowContrastTexts } from '../fixtures/page-checks'
 
 const SAVE_BAR = 'Сохранение изменений'
 const SETTINGS = 'Настройки теста'
+const PHOTO_WINDOW = 'Окно для фото после окончания времени, мин'
+const PHOTO_WINDOW_INVALID = 'Введите целое число минут от 0 до 120'
+const PHOTO_WINDOW_TOAST = 'Окно для фото: введите целое число минут от 0 до 120'
 
 test.describe('test editor: question table, settings panel and student access', () => {
 	test('question table searches by number, sorts in three steps and locks the drag handle @test-editor', async ({
@@ -134,5 +137,101 @@ test.describe('test editor: question table, settings panel and student access', 
 		await expect(page.getByRole('tab', { name: 'Доступ учеников · 1' })).toBeVisible()
 		await row.getByRole('button', { name: `Убрать доступ: ${newcomer.name}` }).click()
 		await expect(page.getByText('У теста пока нет учеников с доступом')).toBeVisible()
+	})
+
+	test('photo window field shows the seeded value, saves it and keeps it after a reload @test-editor', async ({
+		adminPage: page,
+	}, testInfo) => {
+		const seeded = seedTest(projectKey(testInfo), 'photo-window')
+		const path = `/admin/tests/${seeded.topic}/${seeded.slug}`
+		const sheet = page.getByRole('dialog', { name: SETTINGS })
+		const settingsResponse = () =>
+			page.waitForResponse(
+				(response) => response.url().includes('/settings') && response.request().method() === 'PATCH'
+			)
+
+		await page.goto(path)
+		await page.getByRole('button', { name: SETTINGS, exact: true }).click()
+		await expect(sheet.getByLabel(PHOTO_WINDOW)).toHaveValue('15')
+
+		await sheet.getByLabel(PHOTO_WINDOW).fill('0')
+		const saved = settingsResponse()
+		await sheet.getByRole('button', { name: 'Сохранить', exact: true }).click()
+		expect((await saved).status()).toBe(200)
+
+		await page.reload()
+		await page.getByRole('button', { name: SETTINGS, exact: true }).click()
+		await expect(sheet.getByLabel(PHOTO_WINDOW)).toHaveValue('0')
+
+		await sheet.getByLabel(PHOTO_WINDOW).fill('15')
+		const restored = settingsResponse()
+		await sheet.getByRole('button', { name: 'Сохранить', exact: true }).click()
+		expect((await restored).status()).toBe(200)
+		await page.reload()
+		await page.getByRole('button', { name: SETTINGS, exact: true }).click()
+		await expect(sheet.getByLabel(PHOTO_WINDOW)).toHaveValue('15')
+	})
+
+	test('photo window field is hidden without an open question; a wrong value is not sent and is explained @test-editor', async ({
+		adminPage: page,
+	}, testInfo) => {
+		const key = projectKey(testInfo)
+		const sheet = page.getByRole('dialog', { name: SETTINGS })
+		const field = sheet.getByLabel(PHOTO_WINDOW)
+
+		const plain = seedTest(key, 'all-templates')
+		await page.goto(`/admin/tests/${TOPIC_SLUG}/${plain.slug}`)
+		await page.getByRole('button', { name: SETTINGS, exact: true }).click()
+		await expect(sheet.getByLabel('Название')).toBeVisible()
+		await expect(field).toHaveCount(0)
+
+		const seeded = seedTest(key, 'photo-window')
+		await page.goto(`/admin/tests/${seeded.topic}/${seeded.slug}`)
+		await page.getByRole('button', { name: SETTINGS, exact: true }).click()
+		await expect(field).toBeVisible()
+		await expect(sheet.getByText('Отсчёт — от сдачи теста. 0 — фото только до сдачи.')).toBeVisible()
+		expect(await lowContrastTexts(page), 'contrast of the photo window hint').toEqual([])
+
+		let patches = 0
+		page.on('request', (request) => {
+			if (request.method() === 'PATCH' && request.url().includes('/settings')) patches++
+		})
+
+		await field.fill('121')
+		await expect(field).toHaveAttribute('aria-invalid', 'true')
+		await expect(sheet.getByText(PHOTO_WINDOW_INVALID, { exact: true })).toBeVisible()
+		expect(await lowContrastTexts(page), 'contrast of the photo window error').toEqual([])
+
+		await sheet.getByRole('button', { name: 'Сохранить', exact: true }).click()
+		await expect(page.getByText(PHOTO_WINDOW_TOAST, { exact: true })).toBeVisible()
+		await expect(field).toBeFocused()
+		expect(patches).toBe(0)
+
+		await field.fill('')
+		await expect(sheet.getByText('Укажите число минут от 0 до 120', { exact: true })).toBeVisible()
+		await field.fill('12.5')
+		await expect(sheet.getByText(PHOTO_WINDOW_INVALID, { exact: true })).toBeVisible()
+	})
+
+	test('«Добавить вопрос» in a new test without a title explains it and creates nothing @test-editor', async ({
+		adminPage: page,
+	}) => {
+		await page.goto(`/admin/tests/new?topic=${TOPIC_SLUG}`)
+		const topicSelect = page.getByText('Тема', { exact: true }).locator('xpath=..').getByRole('combobox')
+		await expect(topicSelect).toContainText(seedTopic(TOPIC_SLUG).title)
+		await expect(page.getByPlaceholder('Тест по теме...')).toHaveValue('')
+
+		let creates = 0
+		page.on('request', (request) => {
+			if (request.method() === 'POST' && request.url().includes('/api/tests/save')) creates++
+		})
+
+		await page.keyboard.press('Escape')
+		await expect(page.getByRole('dialog', { name: SETTINGS })).toHaveCount(0)
+		await page.getByRole('button', { name: 'Добавить вопрос' }).first().click()
+
+		await expect(page.getByText('Введите название теста', { exact: true })).toBeVisible()
+		await expect(page).toHaveURL(/\/admin\/tests\/new(\?|$)/)
+		expect(creates).toBe(0)
 	})
 })

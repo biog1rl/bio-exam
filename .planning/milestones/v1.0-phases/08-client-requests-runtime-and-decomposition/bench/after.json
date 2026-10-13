@@ -1,0 +1,205 @@
+{
+	"mode": "prod",
+	"env": {
+		"node": "v24.17.0",
+		"platform": "darwin 27.0.0 arm64",
+		"cpu": "Apple M4",
+		"cpuCount": 10,
+		"totalMemBytes": 17179869184,
+		"postgres": "17.10 (Homebrew)",
+		"pgPoolMax": 20,
+		"storage": "memory",
+		"commit": "fa72f9e4e7749c47ccffd50ee4d39d45f58bcd9c"
+	},
+	"seed": {
+		"users": 31,
+		"topics": 6,
+		"tests": 63,
+		"questions": 1834,
+		"prompts": 1834,
+		"explanations": 612,
+		"images": 254,
+		"objects": 2700,
+		"bytes": 38797312,
+		"assignments": 478,
+		"groups": 1,
+		"largestTest": {
+			"id": "b82a4115-5134-4cff-a4e2-8eee4996110b",
+			"slug": "bench-1-01",
+			"topicSlug": "bench-topic-1",
+			"questions": 123
+		},
+		"largestTopic": {
+			"id": "651c9913-d1ef-41e9-8656-5b4fb2df532e",
+			"slug": "bench-topic-1",
+			"tests": 16,
+			"bytes": 22874267
+		}
+	},
+	"search": {
+		"pgPoolMax": 20,
+		"queries": [
+			"клетка",
+			"митохондрия",
+			"фотосинтез"
+		],
+		"runsPerQuery": 50,
+		"warmupCallsExcluded": 3,
+		"limit": 10,
+		"byAccess": {
+			"admin": {
+				"availableCategories": 5,
+				"queriesPerCall": {
+					"min": 5,
+					"max": 5
+				},
+				"maxConcurrentQueries": 5,
+				"calls": 150,
+				"p50Ms": 101.14,
+				"p95Ms": 112.8,
+				"minMs": 93.91,
+				"maxMs": 132.67,
+				"perQuery": {
+					"клетка": {
+						"results": 20,
+						"p50Ms": 95.81,
+						"p95Ms": 102.62,
+						"minMs": 93.91,
+						"maxMs": 109.36
+					},
+					"митохондрия": {
+						"results": 10,
+						"p50Ms": 105.77,
+						"p95Ms": 121.78,
+						"minMs": 100.62,
+						"maxMs": 132.67
+					},
+					"фотосинтез": {
+						"results": 10,
+						"p50Ms": 100.95,
+						"p95Ms": 112.8,
+						"minMs": 98.06,
+						"maxMs": 123.97
+					}
+				}
+			},
+			"teacher": {
+				"availableCategories": 5,
+				"queriesPerCall": {
+					"min": 5,
+					"max": 5
+				},
+				"maxConcurrentQueries": 5,
+				"calls": 150,
+				"p50Ms": 18.27,
+				"p95Ms": 19.44,
+				"minMs": 16.73,
+				"maxMs": 20.71,
+				"perQuery": {
+					"клетка": {
+						"results": 10,
+						"p50Ms": 17.47,
+						"p95Ms": 18.37,
+						"minMs": 16.73,
+						"maxMs": 18.92
+					},
+					"митохондрия": {
+						"results": 10,
+						"p50Ms": 18.78,
+						"p95Ms": 20.18,
+						"minMs": 18,
+						"maxMs": 20.71
+					},
+					"фотосинтез": {
+						"results": 10,
+						"p50Ms": 18.27,
+						"p95Ms": 19.39,
+						"minMs": 17.42,
+						"maxMs": 19.69
+					}
+				}
+			}
+		}
+	},
+	"prompts": {
+		"readDelayMs": 20,
+		"runs": 5,
+		"warmupRunsExcluded": 1,
+		"test": {
+			"slug": "bench-1-01",
+			"questions": 123
+		},
+		"pass": {
+			"maxConcurrentReads": 123,
+			"reads": 123,
+			"queries": 9,
+			"medianMs": 27.17,
+			"minMs": 26.52,
+			"maxMs": 28.17,
+			"timesMs": [
+				26.67,
+				28.17,
+				27.57,
+				27.17,
+				26.52
+			]
+		},
+		"admin": {
+			"maxConcurrentReads": 123,
+			"reads": 164,
+			"queries": 6,
+			"medianMs": 46.64,
+			"minMs": 45.84,
+			"maxMs": 67.5,
+			"timesMs": [
+				46.64,
+				45.9,
+				67.5,
+				62.28,
+				45.84
+			]
+		}
+	},
+	"zip": {
+		"topic": "bench-topic-1",
+		"tests": 16,
+		"withAnswers": true,
+		"readDelayMs": 0,
+		"runs": 5,
+		"warmupRunsExcluded": 1,
+		"queries": 5,
+		"reads": 2233,
+		"readBytes": 22874267,
+		"maxConcurrentReads": 123,
+		"archiveBytes": 22904940,
+		"receiverPeakBytes": 16384,
+		"arrayBuffersPeakDeltaBytes": {
+			"median": 10604775,
+			"max": 10956769,
+			"runs": [
+				10901568,
+				10604775,
+				10956769,
+				10578548,
+				10160304
+			]
+		},
+		"arrayBuffersBaselineBytes": [
+			40210923,
+			40731595,
+			40731595,
+			40731595,
+			40731595
+		],
+		"medianMs": 407.13,
+		"minMs": 402.63,
+		"maxMs": 487.72,
+		"timesMs": [
+			487.72,
+			402.63,
+			433.88,
+			404.36,
+			407.13
+		]
+	}
+}
