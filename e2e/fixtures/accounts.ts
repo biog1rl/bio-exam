@@ -34,8 +34,18 @@ export type SeedTest = {
 	title: string
 	topic?: string
 	published: boolean
+	timeLimitMinutes?: number
+	photoUploadWindowMinutes?: number
 	assignedTo: string[]
 	questions: SeedQuestion[]
+}
+
+export type SeedSession = {
+	id: string
+	test: string
+	student: string
+	startedMinutesAgo: number
+	draft: Record<string, string>
 }
 
 export type SeedGroup = {
@@ -48,6 +58,7 @@ export type SeedProject = {
 	accounts: SeedAccount[]
 	tests: SeedTest[]
 	groups?: SeedGroup[]
+	sessions?: SeedSession[]
 }
 
 export type SeedTopic = {

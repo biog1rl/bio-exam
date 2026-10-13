@@ -11,7 +11,7 @@
  * хранилище — промпт каждого вопроса через модуль содержимого.
  * Попытки блока attempts создаются командами startAttemptSession и submitSession модуля сессии попытки,
  * проверенные дополнительно проходят через materializeAttemptOutcome.
- * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n> notifications=<n>
+ * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n> notifications=<n> sessions=<n>
  */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -36,6 +36,8 @@ type SeedTest = {
 	title: string
 	topic?: string
 	published: boolean
+	timeLimitMinutes?: number
+	photoUploadWindowMinutes?: number
 	assignedTo: string[]
 	questions: SeedQuestion[]
 }
@@ -45,6 +47,14 @@ type SeedAttempt = {
 	student: string
 	answers: Record<string, string>
 	grade?: Record<string, number>
+}
+
+type SeedSession = {
+	id: string
+	test: string
+	student: string
+	startedMinutesAgo: number
+	draft: Record<string, string>
 }
 
 type SeedNotification = { recipient: string; kind: string; testTitles?: string[] }
@@ -67,6 +77,7 @@ type SeedFile = {
 			tests: SeedTest[]
 			groups?: SeedGroup[]
 			attempts?: SeedAttempt[]
+			sessions?: SeedSession[]
 			notifications?: SeedNotification[]
 		}
 	>
@@ -117,8 +128,19 @@ async function main(): Promise<void> {
 	const { ROLE_KEYS } = await import('@bio-exam/rbac')
 	const bcrypt = (await import('bcryptjs')).default
 	const { db, pgPool } = await import('../db/index.js')
-	const { answerKeys, questions, roles, studentGroups, testAssignments, tests, topics, userGroups, userRoles, users } =
-		await import('../db/schema.js')
+	const {
+		answerKeys,
+		questions,
+		roles,
+		studentGroups,
+		testAssignments,
+		testSessions,
+		tests,
+		topics,
+		userGroups,
+		userRoles,
+		users,
+	} = await import('../db/schema.js')
 	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
 	const { syncQuestionDerived, writeContentFiles } = await import('../services/question-content/index.js')
 	const { setGroupOwner, setTopicTeachers } = await import('../services/access-policy/index.js')
@@ -237,6 +259,12 @@ async function main(): Promise<void> {
 							slug: seedTestItem.slug,
 							title: seedTestItem.title,
 							isPublished: seedTestItem.published,
+							...(seedTestItem.timeLimitMinutes === undefined
+								? {}
+								: { timeLimitMinutes: seedTestItem.timeLimitMinutes }),
+							...(seedTestItem.photoUploadWindowMinutes === undefined
+								? {}
+								: { photoUploadWindowMinutes: seedTestItem.photoUploadWindowMinutes }),
 							showCorrectAnswer: true,
 							version: seedTestItem.published ? 1 : 0,
 							order: order++,
@@ -353,6 +381,29 @@ async function main(): Promise<void> {
 			}
 		}
 
+		let sessionCount = 0
+		for (const project of projects) {
+			for (const seedSession of project.sessions ?? []) {
+				const testRow = result.testRows.get(seedSession.test)
+				if (!testRow) throw new Error(`seed session: unknown test ${seedSession.test}`)
+				const userId = result.userIds.get(seedSession.student)
+				if (!userId) throw new Error(`seed session: unknown student ${seedSession.student}`)
+				const draftAnswers = Object.fromEntries(
+					Object.entries(seedSession.draft).map(([key, value]) => [questionIdOf(seedSession.test, key), value])
+				)
+				const now = Date.now()
+				await db.insert(testSessions).values({
+					id: seedSession.id,
+					testId: testRow.id,
+					userId,
+					startedAt: new Date(now - seedSession.startedMinutesAgo * 60_000),
+					draftAnswers,
+					draftUpdatedAt: new Date(now - Math.max(seedSession.startedMinutesAgo - 1, 0) * 60_000),
+				})
+				sessionCount++
+			}
+		}
+
 		let notificationCount = 0
 		for (const project of projects) {
 			const inputs = (project.notifications ?? []).flatMap((seedNotification) => {
@@ -378,7 +429,7 @@ async function main(): Promise<void> {
 		}
 
 		console.log(
-			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount} notifications=${notificationCount}`
+			`e2e-seed: users=${result.users} tests=${result.tests} questions=${result.questions} prompts=${planned.size} attempts=${attemptCount} notifications=${notificationCount} sessions=${sessionCount}`
 		)
 	} finally {
 		await pgPool.end()

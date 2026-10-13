@@ -1,6 +1,6 @@
 ---
 name: bio-exam-api
-description: Факты Express API bio-exam (app/server/src, packages/exam-core). Применять перед правкой маршрутов и сервисов сервера - доступ к тесту, теме, группе, пользователю или попытке, роли и зона учителя (zone.all, закреплённые разделы, свои группы, назначения), вход и сессии, старт и сдача попытки, содержимое вопросов и файлы хранилища, контракт exam-core, тесты известных дефектов.
+description: Факты Express API bio-exam (app/server/src, packages/exam-core). Применять перед правкой маршрутов и сервисов сервера - доступ к тесту, теме, группе, пользователю или попытке, роли и зона учителя (zone.all, закреплённые разделы, свои группы, назначения), вход и сессии, старт и сдача попытки, финализация по дедлайну и окно для фото, фоновые задачи и остановка сервера, содержимое вопросов и файлы хранилища, контракт exam-core, тесты известных дефектов.
 ---
 
 # bio-exam api
@@ -38,7 +38,12 @@ Express владеет данными и политикой доступа (`doc
 
 ## Попытка теста
 
-- `app/server/src/services/attempt-sessions`: доступ к попытке (`checkAttemptAccess`, `findVisibleTest`), старт и черновик сессии (`startAttemptSession`, `saveSessionDraft`), сдача (`precheckSubmit`, `submitAttempt`, `closeExpiredSession`).
+- `app/server/src/services/attempt-sessions` (вход `index.ts`): доступ (`checkAttemptAccess`, `findVisibleTest`, `findVisibleTestBySlug`, `isAssignedOrPrivileged`, `visibleTestsFilter`); команды `startAttemptSession(pair)`, `saveSessionDraft(pair, sessionId, draft)`, `submitSession(pair, request)` (`commands.ts`) сами решают, когда финализировать просроченную сессию, и отвечают исходом словаря `SessionOutcome` (`outcome.ts`); финализация `finalizeSessionByDeadline(sessionId, owner?)`, `findSessionsDueForFinalization`, `closeStaleOpenSessions` (`deadline.ts`); окно фото `photoUploadWindow`, `uploadWindowRefusal`, `uploadWindowState` (`upload-window.ts`); `databaseNow`, `DEADLINE_FINALIZE_MAX_AGE_HOURS` (`sessions.ts`). Шаги `precheckSubmit`, `submitAttempt`, `closeSessionAsExpired` внутренние (`submit.ts`), в `index.ts` их нет.
+- Маршрут переводит исход в HTTP одной функцией `sendSessionOutcome(res, route, outcome, viewer)` в `app/server/src/routes/tests/public.ts` (`route`: `start`, `draft`, `fate`, `submit`); новый исход добавляется в словарь и в эту функцию, а не в обработчик.
+- Просроченная сессия теста с лимитом сдаётся сервером по черновику: `finalizeSessionByDeadline`, источник `deadline`, `submitted_at` - конец таймера (`started_at` плюс лимит), пустой черновик закрывает сессию `expired` без попытки. Давность (D-21): сдаются только сессии, у которых дедлайн плюс льгота прошли не раньше `DEADLINE_FINALIZE_MAX_AGE_HOURS` (24 ч), более давние закрываются `expired`, `draft_answers` остаётся. Просрочку везде считает `sessionExpired(limit, marginSeconds)` из `sessions.ts` - ленивые пути, задача и давность берут одну формулу.
+- Ошибка данных при финализации закрывает сессию `expired` и пишется в лог; временная ошибка базы (`isTransientDbError` из `app/server/src/lib/db-errors.ts`) пробрасывается и повторяется. Ленивая финализация идёт на `/start`, PATCH черновика, `/submit` и чтении судьбы.
+- Судьба сессии: `GET /api/tests/public/tests/:id/sessions/:sessionId` отдаёт `open | submitted | expired` по `SessionFateSchema`. Ответ `/submit` после серверной сдачи - 409 `ATTEMPT_ALREADY_SUBMITTED` с `submitSource: 'deadline'`, `uploadClosesAt`, `serverNow`, `attempt`; одно тело «сдано» для судьбы и 409 строит `submittedBody`.
+- Окно фото: `tests.photo_upload_window_minutes` (0-120, по умолчанию 15), `test_attempts.upload_closes_at` считает база в той же вставке, что попытку. `photoUploadWindow` решает на `clock_timestamp()` базы и рассчитана на вызов из транзакции маршрута фото после `FOR UPDATE` сессии (маршрутов фото пока нет); отказ - 422 `UPLOAD_WINDOW_CLOSED` или `UPLOAD_WINDOW_NONE`.
 - `app/server/src/services/scored-attempt`: оценка (`scoreSubmission`), хранимые факты, чтение результата (`readAttemptView`, `readAdminAttemptView`) и вид попытки (`buildAttemptView`); он же отвечает за итог попытки.
 - Итог считает `computeAttemptOutcome` и `projectionOf` из `packages/exam-core/src/outcome.ts`: статус проверки `none`, `pending` (есть открытый вопрос без оценки, итог `NULL`) или `graded`. Проекцию пишет единственный писатель `materializeAttemptOutcome` (`app/server/src/services/scored-attempt/outcome.ts`), хранение проекции сверяет с пересчётом `reconcileOutcomes` там же.
 - Читатели берут поля результата только через `attemptResultColumns` (Drizzle) и `attemptResultSql` (сырой SQL с алиасом) из `app/server/src/services/scored-attempt/columns.ts`, не из фактовых столбцов. Агрегаты (средний балл, «пройдено», график) условием `review_status <> 'pending'` явно исключают попытки на проверке.
@@ -58,6 +63,13 @@ Express владеет данными и политикой доступа (`doc
 - Таблица видов - `kinds.ts`: на вид запись с текстом строки и обработчиком `open`. Неизвестный вид показывается как «Новое уведомление», его `open` отвечает `NO_ACCESS`. Новый вид - запись в `kinds.ts` и производитель в транзакции причины.
 - Маршруты `app/server/src/routes/notifications.ts`: `GET /api/notifications` (курсор, `limit` до 50), `GET /api/notifications/unread-count`, `POST /api/notifications/read-all`, `POST /api/notifications/:id/read`, `GET /api/notifications/:id/open`. Все читают и меняют только события текущего пользователя (`ownedBy` в `read.ts`).
 - `open` отмечает событие прочитанным и заново проверяет доступ: обработчик вида в `kinds.ts` вызывает `checkAttemptAccess` из `attempt-sessions`, а `canReadTest(req, testId)` ему передаёт маршрут. Ответ - `{ href }` или 403 `{ error: 'NO_ACCESS' }` без данных объекта.
+
+## Фоновые задачи
+
+- Модуль `app/server/src/services/background-jobs`: `createBackgroundJobs({ log })` отдаёт `register`, `start`, `stop`, `runNow`, `names`. Прогон держит замок `pg_try_advisory_xact_lock(11011, hashtext(имя))` в отдельной транзакции, работа идёт другими соединениями пула; занятый замок - отчёт `{ skipped: 'locked' }`.
+- Стартуют задачи только из `app/server/src/index.ts`, в колбэке `listen`; тест или скрипт запускает задачу через `runNow` или `yarn workspace @bio-exam/server jobs:run <имя>` (код 75 - замок занят, 1 - неизвестное имя).
+- Задачи (`jobs.ts`): `finalize-deadlines` раз в 30 с, батч 50, запас 60 с после льготы, давность 24 ч, предел прогона 20 с, память сбоев 10 мин; отчёт `{ stale, due, finalized, expired, other, failed, timeBounded }`. `reconcile-outcomes` только по `runNow`, чинит проекцию попыток со статусом `none`.
+- Остановка: `createShutdown` в `app/server/src/lib/shutdown.ts` - прекращает приём соединений, ждёт запросы и задачи до `SHUTDOWN_DRAIN_MS` (25 с), затем закрывает пул; повторный сигнал завершает процесс кодом 1.
 
 ## Маршруты тестов
 

@@ -102,6 +102,12 @@
 					"role": "user",
 					"name": "Ученик уведомлений desktop",
 					"storageState": true
+				},
+				{
+					"login": "deadline-student-desktop",
+					"role": "user",
+					"name": "Ученик дедлайна desktop",
+					"storageState": true
 				}
 			],
 			"tests": [
@@ -554,6 +560,30 @@
 							"prompt": "Опишите, как свет превращается в химическую энергию."
 						}
 					]
+				},
+				{
+					"slug": "deadline-timed-desktop",
+					"title": "Дедлайн с окном для фото (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"timeLimitMinutes": 5,
+					"photoUploadWindowMinutes": 120,
+					"assignedTo": ["deadline-student-desktop"],
+					"questions": [
+						{
+							"key": "dt-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется органоид, в котором происходит фотосинтез?",
+							"correct": "хлоропласт"
+						},
+						{
+							"key": "dt-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Опишите, как свет превращается в химическую энергию."
+						}
+					]
 				}
 			],
 			"groups": [
@@ -579,6 +609,18 @@
 					},
 					"grade": {
 						"rg-open": 2
+					}
+				}
+			],
+			"sessions": [
+				{
+					"id": "3f1d9c52-7a40-4b6e-9d21-5c8e0a7b1d01",
+					"test": "deadline-timed-desktop",
+					"student": "deadline-student-desktop",
+					"startedMinutesAgo": 10,
+					"draft": {
+						"dt-text": "хлоропласт",
+						"dt-open": "Свет поглощает хлорофилл, и энергия уходит в синтез АТФ."
 					}
 				}
 			],
@@ -669,6 +711,12 @@
 					"login": "notify-student-mobile",
 					"role": "user",
 					"name": "Ученик уведомлений mobile",
+					"storageState": true
+				},
+				{
+					"login": "deadline-student-mobile",
+					"role": "user",
+					"name": "Ученик дедлайна mobile",
 					"storageState": true
 				}
 			],
@@ -1122,6 +1170,30 @@
 							"prompt": "Опишите, как свет превращается в химическую энергию."
 						}
 					]
+				},
+				{
+					"slug": "deadline-timed-mobile",
+					"title": "Дедлайн с окном для фото (mobile)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"timeLimitMinutes": 5,
+					"photoUploadWindowMinutes": 120,
+					"assignedTo": ["deadline-student-mobile"],
+					"questions": [
+						{
+							"key": "dt-text",
+							"template": "short_text",
+							"type": "short_answer",
+							"prompt": "Как называется органоид, в котором происходит фотосинтез?",
+							"correct": "хлоропласт"
+						},
+						{
+							"key": "dt-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Опишите, как свет превращается в химическую энергию."
+						}
+					]
 				}
 			],
 			"groups": [
@@ -1147,6 +1219,18 @@
 					},
 					"grade": {
 						"rg-open": 2
+					}
+				}
+			],
+			"sessions": [
+				{
+					"id": "3f1d9c52-7a40-4b6e-9d21-5c8e0a7b1d02",
+					"test": "deadline-timed-mobile",
+					"student": "deadline-student-mobile",
+					"startedMinutesAgo": 10,
+					"draft": {
+						"dt-text": "хлоропласт",
+						"dt-open": "Свет поглощает хлорофилл, и энергия уходит в синтез АТФ."
 					}
 				}
 			],
