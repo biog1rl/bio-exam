@@ -1,9 +1,12 @@
-import type { SaveAttemptDraftRequest } from '@bio-exam/exam-core'
+import type { SaveAttemptDraftRequest, SubmitAttemptRequest } from '@bio-exam/exam-core'
 
+import { scoreSubmission } from '../scored-attempt/index.js'
 import { finalizeSessionByDeadline } from './deadline.js'
 import { draftAnswerRule } from './draft-answers.js'
+import { explanationReaderFor } from './explanations.js'
 import { ownerOf, type AttemptPair, type SessionOutcomeOf, type SettledOutcome } from './outcome.js'
 import { openOrStartSession, writeSessionDraft } from './sessions.js'
+import { precheckSubmit, submitAttempt } from './submit.js'
 
 export async function startAttemptSession(pair: AttemptPair): Promise<SessionOutcomeOf<'open'>> {
 	const owner = ownerOf(pair)
@@ -38,4 +41,45 @@ export async function saveSessionDraft(
 	})
 	if (written.kind === 'saved') return written
 	return finalizeSessionByDeadline(sessionId, owner)
+}
+
+export async function submitSession(
+	pair: AttemptPair,
+	request: SubmitAttemptRequest
+): Promise<
+	SessionOutcomeOf<
+		'accepted' | 'finalized' | 'submitted' | 'expired' | 'superseded' | 'not_found' | 'answers_invalid' | 'no_questions'
+	>
+> {
+	const owner = ownerOf(pair)
+	const { sessionId, clientAttemptId, answers, telemetry } = request
+	const precheck = await precheckSubmit(owner, { sessionId, clientAttemptId }, pair.test.timeLimitMinutes)
+	if (precheck.kind === 'past_deadline') {
+		const finalized = await finalizeSessionByDeadline(sessionId, owner)
+		if (finalized.kind !== 'open') return finalized
+	} else if (precheck.kind !== 'writable') {
+		return precheck
+	}
+
+	const scored = await scoreSubmission({
+		testId: pair.test.id,
+		answers,
+		passingScore: pair.test.passingScore,
+		readExplanation: explanationReaderFor(pair.test),
+	})
+	if (!scored.ok) {
+		if (scored.reason === 'no_questions') return { kind: 'no_questions' }
+		return { kind: 'answers_invalid', violation: scored.violation }
+	}
+
+	return submitAttempt({
+		owner,
+		sessionId,
+		clientAttemptId,
+		answers,
+		telemetry,
+		scored,
+		test: pair.test,
+		source: 'client',
+	})
 }

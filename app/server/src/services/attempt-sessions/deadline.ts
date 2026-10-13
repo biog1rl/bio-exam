@@ -17,15 +17,13 @@ import {
 	sessionFilter,
 	toSessionInfo,
 } from './sessions.js'
-import { closeSessionAsExpired, submitAttempt, type SubmitAttemptOutcome } from './submit.js'
+import { closeSessionAsExpired, submitAttempt, type DraftChanged } from './submit.js'
 
 export const DEADLINE_CLIENT_ATTEMPT_PREFIX = 'deadline:'
 
 export const FINALIZE_SETTLE_SECONDS = 60
 
 const MAX_DRAFT_ROUNDS = 3
-
-type DraftChanged = { kind: 'draft_changed' }
 
 function isDraftChanged(value: unknown): value is DraftChanged {
 	return typeof value === 'object' && value !== null && (value as { kind?: unknown }).kind === 'draft_changed'
@@ -72,20 +70,6 @@ async function scorableAnswers(
 	return kept
 }
 
-function outcomeOfSubmit(outcome: Exclude<SubmitAttemptOutcome, { kind: 'draft_changed' }>): SettledOutcome {
-	switch (outcome.kind) {
-		case 'created':
-		case 'replayed':
-			return { kind: 'finalized', attemptId: outcome.attemptId }
-		case 'conflict':
-			return { kind: 'submitted', attemptId: outcome.attemptId }
-		case 'closed':
-			return outcome.reason === 'superseded' ? { kind: 'superseded' } : { kind: 'expired' }
-		case 'not_found':
-			return { kind: 'not_found' }
-	}
-}
-
 async function finalizeDraft(sessionId: string, session: DeadlineSession): Promise<SettledOutcome | DraftChanged> {
 	const answers = await scorableAnswers(sessionId, session.testId, session.draftAnswers)
 	if (Object.keys(answers).length === 0) {
@@ -108,29 +92,17 @@ async function finalizeDraft(sessionId: string, session: DeadlineSession): Promi
 	}
 
 	const outcome = await submitAttempt({
-		testId: session.testId,
-		userId: session.userId,
-		testSessionId: sessionId,
+		owner: { testId: session.testId, userId: session.userId },
+		sessionId,
 		clientAttemptId: deadlineClientAttemptId(sessionId),
 		answers,
-		scored: {
-			results: scored.facts,
-			resultsVersion: 2,
-			earnedPoints: scored.earnedPoints,
-			totalPoints: scored.totalPoints,
-			scorePercentage: scored.scorePercentage,
-			passed: scored.passed,
-			outcome: scored.outcome,
-			passingScore: scored.passingScore,
-		},
+		scored,
+		test: session,
 		source: 'deadline',
-		timeLimitMinutes: session.timeLimitMinutes,
-		uploadWindowMinutes: session.photoUploadWindowMinutes,
-		hasOpenQuestion: scored.facts.some((fact) => fact.template === 'open'),
 		expectedDraft: session.draftAnswers,
 	})
-	if (outcome.kind === 'draft_changed') return outcome
-	return outcomeOfSubmit(outcome)
+	if (outcome.kind === 'accepted') return { kind: 'finalized', attemptId: outcome.attemptId }
+	return outcome
 }
 
 async function finalizeOnce(

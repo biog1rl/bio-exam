@@ -6,6 +6,7 @@ import {
 	addQuestion,
 	assignTest,
 	createAttemptTest,
+	insertOpenQuestion,
 	saveDraft,
 	seedAttemptWorld,
 	seedStudent,
@@ -18,6 +19,7 @@ import { startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 type AttemptSessionsModule = typeof import('./index.js')
 type DraftAnswersModule = typeof import('./draft-answers.js')
 type DeadlineModule = typeof import('./deadline.js')
+type BackgroundJobsModule = typeof import('../background-jobs/index.js')
 
 type Prepared = { testId: string; sessionId: string; userId: string; questionId: string }
 
@@ -26,6 +28,7 @@ let world: AttemptWorld
 let attemptSessions: AttemptSessionsModule
 let draftAnswers: DraftAnswersModule
 let deadline: DeadlineModule
+let backgroundJobs: BackgroundJobsModule
 let students = 0
 
 beforeAll(async () => {
@@ -34,6 +37,7 @@ beforeAll(async () => {
 	attemptSessions = await import('./index.js')
 	draftAnswers = await import('./draft-answers.js')
 	deadline = await import('./deadline.js')
+	backgroundJobs = await import('../background-jobs/index.js')
 }, 60_000)
 
 afterAll(async () => {
@@ -143,6 +147,88 @@ describe('startAttemptSession', () => {
 			[prepared.sessionId]
 		)
 		assert.equal(attempts.rows[0]?.count, 0)
+	})
+})
+
+async function attemptsOf(sessionId: string) {
+	const result = await ctx.pgPool.query<{
+		id: string
+		submit_source: string
+		submitted_at: Date
+		upload_closes_at: Date | null
+	}>('SELECT id, submit_source, submitted_at, upload_closes_at FROM test_attempts WHERE session_id = $1', [sessionId])
+	return result.rows
+}
+
+describe('submitSession', () => {
+	test('тест без вопросов: no_questions, попытки нет', async () => {
+		const prepared = await prepareSession({ timeLimitMinutes: 10 })
+		await ctx.pgPool.query('DELETE FROM questions WHERE test_id = $1', [prepared.testId])
+		const test = await attemptSessions.findVisibleTest(prepared.testId)
+		assert.ok(test)
+
+		const outcome = await attemptSessions.submitSession(
+			{ test, userId: prepared.userId },
+			{ sessionId: prepared.sessionId, clientAttemptId: crypto.randomUUID(), answers: {} }
+		)
+
+		assert.deepEqual(outcome, { kind: 'no_questions' })
+		assert.equal((await attemptsOf(prepared.sessionId)).length, 0)
+	})
+
+	test('тест с открытым вопросом: accepted, upload_closes_at через 15 минут после сдачи', async () => {
+		const prepared = await prepareSession({ timeLimitMinutes: null })
+		await insertOpenQuestion(ctx, prepared.testId, { order: 1 })
+		const test = await attemptSessions.findVisibleTest(prepared.testId)
+		assert.ok(test)
+		assert.equal(test.photoUploadWindowMinutes, 15)
+
+		const outcome = await attemptSessions.submitSession(
+			{ test, userId: prepared.userId },
+			{
+				sessionId: prepared.sessionId,
+				clientAttemptId: crypto.randomUUID(),
+				answers: { [prepared.questionId]: 'Митоз' },
+			}
+		)
+
+		assert.equal(outcome.kind, 'accepted', JSON.stringify(outcome))
+		const [attempt] = await attemptsOf(prepared.sessionId)
+		assert.ok(attempt)
+		assert.ok(attempt.upload_closes_at, 'upload_closes_at')
+		const expected = attempt.submitted_at.getTime() + 15 * 60_000
+		assert.ok(Math.abs(attempt.upload_closes_at.getTime() - expected) <= 1000)
+	})
+
+	test('гонка трёх путей финализации без HTTP: пять раундов, одна попытка deadline', async () => {
+		const jobs = backgroundJobs.createBackgroundJobs({ log: { info: () => {}, warn: () => {}, error: () => {} } })
+
+		for (let round = 0; round < 5; round++) {
+			const prepared = await prepareSession({ timeLimitMinutes: 10, answer: 'Митоз', startedAgo: '20 minutes' })
+			const test = await attemptSessions.findVisibleTest(prepared.testId)
+			assert.ok(test)
+			const owner = { testId: prepared.testId, userId: prepared.userId }
+
+			const [finalized, submitted] = await Promise.all([
+				attemptSessions.finalizeSessionByDeadline(prepared.sessionId, owner),
+				attemptSessions.submitSession(
+					{ test, userId: prepared.userId },
+					{
+						sessionId: prepared.sessionId,
+						clientAttemptId: crypto.randomUUID(),
+						answers: { [prepared.questionId]: 'Мейоз' },
+					}
+				),
+				jobs.runNow(backgroundJobs.FINALIZE_DEADLINES_JOB),
+			])
+
+			const attempts = await attemptsOf(prepared.sessionId)
+			assert.equal(attempts.length, 1, `round ${round}`)
+			assert.equal(attempts[0]!.submit_source, 'deadline', `round ${round}`)
+			const attemptId = attempts[0]!.id
+			assert.deepEqual(finalized, { kind: 'finalized', attemptId }, `round ${round}`)
+			assert.deepEqual(submitted, { kind: 'finalized', attemptId }, `round ${round}`)
+		}
 	})
 })
 

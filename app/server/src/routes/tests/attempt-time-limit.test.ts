@@ -21,7 +21,8 @@ import { startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 
 type Student = { id: string; cookie: string }
 
-type AttemptSessionsModule = typeof import('../../services/attempt-sessions/index.js')
+type SubmitStepsModule = typeof import('../../services/attempt-sessions/submit.js')
+type ScoredSubmission = import('../../services/attempt-sessions/submit.js').ScoredSubmission
 
 type SessionRow = {
 	closed_at: Date | null
@@ -33,7 +34,7 @@ type SessionRow = {
 let ctx: AuthApp
 let world: AttemptWorld
 let student: Student
-let attemptSessions: AttemptSessionsModule
+let submitSteps: SubmitStepsModule
 
 async function prepareTest(slug: string, timeLimitMinutes: number | null) {
 	const testId = await createAttemptTest(world, { slug, timeLimitMinutes })
@@ -79,7 +80,7 @@ beforeAll(async () => {
 	ctx = await startAuthApp('test_attempt_time')
 	world = await seedAttemptWorld(ctx, 'time')
 	student = await seedStudent(world, 'time_student')
-	attemptSessions = await import('../../services/attempt-sessions/index.js')
+	submitSteps = await import('../../services/attempt-sessions/submit.js')
 }, 60_000)
 
 afterAll(async () => {
@@ -300,15 +301,15 @@ function submitEnvelope(sessionId: string, questionId: string) {
 	return { sessionId, clientAttemptId: crypto.randomUUID(), answers: { [questionId]: 'b' } }
 }
 
-const STUB_FACTS = {
-	results: [],
-	resultsVersion: 1 as const,
+const STUB_SCORED: ScoredSubmission = {
+	ok: true,
+	facts: [],
+	outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: 60 }),
+	passingScore: 60,
 	earnedPoints: 0,
 	totalPoints: 0,
 	scorePercentage: 0,
 	passed: false,
-	outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: 60 }),
-	passingScore: 60,
 }
 
 describe('лимит времени на submit', () => {
@@ -364,25 +365,24 @@ describe('между предпроверкой и транзакцией submit
 		await shiftStartedAt(ctx, sessionId, '11 minutes')
 		const clientAttemptId = crypto.randomUUID()
 
-		const precheck = await attemptSessions.precheckSubmit({
-			testId,
-			userId: student.id,
-			testSessionId: sessionId,
-			clientAttemptId,
-			timeLimitMinutes: 10,
-		})
-		assert.deepEqual(precheck, { kind: 'open' })
+		const precheck = await submitSteps.precheckSubmit(
+			{ testId, userId: student.id },
+			{ sessionId, clientAttemptId },
+			10
+		)
+		assert.deepEqual(precheck, { kind: 'writable' })
 
 		await shiftStartedAt(ctx, sessionId, '13 minutes')
-		const outcome = await attemptSessions.submitAttempt({
-			testId,
-			userId: student.id,
-			testSessionId: sessionId,
+		const outcome = await submitSteps.submitAttempt({
+			owner: { testId, userId: student.id },
+			sessionId,
 			clientAttemptId,
 			answers: {},
-			scored: STUB_FACTS,
+			scored: STUB_SCORED,
+			test: { timeLimitMinutes: 10, photoUploadWindowMinutes: 15 },
+			source: 'client',
 		})
-		assert.equal(outcome.kind, 'created')
+		assert.equal(outcome.kind, 'accepted')
 		assert.equal(await attemptsOf(testId), 1)
 		const row = await sessionRow(sessionId)
 		assert.notEqual(row.submitted_at, null)
@@ -390,32 +390,31 @@ describe('между предпроверкой и транзакцией submit
 		assert.equal(row.close_reason, null)
 	})
 
-	test('сессия, закрытая как expired параллельным /start до транзакции, даёт closed с reason expired', async () => {
+	test('сессия, закрытая как expired параллельным /start до транзакции, даёт expired', async () => {
 		const { testId } = await prepareTest('time-between-closed', 10)
 		const sessionId = await startOk(testId)
 		const clientAttemptId = crypto.randomUUID()
 
-		const precheck = await attemptSessions.precheckSubmit({
-			testId,
-			userId: student.id,
-			testSessionId: sessionId,
-			clientAttemptId,
-			timeLimitMinutes: 10,
-		})
-		assert.deepEqual(precheck, { kind: 'open' })
+		const precheck = await submitSteps.precheckSubmit(
+			{ testId, userId: student.id },
+			{ sessionId, clientAttemptId },
+			10
+		)
+		assert.deepEqual(precheck, { kind: 'writable' })
 
 		await ctx.pgPool.query("UPDATE test_sessions SET closed_at = now(), close_reason = 'expired' WHERE id = $1", [
 			sessionId,
 		])
-		const outcome = await attemptSessions.submitAttempt({
-			testId,
-			userId: student.id,
-			testSessionId: sessionId,
+		const outcome = await submitSteps.submitAttempt({
+			owner: { testId, userId: student.id },
+			sessionId,
 			clientAttemptId,
 			answers: {},
-			scored: STUB_FACTS,
+			scored: STUB_SCORED,
+			test: { timeLimitMinutes: 10, photoUploadWindowMinutes: 15 },
+			source: 'client',
 		})
-		assert.deepEqual(outcome, { kind: 'closed', reason: 'expired' })
+		assert.deepEqual(outcome, { kind: 'expired' })
 		assert.equal(await attemptsOf(testId), 0)
 		const row = await sessionRow(sessionId)
 		assert.equal(row.submitted_at, null)

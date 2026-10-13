@@ -20,7 +20,8 @@ import { startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
 type BackgroundJobsModule = typeof import('./index.js')
 type AttemptSessionsModule = typeof import('../attempt-sessions/index.js')
 type Job = import('./index.js').Job
-type ScoredAttemptFacts = import('../attempt-sessions/index.js').ScoredAttemptFacts
+type SubmitStepsModule = typeof import('../attempt-sessions/submit.js')
+type ScoredSubmission = import('../attempt-sessions/submit.js').ScoredSubmission
 
 type Prepared = { testId: string; sessionId: string; userId: string }
 
@@ -38,19 +39,20 @@ let ctx: AuthApp
 let world: AttemptWorld
 let jobsModule: BackgroundJobsModule
 let attemptSessions: AttemptSessionsModule
+let submitSteps: SubmitStepsModule
 let students = 0
 
 const quietLog = { info: () => {}, error: () => {}, warn: () => {} }
 
-const STUB_SCORED: ScoredAttemptFacts = {
-	results: [],
-	resultsVersion: 2,
+const STUB_SCORED: ScoredSubmission = {
+	ok: true,
+	facts: [],
+	outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: null }),
+	passingScore: null,
 	earnedPoints: 0,
 	totalPoints: 0,
 	scorePercentage: 0,
 	passed: false,
-	outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: null }),
-	passingScore: null,
 }
 
 beforeAll(async () => {
@@ -58,6 +60,7 @@ beforeAll(async () => {
 	world = await seedAttemptWorld(ctx, 'jobs')
 	jobsModule = await import('./index.js')
 	attemptSessions = await import('../attempt-sessions/index.js')
+	submitSteps = await import('../attempt-sessions/submit.js')
 }, 60_000)
 
 afterAll(async () => {
@@ -337,14 +340,12 @@ describe('запас после льготы', () => {
 		await closeOtherOpenSessions()
 		const prepared = await prepareSession('11 minutes')
 		const clientAttemptId = crypto.randomUUID()
-		const precheck = await attemptSessions.precheckSubmit({
-			testId: prepared.testId,
-			userId: prepared.userId,
-			testSessionId: prepared.sessionId,
-			clientAttemptId,
-			timeLimitMinutes: 10,
-		})
-		assert.deepEqual(precheck, { kind: 'open' })
+		const precheck = await submitSteps.precheckSubmit(
+			{ testId: prepared.testId, userId: prepared.userId },
+			{ sessionId: prepared.sessionId, clientAttemptId },
+			10
+		)
+		assert.deepEqual(precheck, { kind: 'writable' })
 
 		await shiftStartedAt(ctx, prepared.sessionId, '12 minutes 30 seconds')
 		const jobs = jobsModule.createBackgroundJobs({ log: quietLog })
@@ -353,16 +354,16 @@ describe('запас после льготы', () => {
 		assert.equal(untouched.submitted_at, null)
 		assert.equal(untouched.closed_at, null)
 
-		const outcome = await attemptSessions.submitAttempt({
-			testId: prepared.testId,
-			userId: prepared.userId,
-			testSessionId: prepared.sessionId,
+		const outcome = await submitSteps.submitAttempt({
+			owner: { testId: prepared.testId, userId: prepared.userId },
+			sessionId: prepared.sessionId,
 			clientAttemptId,
 			answers: {},
 			scored: STUB_SCORED,
-			timeLimitMinutes: 10,
+			test: { timeLimitMinutes: 10, photoUploadWindowMinutes: 15 },
+			source: 'client',
 		})
-		assert.equal(outcome.kind, 'created')
+		assert.equal(outcome.kind, 'accepted')
 		assert.deepEqual(await attemptSourcesOf([prepared.sessionId]), ['client'])
 	})
 })

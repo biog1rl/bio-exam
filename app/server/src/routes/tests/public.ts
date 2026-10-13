@@ -21,23 +21,15 @@ import {
 	checkAttemptAccess,
 	databaseNow,
 	findVisibleTestBySlug,
-	explanationReaderFor,
 	finalizeSessionByDeadline,
 	isAssignedOrPrivileged,
-	precheckSubmit,
 	saveSessionDraft,
 	startAttemptSession,
-	submitAttempt,
+	submitSession,
 	visibleTestsFilter,
-	type SessionCloseReason,
 	type SessionOutcome,
 } from '../../services/attempt-sessions/index.js'
-import {
-	attemptResultColumns,
-	readAttemptView,
-	scoreSubmission,
-	type AttemptViewer,
-} from '../../services/scored-attempt/index.js'
+import { attemptResultColumns, readAttemptView, type AttemptViewer } from '../../services/scored-attempt/index.js'
 import { readStudentQuestions } from './student-question-view.js'
 
 const router = Router()
@@ -80,15 +72,6 @@ async function submittedBody(attemptId: string, viewer: AttemptViewer) {
 	}
 }
 
-async function sendAlreadySubmitted(res: Response, attemptId: string | null, viewer: AttemptViewer) {
-	if (attemptId === null) return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
-	const body = await submittedBody(attemptId, viewer)
-	if (body.submitSource !== 'deadline') {
-		return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId })
-	}
-	return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, ...body })
-}
-
 function studentViewer(test: { showCorrectAnswer: boolean }): AttemptViewer {
 	return { kind: 'student', showCorrectAnswer: test.showCorrectAnswer }
 }
@@ -97,7 +80,7 @@ function draftNotSaved(res: Response) {
 	return res.status(404).json({ error: 'Session not found or already submitted' })
 }
 
-type OutcomeRoute = 'start' | 'draft' | 'fate'
+type OutcomeRoute = 'start' | 'draft' | 'fate' | 'submit'
 
 async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: SessionOutcome, viewer: AttemptViewer) {
 	switch (outcome.kind) {
@@ -113,6 +96,9 @@ async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: S
 		case 'saved':
 			if (route === 'draft') return res.json({ ok: true, serverNow: outcome.serverNow })
 			break
+		case 'accepted':
+			if (route === 'submit') return res.json(await readAttemptView(outcome.attemptId, viewer))
+			break
 		case 'finalized':
 		case 'submitted':
 			if (route === 'draft') return draftNotSaved(res)
@@ -120,30 +106,34 @@ async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: S
 				if (outcome.attemptId === null) return sessionNotFound(res)
 				return res.json({ state: 'submitted', ...(await submittedBody(outcome.attemptId, viewer)) })
 			}
+			if (route === 'submit') {
+				if (outcome.kind === 'submitted') {
+					return res.status(409).json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, attemptId: outcome.attemptId })
+				}
+				return res
+					.status(409)
+					.json({ error: SUBMIT_ERROR_CODES.alreadySubmitted, ...(await submittedBody(outcome.attemptId, viewer)) })
+			}
 			break
 		case 'expired':
 			if (route === 'draft') return draftNotSaved(res)
 			if (route === 'fate') return res.json({ state: 'expired', serverNow: await databaseNow() })
+			if (route === 'submit') return res.status(422).json({ error: SUBMIT_ERROR_CODES.timeExpired })
 			break
 		case 'superseded':
 		case 'not_found':
 			if (route === 'draft') return draftNotSaved(res)
-			if (route === 'fate') return sessionNotFound(res)
+			if (route === 'fate' || route === 'submit') return sessionNotFound(res)
 			break
 		case 'answers_invalid':
 			if (route === 'draft') return res.status(400).json(answersInvalidBody(outcome.violation))
+			if (route === 'submit') return res.status(422).json(answersInvalidBody(outcome.violation))
+			break
+		case 'no_questions':
+			if (route === 'submit') return res.status(404).json({ error: 'Questions not found' })
 			break
 	}
 	throw new Error(`sendSessionOutcome: outcome ${outcome.kind} is not expected on ${route}`)
-}
-
-function timeExpired(res: Response) {
-	return res.status(422).json({ error: SUBMIT_ERROR_CODES.timeExpired })
-}
-
-function rejectClosedSession(res: Response, reason: SessionCloseReason) {
-	if (reason === 'superseded') return sessionNotFound(res)
-	return timeExpired(res)
 }
 
 async function withTransientDbRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
@@ -469,73 +459,11 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 			return res.status(400).json({ error: 'Bad request', details: parsed.error.flatten() })
 		}
 
-		const { sessionId, clientAttemptId, answers: userAnswers, telemetry } = parsed.data
-
 		const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
 		if (!access.ok) return denyAttemptAccess(res, access.status)
-		const test = access.test
-		const viewer = studentViewer(test)
 
-		const precheck = await precheckSubmit({
-			testId,
-			userId,
-			testSessionId: sessionId,
-			clientAttemptId,
-			timeLimitMinutes: test.timeLimitMinutes,
-		})
-		if (precheck.kind === 'not_found') return sessionNotFound(res)
-		if (precheck.kind === 'submitted') {
-			if (precheck.sameClient && precheck.attemptId) return res.json(await readAttemptView(precheck.attemptId, viewer))
-			return sendAlreadySubmitted(res, precheck.attemptId, viewer)
-		}
-		if (precheck.kind === 'closed') return rejectClosedSession(res, precheck.reason)
-		if (precheck.kind === 'expired') {
-			const finalized = await finalizeSessionByDeadline(sessionId, { testId, userId })
-			if (finalized.kind === 'finalized' || finalized.kind === 'submitted') {
-				return sendAlreadySubmitted(res, finalized.attemptId, viewer)
-			}
-			if (finalized.kind === 'expired') return timeExpired(res)
-			if (finalized.kind === 'superseded' || finalized.kind === 'not_found') return sessionNotFound(res)
-		}
-
-		const scored = await scoreSubmission({
-			testId,
-			answers: userAnswers,
-			passingScore: test.passingScore,
-			readExplanation: explanationReaderFor({ id: testId, slug: test.slug, topicSlug: test.topicSlug }),
-		})
-		if (!scored.ok) {
-			if (scored.reason === 'no_questions') return res.status(404).json({ error: 'Questions not found' })
-			return res.status(422).json(answersInvalidBody(scored.violation))
-		}
-		const { facts, outcome: scoredOutcome, passingScore, earnedPoints, totalPoints, scorePercentage, passed } = scored
-
-		const outcome = await submitAttempt({
-			testId,
-			userId,
-			testSessionId: sessionId,
-			clientAttemptId,
-			answers: userAnswers,
-			telemetry,
-			scored: {
-				results: facts,
-				resultsVersion: 2,
-				earnedPoints,
-				totalPoints,
-				scorePercentage,
-				passed,
-				outcome: scoredOutcome,
-				passingScore,
-			},
-			timeLimitMinutes: test.timeLimitMinutes,
-			uploadWindowMinutes: test.photoUploadWindowMinutes,
-			hasOpenQuestion: facts.some((fact) => fact.template === 'open'),
-		})
-		if (outcome.kind === 'not_found') return sessionNotFound(res)
-		if (outcome.kind === 'conflict') return sendAlreadySubmitted(res, outcome.attemptId, viewer)
-		if (outcome.kind === 'closed') return rejectClosedSession(res, outcome.reason)
-		if (outcome.kind === 'draft_changed') throw new Error('submitAttempt: draft_changed without expectedDraft')
-		res.json(await readAttemptView(outcome.attemptId, viewer))
+		const outcome = await submitSession({ test: access.test, userId }, parsed.data)
+		return sendSessionOutcome(res, 'submit', outcome, studentViewer(access.test))
 	} catch (e) {
 		next(e)
 	}

@@ -9,7 +9,7 @@
  * Пишет в базу роли, активных пользователей (bcrypt-хэши тестового пароля), роли
  * пользователей, тему, тесты, вопросы, ключи ответов версии 1 и назначения, а в локальное
  * хранилище — промпт каждого вопроса через модуль содержимого.
- * Попытки блока attempts создаются тем же путём, что сдача по HTTP (scoreSubmission и submitAttempt),
+ * Попытки блока attempts создаются командами startAttemptSession и submitSession модуля сессии попытки,
  * проверенные дополнительно проходят через materializeAttemptOutcome.
  * Печатает одну строку счётчиков: e2e-seed: users=<n> tests=<n> questions=<n> prompts=<n> attempts=<n> notifications=<n>
  */
@@ -122,8 +122,8 @@ async function main(): Promise<void> {
 	const { getBuiltinQuestionTypeByKey } = await import('@bio-exam/exam-core')
 	const { syncQuestionDerived, writeContentFiles } = await import('../services/question-content/index.js')
 	const { setGroupOwner, setTopicTeachers } = await import('../services/access-policy/index.js')
-	const { startAttemptSession, submitAttempt } = await import('../services/attempt-sessions/index.js')
-	const { materializeAttemptOutcome, scoreSubmission } = await import('../services/scored-attempt/index.js')
+	const { startAttemptSession, submitSession } = await import('../services/attempt-sessions/index.js')
+	const { materializeAttemptOutcome } = await import('../services/scored-attempt/index.js')
 	const { recordNotifications } = await import('../services/notifications/index.js')
 
 	try {
@@ -332,32 +332,14 @@ async function main(): Promise<void> {
 					Object.entries(seedAttempt.answers).map(([key, value]) => [questionIdOf(seedAttempt.test, key), value])
 				)
 
-				const { session } = await startAttemptSession({ test: testRow, userId })
-				const scored = await scoreSubmission({
-					testId: testRow.id,
-					answers,
-					passingScore: testRow.passingScore,
-					readExplanation: async () => null,
-				})
-				if (!scored.ok) throw new Error(`seed attempt ${seedAttempt.test}: scoring failed (${scored.reason})`)
-				const submitted = await submitAttempt({
-					testId: testRow.id,
-					userId,
-					testSessionId: session.sessionId,
+				const pair = { test: testRow, userId }
+				const { session } = await startAttemptSession(pair)
+				const submitted = await submitSession(pair, {
+					sessionId: session.sessionId,
 					clientAttemptId: crypto.randomUUID(),
 					answers,
-					scored: {
-						results: scored.facts,
-						resultsVersion: 2,
-						earnedPoints: scored.earnedPoints,
-						totalPoints: scored.totalPoints,
-						scorePercentage: scored.scorePercentage,
-						passed: scored.passed,
-						outcome: scored.outcome,
-						passingScore: scored.passingScore,
-					},
 				})
-				if (submitted.kind !== 'created') {
+				if (submitted.kind !== 'accepted') {
 					throw new Error(`seed attempt ${seedAttempt.test}: submit returned ${submitted.kind}`)
 				}
 

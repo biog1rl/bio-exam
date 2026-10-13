@@ -25,12 +25,26 @@ type Student = { id: string; cookie: string }
 
 type AttemptSessionsModule = typeof import('../../services/attempt-sessions/index.js')
 type BackgroundJobsModule = typeof import('../../services/background-jobs/index.js')
+type SubmitStepsModule = typeof import('../../services/attempt-sessions/submit.js')
+type ScoredSubmission = import('../../services/attempt-sessions/submit.js').ScoredSubmission
 
 let ctx: AuthApp
 let world: AttemptWorld
 let student: Student
 let attemptSessions: AttemptSessionsModule
 let backgroundJobs: BackgroundJobsModule
+let submitSteps: SubmitStepsModule
+
+const STUB_SCORED: ScoredSubmission = {
+	ok: true,
+	facts: [],
+	outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: null }),
+	passingScore: null,
+	earnedPoints: 0,
+	totalPoints: 0,
+	scorePercentage: 0,
+	passed: false,
+}
 
 beforeAll(async () => {
 	ctx = await startAuthApp('test_attempt_deadline', { env: { PG_POOL_MAX: '12' } })
@@ -38,6 +52,7 @@ beforeAll(async () => {
 	student = await seedStudent(world, 'deadline_student')
 	attemptSessions = await import('../../services/attempt-sessions/index.js')
 	backgroundJobs = await import('../../services/background-jobs/index.js')
+	submitSteps = await import('../../services/attempt-sessions/submit.js')
 }, 60_000)
 
 afterAll(async () => {
@@ -403,24 +418,14 @@ describe('финализация по дедлайну', () => {
 
 	test('submitAttempt с устаревшим expectedDraft возвращает draft_changed и ничего не пишет', async () => {
 		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
-		const outcome = await attemptSessions.submitAttempt({
-			testId: prepared.testId,
-			userId: prepared.owner.id,
-			testSessionId: prepared.sessionId,
+		const outcome = await submitSteps.submitAttempt({
+			owner: { testId: prepared.testId, userId: prepared.owner.id },
+			sessionId: prepared.sessionId,
 			clientAttemptId: `deadline:${prepared.sessionId}`,
 			answers: {},
-			scored: {
-				results: [],
-				resultsVersion: 2,
-				earnedPoints: 0,
-				totalPoints: 0,
-				scorePercentage: 0,
-				passed: false,
-				outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: null }),
-				passingScore: null,
-			},
+			scored: STUB_SCORED,
+			test: { timeLimitMinutes: 10, photoUploadWindowMinutes: 15 },
 			source: 'deadline',
-			timeLimitMinutes: 10,
 			expectedDraft: { [prepared.questionIds[0]!]: 'Мейоз' },
 		})
 		assert.deepEqual(outcome, { kind: 'draft_changed' })
@@ -657,28 +662,19 @@ describe('тела ответов 200 и 409', () => {
 		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
 	})
 
-	test('клиентская сдача после финализации той же сессии получает conflict с попыткой deadline', async () => {
+	test('клиентская сдача после финализации той же сессии получает finalized с попыткой deadline', async () => {
 		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
 		const attemptId = finalizedId(await attemptSessions.finalizeSessionByDeadline(prepared.sessionId))
-		const outcome = await attemptSessions.submitAttempt({
-			testId: prepared.testId,
-			userId: prepared.owner.id,
-			testSessionId: prepared.sessionId,
+		const outcome = await submitSteps.submitAttempt({
+			owner: { testId: prepared.testId, userId: prepared.owner.id },
+			sessionId: prepared.sessionId,
 			clientAttemptId: crypto.randomUUID(),
 			answers: {},
-			scored: {
-				results: [],
-				resultsVersion: 2,
-				earnedPoints: 0,
-				totalPoints: 0,
-				scorePercentage: 0,
-				passed: false,
-				outcome: computeAttemptOutcome({ facts: [], finalScores: new Map(), passingScore: null }),
-				passingScore: null,
-			},
-			timeLimitMinutes: 10,
+			scored: STUB_SCORED,
+			test: { timeLimitMinutes: 10, photoUploadWindowMinutes: 15 },
+			source: 'client',
 		})
-		assert.deepEqual(outcome, { kind: 'conflict', attemptId })
+		assert.deepEqual(outcome, { kind: 'finalized', attemptId })
 		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
 	})
 })
