@@ -38,17 +38,17 @@
 - `yarn verify` green is the precondition for closing every phase (ADR-0003). Changes to the modules `scored-attempt`, `attempt-sessions`, `storage`, `question-content`, `exam-core` and the client `attempt-lifecycle` start with characterization tests through the module interface.
 - Code intelligence is CodeGraph (`codegraph impact` before editing a symbol, `codegraph affected` over the diff). Agents never commit; the user pushes. Agents have no access to the server or to real devices, so steps marked "User steps" are done by the user from the written runbook or instruction.
 - Line numbers in `research/*.md` date from commit `1962edd`; re-verify them when planning each phase.
-- Phases 9 and 10 can run in parallel; Phases 16 and 18 can run in parallel; everything else runs in numeric order (11 before 12 is fixed). Readers (Phase 9) are strictly done before attempts "на проверке" can exist (Phase 14).
+- Phases 9 and 10 can run in parallel; Phases 16 and 18 can run in parallel; everything else runs in numeric order (11 before 12 is fixed; Phase 14.1 is ordered after 14 by the user, 2026-10-13). Readers (Phase 9) are strictly done before attempts "на проверке" can exist (Phase 14).
 
 **Phase Numbering:** continues from v1.0 (last phase 8, inserted 07.1). Decimal phases (9.1, 9.2) are urgent insertions.
 
 - [x] **Phase 9: Result foundation and readers** - Stored result = immutable auto facts + appended reviews; one shared function; every reader handles "на проверке" (completed 2026-10-06)
 - [x] **Phase 10: Notification journal and bell** - General notification-event journal, header bell with unread count and deep links, first real producer (completed 2026-10-06)
 - [ ] **Phase 11: Deadline finalisation, upload window and background jobs** - Server closes a timed attempt at the deadline without losing text; one rule for the photo window; background jobs, clean shutdown, one refresh per browser (research phase)
-- [ ] **Phase 11.1: Question type catalog: one module and one scoring rule** (INSERTED) - One server module owns the question type catalog and the per-test override; the unused second scoring rule is removed (ADR-0008)
 - [ ] **Phase 12: Photos on session authentication** - Up to 5 processed photos per open answer from the computer, private delivery, bounded memory (research phase)
 - [ ] **Phase 13: Token, QR and phone page** - Sign-in-free phone upload page through a scoped link and a QR code in the runner (research phase)
 - [ ] **Phase 14: Authoring and submitting open questions** - Open question editor, text and photo answers, "на проверке" after submit
+- [ ] **Phase 14.1: Question type catalog: one module and one scoring rule** (INSERTED) - One server module owns the question type catalog and the per-test override; the unused second scoring rule is removed (ADR-0008)
 - [ ] **Phase 15: Review** - Queue, review screen, score 0–3, return for correction, history, final result, notifications (research phase)
 - [ ] **Phase 16: Retention and cleanup** - One-year photo retention that keeps review records, orphan cleanup, honest wording
 - [ ] **Phase 17: Enabling and acceptance** - e2e of the full loop, real-phone acceptance, deploy protection for open windows, then the type is offered to authors
@@ -219,26 +219,6 @@ Plans:
 
 **UI hint**: yes
 
-### Phase 11.1: Question type catalog: one module and one scoring rule (INSERTED)
-
-**Goal**: Scoring has one source of rules (the question type catalog with its per-test override), and one server module owns the catalog, its invariants, the per-test override and the recomputation of question points, so the web pages send only the field they edit.
-**Depends on**: Phase 11
-**Requirements**: none (architecture work recorded in `docs/adr/0008-question-type-catalog-module.md`)
-**Success Criteria** (what must be TRUE):
-  1. `TestScoringRules`, the `/scoring-rules/*` routes, `scoringRules` in the test settings PATCH and `scoringRules`/`useGlobalScoringRules` in the topic export are gone; a new migration drops `tests.scoring_rules` and `test_scoring_settings`; scores of existing attempts and questions do not change (characterization test written before the change).
-  2. `services/question-type-catalog/` owns creating, editing and disabling a type, the catalog invariants, template/metric compatibility (400 on write, default rule on read), the per-test type resolver and the per-test override; route handlers only parse the request and map the outcome to HTTP.
-  3. The per-test override is written with PATCH: an absent field keeps its value, `null` clears it, a row with no values is deleted by the server; DELETE resets the override; PUT is removed. The question type page sends only title and disabled flag, the scoring page only the formula, and an edit on one page no longer overwrites a field saved by the other.
-  4. A catalog or override change and the recomputation of `questions.points` run in one transaction with one UPDATE, limited to the affected tests (a type edit: tests with questions of that type; an override: one test).
-  5. The scoring page address is built and parsed by one module in the style of `app/web/lib/tests/attempts-url.ts`, with encoded segments and a table-driven unit test.
-
-**Folded-in work**: candidate 2 of the 2026-10-06 architecture review (removal of the unused scoring rules) is done first, inside this phase, because it removes two of the six recomputation callers the module would otherwise absorb.
-**Planning**: `/gsd-plan-phase 11.1 --tdd` — the catalog module is built test-first through its interface: one test per behaviour in the success criteria and ADR-0008, edge cases only when they already happened, are a stated invariant, or guard data or access.
-**User steps (outside the repository)**: the release carries a migration, so the server does not update by itself (`AUTO_MIGRATIONS=0`); run `deploy.sh` by hand outside an exam window, with the pre-deploy dump.
-**Plans**: 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 11.1 to break down)
-
 ### Phase 12: Photos on session authentication
 
 **Goal**: A signed-in student can attach up to 5 processed photos to an open answer from the computer, only the owner and permitted reviewers can see them, and uploads cannot exhaust the API container's memory.
@@ -291,6 +271,26 @@ Plans:
 **User steps (outside the repository)**: none.
 **Plans**: TBD
 **UI hint**: yes
+
+### Phase 14.1: Question type catalog: one module and one scoring rule (INSERTED)
+
+**Goal**: Scoring has one source of rules (the question type catalog with its per-test override), and one server module owns the catalog, its invariants, the per-test override and the recomputation of question points, so the web pages send only the field they edit.
+**Depends on**: Phase 14
+**Requirements**: none (architecture work recorded in `docs/adr/0008-question-type-catalog-module.md`)
+**Success Criteria** (what must be TRUE):
+  1. `TestScoringRules`, the `/scoring-rules/*` routes, `scoringRules` in the test settings PATCH and `scoringRules`/`useGlobalScoringRules` in the topic export are gone; a new migration drops `tests.scoring_rules` and `test_scoring_settings`; scores of existing attempts and questions do not change (characterization test written before the change).
+  2. `services/question-type-catalog/` owns creating, editing and disabling a type, the catalog invariants, template/metric compatibility (400 on write, default rule on read), the per-test type resolver and the per-test override; route handlers only parse the request and map the outcome to HTTP.
+  3. The per-test override is written with PATCH: an absent field keeps its value, `null` clears it, a row with no values is deleted by the server; DELETE resets the override; PUT is removed. The question type page sends only title and disabled flag, the scoring page only the formula, and an edit on one page no longer overwrites a field saved by the other.
+  4. A catalog or override change and the recomputation of `questions.points` run in one transaction with one UPDATE, limited to the affected tests (a type edit: tests with questions of that type; an override: one test).
+  5. The scoring page address is built and parsed by one module in the style of `app/web/lib/tests/attempts-url.ts`, with encoded segments and a table-driven unit test.
+
+**Folded-in work**: candidate 2 of the 2026-10-06 architecture review (removal of the unused scoring rules) is done first, inside this phase, because it removes two of the six recomputation callers the module would otherwise absorb.
+**Planning**: `/gsd-plan-phase 14.1 --tdd` — the catalog module is built test-first through its interface: one test per behaviour in the success criteria and ADR-0008, edge cases only when they already happened, are a stated invariant, or guard data or access.
+**User steps (outside the repository)**: the release carries a migration, so the server does not update by itself (`AUTO_MIGRATIONS=0`); run `deploy.sh` by hand outside an exam window, with the pre-deploy dump.
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 14.1 to break down)
 
 ### Phase 15: Review
 
@@ -379,7 +379,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19. Phases 9 and 10 can run in parallel, as can 16 and 18. Phase 19 is last and not before 2026-10-12.
+Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 14.1 → 15 → 16 → 17 → 18 → 19. Phases 9 and 10 can run in parallel, as can 16 and 18. Phase 19 is last and not before 2026-10-12.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -389,6 +389,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 15 →
 | 12. Photos on session authentication | 0/TBD | Not started | - |
 | 13. Token, QR and phone page | 0/TBD | Not started | - |
 | 14. Authoring and submitting open questions | 0/TBD | Not started | - |
+| 14.1. Question type catalog: one module and one scoring rule | 0/TBD | Not started | - |
 | 15. Review | 0/TBD | Not started | - |
 | 16. Retention and cleanup | 0/TBD | Not started | - |
 | 17. Enabling and acceptance | 0/TBD | Not started | - |

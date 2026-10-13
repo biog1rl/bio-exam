@@ -192,7 +192,7 @@ Locked ADR decisions D-01...D-05 and resolved sequencing decisions D-06...D-14 a
 
 - 2026-10-05: future milestone v4.0 «Чаты учителя и ученика» added after v3.0 and before PWA (now v5.0); not part of v1.0. Research and decisions: `.planning/research/chat/SUMMARY.md`; requirements CHAT-01...CHAT-12. The v3.0 cabinet notification store is a shared notification-event journal.
 - 2026-10-06: v3.0 roadmap created: Phases 9–19 (result foundation, notification journal, deadline finalisation and background jobs, photos, QR and phone page, open question authoring and submit, review, retention, enabling and acceptance, remaining v1.0 tech debt, Supabase and Vercel removal). Traceability filled in `REQUIREMENTS.md` (74/74).
-- Phase 11.1 inserted after Phase 11: Question type catalog: one module and one scoring rule (ADR-0008, architecture review 2026-10-06); plan after Phase 11 closes
+- Phase 14.1 (was 11.1) ordered after Phase 14 on 2026-10-13: Question type catalog: one module and one scoring rule (ADR-0008, architecture review 2026-10-06); plan after Phase 14 closes
 
 ### Pending Todos
 
