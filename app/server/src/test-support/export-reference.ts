@@ -125,6 +125,7 @@ function settingsEntry(test: TestRow, globalRules: TestScoringRules): Buffer {
 		scoringRules: resolveEffectiveScoringRules({ globalRules, testOverrideRules: test.scoringRules }),
 		useGlobalScoringRules: test.scoringRules == null,
 		timeLimitMinutes: test.timeLimitMinutes,
+		photoUploadWindowMinutes: test.photoUploadWindowMinutes,
 		redThresholdMinutes: test.redThresholdMinutes,
 		warningThresholdMinutes: test.warningThresholdMinutes,
 		passingScore: test.passingScore,

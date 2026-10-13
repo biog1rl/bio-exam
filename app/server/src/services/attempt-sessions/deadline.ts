@@ -4,7 +4,6 @@ import { and, asc, eq, exists, isNotNull, isNull, not, notInArray, sql } from 'd
 
 import { db } from '../../db/index.js'
 import { testAttempts, testSessions, tests, topics } from '../../db/schema.js'
-import { isTransientDbError } from '../../lib/db-errors.js'
 import { logger } from '../../lib/logger.js'
 import { scoreSubmission } from '../scored-attempt/index.js'
 import { draftAnswerRule } from './draft-answers.js'
@@ -24,6 +23,13 @@ export const DEADLINE_CLIENT_ATTEMPT_PREFIX = 'deadline:'
 export const FINALIZE_SETTLE_SECONDS = 60
 
 const MAX_DRAFT_ROUNDS = 3
+
+class DeadlineDataError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = 'DeadlineDataError'
+	}
+}
 
 function isDraftChanged(value: unknown): value is DraftChanged {
 	return typeof value === 'object' && value !== null && (value as { kind?: unknown }).kind === 'draft_changed'
@@ -88,7 +94,7 @@ async function finalizeDraft(sessionId: string, session: DeadlineSession): Promi
 			await closeSessionAsExpired(sessionId)
 			return { kind: 'expired' }
 		}
-		throw new Error(`finalizeSessionByDeadline: answers invalid after filter in session ${sessionId}`)
+		throw new DeadlineDataError(`finalizeSessionByDeadline: answers invalid after filter in session ${sessionId}`)
 	}
 
 	const outcome = await submitAttempt({
@@ -158,8 +164,8 @@ async function finalizeOnce(
 	try {
 		return await finalizeDraft(sessionId, row)
 	} catch (error) {
-		if (isTransientDbError(error)) throw error
-		logger.error({ sessionId, err: error }, 'deadline finalize failed, session closed as expired')
+		if (!(error instanceof DeadlineDataError)) throw error
+		logger.error({ sessionId, err: error }, 'deadline finalize hit a data error, session closed as expired')
 		await closeSessionAsExpired(sessionId)
 		return { kind: 'expired' }
 	}

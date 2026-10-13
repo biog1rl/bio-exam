@@ -811,6 +811,25 @@ describe('окно для фото в настройках теста', () => {
 		}
 	)
 
+	test('PATCH окна от значения по умолчанию: 121 → 400, 0 и 120 → 200, тело без поля значение не меняет', async () => {
+		const topicId = await createTopic(nextSlug('topic'))
+		const testId = await saveWithWindow(topicId, {})
+		const slug = (await testSlugInDb(testId)) as string
+		assert.equal(await windowOf(testId), 15)
+
+		const steps: Array<{ window: Json; status: number; expected: number }> = [
+			{ window: { photoUploadWindowMinutes: 121 }, status: 400, expected: 15 },
+			{ window: { photoUploadWindowMinutes: 0 }, status: 200, expected: 0 },
+			{ window: { photoUploadWindowMinutes: 120 }, status: 200, expected: 120 },
+			{ window: {}, status: 200, expected: 120 },
+		]
+		for (const { window, status, expected } of steps) {
+			const reply = await patchSettings(testId, settingsBody(topicId, slug, window))
+			assert.equal(reply.status, status, JSON.stringify(reply.body))
+			assert.equal(await windowOf(testId), expected, JSON.stringify(window))
+		}
+	})
+
 	test('CHECK базы совпадает с пределом exam-core', async () => {
 		const topicId = await createTopic(nextSlug('topic'))
 		const testId = await saveWithWindow(topicId, {})

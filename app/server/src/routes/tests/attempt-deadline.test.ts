@@ -20,6 +20,7 @@ import {
 	type AttemptWorld,
 } from '../../test-support/attempt-world.js'
 import { call, startAuthApp, type AuthApp } from '../../test-support/auth-app.js'
+import { memoryStorage } from '../../test-support/storage.js'
 
 type Student = { id: string; cookie: string }
 
@@ -352,6 +353,37 @@ describe('финализация по дедлайну', () => {
 		const draftBefore = (await sessionStateOf(prepared.sessionId)).draft_answers
 		assert.deepEqual(await attemptSessions.finalizeSessionByDeadline(prepared.sessionId), { kind: 'expired' })
 		await assertClosedWithoutAttempt(prepared, draftBefore)
+	})
+
+	test('сбой хранилища при чтении пояснения не закрывает сессию, повторная финализация даёт одну попытку deadline', async () => {
+		const prepared = await prepareDeadlineSession({ timeLimitMinutes: 10, startedAgo: '13 minutes' })
+		const questionId = prepared.questionIds[0]!
+		await ctx.pgPool.query('UPDATE questions SET explanation_path = $2 WHERE id = $1', [
+			questionId,
+			`topics/deadline-outage/questions/${questionId}/explanation.md`,
+		])
+		const draftBefore = (await sessionStateOf(prepared.sessionId)).draft_answers
+		const mem = await memoryStorage()
+
+		mem.failOn({ op: 'read', prefix: 'topics' })
+		try {
+			await assert.rejects(attemptSessions.finalizeSessionByDeadline(prepared.sessionId), {
+				name: 'StorageUnavailableError',
+			})
+		} finally {
+			mem.clearFailures()
+		}
+		const state = await sessionStateOf(prepared.sessionId)
+		assert.equal(state.closed_at, null)
+		assert.equal(state.submitted_at, null)
+		assert.deepEqual(state.draft_answers, draftBefore)
+		assert.equal(await attemptsOfSession(prepared.sessionId), 0)
+
+		const attemptId = finalizedId(await attemptSessions.finalizeSessionByDeadline(prepared.sessionId))
+		const row = await attemptRowOf(ctx, attemptId)
+		assert.equal(row.submitSource, 'deadline')
+		assert.equal(row.clientAttemptId, `deadline:${prepared.sessionId}`)
+		assert.equal(await attemptsOfSession(prepared.sessionId), 1)
 	})
 
 	test('повторный вызов возвращает ту же попытку, вторая не создаётся', async () => {

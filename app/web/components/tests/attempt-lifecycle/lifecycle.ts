@@ -34,6 +34,7 @@ import {
 	applyStorageEffects,
 	attemptStorageKeys,
 	readCachedSession,
+	readUnsent,
 	writeCachedSession,
 	writeUnsent,
 	type CachedSession,
@@ -441,6 +442,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 	function applyServerSession(server: AttemptSession, cached: CachedSession | null): void {
 		const cachedSessionId = cached?.sessionId ?? null
 		applyStorageEffects(storage, keys, 'started')
+		unsent = null
 		carryReplacedText(readWal(storage, keys.wal, cachedSessionId), server.sessionId)
 		if (session?.sessionId !== server.sessionId) deadlinePassed = false
 		if (cached && cached.sessionId !== server.sessionId) {
@@ -693,6 +695,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		if (gen !== generation) return null
 		serverClock.observe(server.serverNow)
 		applyStorageEffects(storage, keys, 'started')
+		unsent = null
 		mergeServerDraft(server)
 		session = { sessionId: server.sessionId, startedAt: server.startedAt }
 		writeCachedSession(storage, keys.session, session)
@@ -1058,6 +1061,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			session = null
 			if (!cached) {
 				if (frozen) applyStorageEffects(storage, keys, 'fresh-start')
+				const stored = readUnsent(storage, keys.unsent, testId)
+				if (stored) unsent = { certain: stored.certain, entries: stored.entries }
 				loadLocal(null)
 				phase = timeLimitMinutes ? 'awaitingStart' : 'starting'
 				emit()

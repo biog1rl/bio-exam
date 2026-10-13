@@ -562,6 +562,9 @@ function AttemptRunner({
 							перезагрузке страницы.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{snapshot.unsent ? (
+						<UnsentTextNote compact entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
+					) : null}
 					<AlertDialogFooter>
 						<AlertDialogCancel onClick={() => window.history.back()}>Назад</AlertDialogCancel>
 						<AlertDialogAction onClick={() => void lifecycle.confirmStart()}>Начать</AlertDialogAction>

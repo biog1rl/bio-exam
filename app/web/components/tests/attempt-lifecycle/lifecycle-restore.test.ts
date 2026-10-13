@@ -513,6 +513,26 @@ describe('TIME-06: судьба сессии до /start', () => {
 		assert.equal(fakeApi.start.mock.calls.length, 0)
 	})
 
+	test('после «Ответ принят» перезагрузка: «Начать тест?» с пометкой из test-unsent-, старт нового прохождения её стирает', async () => {
+		vi.setSystemTime(IN_TIME)
+		const entries = [{ questionId: Q1, number: 1, text: 'набрано полностью' }]
+		const record = { v: 1, testId: TEST_ID, attemptId: ATTEMPT_ID, certain: true, entries }
+		const storage = memoryStorage({ [KEYS.unsent]: JSON.stringify(record) })
+		const fakeApi = fakeAttemptApi([sessionOf('s2', new Date(IN_TIME).toISOString())])
+		const { lifecycle } = setupLifecycle({ storage, api: fakeApi, timeLimitMinutes: LIMIT, textQuestionIds: [Q1] })
+		lifecycle.init()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'awaitingStart')
+		assert.deepEqual(lifecycle.getSnapshot().unsent, { certain: true, entries })
+		assert.deepEqual(readJson(storage, KEYS.unsent), record)
+
+		await lifecycle.confirmStart()
+		await settle()
+		assert.equal(lifecycle.getSnapshot().phase, 'active')
+		assert.equal(lifecycle.getSnapshot().unsent, null)
+		assert.equal(storage.data.has(KEYS.unsent), false)
+	})
+
 	test("submitted + 'client' → диалог «Попытка уже сдана», /start не вызван", async () => {
 		vi.setSystemTime(IN_TIME)
 		const storage = cachedStorage()

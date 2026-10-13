@@ -6,7 +6,7 @@ import {
 	ATTEMPT_WAL_KEY_PREFIX,
 } from './user-storage'
 import { detachWal, readWal } from './wal'
-import type { UnsentRecord } from './wal-reconcile'
+import type { UnsentEntry, UnsentRecord } from './wal-reconcile'
 
 export type AttemptStorageKeys = {
 	session: string
@@ -163,5 +163,26 @@ export function writeUnsent(storage: ClientAttemptStorage, key: string, record: 
 		return true
 	} catch {
 		return false
+	}
+}
+
+function isUnsentEntry(value: unknown): value is UnsentEntry {
+	if (!value || typeof value !== 'object') return false
+	const entry = value as Partial<UnsentEntry>
+	return typeof entry.questionId === 'string' && typeof entry.number === 'number' && typeof entry.text === 'string'
+}
+
+export function readUnsent(storage: ClientAttemptStorage, key: string, testId: string): UnsentRecord | null {
+	try {
+		const raw = storage.getItem(key)
+		if (!raw) return null
+		const parsed = JSON.parse(raw) as Partial<UnsentRecord> | null
+		if (!parsed || typeof parsed !== 'object' || parsed.v !== 1 || parsed.testId !== testId) return null
+		if (typeof parsed.certain !== 'boolean' || !Array.isArray(parsed.entries)) return null
+		if (parsed.entries.length === 0 || !parsed.entries.every(isUnsentEntry)) return null
+		const attemptId = typeof parsed.attemptId === 'string' ? parsed.attemptId : null
+		return { v: 1, testId, attemptId, certain: parsed.certain, entries: parsed.entries }
+	} catch {
+		return null
 	}
 }

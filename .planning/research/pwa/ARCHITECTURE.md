@@ -73,7 +73,7 @@
 | `app/web/lib/http/request.ts`, `scripts/web-requests-guards.test.mjs` | Вызовы API идут через типизированный слой запросов | Новые вызовы `/api/push/*` — функции в этом слое, не голый `fetch` |
 | `app/web/components/tests/attempt-lifecycle/storage-keys.ts` | Черновики попытки лежат в **`localStorage`** (ключи по `testId` и `userId`), не в IndexedDB | Очистка при выходе не должна стирать журнал ответов попытки (ядро продукта). Исходящая очередь чата v4.0 в IndexedDB должна быть ключована по `userId` и чиститься при выходе |
 | `e2e/playwright.config.ts` | `workers: 1`, проекты `setup`, `chromium-desktop`, `chromium-mobile`, web на `http://127.0.0.1` | `127.0.0.1` — защищённый контекст, сервис-воркер регистрируется. WebKit и Firefox в проекте нет |
-| Сервер (вне Git, `~/.claude/servers/bio-exam.md`) | Caddy: `/api/*` → `api:4000`, остальное → `web:3000`; Caddyfile, compose, `api.env`, `web.env` лежат в `/opt/bio-exam/deploy` вне Git; HTTP/3 выключен; выкатка `deploy.sh` пересоздаёт `api web`, не выкатывает при незавершённых попытках; фоновых задач и cron нет | Файлы сервера агент не меняет: правки Caddy и `api.env` — инструкции пользователю через `server-deploy`. Воркер будет первой фоновой задачей API |
+| Сервер (вне Git, `~/.claude/servers/bio-exam.md`) | Caddy: `/api/*` → `api:4000`, остальное → `web:3000`; Caddyfile, compose, `api.env`, `web.env` лежат в каталоге выкатки на сервере вне Git; HTTP/3 выключен; выкатка `deploy.sh` пересоздаёт `api web`, не выкатывает при незавершённых попытках; фоновых задач и cron нет | Файлы сервера агент не меняет: правки Caddy и `api.env` — инструкции пользователю через `server-deploy`. Воркер будет первой фоновой задачей API |
 
 ## 3. Новые и изменяемые компоненты
 
@@ -262,7 +262,7 @@ claim:  UPDATE ... SET lease_until = now()+60s, attempts = attempts+1
 ## 7. Сервис-воркер: сборка, раздача, обновление
 
 - **Файл:** рукописный `app/web/public/sw.js` на обычном JS, без бандлера. Область `/` (файл в корне). Регистрация: `navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })` из `PwaRegistrar` после `load`.
-- **Заголовки.** Основной источник — `app/web/next.config.ts` `headers()` для `/sw.js`: `Cache-Control: no-cache, no-store, must-revalidate`, `Content-Type: application/javascript; charset=utf-8`, `Content-Security-Policy: default-src 'self'; script-src 'self'` (так в гайде Next.js 16.3.8, M). Это в репозитории, проверяется e2e под `next start`. Страховка на сервере — строка Caddyfile, которую применяет пользователь (агент файлы сервера не трогает, `/opt/bio-exam/deploy/caddy/Caddyfile`, перечитать `caddy reload`):
+- **Заголовки.** Основной источник — `app/web/next.config.ts` `headers()` для `/sw.js`: `Cache-Control: no-cache, no-store, must-revalidate`, `Content-Type: application/javascript; charset=utf-8`, `Content-Security-Policy: default-src 'self'; script-src 'self'` (так в гайде Next.js 16.3.8, M). Это в репозитории, проверяется e2e под `next start`. Страховка на сервере — строка Caddyfile, которую применяет пользователь (агент файлы сервера не трогает, Caddyfile в каталоге выкатки на сервере, перечитать `caddy reload`):
 
   ```
   @sw path /sw.js

@@ -45,14 +45,15 @@ export function sessionFilter({
 	sessionId?: string
 	owner?: SessionOwner
 	open?: boolean
-}): SQL | undefined {
+}): SQL {
+	if (sessionId === undefined && owner === undefined) throw new Error('sessionFilter: sessionId or owner is required')
 	return and(
 		sessionId === undefined ? undefined : eq(testSessions.id, sessionId),
 		owner ? eq(testSessions.testId, owner.testId) : undefined,
 		owner ? eq(testSessions.userId, owner.userId) : undefined,
 		open ? isNull(testSessions.submittedAt) : undefined,
 		open ? isNull(testSessions.closedAt) : undefined
-	)
+	) as SQL
 }
 
 export async function closeSessionsAsExpired(
