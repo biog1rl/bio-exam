@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v3.0
 milestone_name: Открытые задания с фото и ручной проверкой
 current_phase: 12
-current_phase_name: Photos on session authentication
-status: planning
-stopped_at: Phase 11 complete, ready to plan Phase 12
-last_updated: "2026-10-13T15:57:07.122Z"
+current_phase_name: photos-on-session-authentication
+status: executing
+stopped_at: Phase 12 UI-SPEC approved, plans ready
+last_updated: "2026-10-16T04:13:48.279Z"
 last_activity: 2026-10-13
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
-state_head: 186f2f4da5e327186a5860b43347320d8de22e50
+state_head: a6766c696bb2d2a9b6d560def63313bf1567ff76
 progress:
   total_phases: 12
   completed_phases: 3
-  total_plans: 50
+  total_plans: 60
   completed_plans: 50
   percent: 25
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 
 ## Current Position
 
-Phase: 12 — Photos on session authentication
+Phase: 12 (photos-on-session-authentication) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-10-13 — Phase 11 complete, transitioned to Phase 12
 
 Progress: [███░░░░░░░] 25%
@@ -249,9 +249,9 @@ Items acknowledged and deferred at milestone close, most recent first. In v3.0 t
 
 ## Session Continuity
 
-Last session: 2026-10-06T16:29:50.306Z
-Stopped at: Phase 11 complete, ready to plan Phase 12
-Resume file: None
+Last session: 2026-10-16T04:13:48.168Z
+Stopped at: Phase 12 UI-SPEC approved, plans ready
+Resume file: .planning/phases/12-photos-on-session-authentication/12-UI-SPEC.md
 
 ## Operator Next Steps
 

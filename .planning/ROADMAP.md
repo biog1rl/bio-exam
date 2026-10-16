@@ -234,7 +234,31 @@ Plans:
 
 **Folded-in work**: the shared photo component also offers "Сделать фото" (camera) and "Выбрать из галереи" for the phone page of Phase 13; real-device behaviour is checked in Phases 13 and 17. The runner shows the photo block for a seeded open question here; authoring, text answer and submit come in Phase 14.
 **User steps (outside the repository)**: supply real iPhone and Android photo samples (large JPEG, HEIC) for the spike; decide the API container memory limit from the measurement; check that the Caddy request-body limit (20 MB in the server profile) stays above the upload limit.
-**Plans**: TBD
+**Plans**: 10 plans in 7 waves (lanes api and web)
+
+**Wave 1**
+- [ ] 12-01-PLAN.md — [api] one image-intake module (A1) and the memory spike through it (D-15), numbers and settings in ADR-0004
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 12-02-PLAN.md — [api] delete the dead `POST /api/tests/:id/assets` with its guard tests (A5, D-04)
+- [ ] 12-03-PLAN.md — [api] migration 0031 `answer_photos` and the photo contract in exam-core
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 12-04-PLAN.md — [api] multer refusals as 413/415/400 in one wrapper (A2, DEBT-01), broken window #3 waived
+- [ ] 12-05-PLAN.md — [api] who reads which storage space, `answers/` never through the shared proxy, ADR-0004 (A3, DEBT-07)
+- [ ] 12-06-PLAN.md — [web] photo API client, upload queue with retries, browser downscale, window refusal text
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 12-07-PLAN.md — [api] photos under the session: upload, list, delete; photo files removed on user deletion
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 12-08-PLAN.md — [api] photo delivery to the owner and permitted reviewers (`canReadAnswerPhoto`)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 12-09-PLAN.md — [web] photo block in the runner for the seeded open question, e2e
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 12-10-PLAN.md — [web] phase gates (full e2e, verify, CI build), skills, user steps
 **UI hint**: yes
 
 ### Phase 13: Token, QR and phone page
