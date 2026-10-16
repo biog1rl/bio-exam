@@ -160,6 +160,17 @@ describe('POST /api/users/avatar', () => {
 		assert.equal(meta.orientation, undefined)
 	})
 
+	test('кроп с углом больше полного оборота: 200 и квадрат 256 на 256', async () => {
+		const user = await account()
+		const reply = await postAvatar(user.jar, { ...CROP, cropRotation: '725' }, png())
+		assert.equal(reply.status, 200)
+		const cropped = mem.keys(`avatars/${user.id}`).find((key) => key.includes('_cropped'))
+		assert.ok(cropped)
+		const meta = await sharp(mem.get(cropped)?.data).metadata()
+		assert.equal(meta.width, 256)
+		assert.equal(meta.height, 256)
+	})
+
 	test('без файла у пользователя без аватара: 400 и текст про отсутствие аватара', async () => {
 		const user = await account()
 		const reply = await postAvatar(user.jar, CROP)

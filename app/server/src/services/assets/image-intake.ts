@@ -60,6 +60,7 @@ export type SlotLimiter = {
 
 export type ImageIntake = {
 	acceptImage(buffer: Buffer, profile: ImageProfile): Promise<AcceptedImage>
+	runImageTask<T>(task: () => Promise<T>): Promise<T>
 }
 
 const PHOTO_TYPES: ReadonlyMap<string, string> = new Map([
@@ -231,10 +232,17 @@ export function createImageIntake(options: { concurrency: number; queueLimit: nu
 		)
 	}
 
-	return { acceptImage }
+	function runImageTask<T>(task: () => Promise<T>): Promise<T> {
+		return limiter.run(task, { rejectWhenBusy: false })
+	}
+
+	return { acceptImage, runImageTask }
 }
 
-export const acceptImage: ImageIntake['acceptImage'] = createImageIntake({
+const intake = createImageIntake({
 	concurrency: IMAGE_INTAKE_CONCURRENCY,
 	queueLimit: IMAGE_INTAKE_QUEUE_LIMIT,
-}).acceptImage
+})
+
+export const acceptImage: ImageIntake['acceptImage'] = intake.acceptImage
+export const runImageTask: ImageIntake['runImageTask'] = intake.runImageTask

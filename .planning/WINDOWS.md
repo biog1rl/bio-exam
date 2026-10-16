@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
-waived_count: 1
-fixed_count: 3
+open_count: 4
+waived_count: 4
+fixed_count: 4
 total_count: 12
-last_updated: 2026-10-16T13:12:11.624Z
+last_updated: 2026-10-16T13:22:55.856Z
 ---
 
 # Broken Windows Ledger
@@ -22,11 +22,11 @@ last_updated: 2026-10-16T13:12:11.624Z
 | 5 | 12 | deviation | app/web/components/tests/answer-photos/PhotoBlock.tsx |  | Список форматов, тексты типа и литерал 422 фото ответа не из exam-core: отложено после исполнения, см. 12-ARCH-REVIEW.md (F3) | open |  | 2026-10-16T12:50:55.948Z |  |
 | 6 | 12 | deviation | app/server/src/services/assets/image-intake.ts |  | Размер файла не в профиле приёма, литералы 5 МБ в маршрутах: отложено после исполнения, см. 12-ARCH-REVIEW.md (F4) | open |  | 2026-10-16T12:50:56.036Z |  |
 | 7 | 12 | deviation | app/server/src/services/answer-photos/index.ts |  | Компенсация записанных объектов скопирована в пятый раз: отложено до фазы 16, см. 12-ARCH-REVIEW.md (F5) | open |  | 2026-10-16T12:50:56.127Z |  |
-| 8 | 12 | deviation | app/server/src/services/assets/avatars.ts |  | Кроп аватара (renderCrop, recropAvatar) вне ограничителя памяти sharp, rotate любым числом: отложено, см. 12-SECURITY.md флаг 2 | open |  | 2026-10-16T12:50:56.216Z |  |
+| 8 | 12 | deviation | app/server/src/services/assets/avatars.ts |  | Кроп аватара (renderCrop, recropAvatar) вне ограничителя памяти sharp, rotate любым числом: отложено, см. 12-SECURITY.md флаг 2 | fixed |  | 2026-10-16T12:50:56.216Z | 2026-10-16T13:22:55.562Z |
 | 9 | 12 | deviation | app/server/src/routes/tests/session-photos.ts |  | Число одновременных PUT фото не ограничено до очереди sharp, N x 10 МБ в памяти (WR-01): отложено, поправить строку ADR-0004 про 80 МБ, см. 12-REVIEW.md | fixed |  | 2026-10-16T12:50:56.305Z | 2026-10-16T13:12:11.624Z |
-| 10 | 12 | deviation | app/web/components/tests/answer-photos/upload-queue.ts |  | DELETE 404 у записи failed во время работы сервера над PUT оставляет фото (WR-02): отложено, см. 12-REVIEW.md | open |  | 2026-10-16T12:50:56.394Z |  |
-| 11 | 12 | deviation | app/web/components/tests/answer-photos/use-answer-photos.ts |  | Сдача теряет очередь фото кроме идущего запроса, UI-SPEC:303 и 12-09-SUMMARY:161 неточны (WR-03): передано в фазу 14, см. 12-REVIEW.md | open |  | 2026-10-16T12:50:56.484Z |  |
-| 12 | 12 | deviation | app/web/components/tests/answer-photos/PhotoBlock.tsx |  | У кнопки «Удалить» нет состояния «идёт удаление», на лимите «Добавить фото» гасится opacity-50 без замера контраста, не покрыты e2e скелетон, ошибка списка, ImageOff и отказ окна: передано в фазу 14, см. 12-UI-REVIEW.md | open |  | 2026-10-16T13:02:03.836Z |  |
+| 10 | 12 | deviation | app/web/components/tests/answer-photos/upload-queue.ts |  | DELETE 404 у записи failed во время работы сервера над PUT оставляет фото (WR-02): отложено, см. 12-REVIEW.md | waived | Недостижимо, пока тип open неактивен (D-19); узкая гонка через состояние failed; вернуться до включения типа open в фазе 17 | 2026-10-16T12:50:56.394Z | 2026-10-16T13:22:55.656Z |
+| 11 | 12 | deviation | app/web/components/tests/answer-photos/use-answer-photos.ts |  | Сдача теряет очередь фото кроме идущего запроса, UI-SPEC:303 и 12-09-SUMMARY:161 неточны (WR-03): передано в фазу 14, см. 12-REVIEW.md | waived | Передано в фазу 14: сдача с идущей загрузкой; тип open неактивен (D-19), поправить 12-UI-SPEC.md:303 и 12-09-SUMMARY.md:161 вместе с фазой 14 | 2026-10-16T12:50:56.484Z | 2026-10-16T13:22:55.760Z |
+| 12 | 12 | deviation | app/web/components/tests/answer-photos/PhotoBlock.tsx |  | У кнопки «Удалить» нет состояния «идёт удаление», на лимите «Добавить фото» гасится opacity-50 без замера контраста, не покрыты e2e скелетон, ошибка списка, ImageOff и отказ окна: передано в фазу 14, см. 12-UI-REVIEW.md | waived | Передано в фазу 14: блок фото правится там же; тип open неактивен (D-19) | 2026-10-16T13:02:03.836Z | 2026-10-16T13:22:55.856Z |
 
 ````json
 [
@@ -128,10 +128,10 @@ last_updated: 2026-10-16T13:12:11.624Z
     "file": "app/server/src/services/assets/avatars.ts",
     "line": null,
     "description": "Кроп аватара (renderCrop, recropAvatar) вне ограничителя памяти sharp, rotate любым числом: отложено, см. 12-SECURITY.md флаг 2",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-16T12:50:56.216Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:22:55.562Z",
     "milestone": "v3.0"
   },
   {
@@ -154,10 +154,10 @@ last_updated: 2026-10-16T13:12:11.624Z
     "file": "app/web/components/tests/answer-photos/upload-queue.ts",
     "line": null,
     "description": "DELETE 404 у записи failed во время работы сервера над PUT оставляет фото (WR-02): отложено, см. 12-REVIEW.md",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Недостижимо, пока тип open неактивен (D-19); узкая гонка через состояние failed; вернуться до включения типа open в фазе 17",
     "recorded_at": "2026-10-16T12:50:56.394Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:22:55.656Z",
     "milestone": "v3.0"
   },
   {
@@ -167,10 +167,10 @@ last_updated: 2026-10-16T13:12:11.624Z
     "file": "app/web/components/tests/answer-photos/use-answer-photos.ts",
     "line": null,
     "description": "Сдача теряет очередь фото кроме идущего запроса, UI-SPEC:303 и 12-09-SUMMARY:161 неточны (WR-03): передано в фазу 14, см. 12-REVIEW.md",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Передано в фазу 14: сдача с идущей загрузкой; тип open неактивен (D-19), поправить 12-UI-SPEC.md:303 и 12-09-SUMMARY.md:161 вместе с фазой 14",
     "recorded_at": "2026-10-16T12:50:56.484Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:22:55.760Z",
     "milestone": "v3.0"
   },
   {
@@ -180,10 +180,10 @@ last_updated: 2026-10-16T13:12:11.624Z
     "file": "app/web/components/tests/answer-photos/PhotoBlock.tsx",
     "line": null,
     "description": "У кнопки «Удалить» нет состояния «идёт удаление», на лимите «Добавить фото» гасится opacity-50 без замера контраста, не покрыты e2e скелетон, ошибка списка, ImageOff и отказ окна: передано в фазу 14, см. 12-UI-REVIEW.md",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Передано в фазу 14: блок фото правится там же; тип open неактивен (D-19)",
     "recorded_at": "2026-10-16T13:02:03.836Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:22:55.856Z",
     "milestone": "v3.0"
   }
 ]

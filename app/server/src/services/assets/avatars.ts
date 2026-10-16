@@ -7,7 +7,7 @@ import { users } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { storage } from '../storage/index.js'
 import { avatarUrl, ownStorageKey } from '../storage/links.js'
-import { acceptImage, IMAGE_PROFILES } from './image-intake.js'
+import { acceptImage, IMAGE_MAX_PIXELS, IMAGE_PROFILES, runImageTask } from './image-intake.js'
 
 export { AVATAR_TYPE_ERROR } from './image-intake.js'
 export const NO_AVATAR_ERROR = 'Нет загруженного аватара для редактирования'
@@ -83,10 +83,11 @@ function cropColumns(crop: AvatarCrop) {
 }
 
 async function renderCrop(source: Buffer, box: CropBox): Promise<Buffer> {
-	let image = sharp(source)
-	if (box.rotation !== 0) {
-		const rotated = await image.rotate(box.rotation, { background: TRANSPARENT }).toBuffer()
-		image = sharp(rotated)
+	let image = sharp(source, { limitInputPixels: IMAGE_MAX_PIXELS })
+	const angle = box.rotation % 360
+	if (angle !== 0) {
+		const rotated = await image.rotate(angle, { background: TRANSPARENT }).toBuffer()
+		image = sharp(rotated, { limitInputPixels: IMAGE_MAX_PIXELS * 2 })
 	}
 	const metadata = await image.metadata()
 	if (!metadata.width || !metadata.height) throw new Error('Не удалось получить размеры изображения')
@@ -99,7 +100,7 @@ async function renderCrop(source: Buffer, box: CropBox): Promise<Buffer> {
 }
 
 async function writeCrop(userId: string, source: Buffer, box: CropBox): Promise<string> {
-	const cropped = await renderCrop(source, box)
+	const cropped = await runImageTask(() => renderCrop(source, box))
 	const key = `${userPrefix(userId)}${newName()}_cropped.png`
 	await storage().write(key, cropped, { contentType: 'image/png', upsert: false })
 	return key
