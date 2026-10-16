@@ -25,6 +25,7 @@ import {
 	testScope,
 	userScope,
 } from '../../services/access-policy/index.js'
+import { removeUserAnswerPhotos } from '../../services/answer-photos/index.js'
 import { attemptResultColumns } from '../../services/scored-attempt/index.js'
 import { revokeUserSessions } from '../../services/session/index.js'
 import type { UserRow } from '../../types/db/users.js'
@@ -260,6 +261,8 @@ router.delete('/:id', validateUUID('id'), sessionRequired(), requirePerm('users'
 
 		const existing = await db.query.users.findFirst({ where: eq(users.id, id) })
 		if (!existing) return res.status(404).json({ error: ERROR_MESSAGES.USER_NOT_FOUND })
+
+		await removeUserAnswerPhotos(id)
 
 		// Удаляем пользователя (каскадное удаление обработает связанные записи)
 		await db.delete(users).where(eq(users.id, id))

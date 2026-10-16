@@ -8,7 +8,7 @@ export {
 	type AttemptAccessParams,
 	type AttemptTest,
 } from './access.js'
-export { databaseNow, DEADLINE_FINALIZE_MAX_AGE_HOURS, type SessionInfo } from './sessions.js'
+export { databaseNow, DEADLINE_FINALIZE_MAX_AGE_HOURS, sessionFilter, type SessionInfo } from './sessions.js'
 export { saveSessionDraft, startAttemptSession, submitSession } from './commands.js'
 export {
 	photoUploadWindow,
