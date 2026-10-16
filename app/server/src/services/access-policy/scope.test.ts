@@ -35,6 +35,11 @@ const WORLD: ZoneSnapshot = {
 	attempts: { 'attempt-x': tX, 'attempt-y': tY },
 	roleKeysByUser: { [S]: [STUDENT], [S2]: [STUDENT], [T]: [STAFF], [M]: [STUDENT], [A]: [STAFF], [B]: [STAFF] },
 	usersWithAllowGrants: [M],
+	answerPhotos: {
+		'photo-open': { ownerId: S, attemptId: null },
+		'photo-x': { ownerId: S, attemptId: 'attempt-x' },
+		'photo-y': { ownerId: S2, attemptId: 'attempt-y' },
+	},
 }
 
 function userReq(userId: string): Request {
@@ -72,6 +77,7 @@ function failingLoader(): ZoneLoader {
 		groupOwnerOf: fail,
 		isMemberOfOwnedGroup: fail,
 		studentIdsInOwnedGroups: fail,
+		answerPhotoSubject: fail,
 	}
 }
 
@@ -425,5 +431,36 @@ describe('in-memory загрузчик зоны', () => {
 		expect(await loader.isMemberOfOwnedGroup(A, T)).toBe(false)
 		expect(await loader.isMemberOfOwnedGroup(A, M)).toBe(false)
 		expect(await loader.isMemberOfOwnedGroup(A, S2)).toBe(false)
+		expect(await loader.answerPhotoSubject('photo-x')).toEqual({ ownerId: S, attemptId: 'attempt-x' })
+		expect(await loader.answerPhotoSubject('missing')).toBeNull()
+	})
+})
+
+describe('canReadAnswerPhoto (D-17): владелец, проверяющий только после сдачи', () => {
+	test.each<[string, string, string, PermissionKey[], boolean]>([
+		['владелец до сдачи', S, 'photo-open', [], true],
+		['владелец после сдачи', S, 'photo-x', [], true],
+		['другой ученик до сдачи', S2, 'photo-open', ['tests.read'], false],
+		['другой ученик после сдачи', S2, 'photo-x', ['tests.read'], false],
+		['учитель раздела, сессия без попытки', A, 'photo-open', ['tests.read'], false],
+		['учитель раздела, попытка его раздела', A, 'photo-x', ['tests.read'], true],
+		['учитель раздела без tests.read', A, 'photo-x', [], false],
+		['учитель другого раздела, попытка', B, 'photo-x', ['tests.read'], false],
+		['zone.all без попытки', A, 'photo-open', ['tests.read', 'zone.all'], false],
+		['zone.all с попыткой', A, 'photo-y', ['tests.read', 'zone.all'], true],
+		['несуществующее фото при zone.all', A, 'missing-photo', ['tests.read', 'zone.all'], false],
+	])('%s', async (_label, userId, photoId, granted, expected) => {
+		expect(await zoneScope(granted).scope.canReadAnswerPhoto(userReq(userId), photoId)).toBe(expected)
+	})
+
+	test('Request без пользователя — отказ без чтения загрузчика', async () => {
+		const { scope, counts } = zoneScope(['tests.read', 'zone.all'])
+		expect(await scope.canReadAnswerPhoto({} as Request, 'photo-x')).toBe(false)
+		expect(counts.size).toBe(0)
+	})
+
+	test('ошибка загрузчика зоны пробрасывается', async () => {
+		const scope = createAccessScope(async () => true, failingLoader())
+		await expect(scope.canReadAnswerPhoto(userReq(S), 'photo-x')).rejects.toThrow('zone unavailable')
 	})
 })

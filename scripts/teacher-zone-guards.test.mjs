@@ -34,6 +34,7 @@ const GROUP_ROUTES = 'app/server/src/routes/groups/index.ts'
 const USER_ROUTES = 'app/server/src/routes/users/index.ts'
 const SIGN_IN_ASSIST_ROUTES = 'app/server/src/routes/users/sign-in-assist.ts'
 const INVITE_ROUTES = 'app/server/src/routes/auth/invites.ts'
+const ANSWER_PHOTO_ROUTES = 'app/server/src/routes/answer-photos.ts'
 
 const ROUTE_FILES = {
 	[TOPIC_ROUTES]: { router: 'router', mount: '/api/tests' },
@@ -52,6 +53,7 @@ const ROUTE_FILES = {
 	[USER_ROUTES]: { router: 'router', mount: '/api/users' },
 	[SIGN_IN_ASSIST_ROUTES]: { router: 'router', mount: '/api/users' },
 	[INVITE_ROUTES]: { router: 'router', mount: '/api/auth/invites' },
+	[ANSWER_PHOTO_ROUTES]: { router: 'router', mount: '/api/answer-photos' },
 }
 
 const OBJECT = 'объектный маршрут'
@@ -114,6 +116,7 @@ const INVENTORY = [
 	route(GROUP_ROUTES, 'post', '/', COARSE, ['hasGlobalZone(', 'setGroupOwner(']),
 	route(GROUP_ROUTES, 'get', '/candidates', COARSE, ['studentOnlyFilter(']),
 	route(GROUP_ROUTES, 'get', '/owner-options', COARSE, ['hasGlobalZone(', 'zoneOwnerCandidates(']),
+	route(ANSWER_PHOTO_ROUTES, 'get', '/:photoId/:variant', OBJECT, ['canReadAnswerPhoto(']),
 ]
 
 const TABLE_CHECKS = [
@@ -527,7 +530,7 @@ test('маршруты инвентаря D-14 решают доступ фун�
 		const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8')
 		assert.ok(registrations(source, config.router).length > 0, `${file}: нет регистраций ${config.router}`)
 	}
-	assert.equal(INVENTORY.length, 45)
+	assert.equal(INVENTORY.length, 46)
 	assert.deepEqual(inventoryViolations(REPO_ROOT), [])
 })
 

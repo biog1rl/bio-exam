@@ -20,6 +20,7 @@ export type AccessScope = {
 	canWriteTopic(req: Request, topicId: string): Promise<boolean>
 	canReadUser(req: Request, userId: string): Promise<boolean>
 	canReviewAttempt(req: Request, attemptId: string): Promise<boolean>
+	canReadAnswerPhoto(req: Request, photoId: string): Promise<boolean>
 	testScope(req: Request): Promise<TestScope>
 	canManageCatalog(req: Request): Promise<boolean>
 	canManageGroup(req: Request, groupId: string): Promise<boolean>
@@ -128,6 +129,16 @@ export function createAccessScope(check: PermissionCheck, zones: ZoneLoader): Ac
 	const canReviewAttempt = (req: Request, attemptId: string) =>
 		zoned(req, 'tests.read', async (userId) => topicInZone(req, userId, await zones.topicOfAttempt(attemptId)))
 
+	async function canReadAnswerPhoto(req: Request, photoId: string): Promise<boolean> {
+		const userId = req.authUser?.id
+		if (!userId) return false
+		const subject = await zones.answerPhotoSubject(photoId)
+		if (!subject) return false
+		if (subject.ownerId === userId) return true
+		if (subject.attemptId === null) return false
+		return canReviewAttempt(req, subject.attemptId)
+	}
+
 	const canReadUser = (req: Request, targetId: string) =>
 		zoned(req, 'users.read', (userId) => zones.isMemberOfOwnedGroup(userId, targetId))
 
@@ -145,6 +156,7 @@ export function createAccessScope(check: PermissionCheck, zones: ZoneLoader): Ac
 		canWriteTopic,
 		canReadUser,
 		canReviewAttempt,
+		canReadAnswerPhoto,
 		testScope,
 		canManageCatalog: async (req) => {
 			if (!req.authUser?.id) return false

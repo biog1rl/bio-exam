@@ -111,6 +111,7 @@ POST /api/tests/public/tests/:id/submit  validateUUID(id) > sessionRequired > <a
 PUT /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > singleFileUpload > <anonymous>
 DELETE /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > <anonymous>
 GET /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > sessionRequired > answerPhotoTarget > <anonymous>
+GET /api/answer-photos/:photoId/:variant  validateUUID(photoId) > sessionRequired > <anonymous>
 GET /api/settings/charts  sessionRequired > <anonymous>
 PUT /api/settings/charts  sessionRequired > requirePerm(settings.manage) > <anonymous>
 GET /api/groups/my  sessionRequired > <anonymous>

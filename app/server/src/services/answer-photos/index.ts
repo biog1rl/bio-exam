@@ -213,6 +213,13 @@ export async function deleteAnswerPhoto(place: AnswerPhotoPlace, photoId: string
 	return { kind: 'deleted', count: outcome.count }
 }
 
+export async function readAnswerPhotoFile(photoId: string, variant: AnswerPhotoVariant): Promise<Buffer | null> {
+	const row = await findPhotoRow(db, photoId)
+	if (!row) return null
+	const file = await storage().read(answerPhotoKey(row, variant))
+	return file?.data ?? null
+}
+
 export async function removeUserAnswerPhotos(userId: string): Promise<number> {
 	const rows = await db
 		.select({ id: answerPhotos.id, sessionId: answerPhotos.sessionId, questionId: answerPhotos.questionId })

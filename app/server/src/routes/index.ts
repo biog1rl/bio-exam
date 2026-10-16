@@ -3,6 +3,7 @@
  */
 import { Router } from 'express'
 
+import answerPhotosRouter from './answer-photos.js'
 import authRouter from './auth/index.js'
 import docsAssetsRouter from './docs/assets.js'
 import groupsRouter from './groups/index.js'
@@ -27,6 +28,7 @@ router.use('/sidebar', sidebarRouter)
 router.use('/tests', testsRouter)
 router.use('/tests/public', publicTestsRouter)
 router.use('/tests/public', sessionPhotosRouter)
+router.use('/answer-photos', answerPhotosRouter)
 router.use('/settings', settingsRouter)
 router.use('/groups', groupsRouter)
 router.use('/docs/assets', docsAssetsRouter)
