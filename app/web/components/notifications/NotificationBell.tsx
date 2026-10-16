@@ -69,7 +69,12 @@ export default function NotificationBell() {
 		<>
 			<Popover open={open} onOpenChange={handleOpenChange}>
 				<PopoverTrigger asChild>
-					<Button size="icon" variant="outline" className="relative" aria-label={bellAccessibleName(count)}>
+					<Button
+						size="icon"
+						variant="outline"
+						className="relative rounded-full bg-card hover:bg-accent"
+						aria-label={bellAccessibleName(count)}
+					>
 						<Bell className="size-4" aria-hidden="true" />
 						{count > 0 ? (
 							<span
@@ -90,7 +95,7 @@ export default function NotificationBell() {
 						event.preventDefault()
 						headingRef.current?.focus()
 					}}
-					className="flex max-h-[min(32rem,var(--radix-popover-content-available-height))] w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-3xl p-0 mob:w-96"
+					className="flex max-h-[min(32rem,var(--radix-popover-content-available-height))] w-[calc(100vw-1rem)] flex-col overflow-hidden p-0 mob:w-96"
 				>
 					<div className="flex items-center justify-between gap-2 border-b border-border/70 py-1 pr-2 pl-4">
 						<h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-sm font-medium outline-none">

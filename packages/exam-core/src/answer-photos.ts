@@ -2,13 +2,26 @@ import { z } from 'zod'
 
 export const ANSWER_PHOTO_MAX_COUNT = 5
 
+export const ANSWER_PHOTO_MAX_COUNT_LIMIT = 10
+
 export const ANSWER_PHOTO_MAX_BYTES = 10 * 1024 * 1024
 
 export const ANSWER_PHOTO_MAX_SIDE = 2560
 
 export const ANSWER_PHOTO_VARIANTS = ['thumb', 'full'] as const
 
-export const ANSWER_PHOTO_LIMIT_MESSAGE = `К ответу можно прикрепить не больше ${ANSWER_PHOTO_MAX_COUNT} фото`
+export function answerPhotoLimitMessage(max: number): string {
+	return `К ответу можно прикрепить не больше ${max} фото`
+}
+
+export const ANSWER_PHOTO_LIMIT_MESSAGE = answerPhotoLimitMessage(ANSWER_PHOTO_MAX_COUNT)
+
+export const ANSWER_PHOTO_FORBIDDEN_MESSAGE = 'К ответу на этот вопрос нельзя прикрепить фото'
+
+export const QuestionPhotoSettingsSchema = z.object({
+	allowPhotos: z.boolean(),
+	maxPhotos: z.number().int().min(1).max(ANSWER_PHOTO_MAX_COUNT_LIMIT),
+})
 
 export const AnswerPhotoSchema = z.object({
 	id: z.string().uuid(),
@@ -18,7 +31,7 @@ export const AnswerPhotoSchema = z.object({
 
 export const AnswerPhotoUploadResponseSchema = z.object({
 	photo: AnswerPhotoSchema,
-	count: z.number().int().min(0).max(ANSWER_PHOTO_MAX_COUNT),
+	count: z.number().int().min(0).max(ANSWER_PHOTO_MAX_COUNT_LIMIT),
 })
 
 export const AnswerPhotoListResponseSchema = z.object({
@@ -29,6 +42,7 @@ export const AnswerPhotoDeleteResponseSchema = z.object({
 	count: z.number().int().nonnegative(),
 })
 
+export type QuestionPhotoSettings = z.infer<typeof QuestionPhotoSettingsSchema>
 export type AnswerPhotoVariant = (typeof ANSWER_PHOTO_VARIANTS)[number]
 export type AnswerPhoto = z.infer<typeof AnswerPhotoSchema>
 export type AnswerPhotoUploadResponse = z.infer<typeof AnswerPhotoUploadResponseSchema>

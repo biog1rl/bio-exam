@@ -5,6 +5,8 @@ import type { Request } from 'express'
 import { db } from '../../db/index.js'
 import { createDrizzleGrantsLoader } from './grants-loader.js'
 import { createAccessPolicy, type AccessSet } from './policy.js'
+import { attemptReviewers as attemptReviewersOf } from './review-recipients.js'
+import type { ZoneLoaderDb } from './zone-loader.js'
 
 export {
 	computeAccess,
@@ -86,3 +88,8 @@ export {
 	type ZonePerson,
 } from './zone-store.js'
 export { loadRoleTraits, roleTraits, type RoleTraits } from './role-traits.js'
+export type { AttemptReviewers } from './review-recipients.js'
+
+export function attemptReviewers(executor: ZoneLoaderDb, attemptId: string) {
+	return attemptReviewersOf(executor, attemptId, (userId) => accessPolicy.accessFor(userId))
+}

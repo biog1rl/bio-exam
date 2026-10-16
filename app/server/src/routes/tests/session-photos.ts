@@ -1,4 +1,4 @@
-import { ANSWER_PHOTO_LIMIT_MESSAGE, ANSWER_PHOTO_MAX_BYTES } from '@bio-exam/exam-core'
+import { ANSWER_PHOTO_FORBIDDEN_MESSAGE, ANSWER_PHOTO_MAX_BYTES, answerPhotoLimitMessage } from '@bio-exam/exam-core'
 
 import { Router, type NextFunction, type Request, type Response } from 'express'
 
@@ -77,7 +77,9 @@ function sendUploadOutcome(res: Response, outcome: UploadOutcome) {
 		case 'window':
 			return res.status(outcome.status).json(outcome.body)
 		case 'limit':
-			return res.status(409).json({ error: ANSWER_PHOTO_LIMIT_MESSAGE })
+			return res.status(409).json({ error: answerPhotoLimitMessage(outcome.max) })
+		case 'forbidden':
+			return res.status(409).json({ error: ANSWER_PHOTO_FORBIDDEN_MESSAGE })
 		case 'conflict':
 			return res.status(409).json({ error: ANSWER_PHOTO_CONFLICT })
 		case 'missing':

@@ -35,7 +35,7 @@ export function StudentAttemptResult({ attempt, test, questions, photos }: Stude
 						<section
 							key={question.id}
 							id={`question-${index}`}
-							className="scroll-mt-6 rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit"
+							className="scroll-mt-6 rounded-3xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit"
 						>
 							<div className="flex flex-wrap items-center justify-between gap-3">
 								<div className="flex items-center gap-3">

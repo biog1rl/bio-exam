@@ -186,6 +186,7 @@ __metadata:
     react-dom: "npm:19.2.2"
     react-easy-crop: "npm:^5.5.5"
     react-imask: "npm:^7.6.1"
+    react-zoom-pan-pinch: "npm:4.2.0"
     recharts: "npm:^2.15.3"
     rehype-raw: "npm:^7.0.0"
     remark-gfm: "npm:^4.0.1"
@@ -10352,6 +10353,16 @@ __metadata:
     react: ">=16.6.0"
     react-dom: ">=16.6.0"
   checksum: 10c0/2ba754ba748faefa15f87c96dfa700d5525054a0141de8c75763aae6734af0740e77e11261a1e8f4ffc08fd9ab78510122e05c21c2d79066c38bb6861a886c82
+  languageName: node
+  linkType: hard
+
+"react-zoom-pan-pinch@npm:4.2.0":
+  version: 4.2.0
+  resolution: "react-zoom-pan-pinch@npm:4.2.0"
+  peerDependencies:
+    react: "*"
+    react-dom: "*"
+  checksum: 10c0/caab5abeab6e99a30b7913049d401a51ccc7d130674e0d62e2b42076e418502a666b50054a27c094e0ad62057079e3a9d98802fa9fb2da1f3f7f0df884baeff7
   languageName: node
   linkType: hard
 

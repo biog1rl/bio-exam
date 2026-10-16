@@ -1,4 +1,4 @@
-export const DEFAULT_AVATAR_COLOR = '#2563EB'
+export const DEFAULT_AVATAR_COLOR = '#4b6b38'
 
 const LIGHT_TEXT = '#ffffff'
 const DARK_TEXT = '#182610'

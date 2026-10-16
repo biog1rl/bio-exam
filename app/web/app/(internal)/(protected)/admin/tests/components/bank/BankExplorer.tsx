@@ -88,7 +88,7 @@ function LoadingBank() {
 		<div className="space-y-4">
 			<Skeleton className="h-12 rounded-3xl" />
 			<div className="grid gap-5 tab:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
-				<Skeleton className="hidden h-96 rounded-4xl tab:block" />
+				<Skeleton className="hidden h-96 rounded-3xl tab:block" />
 				<Skeleton className="h-96 rounded-3xl" />
 			</div>
 		</div>

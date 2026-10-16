@@ -133,7 +133,7 @@ function ChartsNav({
 	return (
 		<nav
 			aria-label="Графики"
-			className="rounded-4xl border border-border/80 bg-card/90 p-2 shadow-sm tab:sticky tab:top-unit"
+			className="rounded-3xl border border-border/80 bg-card/90 p-2 shadow-sm tab:sticky tab:top-unit"
 		>
 			{PLACES.map((place) => (
 				<div key={place} className="pb-1">

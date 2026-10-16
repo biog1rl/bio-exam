@@ -114,6 +114,34 @@ async function attemptCount(sessionId: string): Promise<number> {
 	return Number(result.rows[0]?.count ?? 0)
 }
 
+async function expire(prepared: Prepared): Promise<Reply> {
+	await shiftStartedAt(ctx, prepared.sessionId, '12 minutes')
+	return call(ctx, 'GET', `/api/tests/public/tests/${prepared.testId}/sessions/${prepared.sessionId}`, {
+		cookies: prepared.owner.cookie,
+	})
+}
+
+async function submittedByDeadline(
+	options: { windowMinutes?: number } = {}
+): Promise<Prepared & { attemptId: string }> {
+	const prepared = await prepare({ ...options, timeLimitMinutes: 10 })
+	const [openId] = prepared.openIds
+	assert.ok(openId)
+	for (const [questionId, value] of [
+		[prepared.shortId, 'ответ'],
+		[openId, 'текст'],
+	] as const) {
+		const saved = await saveDraft(world, prepared.owner.cookie, prepared.testId, prepared.sessionId, {
+			questionId,
+			value,
+		})
+		assert.equal(saved.status, 200, JSON.stringify(saved.body))
+	}
+	const fate = await expire(prepared)
+	assert.equal(fate.body.state, 'submitted', JSON.stringify(fate.body))
+	return { ...prepared, attemptId: fate.body.attemptId as string }
+}
+
 describe('сдача: открытый вопрос без текста и фото', () => {
 	test.each([
 		{ name: 'нет ответа', text: undefined },
@@ -177,12 +205,10 @@ describe('сдача: открытый вопрос без текста и фо�
 		assert.deepEqual(reply.body.questionIds, [empty])
 	})
 
-	test('фото после сдачи получает attempt_id попытки', async () => {
-		const prepared = await prepare()
+	test('фото после сдачи по дедлайну получает attempt_id попытки', async () => {
+		const prepared = await submittedByDeadline()
 		const [openId] = prepared.openIds
 		assert.ok(openId)
-		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
-		assert.equal(sent.status, 200, JSON.stringify(sent.body))
 
 		const photo = await attachPhoto(prepared, openId)
 
@@ -193,19 +219,23 @@ describe('сдача: открытый вопрос без текста и фо�
 		)
 		assert.deepEqual(
 			linked.rows.map((row) => row.attempt_id),
-			[sent.body.attemptId]
+			[prepared.attemptId]
 		)
+	})
+
+	test('обычная сдача не открывает окно фото: upload_closes_at пуст, фото после неё отклоняются', async () => {
+		const prepared = await prepare()
+		const [openId] = prepared.openIds
+		assert.ok(openId)
+		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
+		assert.equal(sent.status, 200, JSON.stringify(sent.body))
+
+		assert.equal((await attemptRowOf(ctx, sent.body.attemptId as string)).uploadClosesAt, null)
+		assert.equal((await attachPhoto(prepared, openId)).status, 422)
 	})
 })
 
 describe('сдача по дедлайну с пустым открытым ответом', () => {
-	async function expire(prepared: Prepared): Promise<Reply> {
-		await shiftStartedAt(ctx, prepared.sessionId, '12 minutes')
-		return call(ctx, 'GET', `/api/tests/public/tests/${prepared.testId}/sessions/${prepared.sessionId}`, {
-			cookies: prepared.owner.cookie,
-		})
-	}
-
 	test('черновик без открытого ответа сдаётся сервером, попытка на проверке', async () => {
 		const prepared = await prepare({ timeLimitMinutes: 10 })
 		const saved = await saveDraft(world, prepared.owner.cookie, prepared.testId, prepared.sessionId, {
@@ -243,14 +273,7 @@ describe('сдача по дедлайну с пустым открытым от
 })
 
 describe('POST …/sessions/:sessionId/uploads-done', () => {
-	async function submitted(options: { windowMinutes?: number } = {}): Promise<Prepared & { attemptId: string }> {
-		const prepared = await prepare(options)
-		const [openId] = prepared.openIds
-		assert.ok(openId)
-		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
-		assert.equal(sent.status, 200, JSON.stringify(sent.body))
-		return { ...prepared, attemptId: sent.body.attemptId as string }
-	}
+	const submitted = submittedByDeadline
 
 	test('владелец досрочно закрывает окно: 200 и uploadClosesAt не позже now', async () => {
 		const prepared = await submitted()
@@ -338,13 +361,9 @@ describe('POST …/sessions/:sessionId/uploads-done', () => {
 })
 
 describe('очередь проверки: только попытки с закрытым окном', () => {
-	test('review=pending, pendingTotal и reviewReady следуют за окном', async () => {
-		const prepared = await prepare()
-		const [openId] = prepared.openIds
-		assert.ok(openId)
-		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
-		assert.equal(sent.status, 200, JSON.stringify(sent.body))
-		const attemptId = sent.body.attemptId as string
+	test('сдача по дедлайну: review=pending, pendingTotal и reviewReady следуют за окном', async () => {
+		const prepared = await submittedByDeadline()
+		const attemptId = prepared.attemptId
 
 		const waiting = await attemptsList('?review=pending&limit=100')
 		const inQueueBefore = (waiting.body.rows as Array<{ attemptId: string }>).some((row) => row.attemptId === attemptId)
@@ -373,8 +392,8 @@ describe('очередь проверки: только попытки с зак
 		assert.equal((detailAfter.body.attempt as { reviewReady: boolean }).reviewReady, true)
 	})
 
-	test('попытка без окна на проверке сразу в очереди', async () => {
-		const prepared = await prepare({ windowMinutes: 0 })
+	test('обычная сдача на проверке сразу в очереди', async () => {
+		const prepared = await prepare()
 		const [openId] = prepared.openIds
 		assert.ok(openId)
 		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })

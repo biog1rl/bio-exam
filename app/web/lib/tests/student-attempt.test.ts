@@ -20,6 +20,8 @@ function question(id: string, order: number): PublicTestQuestion {
 		points: 1,
 		options: null,
 		matchingPairs: null,
+		allowPhotos: true,
+		maxPhotos: 5,
 		promptText: id,
 	}
 }

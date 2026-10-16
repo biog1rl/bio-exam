@@ -17,6 +17,7 @@ import { ColumnFilterMenu } from '@/components/table/ColumnFilterMenu'
 import { SortableHead } from '@/components/table/SortableHead'
 import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkFocus } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -225,7 +226,8 @@ export default function QuestionTypesPageClient() {
 											<Link
 												href={href}
 												className={cn(
-													'font-medium [overflow-wrap:anywhere] transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none',
+													'font-medium [overflow-wrap:anywhere] transition-colors hover:text-primary',
+													mainLinkFocus,
 													item.isActive ? 'text-foreground' : 'text-muted-foreground'
 												)}
 											>

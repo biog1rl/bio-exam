@@ -1,6 +1,6 @@
 'use client'
 
-import { ANSWER_PHOTO_LIMIT_MESSAGE, ANSWER_PHOTO_MAX_COUNT } from '@bio-exam/exam-core'
+import { answerPhotoLimitMessage } from '@bio-exam/exam-core'
 
 import { useEffect, useId, useRef, useState, type ChangeEvent, type RefObject } from 'react'
 
@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { RequestError } from '@/lib/http/request'
 import { answerPhotoUrl } from '@/lib/tests/answer-photos-api'
 
+import { PhotoViewer } from './PhotoViewer'
 import type { PhotoItem } from './upload-queue'
 import { useAnswerPhotos, type AnswerPhotoQueueHandle } from './use-answer-photos'
 
@@ -33,7 +34,10 @@ const SOURCE_VIEW: Record<PhotoSource, { label: string; Icon: typeof ImagePlus }
 	gallery: { label: 'Выбрать из галереи', Icon: Images },
 }
 
-const HINT = `До ${ANSWER_PHOTO_MAX_COUNT} фото в форматах JPEG, PNG или WebP.`
+function hintFor(max: number): string {
+	return `До ${max} фото в форматах JPEG, PNG или WebP.`
+}
+
 const HINT_AT_LIMIT = 'Чтобы добавить другое фото, удалите одно из прикреплённых.'
 
 const ROW_BUTTON = 'h-11 tab:h-8'
@@ -64,11 +68,12 @@ type RowProps = {
 	item: PhotoItem
 	number: number
 	disabled: boolean
+	onOpen: () => void
 	onRetry: (photoId: string) => void
 	onRemove: (photoId: string) => void
 }
 
-function PhotoRow({ item, number, disabled, onRetry, onRemove }: RowProps) {
+function PhotoRow({ item, number, disabled, onOpen, onRetry, onRemove }: RowProps) {
 	const name = `Фото ${number}`
 	const busy = item.status === 'preparing' || item.status === 'uploading' || item.status === 'retrying'
 	const status =
@@ -77,7 +82,14 @@ function PhotoRow({ item, number, disabled, onRetry, onRemove }: RowProps) {
 		<li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
 			<div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
 				{item.status === 'done' && item.photo ? (
-					<Thumbnail photoId={item.photo.id} alt={name} />
+					<button
+						type="button"
+						onClick={onOpen}
+						aria-label={`Открыть фото ${number}`}
+						className="block size-full cursor-zoom-in outline-none focus-visible:ring-[0.1875rem] focus-visible:ring-ring/50"
+					>
+						<Thumbnail photoId={item.photo.id} alt={name} />
+					</button>
 				) : busy ? (
 					<Spinner />
 				) : (
@@ -208,6 +220,8 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 	const rows = state.items.filter((item) => !item.limitRefusal)
 	const limitRefusals = state.items.filter((item) => item.limitRefusal)
 	const atLimit = state.atLimit
+	const viewable = rows.flatMap((item) => (item.status === 'done' && item.photo ? [item.photo] : []))
+	const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 	const ready = listing === 'ready'
 	const sourceDisabled = disabled || !ready
 
@@ -248,11 +262,11 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 						Фото к ответу
 					</p>
 					<span aria-live="polite" aria-atomic="true" className="text-sm text-muted-foreground tabular-nums">
-						{ready ? state.count : '—'} из {ANSWER_PHOTO_MAX_COUNT}
+						{ready ? state.count : '—'} из {state.max}
 					</span>
 				</div>
 				<p id={hintId} className="text-xs text-muted-foreground">
-					{atLimit ? HINT_AT_LIMIT : HINT}
+					{atLimit ? HINT_AT_LIMIT : hintFor(state.max)}
 				</p>
 			</div>
 			<div ref={sourcesRef} className="flex flex-wrap gap-2">
@@ -295,6 +309,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 							item={item}
 							number={index + 1}
 							disabled={disabled}
+							onOpen={() => setViewerIndex(viewable.findIndex((photo) => photo.id === item.photo?.id))}
 							onRetry={retry}
 							onRemove={(photoId) => startRemoval([photoId], index)}
 						/>
@@ -306,7 +321,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 							</div>
 							<div className="min-w-0 flex-1 basis-40">
 								<p role="alert" className="text-sm break-words text-destructive">
-									{ANSWER_PHOTO_LIMIT_MESSAGE}
+									{answerPhotoLimitMessage(state.max)}
 								</p>
 								{limitRefusals.length >= 2 ? (
 									<p className="text-sm text-muted-foreground">Не добавлено фото: {limitRefusals.length}</p>
@@ -335,6 +350,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 					) : null}
 				</ul>
 			) : null}
+			<PhotoViewer photos={viewable} openIndex={viewerIndex} onClose={() => setViewerIndex(null)} />
 		</div>
 	)
 }

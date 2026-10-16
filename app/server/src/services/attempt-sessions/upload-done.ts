@@ -4,6 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { testAttempts, testSessions } from '../../db/schema.js'
+import { recordReviewPending } from '../answer-reviews/review-pending.js'
 import type { SessionOwner } from './outcome.js'
 import { sessionFilter } from './sessions.js'
 import { photoUploadWindow, uploadWindowRefusal } from './upload-window.js'
@@ -35,6 +36,7 @@ export async function closeUploadWindow(owner: SessionOwner, sessionId: string):
 			.where(eq(testAttempts.id, session.attemptId))
 			.returning({ uploadClosesAt: testAttempts.uploadClosesAt })
 		if (!closed?.uploadClosesAt) throw new Error('closeUploadWindow: окно не закрыто')
+		await recordReviewPending(tx, session.attemptId, { assumeReady: true })
 		return { kind: 'closed', uploadClosesAt: closed.uploadClosesAt }
 	})
 }

@@ -16,8 +16,8 @@ export function EmptyState({ title, description, action, size = 'default', class
 			className={cn(
 				'flex flex-col items-center border border-dashed border-border text-center',
 				size === 'sm'
-					? 'gap-3 rounded-2xl px-4 py-6 text-sm text-muted-foreground'
-					: 'gap-4 rounded-4xl bg-card/70 px-6 py-14',
+					? 'gap-3 rounded-md px-4 py-6 text-sm text-muted-foreground'
+					: 'gap-4 rounded-3xl bg-card/70 px-6 py-14',
 				className
 			)}
 		>

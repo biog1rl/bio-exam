@@ -15,8 +15,10 @@ const EXPLANATION = 'Пояснение-маркер: деление сомат�
 const KEY = 'Эталон-маркер-ответа'
 
 const STUDENT_QUESTION_KEYS = [
+	'allowPhotos',
 	'id',
 	'matchingPairs',
+	'maxPhotos',
 	'options',
 	'order',
 	'points',

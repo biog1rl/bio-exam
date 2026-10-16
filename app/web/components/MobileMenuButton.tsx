@@ -12,7 +12,7 @@ export function MobileMenuButton() {
 		<Button
 			size="icon"
 			variant="outline"
-			className="size-9 cursor-pointer border-border bg-card text-foreground transition-colors hover:bg-secondary tab:hidden"
+			className="rounded-full bg-card hover:bg-accent tab:hidden"
 			onClick={() => setOpenMobile(true)}
 			aria-label="Открыть меню"
 			aria-haspopup="dialog"

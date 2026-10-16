@@ -1,5 +1,11 @@
 import { logger } from '../../lib/logger.js'
-import { findNoAnswerCandidates, loadLatestScores, recordNoAnswerReviews } from '../answer-reviews/index.js'
+import {
+	findNoAnswerCandidates,
+	findReviewPendingAttemptIds,
+	loadLatestScores,
+	notifyReviewPending,
+	recordNoAnswerReviews,
+} from '../answer-reviews/index.js'
 import {
 	closeStaleOpenSessions,
 	finalizeSessionByDeadline,
@@ -95,18 +101,22 @@ export function reconcileOutcomesJob(deps: { log?: Pick<JobLog, 'warn'> } = {}):
 export type NoAnswerReviewsDeps = {
 	find?: typeof findNoAnswerCandidates
 	record?: typeof recordNoAnswerReviews
+	findPending?: typeof findReviewPendingAttemptIds
+	notify?: typeof notifyReviewPending
 	log?: Pick<JobLog, 'error'>
 }
 
 export function noAnswerReviewsJob(deps: NoAnswerReviewsDeps = {}): Job {
 	const find = deps.find ?? findNoAnswerCandidates
 	const record = deps.record ?? recordNoAnswerReviews
+	const findPending = deps.findPending ?? findReviewPendingAttemptIds
+	const notify = deps.notify ?? notifyReviewPending
 	const log = deps.log ?? logger
 	return {
 		name: NO_ANSWER_REVIEWS_JOB,
 		intervalMs: NO_ANSWER_REVIEWS_INTERVAL_MS,
 		async runOnce({ signal }) {
-			const report = { candidates: 0, reviewed: 0, graded: 0, failed: 0 }
+			const report = { candidates: 0, reviewed: 0, graded: 0, notified: 0, failed: 0 }
 			const candidates = await find(NO_ANSWER_REVIEWS_BATCH)
 			report.candidates = candidates.length
 			for (const candidate of candidates) {
@@ -118,6 +128,15 @@ export function noAnswerReviewsJob(deps: NoAnswerReviewsDeps = {}): Job {
 				} catch (error) {
 					report.failed += 1
 					log.error({ attemptId: candidate.attemptId, err: error }, 'no-answer-reviews attempt failed')
+				}
+			}
+			for (const attemptId of await findPending(NO_ANSWER_REVIEWS_BATCH)) {
+				if (signal.aborted) break
+				try {
+					if ((await notify(attemptId)) > 0) report.notified += 1
+				} catch (error) {
+					report.failed += 1
+					log.error({ attemptId, err: error }, 'review-pending notification failed')
 				}
 			}
 			return report

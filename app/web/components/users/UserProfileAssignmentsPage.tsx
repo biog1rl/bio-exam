@@ -33,8 +33,9 @@ import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkClass } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
-import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
+import { AttemptResultCells, AttemptResultHeads } from '@/components/tests/attempt-result/AttemptResultColumns'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -74,7 +75,7 @@ import {
 	resolvePeriodBounds,
 } from '@/lib/progress/attempt-chart'
 import { adminTestsKeys, adminTestsListFetcher, type AdminTestListItem } from '@/lib/tests/admin-api'
-import { attemptResultView } from '@/lib/tests/attempt-result-view'
+import { attemptMetaLine, attemptResultView } from '@/lib/tests/attempt-result-view'
 import { attemptsUrl } from '@/lib/tests/attempts-url'
 import {
 	assignTest,
@@ -159,8 +160,8 @@ function AttemptsTable({
 				<TableHeader>
 					<TableRow className="hover:bg-transparent">
 						<TableHead className="pl-4">Тест</TableHead>
-						<TableHead className="hidden w-40 text-right tab-sm:table-cell">Дата</TableHead>
-						<TableHead className="w-40 pr-4 text-right">Результат</TableHead>
+						<TableHead className="hidden w-40 text-right lg:table-cell">Дата</TableHead>
+						<AttemptResultHeads from="lg" />
 					</TableRow>
 				</TableHeader>
 				<TableBody>
@@ -172,10 +173,7 @@ function AttemptsTable({
 						return (
 							<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
 								<TableCell className="py-3 pl-4">
-									<Link
-										href={href}
-										className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
-									>
+									<Link href={href} className={mainLinkClass}>
 										{attempt.testTitle}
 									</Link>
 									<p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -188,14 +186,14 @@ function AttemptsTable({
 										) : null}
 										<span className="truncate">{attempt.topicTitle ?? attempt.topicSlug}</span>
 									</p>
-									<p className="mt-0.5 text-xs text-muted-foreground tabular-nums tab-sm:hidden">{submitted}</p>
+									<p className="mt-0.5 text-xs text-muted-foreground tabular-nums lg:hidden">
+										{attemptMetaLine([submitted], view)}
+									</p>
 								</TableCell>
-								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums lg:table-cell">
 									{submitted}
 								</TableCell>
-								<TableCell className="py-3 pr-4 text-right">
-									<AttemptScore view={view} audience="staff" />
-								</TableCell>
+								<AttemptResultCells view={view} from="lg" />
 							</TableRow>
 						)
 					})}
@@ -584,7 +582,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 			<div
 				role="status"
 				aria-label="Загрузка пользователя"
-				className="rounded-4xl border border-border/80 bg-card/90 p-12"
+				className="rounded-3xl border border-border/80 bg-card/90 p-12"
 			>
 				<Loader2 className="h-8 w-8 animate-spin" />
 			</div>
@@ -593,7 +591,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 
 	if (!user) {
 		return (
-			<div className="rounded-4xl border border-border/80 bg-card/90 p-8 text-center text-muted-foreground">
+			<div className="rounded-3xl border border-border/80 bg-card/90 p-8 text-center text-muted-foreground">
 				Пользователь не найден
 			</div>
 		)
@@ -938,7 +936,7 @@ export default function UserProfileAssignmentsPage({ login }: Props) {
 										void runSessionAction('revoke')
 									}}
 									disabled={actionPending}
-									className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+									className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 								>
 									{pendingAction === 'revoke' ? 'Завершаем…' : 'Завершить сеансы'}
 								</AlertDialogAction>

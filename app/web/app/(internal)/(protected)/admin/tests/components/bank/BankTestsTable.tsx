@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { SortableHead } from '@/components/table/SortableHead'
 import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkClass } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Button } from '@/components/ui/button'
 import {
@@ -81,10 +82,7 @@ export function BankTestsTable({
 					{tests.map((test) => (
 						<TableRow key={test.id} className="cursor-pointer" {...rowLink(editorHref(test))}>
 							<TableCell className="py-3 pl-4">
-								<Link
-									href={editorHref(test)}
-									className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
-								>
+								<Link href={editorHref(test)} className={mainLinkClass}>
 									{test.title}
 								</Link>
 								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">

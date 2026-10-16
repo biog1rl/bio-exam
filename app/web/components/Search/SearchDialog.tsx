@@ -63,8 +63,8 @@ function splitMeta(value: string): string[] {
 
 function MetaPill({ label, value }: { label: string; value: string }) {
 	return (
-		<span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted/70 px-1.5 py-0.5 text-[11px] text-muted-foreground">
-			<span className="text-muted-foreground/70">{label}</span>
+		<span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+			<span className="text-muted-foreground">{label}</span>
 			<span className="truncate">{value}</span>
 		</span>
 	)
@@ -331,7 +331,7 @@ export default function SearchDialog() {
 			>
 				<Command
 					shouldFilter={false}
-					className="h-[min(720px,calc(100dvh-2rem))] rounded-2xl border bg-background/95 shadow-[0_24px_90px_rgba(34,45,24,0.22)] backdrop-blur-xl"
+					className="h-[min(720px,calc(100dvh-2rem))] rounded-2xl border bg-popover shadow-lg backdrop-blur-xl"
 				>
 					<DialogTitle>
 						<VisuallyHidden.Root>Поиск</VisuallyHidden.Root>

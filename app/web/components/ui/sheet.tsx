@@ -49,7 +49,7 @@ function SheetContent({
 				data-slot="sheet-content"
 				{...returnFocus}
 				className={cn(
-					'fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
+					'fixed z-50 flex flex-col gap-4 bg-popover shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500',
 					side === 'right' &&
 						'inset-y-0 right-0 h-full w-full max-w-sm border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right tab-sm:w-3/4',
 					side === 'left' &&
@@ -84,7 +84,7 @@ function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPr
 	return (
 		<SheetPrimitive.Title
 			data-slot="sheet-title"
-			className={cn('font-semibold text-foreground', className)}
+			className={cn('text-lg font-semibold text-foreground', className)}
 			{...props}
 		/>
 	)

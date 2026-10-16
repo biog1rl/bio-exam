@@ -17,6 +17,7 @@ import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { SortableHead } from '@/components/table/SortableHead'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkClass } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Button } from '@/components/ui/button'
 import {
@@ -168,10 +169,7 @@ export default function GroupsClient() {
 										return (
 											<TableRow key={group.id} className="cursor-pointer" {...rowLink(href)}>
 												<TableCell className="py-3 pl-4">
-													<Link
-														href={href}
-														className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
-													>
+													<Link href={href} className={mainLinkClass}>
 														{group.name}
 													</Link>
 													{zoneAll ? (

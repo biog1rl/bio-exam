@@ -232,6 +232,13 @@
       "when": 1792158335474,
       "tag": "0032_answer_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792165213670,
+      "tag": "0033_question_photo_settings",
+      "breakpoints": true
     }
   ]
 }

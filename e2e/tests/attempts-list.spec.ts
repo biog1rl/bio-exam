@@ -158,7 +158,7 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		await expect(firstRow).toContainText('Ученик догрузки')
 		await expect(firstRow).toContainText('50%')
 
-		await browserPage.getByRole('button', { name: 'Фильтр по результату' }).click()
+		await browserPage.getByRole('button', { name: /^Фильтр по (статусу|результату и проверке)$/ }).click()
 		await browserPage.getByRole('menuitemcheckbox', { name: /^Не пройден/ }).click()
 		await browserPage.keyboard.press('Escape')
 		await expect(browserPage).toHaveURL(/[?&]result=failed(&|$)/)
@@ -269,20 +269,20 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 			.filter({ has: browserPage.locator(`a[href="/admin/attempts/${GRADED.attemptId}"]`) })
 		await expect(pendingRow).toBeVisible()
 		await expect(pendingRow).toContainText('На проверке')
-		await expect(pendingRow).toContainText('авто 1 из 1')
+		await expect(pendingRow).toContainText('1 из 1')
 		await expect(pendingRow).not.toContainText('%')
 		await expect(pendingRow).not.toContainText('Пройден')
 		await expect(pendingRow).not.toContainText('Не пройден')
-		await expect(gradedRow).toContainText('проверено учителем')
+		await expect(gradedRow).toContainText('Проверено учителем')
 		await expect(gradedRow).toContainText('75%')
 
-		const marks = browserPage.getByText(/^(На проверке|проверено учителем)$/)
+		const marks = browserPage.getByText(/^(На проверке, баллы предварительные|Проверено учителем)$/)
 		await expect(marks.first()).toBeVisible()
 		const lowContrast = (await lowContrastTexts(browserPage)).filter((text) => /проверк|авто|учителем/.test(text))
 		expect(lowContrast).toEqual([])
 		expect(await horizontalOverflow(browserPage)).toEqual([])
 
-		const toggle = browserPage.getByRole('button', { name: '1 на проверке' })
+		const toggle = browserPage.getByRole('button', { name: 'Только на проверке: 1' })
 		await expect(toggle).toHaveAttribute('aria-pressed', 'false')
 		await toggle.click()
 		await expect(browserPage).toHaveURL(/review=pending/)
@@ -298,7 +298,10 @@ test.describe('attempts list: server filters and «Показать ещё»', (
 		teacherPage: browserPage,
 	}) => {
 		await browserPage.goto('/admin/attempts?review=pending')
-		await expect(browserPage.getByRole('button', { name: '0 на проверке' })).toHaveAttribute('aria-pressed', 'true')
+		await expect(browserPage.getByRole('button', { name: 'Только на проверке: 0' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		)
 		await expect(browserPage.getByText('Нет попыток на проверке')).toBeVisible()
 		await expect(
 			browserPage.getByText('Здесь появятся сданные попытки, в которых есть ответы, ожидающие проверки учителем.')

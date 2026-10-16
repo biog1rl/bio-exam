@@ -44,9 +44,9 @@ export function QuestionInput({
 				{question.options.map((option) => {
 					const inputId = `q-${question.id}-opt-${option.id}`
 					return (
-						<div key={option.id} className="flex items-center gap-2">
+						<div key={option.id} className="flex min-h-10 items-center gap-2">
 							<RadioGroupItem id={inputId} value={option.id} />
-							<Label htmlFor={inputId} className="cursor-pointer font-normal">
+							<Label htmlFor={inputId} className="cursor-pointer text-base leading-6 font-normal">
 								{option.text}
 							</Label>
 						</div>
@@ -63,14 +63,14 @@ export function QuestionInput({
 					const inputId = `q-${question.id}-opt-${option.id}`
 					const selected = Array.isArray(answer) && answer.includes(option.id)
 					return (
-						<div key={option.id} className="flex items-center gap-2">
+						<div key={option.id} className="flex min-h-10 items-center gap-2">
 							<Checkbox
 								id={inputId}
 								checked={selected}
 								onCheckedChange={() => onToggleCheckbox(question.id, option.id)}
 								disabled={disabled || readOnly}
 							/>
-							<Label htmlFor={inputId} className="cursor-pointer font-normal">
+							<Label htmlFor={inputId} className="cursor-pointer text-base leading-6 font-normal">
 								{option.text}
 							</Label>
 						</div>
@@ -94,7 +94,7 @@ export function QuestionInput({
 					maxLength={SHORT_TEXT_MAX_LENGTH}
 					readOnly={readOnly}
 					disabled={disabled && !readOnly}
-					className={cn('bg-white', readOnly && 'read-only:bg-muted')}
+					className={cn('bg-card', readOnly && 'read-only:bg-muted')}
 				/>
 				{template === 'sequence_digits' ? (
 					<p className="text-xs text-muted-foreground">Последовательность вводится цифрами без пробелов.</p>
@@ -120,7 +120,7 @@ export function QuestionInput({
 					rows={8}
 					aria-label="Развёрнутый ответ"
 					aria-describedby={counterId}
-					className={cn('min-h-40 bg-white', readOnly && 'read-only:bg-muted')}
+					className={cn('min-h-40 bg-card', readOnly && 'read-only:bg-muted')}
 				/>
 				<p id={counterId} className="text-xs text-muted-foreground tabular-nums">
 					{value.length} из {OPEN_TEXT_MAX_LENGTH} знаков
@@ -135,7 +135,7 @@ export function QuestionInput({
 			<div className="space-y-3">
 				{question.matchingPairs.left.map((left) => (
 					<div key={left.id} className="grid gap-2 tab-sm:grid-cols-[1fr_13.75rem] tab-sm:items-center">
-						<div>{left.text}</div>
+						<div className="text-base leading-6">{left.text}</div>
 						<Select
 							value={selected[left.id] || undefined}
 							onValueChange={(value) => onSelectMatching(question.id, left.id, value)}

@@ -8,6 +8,11 @@ export {
 } from './record.js'
 export { ATTEMPT_GRADED_KIND, attemptGradedDedupeKey, recordAttemptGraded } from './producers/attempt-graded.js'
 export {
+	ATTEMPT_REVIEW_PENDING_KIND,
+	attemptReviewPendingDedupeKey,
+	recordAttemptReviewPending,
+} from './producers/attempt-review-pending.js'
+export {
 	TEST_ASSIGNED_KIND,
 	recordTestAssigned,
 	recordTestPublished,

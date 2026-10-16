@@ -62,7 +62,7 @@ export function DeleteGroupDialog({ group, onOpenChange, onDeleted }: Props) {
 					<AlertDialogAction
 						onClick={handleDelete}
 						disabled={deleting}
-						className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+						className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 					>
 						{deleting ? 'Удаление...' : 'Удалить'}
 					</AlertDialogAction>

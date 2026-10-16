@@ -62,7 +62,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 
 	if (model.isLoading) {
 		return (
-			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
+			<div className="flex items-center justify-center rounded-3xl border border-border/80 bg-card/90 p-12 shadow-sm">
 				<Loader2 className="size-8 animate-spin text-primary" />
 			</div>
 		)
@@ -126,7 +126,7 @@ export default function TestEditorClient({ topicSlug, testSlug }: Props) {
 							onRetry={model.retryQuestions}
 						/>
 					) : model.questionsLoading ? (
-						<Skeleton className="h-96 rounded-4xl" aria-label="Загрузка вопросов" />
+						<Skeleton className="h-96 rounded-3xl" aria-label="Загрузка вопросов" />
 					) : (
 						<QuestionsPanel
 							{...model.questionsPanelProps}

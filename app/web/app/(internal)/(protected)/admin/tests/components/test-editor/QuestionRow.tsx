@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
+import { mainLinkFocus } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Button } from '@/components/ui/button'
 import {
@@ -105,7 +106,10 @@ export function QuestionRow({ question, index, editHref, sortable, onEdit, onDel
 					{editHref ? (
 						<Link
 							href={editHref}
-							className="line-clamp-2 min-w-0 leading-snug [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
+							className={cn(
+								'line-clamp-2 min-w-0 leading-snug [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary',
+								mainLinkFocus
+							)}
 						>
 							{previewText}
 						</Link>

@@ -25,6 +25,7 @@ export {
 	unreviewedOpenQuestionIds,
 } from './queries.js'
 export type { AttemptForReview, LatestReview, NoAnswerCandidate } from './queries.js'
+export { findReviewPendingAttemptIds, notifyReviewPending, recordReviewPending } from './review-pending.js'
 
 export type SaveReviewInput = {
 	attemptId: string

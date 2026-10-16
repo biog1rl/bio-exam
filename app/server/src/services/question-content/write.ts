@@ -280,6 +280,8 @@ export async function updateQuestion(params: {
 					}),
 					options: data.options ?? null,
 					matchingPairs: data.matchingPairs ?? null,
+					allowPhotos: data.allowPhotos,
+					maxPhotos: data.maxPhotos,
 					promptPath: files.promptPath,
 					explanationPath: files.explanationPath,
 					updatedAt: now,
@@ -367,6 +369,8 @@ export async function createQuestion(params: {
 				}),
 				options: data.options ?? null,
 				matchingPairs: data.matchingPairs ?? null,
+				allowPhotos: data.allowPhotos,
+				maxPhotos: data.maxPhotos,
 				promptPath: files.promptPath,
 				explanationPath: files.explanationPath,
 			})
@@ -485,6 +489,8 @@ export async function createTestWithQuestions(params: {
 					}),
 					options: question.options ?? null,
 					matchingPairs: question.matchingPairs ?? null,
+					allowPhotos: question.allowPhotos,
+					maxPhotos: question.maxPhotos,
 					promptPath: content.promptPath,
 					explanationPath: content.explanationPath,
 				})

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 
 import { sessionRequired } from '../middleware/auth/session.js'
-import { canReadTest } from '../services/access-policy/index.js'
+import { canReadTest, canReviewAttempt } from '../services/access-policy/index.js'
 import {
 	countUnread,
 	decodeCursor,
@@ -66,6 +66,7 @@ router.get('/:id/open', sessionRequired(), async (req, res, next) => {
 	try {
 		const result = await openNotification(req.authUser!.id, String(req.params.id), {
 			canReadTest: (testId) => canReadTest(req, testId),
+			canReviewAttempt: (attemptId) => canReviewAttempt(req, attemptId),
 		})
 		if (!result.ok) return res.status(403).json({ error: 'NO_ACCESS' })
 		res.json({ href: result.href })

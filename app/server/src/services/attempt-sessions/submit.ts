@@ -63,14 +63,15 @@ function submittedAtOf(source: AttemptSubmitSource, startedAt: Date, timeLimitMi
 }
 
 function uploadClosesAtOf(params: {
+	source: AttemptSubmitSource
 	submittedAt: SQL
 	startedAt: Date
 	timeLimitMinutes: number | null
 	uploadWindowMinutes: number
 	hasOpenQuestion: boolean
 }): SQL | null {
-	const { submittedAt, startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
-	if (!hasOpenQuestion || uploadWindowMinutes <= 0) return null
+	const { source, submittedAt, startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
+	if (source !== 'deadline' || !hasOpenQuestion || uploadWindowMinutes <= 0) return null
 	return sql`LEAST(${submittedAt}, (${timerEndsAtOf(startedAt, timeLimitMinutes)})::timestamptz) + make_interval(mins => ${uploadWindowMinutes}::int)`
 }
 
@@ -199,6 +200,7 @@ export async function submitAttempt({
 					submittedAt,
 					submitSource: source,
 					uploadClosesAt: uploadClosesAtOf({
+						source,
 						submittedAt,
 						startedAt: session.startedAt,
 						timeLimitMinutes,

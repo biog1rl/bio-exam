@@ -23,6 +23,8 @@ const d5: Question = {
 	matchingPairs: null,
 	promptText: 'Назовите методы',
 	explanationText: null,
+	allowPhotos: true,
+	maxPhotos: 5,
 	correct: ['эксперимент', 'моделирование'],
 }
 
@@ -50,6 +52,8 @@ const base: Question = {
 	matchingPairs: null,
 	promptText: 'Вопрос',
 	explanationText: null,
+	allowPhotos: true,
+	maxPhotos: 5,
 	correct: 'a',
 }
 
@@ -170,4 +174,22 @@ test('открытый вопрос уходит в сохранение с пу
 		correct: null,
 	} as unknown as Question
 	assert.equal(normalizeQuestionForSave(open).correct, '')
+})
+
+test('открытый вопрос: максимум фото вне 1…10 или нецелый не проходит, при запрещённых фото число не проверяется', () => {
+	const open: Question = {
+		...base,
+		type: 'open',
+		questionUiTemplate: 'open',
+		options: null,
+		explanationText: 'Эталон',
+		correct: '',
+	}
+	const types = [typeOf('open')]
+	assert.equal(validateQuestion(open, types), null)
+	assert.equal(validateQuestion({ ...open, maxPhotos: 10 }, types), null)
+	for (const maxPhotos of [0, 11, 2.5, Number.NaN]) {
+		assert.equal(validateQuestion({ ...open, maxPhotos }, types), 'Максимум фото: целое число от 1 до 10')
+	}
+	assert.equal(validateQuestion({ ...open, allowPhotos: false, maxPhotos: 0 }, types), null)
 })

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { attemptResultView, type AttemptResultFields } from './attempt-result-view'
+import {
+	attemptMetaLine,
+	attemptResultView,
+	reviewMarkOf,
+	type AttemptResultFields,
+	type ReviewMarkKind,
+} from './attempt-result-view'
 
 const base: AttemptResultFields = {
 	reviewStatus: 'none',
@@ -64,5 +70,24 @@ const rows: { name: string; fields: AttemptResultFields; view: ReturnType<typeof
 describe('attemptResultView', () => {
 	it.each(rows.map((row) => [row.name, row] as const))('%s', (_name, row) => {
 		expect(attemptResultView(row.fields)).toEqual(row.view)
+	})
+})
+
+const marks: [string, AttemptResultFields, ReviewMarkKind, string][] = [
+	['none', base, 'none', '6 окт · 4 из 5 · Пройден'],
+	['graded', { ...base, reviewStatus: 'graded' }, 'graded', '6 окт · 4 из 5 · Пройден'],
+	[
+		'pending',
+		{ ...base, reviewStatus: 'pending', earnedPoints: null, scorePercentage: null, passed: null },
+		'pending',
+		'6 окт · 4 из 5',
+	],
+]
+
+describe('отметка проверки и строка под главной ячейкой', () => {
+	it.each(marks)('%s', (_name, fields, mark, line) => {
+		const view = attemptResultView(fields)
+		expect(reviewMarkOf(view)).toBe(mark)
+		expect(attemptMetaLine(['6 окт'], view)).toBe(line)
 	})
 })

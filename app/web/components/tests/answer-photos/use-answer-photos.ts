@@ -24,11 +24,14 @@ export type AnswerPhotoSession = {
 	photosFor(questionId: string): AnswerPhotoQueueHandle
 }
 
+type MaxCountOf = (questionId: string) => number
+
 type SessionRegistry = AnswerPhotoSession & { retain(): void; release(): void }
 
-function createQueueHandle(target: AnswerPhotoTarget): AnswerPhotoQueueHandle {
+function createQueueHandle(target: AnswerPhotoTarget, maxCount: number | undefined): AnswerPhotoQueueHandle {
 	let listed = false
 	const queue = createPhotoUploadQueue({
+		maxCount,
 		upload: (photoId, blob, fileName) => uploadAnswerPhoto(target, photoId, blob, fileName),
 		remove: (photoId) => deleteAnswerPhoto(target, photoId),
 		prepare: prepareForUpload,
@@ -44,7 +47,11 @@ function createQueueHandle(target: AnswerPhotoTarget): AnswerPhotoQueueHandle {
 	}
 }
 
-function createSessionRegistry(testId: string, sessionId: string | null): SessionRegistry {
+function createSessionRegistry(
+	testId: string,
+	sessionId: string | null,
+	maxCountOf: MaxCountOf | undefined
+): SessionRegistry {
 	const handles = new Map<string, AnswerPhotoQueueHandle>()
 	let pendingRelease: ReturnType<typeof setTimeout> | null = null
 
@@ -57,7 +64,7 @@ function createSessionRegistry(testId: string, sessionId: string | null): Sessio
 		photosFor(questionId) {
 			const existing = handles.get(questionId)
 			if (existing) return existing
-			const handle = createQueueHandle({ testId, sessionId: sessionId ?? '', questionId })
+			const handle = createQueueHandle({ testId, sessionId: sessionId ?? '', questionId }, maxCountOf?.(questionId))
 			handles.set(questionId, handle)
 			return handle
 		},
@@ -75,9 +82,13 @@ function createSessionRegistry(testId: string, sessionId: string | null): Sessio
 	}
 }
 
-export function useAnswerPhotoSession(ids: { testId: string; sessionId: string | null }): AnswerPhotoSession {
-	const { testId, sessionId } = ids
-	const registry = useMemo(() => createSessionRegistry(testId, sessionId), [testId, sessionId])
+export function useAnswerPhotoSession(ids: {
+	testId: string
+	sessionId: string | null
+	maxCountOf?: MaxCountOf
+}): AnswerPhotoSession {
+	const { testId, sessionId, maxCountOf } = ids
+	const registry = useMemo(() => createSessionRegistry(testId, sessionId, maxCountOf), [testId, sessionId, maxCountOf])
 	useEffect(() => {
 		registry.retain()
 		return () => registry.release()
@@ -142,4 +153,48 @@ export function useAnswerPhotos(handle: AnswerPhotoQueueHandle): AnswerPhotosVie
 		retry: queue.retry,
 		remove: queue.remove,
 	}
+}
+
+function primeListing(handle: AnswerPhotoQueueHandle): void {
+	if (handle.listed()) return
+	void listAnswerPhotos(handle.target).then((outcome) => {
+		if (!outcome.ok || handle.listed()) return
+		handle.queue.seed(outcome.data.photos)
+		handle.markListed()
+	})
+}
+
+function createCountStore(session: AnswerPhotoSession, questionIds: readonly string[]) {
+	const handles = questionIds.map((questionId) => session.photosFor(questionId))
+	let seen: readonly PhotoQueueState[] = []
+	let value: ReadonlyMap<string, number> = new Map()
+	return {
+		snapshot(): ReadonlyMap<string, number> {
+			const states = handles.map((handle) => handle.queue.snapshot())
+			if (states.length === seen.length && states.every((state, index) => state === seen[index])) return value
+			seen = states
+			value = new Map(
+				questionIds.map((questionId, index) => [
+					questionId,
+					states[index]?.items.filter((item) => item.status === 'done').length ?? 0,
+				])
+			)
+			return value
+		},
+		subscribe(listener: () => void): () => void {
+			const unsubscribers = handles.map((handle) => handle.queue.subscribe(listener))
+			for (const handle of handles) primeListing(handle)
+			return () => {
+				for (const unsubscribe of unsubscribers) unsubscribe()
+			}
+		},
+	}
+}
+
+export function useAnswerPhotoCounts(
+	session: AnswerPhotoSession,
+	questionIds: readonly string[]
+): ReadonlyMap<string, number> {
+	const store = useMemo(() => createCountStore(session, questionIds), [session, questionIds])
+	return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot)
 }

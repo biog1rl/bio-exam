@@ -1,5 +1,7 @@
 import type { ReviewStatus } from '@bio-exam/exam-core'
 
+import { formatPoints } from './format'
+
 export type AttemptResultFields = {
 	reviewStatus: ReviewStatus
 	earnedPoints: number | null
@@ -35,4 +37,25 @@ export function attemptResultView(fields: AttemptResultFields): AttemptResultVie
 		points: { earned: earnedPoints, total: fields.totalPoints },
 		teacherChecked: reviewStatus === 'graded',
 	}
+}
+
+export type ReviewMarkKind = 'pending' | 'graded' | 'none'
+
+export function reviewMarkOf(view: AttemptResultView): ReviewMarkKind {
+	if (view.kind === 'pending') return 'pending'
+	return view.teacherChecked ? 'graded' : 'none'
+}
+
+export function attemptPointsText(view: AttemptResultView): string | null {
+	if (view.kind === 'pending') return view.auto ? formatPoints(view.auto) : null
+	return formatPoints(view.points)
+}
+
+export function attemptVerdictText(view: AttemptResultView): string | null {
+	if (view.kind === 'pending') return null
+	return view.passed ? 'Пройден' : 'Не пройден'
+}
+
+export function attemptMetaLine(leading: readonly string[], view: AttemptResultView): string {
+	return [...leading, attemptPointsText(view), attemptVerdictText(view)].filter(Boolean).join(' · ')
 }

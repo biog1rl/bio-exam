@@ -56,6 +56,8 @@ function question(
 		questionTypeTitle: QUESTION_TYPES_MAP[type]?.title ?? type,
 		order: 0,
 		points: 1,
+		allowPhotos: true,
+		maxPhotos: 5,
 		promptText,
 		...content,
 	}

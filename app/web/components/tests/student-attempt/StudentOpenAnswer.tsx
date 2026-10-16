@@ -1,6 +1,11 @@
+'use client'
+
 import { OPEN_QUESTION_MAX_POINTS } from '@bio-exam/exam-core'
 
+import { useState } from 'react'
+
 import MdxRenderer from '@/components/tests/MdxRenderer'
+import { PhotoViewer } from '@/components/tests/answer-photos/PhotoViewer'
 import { answerPhotoUrl } from '@/lib/tests/answer-photos-api'
 import type { StudentAttemptPhoto } from '@/lib/tests/student-attempt'
 import type { AttemptQuestionView } from '@/lib/tests/types'
@@ -14,6 +19,7 @@ export function StudentOpenAnswer({
 }) {
 	const text = typeof view.userAnswer === 'string' ? view.userAnswer.trim() : ''
 	const review = view.review ?? null
+	const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 
 	return (
 		<div className="mt-4 space-y-3">
@@ -28,23 +34,20 @@ export function StudentOpenAnswer({
 					<ul aria-label="Фото ответа" className="mt-3 flex flex-wrap gap-2">
 						{photos.map((photo, index) => (
 							<li key={photo.id}>
-								<a
-									href={answerPhotoUrl(photo.id, 'full')}
-									target="_blank"
-									rel="noopener noreferrer"
-									className="block overflow-hidden rounded-xl border border-border/70 outline-none focus-visible:border-primary"
+								<button
+									type="button"
+									onClick={() => setViewerIndex(index)}
+									aria-label={`Открыть фото ${index + 1}`}
+									className="block cursor-zoom-in overflow-hidden rounded-xl border border-border/70 focus-visible:ring-[0.1875rem] focus-visible:ring-ring/50 focus-visible:outline-none"
 								>
 									{/* eslint-disable-next-line @next/next/no-img-element */}
-									<img
-										src={answerPhotoUrl(photo.id, 'thumb')}
-										alt={`Фото ответа ${index + 1}, открыть целиком`}
-										className="size-24 object-cover"
-									/>
-								</a>
+									<img src={answerPhotoUrl(photo.id, 'thumb')} alt="" className="size-24 object-cover" />
+								</button>
 							</li>
 						))}
 					</ul>
 				) : null}
+				<PhotoViewer photos={photos} openIndex={viewerIndex} onClose={() => setViewerIndex(null)} />
 			</div>
 
 			{review ? (

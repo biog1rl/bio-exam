@@ -59,9 +59,9 @@ export function NavUser() {
 					<DropdownMenuTrigger asChild>
 						<SidebarMenuButton
 							size="lg"
-							className="cursor-pointer transition-all group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:hover:scale-110 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:data-[state=open]:scale-110"
+							className="cursor-pointer rounded-xl transition-all group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:hover:scale-110 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:data-[state=open]:scale-110"
 						>
-							<Avatar className="h-8 w-8 rounded-lg">
+							<Avatar className="h-8 w-8 rounded-full">
 								<AvatarImage src={avatar || undefined} className="rounded-full" />
 								<AvatarFallback
 									className="rounded-full font-semibold"

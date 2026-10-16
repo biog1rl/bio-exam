@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
 import MdxRenderer from '@/components/tests/MdxRenderer'
+import { PhotoViewer } from '@/components/tests/answer-photos/PhotoViewer'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -37,6 +38,7 @@ export function OpenAnswerReview({ attempt, view, onSaved }: Props) {
 	const [form, setForm] = useState<OpenReviewForm>(() => initialReviewForm(open?.review ?? null))
 	const [saving, setSaving] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 	const [nowMs] = useState(() => Date.now())
 
 	if (!open) return null
@@ -79,25 +81,26 @@ export function OpenAnswerReview({ attempt, view, onSaved }: Props) {
 					<ul className="flex flex-wrap gap-3">
 						{open.photos.map((photo, index) => (
 							<li key={photo.id} className="w-32 space-y-1">
-								<a
-									href={answerPhotoUrl(photo.id, 'full')}
-									target="_blank"
-									rel="noopener noreferrer"
-									aria-label={`Открыть фото ${index + 1} в полном размере`}
-									className="block overflow-hidden rounded-xl border border-border/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+								<button
+									type="button"
+									onClick={() => setViewerIndex(index)}
+									aria-label={`Открыть фото ${index + 1}`}
+									className="block w-full cursor-zoom-in overflow-hidden rounded-xl border border-border/70 focus-visible:ring-[0.1875rem] focus-visible:ring-ring/50 focus-visible:outline-none"
 								>
+									{/* eslint-disable-next-line @next/next/no-img-element */}
 									<img
 										src={answerPhotoUrl(photo.id, 'thumb')}
-										alt={`Фото ответа ${index + 1}`}
+										alt=""
 										loading="lazy"
 										className="aspect-square w-full object-cover"
 									/>
-								</a>
+								</button>
 								<p className="text-xs text-muted-foreground">Загружено {formatDateTime(photo.uploadedAt)}</p>
 							</li>
 						))}
 					</ul>
 				)}
+				<PhotoViewer photos={open.photos} openIndex={viewerIndex} onClose={() => setViewerIndex(null)} />
 			</div>
 
 			{open.referenceText ? (

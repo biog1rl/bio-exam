@@ -269,6 +269,34 @@ describe('создание вопроса', () => {
 		assert.equal(after[2]?.id, reply.body.questionId)
 	})
 
+	test('настройки фото вопроса: по умолчанию 5 и разрешено, сохраняются при создании и правке, вне 1…10 отклоняются', async () => {
+		const testId = await saveTest(nextSlug('photos'), [radio('Первый', { order: 0 })])
+		async function photoSettings(questionId: string) {
+			const { rows } = await ctx.pgPool.query<{ allow_photos: boolean; max_photos: number }>(
+				'SELECT allow_photos, max_photos FROM questions WHERE id = $1',
+				[questionId]
+			)
+			return rows[0]
+		}
+		const plain = await postQuestion(testId, radio('Без настроек'))
+		assert.equal(plain.status, 201)
+		assert.deepEqual(await photoSettings(String(plain.body.questionId)), { allow_photos: true, max_photos: 5 })
+		const custom = await postQuestion(testId, radio('С настройками', { allowPhotos: false, maxPhotos: 3 }))
+		assert.equal(custom.status, 201)
+		const customId = String(custom.body.questionId)
+		assert.deepEqual(await photoSettings(customId), { allow_photos: false, max_photos: 3 })
+		const kept = await patchQuestion(testId, customId, radio('Правка без настроек'))
+		assert.equal(kept.status, 200)
+		assert.deepEqual(await photoSettings(customId), { allow_photos: false, max_photos: 3 })
+		const changed = await patchQuestion(testId, customId, radio('Правка', { allowPhotos: true, maxPhotos: 10 }))
+		assert.equal(changed.status, 200)
+		assert.deepEqual(await photoSettings(customId), { allow_photos: true, max_photos: 10 })
+		for (const maxPhotos of [0, 11, 2.5]) {
+			assert.equal((await patchQuestion(testId, customId, radio('Мимо', { maxPhotos }))).status, 400)
+		}
+		assert.deepEqual(await photoSettings(customId), { allow_photos: true, max_photos: 10 })
+	})
+
 	test('параллельные POST дают порядок 0…n-1 без повторов', async () => {
 		const testId = await saveTest(nextSlug('parallel'), [
 			radio('Первый', { order: 0 }),

@@ -37,16 +37,17 @@ const sizeClasses = {
 }
 
 const predefinedColors = [
-	'#3B82F6', // blue
-	'#10B981', // emerald
-	'#F59E0B', // amber
-	'#EF4444', // red
-	'#8B5CF6', // violet
-	'#06B6D4', // cyan
-	'#84CC16', // lime
-	'#F97316', // orange
-	'#EC4899', // pink
-	'#6B7280', // gray
+	'#4b6b38',
+	'#69954f',
+	'#c3ac65',
+	'#68a796',
+	'#ba7747',
+	'#457a8e',
+	'#7d68a2',
+	'#bd6062',
+	'#526897',
+	'#bb79a5',
+	'#4c673e',
 ]
 
 export function AvatarEditor({
