@@ -1,6 +1,6 @@
 'use client'
 
-import { keyShapeFor } from '@bio-exam/exam-core'
+import { ANSWER_PHOTO_MAX_COUNT_LIMIT, keyShapeFor } from '@bio-exam/exam-core'
 
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 
@@ -11,6 +11,7 @@ import { Editor } from '@/components/editor/editor'
 import { PageHeader } from '@/components/page/PageHeader'
 import { Panel } from '@/components/page/Panel'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -167,9 +168,9 @@ export default function QuestionEditor({
 					{autosaveStatus ? <AutosaveStatusLine status={autosaveStatus} /> : null}
 					{headerActions}
 					<Button
-						variant="secondary"
+						variant="outline"
 						onClick={onCancel}
-						className={leaving ? 'relative rounded-full' : 'rounded-full'}
+						className={leaving ? 'relative h-10 rounded-full' : 'h-10 rounded-full'}
 						aria-label={leaving ? 'Отмена' : undefined}
 						aria-busy={leaving || undefined}
 					>
@@ -182,7 +183,7 @@ export default function QuestionEditor({
 							'Отмена'
 						)}
 					</Button>
-					<Button className="relative rounded-full" onClick={handleSave} disabled={leaving}>
+					<Button className="relative h-10 rounded-full" onClick={handleSave} disabled={leaving}>
 						<span className={isSaving ? 'invisible' : ''}>Сохранить вопрос</span>
 						{isSaving && (
 							<Loader2 className="absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 animate-spin" />
@@ -319,6 +320,34 @@ export default function QuestionEditor({
 							preset="full"
 							docPath={docPath}
 						/>
+						<div className="mt-2 flex flex-col gap-3">
+							<div className="flex items-center gap-2">
+								<Checkbox
+									id="question-allow-photos"
+									checked={form.allowPhotos}
+									onCheckedChange={(checked) => setForm((prev) => ({ ...prev, allowPhotos: checked === true }))}
+								/>
+								<Label htmlFor="question-allow-photos">Разрешить добавление фото</Label>
+							</div>
+							{form.allowPhotos ? (
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="question-max-photos">Максимум фото</Label>
+									<Input
+										id="question-max-photos"
+										type="number"
+										inputMode="numeric"
+										min={1}
+										max={ANSWER_PHOTO_MAX_COUNT_LIMIT}
+										className="w-28"
+										value={Number.isFinite(form.maxPhotos) ? form.maxPhotos : ''}
+										onChange={(event) => setForm((prev) => ({ ...prev, maxPhotos: event.target.valueAsNumber }))}
+									/>
+									<p className="text-xs text-muted-foreground">
+										От 1 до {ANSWER_PHOTO_MAX_COUNT_LIMIT} фото к одному ответу.
+									</p>
+								</div>
+							) : null}
+						</div>
 					</div>
 				) : (
 					<div className="flex flex-col gap-2">

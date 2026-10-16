@@ -126,7 +126,7 @@ export default function NotificationList({ userId, onNavigate }: NotificationLis
 							href={`/notifications/${encodeURIComponent(item.id)}`}
 							prefetch={false}
 							onClick={onNavigate}
-							className="flex min-h-11 items-start gap-2 rounded-2xl px-2 py-2 transition-colors hover:bg-secondary/60 focus-visible:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+							className="flex min-h-11 items-start gap-2 rounded-sm px-2 py-2 transition-colors hover:bg-secondary/60 focus-visible:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 						>
 							<span aria-hidden="true" className="flex h-5 shrink-0 items-center">
 								<span className={cn('size-2 rounded-full', item.read ? 'bg-transparent' : 'bg-primary')} />

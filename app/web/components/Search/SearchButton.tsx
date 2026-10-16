@@ -31,7 +31,13 @@ export default function SearchButton() {
 		<div className="flex w-full max-w-xs flex-col gap-6">
 			<Tooltip>
 				<TooltipTrigger onKeyDown={onKeyDown} asChild>
-					<Button size="icon" variant="outline" onClick={openDialog}>
+					<Button
+						size="icon"
+						variant="outline"
+						className="rounded-full bg-card hover:bg-accent"
+						aria-label="Поиск"
+						onClick={openDialog}
+					>
 						<SearchIcon size="4" />
 					</Button>
 				</TooltipTrigger>

@@ -628,7 +628,7 @@ export function EditUserDialog({ open, onOpenChange, user, onSaved }: Props) {
 								void runSessionAction('revoke')
 							}}
 							disabled={actionPending}
-							className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 						>
 							{pendingAction === 'revoke' ? 'Завершаем…' : 'Завершить сеансы'}
 						</AlertDialogAction>

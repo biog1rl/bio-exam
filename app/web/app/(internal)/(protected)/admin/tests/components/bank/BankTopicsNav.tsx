@@ -36,13 +36,20 @@ interface BankTopicsNavProps {
 	currentSlug: string | null
 	canCreateTopic: boolean
 	onCreateTopic: () => void
+	label?: string
 }
 
-export function BankTopicsNav({ links, currentSlug, canCreateTopic, onCreateTopic }: BankTopicsNavProps) {
+export function BankTopicsNav({
+	links,
+	currentSlug,
+	canCreateTopic,
+	onCreateTopic,
+	label = 'Темы банка',
+}: BankTopicsNavProps) {
 	return (
 		<nav
-			aria-label="Темы банка"
-			className="rounded-4xl border border-border/80 bg-card/90 p-2 shadow-sm tab:sticky tab:top-unit tab:max-h-[calc(100dvh-8rem)] tab:overflow-y-auto"
+			aria-label={label}
+			className="rounded-3xl border border-border/80 bg-card/90 p-2 shadow-sm tab:sticky tab:top-unit tab:max-h-[calc(100dvh-8rem)] tab:overflow-y-auto"
 		>
 			<div className="flex items-center justify-between gap-2 py-1 pr-1 pl-3">
 				<h2 className="font-mono text-[0.6875rem] tracking-[0.18em] text-muted-foreground uppercase">Темы</h2>

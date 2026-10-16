@@ -51,7 +51,7 @@ export default async function AppLayout({
 									<header className="sticky top-0 z-10 flex min-w-0 items-center border-b border-border bg-background/90 p-unit-mob backdrop-blur-xl tab-sm:p-unit">
 										<div className="flex h-full shrink-0 items-center gap-2 tab-sm:gap-4">
 											<MobileMenuButton />
-											<BackButton className="size-9 cursor-pointer border-border bg-card text-foreground transition-colors hover:bg-secondary" />
+											<BackButton />
 											<Separator className="hidden bg-border mob:block" orientation="vertical" />
 										</div>
 

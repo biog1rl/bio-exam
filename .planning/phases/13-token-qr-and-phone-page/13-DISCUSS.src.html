@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Фаза 13: ссылка и страница телефона</title>
+<link rel="stylesheet" href="htmlplan.css">
+<script src="htmlplan.js" defer></script>
+<body>
+
+<header>
+  <h1>Фаза 13: ссылка и страница телефона</h1>
+  <details class="thread"><summary>Цель и что уже решено</summary>
+    <doc-quote via="doc" from="ROADMAP.md, Phase 13">A student can add photos to an open answer from a phone by scanning a QR code, without signing in, through a link that can do nothing else.</doc-quote>
+    <doc-quote via="doc" from="REQUIREMENTS.md, QR-03">The link can only add and remove photos of its question; it stops working when the upload window closes, after "Готово", when the assignment is revoked or the user is blocked, and every invalid state shows one message "ссылка недействительна"</doc-quote>
+    <doc-quote via="doc" from="REQUIREMENTS.md, QR-04">The link token never appears in server logs, the Referer header or search indexes; phone-page requests are rate-limited by token, not only by IP</doc-quote>
+    <doc-quote via="doc" from="photo-milestone-decisions, 2026-10-06">ссылка-способность — непрозрачный токен, sha256 в БД, область = слот (сессия, вопрос), до 3 активных ссылок на слот, без нового секрета; лимит запросов по хешу токена</doc-quote>
+    <doc-quote via="doc" from="12-CONTEXT.md, D-18">Общий компонент фото … готовится так, чтобы фаза 13 добавила «Сделать фото» (capture) и «Выбрать из галереи» без переделки</doc-quote>
+  </details>
+</header>
+
+<main>
+<doc-plan>
+
+<doc-claim>
+  <p>Токен ссылки не попадает ни в журнал сервера, ни в Referer, а перезагрузка страницы на компьютере не ломает открытую страницу телефона.</p>
+  <doc-code src="app/web/proxy.ts" lines="8-14" hl="9,13">
+    <doc-pin line="9" tone="warn" title="Префикс без слэша">Для /photo-upload такой префикс открыл бы и /photo-upload-anything.</doc-pin>
+  </doc-code>
+  <doc-code src="app/server/src/lib/logger.ts" lines="7" hl="7">
+    <doc-pin line="7" tone="risk" title="Заголовка токена в списке нет">Любой лог ошибки запроса записал бы X-Upload-Token.</doc-pin>
+  </doc-code>
+  <doc-note tone="info"><strong>Почему важно.</strong> Токен даёт право писать в чужой ответ без входа. Тремя местами маскировки (Next, Caddy, errorHandler) легко ошибиться; фрагмент адреса убирает их структурно. В v1.0 уже был такой случай: заголовок Cookie попал в лог (журнал «разбитых окон», №1).</doc-note>
+
+  <doc-claim>
+    <p>Токен лежит во фрагменте адреса <code>/photo-upload#токен</code>: браузер не отправляет фрагмент ни серверу, ни в Referer.</p>
+    <doc-code title="photo-upload page · sketch" lang="ts">
+<script type="text/plain">
+const token = location.hash.slice(1)
+fetch('/api/upload/context', { headers: { 'X-Upload-Token': token } })
+</script>
+    </doc-code>
+    <doc-ask id="link-transport">
+      <p>Где держать токен в адресе страницы телефона?</p>
+      <label><input type="radio" name="link-transport" value="fragment" checked> Во фрагменте <code>#</code> <small>сервер, Caddy и Referer токена не видят</small></label>
+      <label><input type="radio" name="link-transport" value="path"> В пути <code>/photo-upload/токен</code> <small>токен виден Next, Caddy; нужна маскировка</small></label>
+      <label><input type="radio" name="link-transport" value="custom"> Свой вариант</label>
+      <input type="text" name="link-transport-custom">
+    </doc-ask>
+    <div data-if="link-transport=path"><doc-note tone="warn">Тогда добавляются: префикс <code>/photo-upload/</code> со слэшем и тест в proxy.test.ts, маскировка пути в логе Caddy (правит владелец на сервере), шаг владельца «проверить журнал Caddy».</doc-note></div>
+    <div data-if="link-transport=fragment"><doc-note tone="warn">Спайк на устройствах обязан проверить, что сканеры QR и просмотрщики мессенджеров не обрезают фрагмент. Если обрежут в браузере, которым пользуются ученики, вернёмся к пути с маскировкой.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>В базе лежит только sha256 токена; тот же QR после перезагрузки показывает кэш компьютера, потеря кэша выдаёт новую ссылку (до 3 активных на слот).</p>
+    <doc-schema id="links-table" lang="sql" title="миграция 0032 · sketch" caption="Ссылки физически не удаляются: гаснут через revoked_at или каскадом с сессией.">
+<script type="text/plain">
+CREATE TABLE answer_upload_links (
+  id           uuid PRIMARY KEY,
+  token_hash   text NOT NULL UNIQUE,
+  session_id   uuid NOT NULL REFERENCES test_sessions(id) ON DELETE CASCADE,
+  question_id  uuid NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  revoked_at   timestamptz,
+  last_used_at timestamptz
+);
+</script>
+    </doc-schema>
+    <doc-ask id="token-keep">
+      <p>Как сделать, чтобы QR после перезагрузки остался тем же?</p>
+      <label><input type="radio" name="token-keep" value="hash3" checked> Хеш в базе, до 3 ссылок на слот, адрес в sessionStorage <small>решено раньше; нового секрета нет</small></label>
+      <label><input type="radio" name="token-keep" value="plain"> Токен в строке открытым, одна ссылка на слот <small>тот же QR на любой вкладке; база хранит живые токены</small></label>
+      <label><input type="radio" name="token-keep" value="hmac"> HMAC от id ссылки <small>нужен новый секрет в env-контракте</small></label>
+      <label><input type="radio" name="token-keep" value="custom"> Свой вариант</label>
+      <input type="text" name="token-keep-custom">
+    </doc-ask>
+    <div data-if="token-keep=hash3"><doc-note tone="info">Четвёртая выдача при трёх активных гасит самую старую ссылку: открытая на ней страница телефона получит «ссылка недействительна».</doc-note></div>
+    <div data-if="token-keep=plain"><doc-note tone="warn">Резервные копии держат токены до 12 месяцев, но к тому времени окно давно закрыто и ссылки мертвы.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Телефон удаляет любое фото своего вопроса: ученик видит все пять на одном экране.</p>
+    <doc-ask id="phone-delete">
+      <p>Какие фото вопроса может удалить телефон?</p>
+      <label><input type="radio" name="phone-delete" value="any" checked> Любые фото этого вопроса <small>так в QR-03; проще</small></label>
+      <label><input type="radio" name="phone-delete" value="own"> Только добавленные этой ссылкой <small>сосед по парте не удалит фото с компьютера</small></label>
+      <label><input type="radio" name="phone-delete" value="custom"> Свой вариант</label>
+      <input type="text" name="phone-delete-custom">
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Каждое фото помечено, откуда оно пришло (<code>session</code> или <code>link</code>); проверяющий в фазе 15 увидит «загружено по ссылке».</p>
+    <doc-ask id="via-mark">
+      <p>Помечать фото источником загрузки?</p>
+      <label><input type="radio" name="via-mark" value="yes" checked> Да, столбец <code>uploaded_via</code> в той же миграции 0032 <small>единственный сдерживающий фактор против чужих фото</small></label>
+      <label><input type="radio" name="via-mark" value="no"> Нет <small>проверяющий не отличит фото с телефона</small></label>
+    </doc-ask>
+    <div data-if="via-mark=no"><doc-note tone="warn">Фаза 12 не создаёт такого столбца; без него в фазе 15 пометку придётся добавлять миграцией задним числом без данных.</doc-note></div>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Страница телефона показывает шесть состояний; недействительная ссылка всегда выглядит одинаково.</p>
+  <doc-machine name="phone" caption="Пять рабочих состояний и два конечных.">
+<script type="text/plain">
+machine phone initial ready
+state ready      # Можно добавить фото.
+state uploading  # Фото уходит на сервер.
+state full       # Уже 5 из 5.
+state offline    # Нет сети, очередь ждёт.
+state closed final   # Окно фото закрылось.
+state invalid final  # Ссылка недействительна.
+
+| ready    | uploading | full   |
+| offline  | closed    | invalid |
+
+ready     -pick->    uploading : выбор файла
+uploading -ok->      ready     : 201
+uploading -fifth->   full      : пятое фото
+full      -delete->  ready     : удалил фото
+ready     -lost->    offline   : нет сети
+offline   -back->    ready     : сеть вернулась
+ready     -window->  closed    : 422
+uploading -window->  closed    : 422
+ready     -revoked-> invalid   : 404
+uploading -revoked-> invalid   : 404
+</script>
+  </doc-machine>
+  <doc-note tone="info"><strong>Две неувязки в требованиях.</strong> QR-02 называет «окно закрыто» и «ссылка недействительна» разными состояниями, а QR-03 велит одно сообщение на все недействительные случаи. Трактовка по умолчанию: токен верный и окно закрыто — своё состояние; отозван, неизвестен, ученик заблокирован, назначение снято — одно «ссылка недействительна».</doc-note>
+
+  <doc-claim>
+    <p>«Окно закрыто» — отдельное состояние со временем закрытия; всё остальное неверное — одно «ссылка недействительна».</p>
+    <doc-ask id="closed-state">
+      <p>Показывать закрытое окно отдельно от недействительной ссылки?</p>
+      <label><input type="radio" name="closed-state" value="separate" checked> Отдельно, со временем закрытия <small>как в критерии 1; ученик понимает причину</small></label>
+      <label><input type="radio" name="closed-state" value="same"> Тоже «ссылка недействительна» <small>оракула нет совсем; причина непонятна</small></label>
+    </doc-ask>
+    <div data-if="closed-state=same"><doc-note tone="warn">Состояние «окно закрыто» из QR-02 и критерия 1 пропадает; текст «Время для добавления фото закончилось в ЧЧ:ММ» остаётся только на компьютере.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Ссылка живёт, пока открыто окно фото из фазы 11; сдача теста её не гасит.</p>
+    <doc-code src="app/server/src/services/attempt-sessions/upload-window.ts" lines="28-43" hl="33-36">
+      <doc-pin line="33" title="После сдачи окно открыто до uploadClosesAt">Тест с таймером и тест без лимита принимают фото уже после сдачи.</doc-pin>
+    </doc-code>
+    <doc-ask id="submit-link">
+      <p>Когда гаснет ссылка в связи со сдачей?</p>
+      <label><input type="radio" name="submit-link" value="window" checked> Только когда закрылось окно фото, в том числе по «Готово» из фазы 14 <small>одно правило, <code>photoUploadWindow</code></small></label>
+      <label><input type="radio" name="submit-link" value="submit"> Сразу при сдаче теста <small>поздние фото с телефона после таймера невозможны</small></label>
+    </doc-ask>
+    <div data-if="submit-link=submit"><doc-note tone="warn">Это противоречит окну фазы 11: после принудительной сдачи по таймеру ученик как раз догружает фото с телефона. Окно тогда теряет смысл для QR.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Миниатюры на телефоне идут маршрутом <code>/api/upload/photos/:id/thumb</code> с заголовком токена; полноразмерных фото по ссылке нет.</p>
+    <doc-note tone="info">У телефона нет сессии, а раздача фазы 12 требует её. Тег <code>img</code> заголовок не передаёт, поэтому страница берёт миниатюры через fetch и показывает как blob.</doc-note>
+    <doc-ask id="phone-thumbs">
+      <p>Как телефон видит загруженные фото?</p>
+      <label><input type="radio" name="phone-thumbs" value="route" checked> Отдельный маршрут миниатюр по токену <small>только thumb, no-store</small></label>
+      <label><input type="radio" name="phone-thumbs" value="inline"> Миниатюры внутри ответа списка <small>тяжелее на каждом опросе</small></label>
+      <label><input type="radio" name="phone-thumbs" value="none"> Без миниатюр, только счётчик «N из 5» <small>проще; ученик не видит, что загрузил</small></label>
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>На компьютере у открытого вопроса есть панель QR; на самом телефоне панели нет, там сразу «Сделать фото» и «Выбрать из галереи».</p>
+    <doc-ask id="runner-device">
+      <p>Где показывать панель QR?</p>
+      <label><input type="radio" name="runner-device" value="pointer" checked> Только на компьютере (точный указатель) <small>на телефоне кнопки камеры и галереи</small></label>
+      <label><input type="radio" name="runner-device" value="always"> Везде одинаково <small>на телефоне QR бесполезен</small></label>
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Страница 404 показывает свою картинку, а тосты в защищённой области не дублируются.</p>
+  <doc-code src="app/web/app/not-found.tsx" lines="20" hl="20">
+    <doc-pin line="20" tone="risk" title="Файла нет">В public/img лежит только main-bg.jpg; not-found.png удалён в afe2b15.</doc-pin>
+  </doc-code>
+  <doc-note tone="ok"><strong>Решено владельцем.</strong> Картинка рисуется заново в SVG по концепции сайта (черновик в каталоге фазы <code>assets/not-found.svg</code>); в план попадает перенос в <code>app/web/public/img/</code> и смена <code>src</code>.</doc-note>
+  <doc-note tone="ok"><strong>Проверено.</strong> <code>Toaster</code> в коде один, в корневом <code>app/layout.tsx</code> (журнал «разбитых окон», №2 закрыт). Дублей из-за второго Toaster больше нет.</doc-note>
+
+  <doc-claim>
+    <p>«Один тост» значит: каждое сообщение показывается один раз, единственный <code>Toaster</code> закрепляет проверка e2e.</p>
+    <doc-ask id="toast-one">
+      <p>Что считать «одним тостом за раз» в критерии 5?</p>
+      <label><input type="radio" name="toast-one" value="nodup" checked> Нет дублей одного сообщения <small>тосты разных событий складываются стопкой</small></label>
+      <label><input type="radio" name="toast-one" value="single"> Виден только один тост, новый вытесняет старый <small>теряются сообщения, например об ошибке загрузки</small></label>
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Фаза строится на трёх углублённых модулях, а не на копиях правил под ссылку.</p>
+  <doc-code src="app/web/components/AppLayout/AppLayout.tsx" lines="70" hl="70">
+    <doc-pin line="70" tone="warn" title="Третий список публичных путей">Такие же списки в proxy.ts и lib/session/client.ts, сравнение без слэша.</doc-pin>
+  </doc-code>
+  <doc-note tone="info"><strong>Откуда.</strong> Архитектурный осмотр <code>13-ARCH-REVIEW.md</code>: пять находок, три сильные. Для двух слабых ответ уже записан с причиной, их решать не нужно.</doc-note>
+
+  <doc-claim>
+    <p>Одна функция решает, принимает ли слот фото, и её вызывают и cookie-маршруты, и ссылка.</p>
+    <doc-ask id="arch-slot">
+      <p>Собрать проверку «слот принимает фото» в одно место отдельным планом?</p>
+      <label><input type="radio" name="arch-slot" value="phase" checked> В этой фазе <small>иначе ссылка копирует активность, назначение, окно; у учителя QR сломан</small></label>
+      <label><input type="radio" name="arch-slot" value="defer"> Отложить <small>правило в двух местах расходится</small></label>
+      <label><input type="radio" name="arch-slot" value="reject"> Отклонить</label>
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Блок фото и очередь принимают транспорт, и телефон подключает токен, не копируя компонент.</p>
+    <doc-ask id="arch-transport">
+      <p>Дать <code>PhotoBlock</code> и очереди транспорт отдельным web-планом?</p>
+      <label><input type="radio" name="arch-transport" value="phase" checked> В этой фазе <small>иначе страница телефона дублирует кнопки, счётчик и очередь</small></label>
+      <label><input type="radio" name="arch-transport" value="defer"> Отложить <small>телефон получает копию компонента</small></label>
+      <label><input type="radio" name="arch-transport" value="reject"> Отклонить</label>
+    </doc-ask>
+    <div data-if="arch-transport=phase"><doc-note tone="warn">Правка идёт в код, который исполняет фаза 12 (12-06, 12-09). Этот план стартует только после слияния фазы 12.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Публичные пути собраны в одном модуле, а на них оболочка сайта (меню, шапка, колокольчик) не рисуется.</p>
+    <doc-ask id="arch-public">
+      <p>Собрать три списка публичных путей в один модуль?</p>
+      <label><input type="radio" name="arch-public" value="phase" checked> В этой фазе <small>иначе три правки с опасным сравнением и чужое меню на телефоне</small></label>
+      <label><input type="radio" name="arch-public" value="defer"> Отложить <small>добавим <code>/photo-upload</code> в каждый список</small></label>
+      <label><input type="radio" name="arch-public" value="reject"> Отклонить</label>
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim aux="scope">
+  <p>Не делаем в этой фазе.</p>
+  <ul>
+    <li>Текст ответа, сдача и «Готово, фото загружены» — фаза 14; ссылка уже гаснет по закрытию окна, как только кнопка сдвигает <code>uploadClosesAt</code>.</li>
+    <li>Просмотр фото проверяющим и пометка «по ссылке» в интерфейсе — фаза 15; в фазе 13 только пишем <code>uploaded_via</code>.</li>
+    <li>Срок хранения и очистка — фаза 16; приёмка на реальных телефонах — фаза 17.</li>
+    <li>Живой канал вместо опроса списка (шина событий) — чаты v4.0; пока опрос раз в 2,5 с, пока панель QR открыта.</li>
+    <li>Чтение полноразмерных фото по ссылке, HEIC на сервере, PWA и push — не берём.</li>
+    <li>Лимиты запросов (по хешу токена основной, по IP мягкий и широкий), имя заголовка и числа — решает планировщик по исследованию. Отдельный модуль лимитов не нужен: лимитер ставится после разбора токена (в осмотре отклонено с причиной).</li>
+    <li>Модуль «что не попадает в журнал» не строим: заголовок токена в redact и политика Referer делаются в самой фазе, остальное записывается в журнал «разбитых окон» (отложено). Токен приглашения в пути API, попадающий в журнал, — отдельная задача вне фазы.</li>
+  </ul>
+</doc-claim>
+
+</doc-plan>
+</main>
+</body>
+</html>

@@ -12,6 +12,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { SortableHead } from '@/components/table/SortableHead'
 import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkClass } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -170,10 +171,7 @@ export function UsersTable({
 									return (
 										<TableRow key={user.id} className="cursor-pointer" {...rowLink(href)}>
 											<TableCell className="py-3 pl-4">
-												<Link
-													href={href}
-													className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
-												>
+												<Link href={href} className={mainLinkClass}>
 													<Highlighted text={name} query={searchQuery} />
 												</Link>
 												<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground">

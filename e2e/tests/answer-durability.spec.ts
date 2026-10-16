@@ -62,7 +62,7 @@ test.describe.serial('LIFE-02: ответы переживают перезаг�
 			await page.reload()
 
 			await expect(page.getByText(`Отвечено: 2 / ${count}`)).toBeVisible()
-			await page.getByRole('button', { name: '1', exact: true }).click()
+			await page.getByRole('button', { name: /^Вопрос 1,/ }).click()
 			await expect(page.getByRole('radio', { name: correctOptionText(first), exact: true })).toBeChecked()
 		} finally {
 			await closeOpenAttempt(page, seed)

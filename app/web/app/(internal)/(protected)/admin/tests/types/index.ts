@@ -2,7 +2,7 @@
 // Types for Test Management
 // =============================================================================
 
-import { toCanonicalKey } from '@bio-exam/exam-core'
+import { ANSWER_PHOTO_MAX_COUNT, ANSWER_PHOTO_MAX_COUNT_LIMIT, toCanonicalKey } from '@bio-exam/exam-core'
 import type {
 	MistakeMetric,
 	QuestionTypeScoringRule,
@@ -166,6 +166,8 @@ export interface Question {
 	matchingPairs: MatchingPairs | null
 	promptText: string
 	explanationText: string | null
+	allowPhotos: boolean
+	maxPhotos: number
 	correct: string | string[] | Record<string, string>
 }
 
@@ -256,8 +258,14 @@ export function createDefaultQuestion(order: number): Question {
 		matchingPairs: null,
 		promptText: '',
 		explanationText: null,
+		allowPhotos: true,
+		maxPhotos: ANSWER_PHOTO_MAX_COUNT,
 		correct: '',
 	}
+}
+
+export function isValidMaxPhotos(value: unknown): value is number {
+	return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= ANSWER_PHOTO_MAX_COUNT_LIMIT
 }
 
 export function createDefaultScoringRules(): TestScoringRules {

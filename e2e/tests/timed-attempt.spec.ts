@@ -73,7 +73,7 @@ test('LIFE-05: тест с лимитом показывает таймер, т�
 		await expect(accepted).toBeFocused()
 		const acceptedLine = page.getByText('Время вышло, ответы приняты автоматически.')
 		await expect(acceptedLine).toBeVisible()
-		await expect(page.getByText('Баллы: 1 / 2')).toBeVisible()
+		await expect(page.getByText('Баллы: 1 из 2')).toBeVisible()
 		await expect(page.getByText('Время вышло', { exact: true })).toHaveCount(0)
 		const acceptedRatio = await contrastOf(acceptedLine)
 		console.log(`contrast: accepted line ${acceptedRatio.toFixed(2)}`)

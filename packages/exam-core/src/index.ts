@@ -40,15 +40,19 @@ export {
 } from './answer-limits'
 export type { AnswerViolation, AnswerViolationReason } from './answer-limits'
 export {
+	ANSWER_PHOTO_FORBIDDEN_MESSAGE,
 	ANSWER_PHOTO_LIMIT_MESSAGE,
 	ANSWER_PHOTO_MAX_BYTES,
 	ANSWER_PHOTO_MAX_COUNT,
+	ANSWER_PHOTO_MAX_COUNT_LIMIT,
 	ANSWER_PHOTO_MAX_SIDE,
 	ANSWER_PHOTO_VARIANTS,
 	AnswerPhotoDeleteResponseSchema,
 	AnswerPhotoListResponseSchema,
 	AnswerPhotoSchema,
 	AnswerPhotoUploadResponseSchema,
+	QuestionPhotoSettingsSchema,
+	answerPhotoLimitMessage,
 } from './answer-photos'
 export type {
 	AnswerPhoto,
@@ -56,6 +60,7 @@ export type {
 	AnswerPhotoListResponse,
 	AnswerPhotoUploadResponse,
 	AnswerPhotoVariant,
+	QuestionPhotoSettings,
 } from './answer-photos'
 export {
 	AdminAttemptViewSchema,

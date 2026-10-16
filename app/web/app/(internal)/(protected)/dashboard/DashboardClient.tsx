@@ -13,9 +13,9 @@ import { Panel } from '@/components/page/Panel'
 import { StudentProgressSection } from '@/components/progress/StudentProgressSection'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkClass } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
-import { type AttemptReviewAudience } from '@/components/tests/attempt-result/AttemptReviewLine'
-import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
+import { AttemptResultCells, AttemptResultHeads } from '@/components/tests/attempt-result/AttemptResultColumns'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -24,10 +24,11 @@ import { deniedAsNull } from '@/lib/http/swr'
 import { quickLinkSections } from '@/lib/navigation/sections'
 import { adminTestsKeys, adminTestsListFetcher, topicsListFetcher } from '@/lib/tests/admin-api'
 import { fetchMyTestAttempts, fetchPublicTestsList } from '@/lib/tests/api'
-import { attemptResultView, type AttemptResultFields } from '@/lib/tests/attempt-result-view'
+import { attemptMetaLine, attemptResultView } from '@/lib/tests/attempt-result-view'
 import { adminDashboardFetcher, adminDashboardKey, type AdminDashboardAttempt } from '@/lib/tests/dashboard-api'
 import { formatPercent } from '@/lib/tests/format'
 import type { PublicTestListItem, TestAttemptSummary } from '@/lib/tests/types'
+import { cn } from '@/lib/utils/cn'
 import { formatShortDay } from '@/lib/utils/dates'
 
 type AttemptBundle = {
@@ -56,11 +57,11 @@ type Stat = {
 	loading: boolean
 }
 
-function StatCards({ stats }: { stats: Stat[] }) {
+function StatGroup({ stats, className }: { stats: Stat[]; className: string }) {
 	return (
-		<div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-3">
+		<div className={cn('grid gap-3', className)}>
 			{stats.map((stat) => (
-				<div key={stat.label} className="rounded-3xl border border-border/80 bg-card px-4 py-3">
+				<div key={stat.label} className="rounded-3xl border border-border/80 bg-card px-4 py-3 shadow-sm">
 					{stat.loading ? (
 						<Skeleton className="my-0.5 h-6 w-12" />
 					) : (
@@ -73,6 +74,15 @@ function StatCards({ stats }: { stats: Stat[] }) {
 	)
 }
 
+function StatCards({ people, bank }: { people: Stat[]; bank: Stat[] }) {
+	return (
+		<div className={cn('grid gap-3', bank.length > 0 && 'lg:grid-cols-[3fr_4fr]')}>
+			<StatGroup stats={people} className="grid-cols-3" />
+			{bank.length > 0 ? <StatGroup stats={bank} className="grid-cols-2 tab-sm:grid-cols-4" /> : null}
+		</div>
+	)
+}
+
 function SectionHeading({ title, children }: { title: string; children?: ReactNode }) {
 	return (
 		<div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
@@ -81,9 +91,6 @@ function SectionHeading({ title, children }: { title: string; children?: ReactNo
 		</div>
 	)
 }
-
-const mainLinkClass =
-	'font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none'
 
 function testHrefOf(test: PublicTestListItem) {
 	return `/tests/${test.topicSlug}/${test.slug}`
@@ -129,14 +136,6 @@ function AvailableTestsTable({ tests }: { tests: PublicTestListItem[] }) {
 	)
 }
 
-function ResultCell({ attempt, audience }: { attempt: AttemptResultFields; audience: AttemptReviewAudience }) {
-	return (
-		<TableCell className="py-3 pr-4 text-right">
-			<AttemptScore view={attemptResultView(attempt)} audience={audience} />
-		</TableCell>
-	)
-}
-
 function LatestAttemptsTable({ attempts }: { attempts: DashboardAttempt[] }) {
 	const rowLink = useRowLink()
 	return (
@@ -146,26 +145,29 @@ function LatestAttemptsTable({ attempts }: { attempts: DashboardAttempt[] }) {
 					<TableRow className="hover:bg-transparent">
 						<TableHead className="pl-4">Тест</TableHead>
 						<TableHead className="hidden w-24 text-right tab-sm:table-cell">Дата</TableHead>
-						<TableHead className="w-40 pr-4 text-right">Результат</TableHead>
+						<AttemptResultHeads />
 					</TableRow>
 				</TableHeader>
 				<TableBody>
-					{attempts.map((attempt) => (
-						<TableRow key={attempt.id} className="cursor-pointer" {...rowLink(attempt.testHref)}>
-							<TableCell className="py-3 pl-4">
-								<Link href={attempt.testHref} className={mainLinkClass}>
-									{attempt.testTitle}
-								</Link>
-								<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
+					{attempts.map((attempt) => {
+						const view = attemptResultView(attempt)
+						return (
+							<TableRow key={attempt.id} className="cursor-pointer" {...rowLink(attempt.testHref)}>
+								<TableCell className="py-3 pl-4">
+									<Link href={attempt.testHref} className={mainLinkClass}>
+										{attempt.testTitle}
+									</Link>
+									<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
+										{attemptMetaLine([formatShortDay(attempt.submittedAt)], view)}
+									</p>
+								</TableCell>
+								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
 									{formatShortDay(attempt.submittedAt)}
-								</p>
-							</TableCell>
-							<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
-								{formatShortDay(attempt.submittedAt)}
-							</TableCell>
-							<ResultCell attempt={attempt} audience="student" />
-						</TableRow>
-					))}
+								</TableCell>
+								<AttemptResultCells view={view} />
+							</TableRow>
+						)
+					})}
 				</TableBody>
 			</Table>
 		</TableCard>
@@ -180,32 +182,35 @@ function StudentAttemptsTable({ attempts }: { attempts: AdminDashboardAttempt[] 
 				<TableHeader>
 					<TableRow className="hover:bg-transparent">
 						<TableHead className="pl-4">Ученик</TableHead>
-						<TableHead className="hidden lg:table-cell">Тест</TableHead>
-						<TableHead className="hidden w-24 text-right tab-sm:table-cell">Дата</TableHead>
-						<TableHead className="w-40 pr-4 text-right">Результат</TableHead>
+						<TableHead className="hidden 2xl:table-cell">Тест</TableHead>
+						<TableHead className="hidden w-24 text-right lg:table-cell">Дата</TableHead>
+						<AttemptResultHeads from="lg" />
 					</TableRow>
 				</TableHeader>
 				<TableBody>
 					{attempts.map((attempt) => {
 						const href = `/admin/attempts/${attempt.attemptId}`
+						const view = attemptResultView(attempt)
 						return (
 							<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
 								<TableCell className="py-3 pl-4">
 									<Link href={href} className={mainLinkClass}>
 										{attempt.studentName}
 									</Link>
-									<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground lg:hidden">
+									<p className="mt-0.5 text-xs [overflow-wrap:anywhere] text-muted-foreground 2xl:hidden">
 										{attempt.testTitle}
-										<span className="tab-sm:hidden"> · {formatShortDay(attempt.submittedAt)}</span>
+									</p>
+									<p className="mt-0.5 text-xs text-muted-foreground lg:hidden">
+										{attemptMetaLine([formatShortDay(attempt.submittedAt)], view)}
 									</p>
 								</TableCell>
-								<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
+								<TableCell className="hidden truncate text-muted-foreground 2xl:table-cell">
 									{attempt.testTitle}
 								</TableCell>
-								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+								<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums lg:table-cell">
 									{formatShortDay(attempt.submittedAt)}
 								</TableCell>
-								<ResultCell attempt={attempt} audience="staff" />
+								<AttemptResultCells view={view} from="lg" />
 							</TableRow>
 						)
 					})}
@@ -279,7 +284,6 @@ export default function DashboardClient() {
 	const latestAttempts = [...allAttempts]
 		.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
 		.slice(0, 6)
-	const latestAttempt = latestAttempts[0] ?? null
 	const finalPercents = allAttempts.flatMap((attempt) => {
 		const view = attemptResultView(attempt)
 		return view.kind === 'final' ? [view.percent] : []
@@ -296,13 +300,11 @@ export default function DashboardClient() {
 	const publishedCount = adminTests.filter((test) => test.isPublished).length
 	const draftCount = adminTests.length - publishedCount
 	const totalQuestions = adminTests.reduce((sum, test) => sum + (test.questionsCount ?? 0), 0)
-	const heroHref = canReadTests ? '/admin/tests' : (latestAttempt?.testHref ?? '/tests')
-	const heroCta = canReadTests ? 'Управление тестами' : latestAttempt ? 'Открыть последний тест' : 'Перейти к тестам'
 	const adminSummary = adminDashboard?.summary
 	const studentAttemptsLoading = testsQuery.isLoading || attemptsQuery.isLoading
 	const statsLoadingAdmin = adminDashboardQuery.isLoading
 	const statsLoadingCatalog = adminTopicsQuery.isLoading || adminTestsQuery.isLoading
-	const stats: Stat[] = canReadTests
+	const peopleStats: Stat[] = canReadTests
 		? [
 				{ label: 'попыток студентов', value: adminSummary?.totalAttempts ?? 0, loading: statsLoadingAdmin },
 				{ label: 'активных студентов', value: adminSummary?.activeStudents ?? 0, loading: statsLoadingAdmin },
@@ -311,14 +313,6 @@ export default function DashboardClient() {
 					value: adminSummary?.averageScore != null ? `${Math.round(adminSummary.averageScore)}%` : '—',
 					loading: statsLoadingAdmin,
 				},
-				...(statsLoadingCatalog || teacherAllowed
-					? [
-							{ label: 'темы', value: topics.length, loading: statsLoadingCatalog },
-							{ label: 'опубликовано', value: publishedCount, loading: statsLoadingCatalog },
-							{ label: 'черновики', value: draftCount, loading: statsLoadingCatalog },
-							{ label: 'вопросов', value: totalQuestions, loading: statsLoadingCatalog },
-						]
-					: []),
 			]
 		: [
 				{ label: 'завершено', value: completedTotal, loading: studentAttemptsLoading },
@@ -333,22 +327,24 @@ export default function DashboardClient() {
 					loading: studentAttemptsLoading,
 				},
 			]
+	const bankStats: Stat[] =
+		canReadTests && (statsLoadingCatalog || teacherAllowed)
+			? [
+					{ label: 'темы', value: topics.length, loading: statsLoadingCatalog },
+					{ label: 'опубликовано', value: publishedCount, loading: statsLoadingCatalog },
+					{ label: 'черновики', value: draftCount, loading: statsLoadingCatalog },
+					{ label: 'вопросов', value: totalQuestions, loading: statsLoadingCatalog },
+				]
+			: []
 
 	return (
 		<div className="space-y-6">
-			<PageHeader title={dashboardName(me?.firstName, me?.login)}>
-				<Button asChild className="h-10 rounded-full px-5">
-					<Link href={heroHref}>
-						{heroCta}
-						<ArrowRight className="size-4" aria-hidden="true" />
-					</Link>
-				</Button>
-			</PageHeader>
+			<PageHeader title={dashboardName(me?.firstName, me?.login)} />
 
-			<StatCards stats={stats} />
+			<StatCards people={peopleStats} bank={bankStats} />
 
 			{canReadTests ? null : (
-				<div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-2">
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-6 3xl:grid-cols-2">
 					<section className="space-y-3">
 						<SectionHeading title="Доступные тесты">
 							<Button asChild variant="outline" size="sm" className="rounded-full bg-card">
@@ -358,7 +354,7 @@ export default function DashboardClient() {
 						{testsQuery.isLoading ? (
 							<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка тестов" />
 						) : featuredTests.length === 0 ? (
-							<EmptyState description="Назначенных тестов пока нет." className="py-10" />
+							<EmptyState description="Назначенных тестов пока нет." />
 						) : (
 							<AvailableTestsTable tests={featuredTests} />
 						)}
@@ -369,7 +365,7 @@ export default function DashboardClient() {
 						{studentAttemptsLoading ? (
 							<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка попыток" />
 						) : latestAttempts.length === 0 ? (
-							<EmptyState description="История появится после первой попытки." className="py-10" />
+							<EmptyState description="История появится после первой попытки." />
 						) : (
 							<LatestAttemptsTable attempts={latestAttempts} />
 						)}
@@ -384,7 +380,7 @@ export default function DashboardClient() {
 						{adminDashboardQuery.isLoading ? (
 							<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка попыток" />
 						) : adminLatestAttempts.length === 0 ? (
-							<EmptyState description="Студенты пока не завершали тесты." className="py-10" />
+							<EmptyState description="Ученики пока не завершали тесты." />
 						) : (
 							<StudentAttemptsTable attempts={adminLatestAttempts.slice(0, 5)} />
 						)}

@@ -55,12 +55,14 @@ test('LIFE-05: страница прохождения на 375px без гор�
 		await page.goto(`/tests/${TOPIC_SLUG}/${seeded.slug}/start`)
 		await expect(page.getByText(new RegExp(`Отвечено: \\d+ / ${seeded.questions.length}`))).toBeVisible()
 		for (const [index, question] of seeded.questions.entries()) {
-			await page.getByRole('button', { name: String(index + 1), exact: true }).click()
+			await page.getByRole('button', { name: new RegExp(`^Вопрос ${index + 1},`) }).click()
 			await expect(page.getByText(`${index + 1}.`, { exact: true })).toBeVisible()
 			await answerQuestion(page, question, question.correct)
 			await expectNoHorizontalScroll(page, `question ${question.key}`)
 			await expectInsideViewport(page.locator('section[id^="question-"]'), `question ${question.key}`)
-			await expectInsideViewport(page.getByRole('button', { name: 'Завершить' }).first(), `finish ${question.key}`)
+			if (index === seeded.questions.length - 1) {
+				await expectInsideViewport(page.getByRole('button', { name: 'Завершить' }), `finish ${question.key}`)
+			}
 		}
 	} finally {
 		await closeOpenSession(page, testId)

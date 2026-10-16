@@ -71,9 +71,9 @@ test('LIFE-05: ответы на вопросы 1 и 2 под задержанн
 		await page.unrouteAll({ behavior: 'ignoreErrors' })
 
 		await expect(page.getByText(`Отвечено: 2 / ${QUESTIONS.length}`)).toBeVisible()
-		await page.getByRole('button', { name: '1', exact: true }).click()
+		await page.getByRole('button', { name: /^Вопрос 1,/ }).click()
 		await expect(page.getByRole('radio', { name: 'Митохондрия', exact: true })).toBeChecked()
-		await page.getByRole('button', { name: '2', exact: true }).click()
+		await page.getByRole('button', { name: /^Вопрос 2,/ }).click()
 		await expect(page.getByRole('radio', { name: 'Хлоропласт', exact: true })).toBeChecked()
 
 		const submitted = page.waitForResponse((response) => isSubmitRequest(response.url(), response.request().method()))

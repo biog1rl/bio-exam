@@ -24,7 +24,7 @@ export function AttemptReviewNav({
 	onNavFilterChange: (filter: NavFilter) => void
 }) {
 	return (
-		<aside className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit tab:sticky tab:top-4 tab:h-fit">
+		<aside className="rounded-3xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit tab:sticky tab:top-4 tab:h-fit">
 			<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">навигация</p>
 
 			<div className="mt-5 flex flex-wrap gap-2">

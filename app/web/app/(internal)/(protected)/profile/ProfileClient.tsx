@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 
+import { LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { PageHeader } from '@/components/page/PageHeader'
 import { Panel } from '@/components/page/Panel'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -180,7 +182,13 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 
 	return (
 		<div className="space-y-4">
-			<PageHeader title="Профиль" />
+			<PageHeader title="Профиль">
+				<ToolbarTooltip label="Выйти из аккаунта">
+					<ToolbarButton label="Выйти из аккаунта" onClick={handleLogout}>
+						<LogOut className="size-4" aria-hidden="true" />
+					</ToolbarButton>
+				</ToolbarTooltip>
+			</PageHeader>
 
 			<div className="grid gap-4 tab:grid-cols-2">
 				{canEditAvatar && (
@@ -249,7 +257,11 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									))}
 								</div>
 							)}
-							<Button onClick={handleSaveProfile} disabled={isLoading} className="w-full">
+							<Button
+								onClick={handleSaveProfile}
+								disabled={isLoading}
+								className="w-full mob:ml-auto mob:flex mob:w-fit"
+							>
 								{isLoading ? 'Сохранение...' : 'Сохранить изменения'}
 							</Button>
 						</div>
@@ -284,16 +296,15 @@ export function ProfileClient({ initialData }: ProfileClientProps) {
 									placeholder="Подтвердите новый пароль"
 								/>
 							</FormField>
-							<Button onClick={handleChangePassword} disabled={isPasswordLoading} className="w-full">
+							<Button
+								onClick={handleChangePassword}
+								disabled={isPasswordLoading}
+								variant="outline"
+								className="w-full mob:ml-auto mob:flex mob:w-fit"
+							>
 								{isPasswordLoading ? 'Смена пароля...' : 'Сменить пароль'}
 							</Button>
 						</div>
-					</Panel>
-
-					<Panel title="Выход из аккаунта">
-						<Button onClick={handleLogout} variant="destructive" className="w-full">
-							Выйти из аккаунта
-						</Button>
 					</Panel>
 				</div>
 			</div>

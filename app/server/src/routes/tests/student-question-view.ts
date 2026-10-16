@@ -12,6 +12,8 @@ export type StudentQuestionRow = {
 	points: number
 	options: unknown
 	matchingPairs: unknown
+	allowPhotos: boolean
+	maxPhotos: number
 }
 
 export type StudentQuestionTypeConfig = {
@@ -33,6 +35,8 @@ export function studentQuestionView(
 		points: row.points,
 		options: row.options,
 		matchingPairs: row.matchingPairs,
+		allowPhotos: row.allowPhotos,
+		maxPhotos: row.maxPhotos,
 		promptText,
 	}
 }
@@ -46,6 +50,8 @@ export async function readStudentQuestions(test: { id: string; slug: string; top
 			points: questions.points,
 			options: questions.options,
 			matchingPairs: questions.matchingPairs,
+			allowPhotos: questions.allowPhotos,
+			maxPhotos: questions.maxPhotos,
 			promptPath: questions.promptPath,
 		})
 		.from(questions)

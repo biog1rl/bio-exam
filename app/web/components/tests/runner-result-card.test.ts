@@ -14,14 +14,14 @@ test('SCORE-04-zero-points-status: вопрос с весом 0 подписан
 test('runnerResultCard: статус отсутствует, карточка «Без оценки»', () => {
 	assert.deepEqual(runnerResultCard(undefined), {
 		label: 'Без оценки',
-		className: 'rounded border bg-muted/30 p-3 text-sm',
+		className: 'rounded-md border bg-muted/30 p-3 text-sm',
 	})
 })
 
 test('runnerResultCard: неизвестный статус даёт «Без оценки»', () => {
 	assert.deepEqual(runnerResultCard('skipped' as unknown as QuestionStatus), {
 		label: 'Без оценки',
-		className: 'rounded border bg-muted/30 p-3 text-sm',
+		className: 'rounded-md border bg-muted/30 p-3 text-sm',
 	})
 })
 
@@ -30,7 +30,7 @@ test('runnerResultCard: открытый вопрос подписан «На п
 		runnerResultCard(questionStatus({ points: 3, isCorrect: false, earnedPoints: 0, template: 'open' })),
 		{
 			label: 'На проверке',
-			className: 'rounded border border-border/70 bg-secondary p-3 text-sm text-secondary-foreground',
+			className: 'rounded-md border border-border/70 bg-secondary p-3 text-sm text-secondary-foreground',
 		}
 	)
 })

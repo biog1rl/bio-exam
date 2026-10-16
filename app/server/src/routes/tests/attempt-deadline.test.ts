@@ -135,71 +135,18 @@ describe('serverNow у /start', () => {
 })
 
 describe('окно для фото при ручной сдаче', () => {
-	test('сдача теста с открытым вопросом пишет upload_closes_at, ответ /submit его отдаёт', async () => {
+	test('ручная сдача теста с открытым вопросом окна не открывает: upload_closes_at пуст, ответ и разбор это отдают', async () => {
 		const prepared = await prepareWindowTest('deadline-window-tracer', { timeLimitMinutes: 10, withOpen: true })
 		const sessionId = await startOk(prepared.testId)
 		const body = await submitOk(prepared, sessionId)
 
 		assert.equal(body.submitSource, 'client')
-		assert.equal(typeof body.uploadClosesAt, 'string')
-		const row = await attemptRowOf(ctx, body.attemptId as string)
-		assertSameMoment(row.uploadClosesAt, new Date(row.submittedAt.getTime() + 15 * MINUTE_MS), 'upload_closes_at')
-		assert.equal(Date.parse(body.uploadClosesAt as string), row.uploadClosesAt!.getTime())
-	})
-
-	type WindowCase = {
-		name: string
-		timeLimitMinutes: number | null
-		withOpen: boolean
-		windowMinutes?: number
-		startedAgo?: string
-		closesFrom: 'timer_end' | 'submitted' | null
-	}
-
-	test.each<WindowCase>([
-		{
-			name: 'в пределах льготы окно идёт от конца таймера',
-			timeLimitMinutes: 10,
-			withOpen: true,
-			startedAgo: '11 minutes',
-			closesFrom: 'timer_end',
-		},
-		{ name: 'без лимита окно идёт от сдачи', timeLimitMinutes: null, withOpen: true, closesFrom: 'submitted' },
-		{ name: 'окно 0 — окна нет', timeLimitMinutes: 10, withOpen: true, windowMinutes: 0, closesFrom: null },
-		{ name: 'без открытого вопроса окна нет', timeLimitMinutes: 10, withOpen: false, closesFrom: null },
-	])('$name', async ({ name, timeLimitMinutes, withOpen, windowMinutes, startedAgo, closesFrom }) => {
-		const slug = `deadline-window-${crypto.randomUUID().slice(0, 8)}`
-		const prepared = await prepareWindowTest(slug, { timeLimitMinutes, withOpen })
-		if (windowMinutes !== undefined) {
-			await ctx.pgPool.query('UPDATE tests SET photo_upload_window_minutes = $2 WHERE id = $1', [
-				prepared.testId,
-				windowMinutes,
-			])
-		}
-		const sessionId = await startOk(prepared.testId)
-		if (startedAgo) await shiftStartedAt(ctx, sessionId, startedAgo)
-		const body = await submitOk(prepared, sessionId)
+		assert.equal(body.uploadClosesAt, null)
 		const attemptId = body.attemptId as string
-		const row = await attemptRowOf(ctx, attemptId)
-
-		assert.equal(row.submitSource, 'client', name)
-		if (closesFrom === null) {
-			assert.equal(row.uploadClosesAt, null, name)
-			assert.equal(body.uploadClosesAt, null, name)
-		} else {
-			const anchor =
-				closesFrom === 'timer_end'
-					? (await startedAtOf(sessionId)).getTime() + (timeLimitMinutes ?? 0) * MINUTE_MS
-					: row.submittedAt.getTime()
-			assertSameMoment(row.uploadClosesAt, new Date(anchor + 15 * MINUTE_MS), name)
-			assert.equal(Date.parse(body.uploadClosesAt as string), row.uploadClosesAt!.getTime(), name)
-		}
-
+		assert.equal((await attemptRowOf(ctx, attemptId)).uploadClosesAt, null)
 		const review = await adminReview(world, attemptId)
 		assert.equal(review.status, 200, JSON.stringify(review.body))
-		const reviewed = review.body.attempt as Record<string, unknown>
-		assert.equal(reviewed.uploadClosesAt, body.uploadClosesAt, name)
-		assert.equal(reviewed.submitSource, 'client', name)
+		assert.equal((review.body.attempt as Record<string, unknown>).uploadClosesAt, null)
 	})
 })
 

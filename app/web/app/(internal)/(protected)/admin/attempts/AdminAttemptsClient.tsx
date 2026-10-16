@@ -13,14 +13,15 @@ import useSWR from 'swr'
 import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
-import { ToolbarButton } from '@/components/page/ToolbarButton'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { ToolbarSearch } from '@/components/page/ToolbarSearch'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { ColumnFilterMenu, type ColumnFilterOption } from '@/components/table/ColumnFilterMenu'
 import { SortableHead } from '@/components/table/SortableHead'
 import { TableCard } from '@/components/table/TableCard'
+import { mainLinkClass } from '@/components/table/main-link'
 import { useRowLink } from '@/components/table/use-row-link'
-import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
+import { AttemptResultCells, AttemptResultHeads } from '@/components/tests/attempt-result/AttemptResultColumns'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -34,7 +35,7 @@ import {
 	fetchAdminAttemptsPage,
 	mergeAttemptPages,
 } from '@/lib/tests/admin-api'
-import { attemptResultView } from '@/lib/tests/attempt-result-view'
+import { attemptMetaLine, attemptResultView } from '@/lib/tests/attempt-result-view'
 import {
 	attemptsUrl,
 	dayParam,
@@ -50,7 +51,7 @@ import { cn } from '@/lib/utils/cn'
 import { formatDateTime, formatPeriod } from '@/lib/utils/dates'
 import { sortDirectionOf } from '@/lib/utils/table-sort'
 
-import type { AdminAttemptListItem, AdminAttemptsResponse } from './attempts-types'
+import type { AdminAttemptsResponse } from './attempts-types'
 
 const STATUS_OPTIONS: readonly ColumnFilterOption<string>[] = [
 	{ value: 'active', label: 'Активные' },
@@ -130,14 +131,6 @@ function emptyAttemptsContent({
 			? 'Когда ученики начнут проходить тесты, здесь появится журнал результатов.'
 			: 'Здесь появятся попытки учеников по вашим темам.',
 	}
-}
-
-function AttemptResultCell({ attempt }: { attempt: AdminAttemptListItem }) {
-	return (
-		<TableCell className="py-3 pr-4 text-right">
-			<AttemptScore view={attemptResultView(attempt)} audience="staff" />
-		</TableCell>
-	)
 }
 
 export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAttemptsResponse; initialKey: string }) {
@@ -275,23 +268,44 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 		/>
 	)
 
+	const resultGroup = {
+		label: 'Результат',
+		options: RESULT_OPTIONS,
+		selected: url.results,
+		onChange: (results: string[]) => updateUrl({ results: results as AttemptResult[] }),
+	}
+
+	const reviewGroup = {
+		label: 'Проверка',
+		options: REVIEW_OPTIONS,
+		selected: url.review === 'all' ? [] : [url.review],
+		onChange: (selected: string[]) => updateUrl({ review: reviewOfChoice(selected) }),
+	}
+
 	const resultFilter = (
 		<ColumnFilterMenu
-			label="Фильтр по результату"
-			groups={[
-				{
-					label: 'Результат',
-					options: RESULT_OPTIONS,
-					selected: url.results,
-					onChange: (results) => updateUrl({ results: results as AttemptResult[] }),
-				},
-				{
-					label: 'Проверка',
-					options: REVIEW_OPTIONS,
-					selected: url.review === 'all' ? [] : [url.review],
-					onChange: (selected) => updateUrl({ review: reviewOfChoice(selected) }),
-				},
-			]}
+			label="Фильтр по статусу"
+			options={RESULT_OPTIONS}
+			selected={url.results}
+			onChange={resultGroup.onChange}
+			align="end"
+		/>
+	)
+
+	const reviewFilter = (
+		<ColumnFilterMenu
+			label="Фильтр по проверке"
+			options={REVIEW_OPTIONS}
+			selected={reviewGroup.selected}
+			onChange={reviewGroup.onChange}
+			align="end"
+		/>
+	)
+
+	const mobileFilter = (
+		<ColumnFilterMenu
+			label="Фильтр по результату и проверке"
+			groups={[resultGroup, reviewGroup]}
 			onReset={() => updateUrl({ results: [], review: 'all' })}
 			align="end"
 		/>
@@ -300,9 +314,9 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 	return (
 		<div className="space-y-4">
 			<PageHeader title="Попытки" titleRef={titleRef}>
-				<div className="flex items-center gap-1 lg:hidden">
+				<div className="flex items-center gap-1 xl:hidden">
 					{topicFilter}
-					<span className="tab-sm:hidden">{resultFilter}</span>
+					<span className="lg:hidden">{mobileFilter}</span>
 				</div>
 				<ToolbarSearch
 					value={url.q}
@@ -311,15 +325,25 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 					placeholder="Ученик, тест или тема"
 				/>
 				{pendingTotal > 0 || url.review === 'pending' ? (
-					<Button
-						variant={url.review === 'pending' ? 'default' : 'outline'}
-						aria-pressed={url.review === 'pending'}
-						className={cn('h-10 shrink-0 rounded-full', url.review !== 'pending' && 'bg-card')}
-						onClick={() => updateUrl({ review: url.review === 'pending' ? 'all' : 'pending' })}
-					>
-						<Clock3 className="size-4" aria-hidden="true" />
-						{pendingTotal} на проверке
-					</Button>
+					<ToolbarTooltip label={`Только на проверке: ${pendingTotal}`}>
+						<ToolbarButton
+							label={`Только на проверке: ${pendingTotal}`}
+							tone={url.review === 'pending' ? 'primary' : 'outline'}
+							aria-pressed={url.review === 'pending'}
+							onClick={() => updateUrl({ review: url.review === 'pending' ? 'all' : 'pending' })}
+						>
+							<Clock3 className="size-4" aria-hidden="true" />
+							<span
+								aria-hidden="true"
+								className={cn(
+									'absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs leading-none font-medium tabular-nums ring-2 ring-background',
+									url.review === 'pending' ? 'bg-card text-foreground' : 'bg-primary text-primary-foreground'
+								)}
+							>
+								{pendingTotal}
+							</span>
+						</ToolbarButton>
+					</ToolbarTooltip>
 				) : null}
 				<Popover open={periodOpen} onOpenChange={setPeriodOpen}>
 					<PopoverTrigger asChild>
@@ -368,7 +392,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 											</span>
 										</TableHead>
 										<TableHead>Тест</TableHead>
-										<TableHead className="hidden w-40 lg:table-cell">
+										<TableHead className="hidden w-40 xl:table-cell">
 											<span className="inline-flex items-center gap-1">
 												Тема
 												{topicFilter}
@@ -379,22 +403,28 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 											direction={sortDirectionOf(url.sort, 'date')}
 											onSort={() => updateUrl({ sort: nextAttemptsSort(url.sort, 'date') })}
 											align="right"
-											className="hidden w-44 tab-sm:table-cell"
+											className="hidden w-36 lg:table-cell"
 										/>
-										<SortableHead
-											label="Результат"
-											direction={sortDirectionOf(url.sort, 'score')}
-											onSort={() => updateUrl({ sort: nextAttemptsSort(url.sort, 'score') })}
-											align="right"
-											filter={<span className="hidden tab-sm:inline-flex">{resultFilter}</span>}
-											className="w-32 pr-4 tab-sm:w-40"
+										<AttemptResultHeads
+											from="lg"
+											resultHead={
+												<SortableHead
+													label="Результат"
+													direction={sortDirectionOf(url.sort, 'score')}
+													onSort={() => updateUrl({ sort: nextAttemptsSort(url.sort, 'score') })}
+													align="right"
+													className="w-26"
+												/>
+											}
+											statusFilter={resultFilter}
+											reviewFilter={reviewFilter}
 										/>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
 									{merged.rows.length === 0 ? (
 										<TableRow className="hover:bg-transparent">
-											<TableCell colSpan={5} className="py-12 text-center whitespace-normal">
+											<TableCell colSpan={8} className="py-12 text-center whitespace-normal">
 												<p className="font-medium text-foreground">{empty.title}</p>
 												<p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{empty.text}</p>
 												<div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -418,6 +448,7 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 									) : null}
 									{merged.rows.map((attempt) => {
 										const href = `/admin/attempts/${attempt.attemptId}`
+										const view = attemptResultView(attempt)
 										return (
 											<TableRow key={attempt.attemptId} className="cursor-pointer" {...rowLink(href)}>
 												<TableCell className="py-3 pl-4">
@@ -432,24 +463,21 @@ export function AdminAttemptsClient({ initial, initialKey }: { initial: AdminAtt
 													{attempt.studentIsActive ? null : <p className="text-xs text-muted-foreground">неактивен</p>}
 												</TableCell>
 												<TableCell className="py-3">
-													<Link
-														href={href}
-														className="font-medium [overflow-wrap:anywhere] text-foreground transition-colors hover:text-primary focus-visible:underline focus-visible:outline-none"
-													>
+													<Link href={href} className={mainLinkClass}>
 														{attempt.testTitle}
 													</Link>
+													<p className="mt-0.5 text-xs text-muted-foreground xl:hidden">{attempt.topicTitle}</p>
 													<p className="mt-0.5 text-xs text-muted-foreground lg:hidden">
-														{attempt.topicTitle}
-														<span className="tab-sm:hidden"> · {formatDateTime(attempt.submittedAt)}</span>
+														{attemptMetaLine([formatDateTime(attempt.submittedAt)], view)}
 													</p>
 												</TableCell>
-												<TableCell className="hidden truncate text-muted-foreground lg:table-cell">
+												<TableCell className="hidden truncate text-muted-foreground xl:table-cell">
 													{attempt.topicTitle}
 												</TableCell>
-												<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums tab-sm:table-cell">
+												<TableCell className="hidden text-right whitespace-nowrap text-muted-foreground tabular-nums lg:table-cell">
 													{formatDateTime(attempt.submittedAt)}
 												</TableCell>
-												<AttemptResultCell attempt={attempt} />
+												<AttemptResultCells view={view} from="lg" />
 											</TableRow>
 										)
 									})}

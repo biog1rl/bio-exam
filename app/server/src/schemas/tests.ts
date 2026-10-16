@@ -7,6 +7,7 @@ import {
 	OptionSchema,
 	PHOTO_UPLOAD_WINDOW_MAX_MINUTES,
 	QuestionKeyPayloadSchema,
+	QuestionPhotoSettingsSchema,
 } from '@bio-exam/exam-core'
 
 import { z } from 'zod'
@@ -26,6 +27,7 @@ export const QuestionSchema = z.object({
 	matchingPairs: MatchingPairsSchema.optional().nullable(),
 	promptText: z.string().min(1),
 	explanationText: z.string().optional().nullable(),
+	...QuestionPhotoSettingsSchema.partial().shape,
 	correct: QuestionKeyPayloadSchema,
 })
 
@@ -92,6 +94,7 @@ export const SaveQuestionSchema = z.object({
 	matchingPairs: MatchingPairsSchema.optional().nullable(),
 	promptText: z.string().min(1),
 	explanationText: z.string().optional().nullable(),
+	...QuestionPhotoSettingsSchema.partial().shape,
 	correct: QuestionKeyPayloadSchema,
 })
 

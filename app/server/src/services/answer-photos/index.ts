@@ -1,5 +1,4 @@
 import {
-	ANSWER_PHOTO_MAX_COUNT,
 	ANSWER_PHOTO_VARIANTS,
 	type AnswerPhoto,
 	type AnswerPhotoVariant,
@@ -42,7 +41,8 @@ type WindowRefused = { kind: 'window'; status: 422; body: UploadWindowRefusal }
 export type UploadOutcome =
 	| { kind: 'created' | 'existing'; photo: AnswerPhoto; count: number }
 	| WindowRefused
-	| { kind: 'limit' }
+	| { kind: 'limit'; max: number }
+	| { kind: 'forbidden' }
 	| { kind: 'conflict' }
 	| { kind: 'missing' }
 
@@ -97,6 +97,18 @@ async function findPhotoRow(executor: UploadWindowExecutor, photoId: string): Pr
 	return row ?? null
 }
 
+async function readPhotoRule(
+	executor: UploadWindowExecutor,
+	questionId: string
+): Promise<{ allowPhotos: boolean; maxPhotos: number } | null> {
+	const [row] = await executor
+		.select({ allowPhotos: questions.allowPhotos, maxPhotos: questions.maxPhotos })
+		.from(questions)
+		.where(eq(questions.id, questionId))
+		.limit(1)
+	return row ?? null
+}
+
 async function countPhotos(executor: UploadWindowExecutor, place: AnswerPhotoPlace): Promise<number> {
 	const [row] = await executor
 		.select({ value: count() })
@@ -134,6 +146,9 @@ export async function uploadAnswerPhoto(
 	}
 	const early = await windowRefused(db, place.sessionId)
 	if (early) return early
+	const earlyRule = await readPhotoRule(db, place.questionId)
+	if (!earlyRule) return { kind: 'missing' }
+	if (!earlyRule.allowPhotos) return { kind: 'forbidden' }
 
 	const accepted = await acceptImage(buffer, IMAGE_PROFILES.answerPhoto)
 	const target = { sessionId: place.sessionId, questionId: place.questionId, id: photoId }
@@ -164,8 +179,11 @@ export async function uploadAnswerPhoto(
 				if (!sameAnswer(row, place)) return { kind: 'conflict' }
 				return { kind: 'existing', photo: toPhoto(row), count: await countPhotos(tx, place) }
 			}
+			const rule = await readPhotoRule(tx, place.questionId)
+			if (!rule) return { kind: 'missing' }
+			if (!rule.allowPhotos) return { kind: 'forbidden' }
 			const current = await countPhotos(tx, place)
-			if (current >= ANSWER_PHOTO_MAX_COUNT) return { kind: 'limit' }
+			if (current >= rule.maxPhotos) return { kind: 'limit', max: rule.maxPhotos }
 			const [inserted] = await tx
 				.insert(answerPhotos)
 				.values({

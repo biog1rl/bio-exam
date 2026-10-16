@@ -26,7 +26,7 @@ export function AccessDeniedState({
 	headingRef: heading,
 }: AccessDeniedStateProps) {
 	return (
-		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+		<section className="rounded-3xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
 			<Icon className="size-7 text-muted-foreground" aria-hidden="true" />
 			<p className="mt-4 font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">{kicker}</p>
 			<h1

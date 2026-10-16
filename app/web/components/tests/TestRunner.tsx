@@ -1,9 +1,10 @@
 'use client'
 
-import { isAnswered } from '@bio-exam/exam-core'
+import { ANSWER_PHOTO_MAX_COUNT } from '@bio-exam/exam-core'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { CircleCheck, CircleX } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 
@@ -12,7 +13,7 @@ import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { PhotoBlock } from '@/components/tests/answer-photos/PhotoBlock'
 import { SubmittedPhotos } from '@/components/tests/answer-photos/SubmittedPhotos'
-import { useAnswerPhotoSession } from '@/components/tests/answer-photos/use-answer-photos'
+import { useAnswerPhotoCounts, useAnswerPhotoSession } from '@/components/tests/answer-photos/use-answer-photos'
 import { usePhotoSources } from '@/components/tests/answer-photos/use-photo-sources'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
@@ -24,6 +25,7 @@ import { runnerResultCard } from '@/components/tests/runner-result-card'
 import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
+import { isQuestionAnswered } from '@/lib/tests/question-answered'
 import type { AttemptQuestionView, PublicTestDetail, PublicTestQuestion, TestAttemptSummary } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 import { formatDateTime } from '@/lib/utils/dates'
@@ -153,7 +155,28 @@ function AttemptRunner({
 	const interactionDisabled = snapshot.interactionDisabled
 	const deadlinePassed = snapshot.deadlinePassed
 	const navigationDisabled = interactionDisabled && !deadlinePassed
-	const photoSession = useAnswerPhotoSession({ testId: test.id, sessionId: snapshot.photoSessionId })
+	const maxPhotosOf = useCallback(
+		(questionId: string) =>
+			orderedQuestions.find((question) => question.id === questionId)?.maxPhotos ?? ANSWER_PHOTO_MAX_COUNT,
+		[orderedQuestions]
+	)
+	const photoSession = useAnswerPhotoSession({
+		testId: test.id,
+		sessionId: snapshot.photoSessionId,
+		maxCountOf: maxPhotosOf,
+	})
+	const photoQuestionIds = useMemo(
+		() =>
+			snapshot.photoSessionId
+				? orderedQuestions
+						.filter((question) => question.questionUiTemplate === 'open' && question.allowPhotos)
+						.map((question) => question.id)
+				: [],
+		[orderedQuestions, snapshot.photoSessionId]
+	)
+	const photoCounts = useAnswerPhotoCounts(photoSession, photoQuestionIds)
+	const isAnsweredQuestion = (question: PublicTestQuestion) =>
+		isQuestionAnswered({ question, answer: answers[question.id], photoCount: photoCounts.get(question.id) ?? 0 })
 	const photoSources = usePhotoSources()
 	const [uploadsDone, setUploadsDone] = useState<{ attemptId: string; uploadClosesAt: string | null } | null>(null)
 	const uploadClosesAt =
@@ -179,17 +202,7 @@ function AttemptRunner({
 		return map
 	}, [submitResult])
 
-	const answeredCount = useMemo(
-		() =>
-			orderedQuestions.filter((question) =>
-				isAnswered({
-					template: question.questionUiTemplate,
-					answer: answers[question.id],
-					content: { options: question.options, matchingPairs: question.matchingPairs },
-				})
-			).length,
-		[answers, orderedQuestions]
-	)
+	const answeredCount = orderedQuestions.filter(isAnsweredQuestion).length
 
 	const onSelectRadio = (questionId: string, optionId: string) => {
 		lifecycle.answer(questionId, optionId)
@@ -296,12 +309,7 @@ function AttemptRunner({
 				) : null}
 
 				{outcome?.kind === 'result' ? (
-					<section
-						className={cn(
-							'rounded-lg border p-4',
-							resultView?.kind === 'pending' ? 'border-border bg-secondary' : 'border-emerald-200 bg-emerald-50'
-						)}
-					>
+					<section className="rounded-3xl border bg-card p-4 tab-sm:p-5">
 						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
 							{outcome.accepted ? 'Ответ принят' : 'Результат'}
 						</h2>
@@ -320,26 +328,33 @@ function AttemptRunner({
 						) : null}
 						{resultView?.kind === 'pending' ? (
 							<>
-								<AttemptReviewLine view={resultView} audience="student" chipClassName="bg-card" />
+								<AttemptReviewLine view={resultView} audience="student" />
 								<p className="mt-2 text-sm text-muted-foreground">Процент и итог появятся после проверки учителем.</p>
 							</>
 						) : resultView ? (
 							<>
+								<p className="flex items-center gap-2 font-medium">
+									{resultView.passed ? (
+										<CircleCheck className="size-5 text-success" aria-hidden="true" />
+									) : (
+										<CircleX className="size-5 text-muted-foreground" aria-hidden="true" />
+									)}
+									{resultView.passed ? 'Пройден' : 'Не пройден'}
+								</p>
 								<p>
-									Баллы: {resultView.points.earned} / {resultView.points.total}
+									Баллы: {resultView.points.earned} из {resultView.points.total}
 								</p>
 								<p>Процент: {formatPercent(resultView.percent)}</p>
-								<p>{resultView.passed ? 'Статус: пройден' : 'Статус: не пройден'}</p>
 							</>
 						) : null}
 						<div className="mt-3 flex flex-wrap gap-2">
-							<Button type="button" variant="outline" onClick={handleRetake}>
+							<Button type="button" variant="outline" size="sm" className="rounded-full" onClick={handleRetake}>
 								Пройти ещё раз
 							</Button>
-							<Button variant="outline" asChild>
+							<Button variant="outline" size="sm" className="rounded-full" asChild>
 								<Link href={`/tests/${test.topicSlug}/${test.slug}`}>К тесту</Link>
 							</Button>
-							<Button variant="outline" asChild>
+							<Button variant="outline" size="sm" className="rounded-full" asChild>
 								<Link href="/tests">Ко всем тестам</Link>
 							</Button>
 						</div>
@@ -347,7 +362,7 @@ function AttemptRunner({
 				) : null}
 
 				{outcome?.kind === 'accepted-without-result' ? (
-					<section className="rounded-lg border border-border bg-secondary p-4">
+					<section className="rounded-3xl border bg-card p-4 tab-sm:p-5">
 						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
 							Ответ принят
 						</h2>
@@ -356,14 +371,20 @@ function AttemptRunner({
 							<UnsentTextNote entries={snapshot.unsent.entries} certain={snapshot.unsent.certain} />
 						) : null}
 						<p className="mt-2 text-sm">Результат появится в списке «Мои попытки» после обновления страницы.</p>
-						<Button type="button" variant="outline" className="mt-3" onClick={() => window.location.reload()}>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="mt-3 rounded-full"
+							onClick={() => window.location.reload()}
+						>
 							К результатам
 						</Button>
 					</section>
 				) : null}
 
 				{bannerView ? (
-					<section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
+					<section className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-destructive-border bg-destructive-soft p-4">
 						<span role="alert" className="text-sm">
 							{bannerView.message}
 						</span>
@@ -395,7 +416,7 @@ function AttemptRunner({
 							<p ref={questionNumberRef} tabIndex={-1} className="text-lg font-medium outline-none">
 								{currentIndex + 1}.
 							</p>
-							<div className="flex-1 space-y-4 rounded-lg border bg-secondary p-4">
+							<div className="flex-1 space-y-4 rounded-3xl border bg-secondary p-4">
 								<div className="space-y-2">
 									<MdxRenderer source={question.promptText} className="prose max-w-none text-sm select-none" />
 								</div>
@@ -412,7 +433,10 @@ function AttemptRunner({
 										onSelectMatching={onSelectMatching}
 									/>
 								) : null}
-								{!questionResult && question.questionUiTemplate === 'open' && snapshot.sessionId ? (
+								{!questionResult &&
+								question.questionUiTemplate === 'open' &&
+								question.allowPhotos &&
+								snapshot.sessionId ? (
 									<PhotoBlock
 										photos={photoSession.photosFor(question.id)}
 										disabled={interactionDisabled && !deadlinePassed}
@@ -447,6 +471,7 @@ function AttemptRunner({
 								{questionResult &&
 								questionResult.status === 'pending' &&
 								question.questionUiTemplate === 'open' &&
+								question.allowPhotos &&
 								submitResult &&
 								snapshot.photoSessionId ? (
 									<SubmittedPhotos
@@ -463,20 +488,22 @@ function AttemptRunner({
 							</div>
 
 							{/* Navigation buttons */}
-							<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-								<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || navigationDisabled}>
-									Назад
-								</Button>
-								{currentIndex < orderedQuestions.length - 1 ? (
-									<Button variant="outline" onClick={goNext} disabled={navigationDisabled}>
-										Далее
+							{outcome === null ? (
+								<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+									<Button variant="outline" onClick={goPrev} disabled={currentIndex <= 0 || navigationDisabled}>
+										Назад
 									</Button>
-								) : (
-									<Button onClick={handleSubmit} disabled={submitting || interactionDisabled}>
-										{submitting ? 'Отправка…' : 'Завершить'}
-									</Button>
-								)}
-							</div>
+									{currentIndex < orderedQuestions.length - 1 ? (
+										<Button variant="outline" onClick={goNext} disabled={navigationDisabled}>
+											Далее
+										</Button>
+									) : (
+										<Button className="tab:hidden" onClick={handleSubmit} disabled={submitting || interactionDisabled}>
+											{submitting ? 'Отправка…' : 'Завершить'}
+										</Button>
+									)}
+								</div>
+							) : null}
 						</section>
 					)
 				})()}
@@ -523,7 +550,7 @@ function AttemptRunner({
 			</div>
 
 			{/* Панель навигации по вопросам и прогресс */}
-			<section className="h-fit w-full shrink-0 space-y-4 rounded-lg border bg-white p-4 tab:sticky tab:top-4 tab:w-48">
+			<section className="h-fit w-full shrink-0 space-y-4 rounded-3xl border bg-card p-4 tab:sticky tab:top-4 tab:w-48">
 				{snapshot.display.timer && secondsLeft !== null && (
 					<div
 						role="timer"
@@ -540,9 +567,9 @@ function AttemptRunner({
 					<p className="text-xs text-muted-foreground">
 						Отвечено: {answeredCount} / {orderedQuestions.length}
 					</p>
-					<div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+					<div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 						<div
-							className="h-full rounded-full bg-green-500 transition-all duration-300"
+							className="h-full rounded-full bg-primary transition-all duration-300"
 							style={{
 								width: orderedQuestions.length > 0 ? `${(answeredCount / orderedQuestions.length) * 100}%` : '0%',
 							}}
@@ -559,25 +586,23 @@ function AttemptRunner({
 					) : null}
 				</div>
 
-				<div className="grid grid-cols-5 gap-1">
+				<div className="flex flex-wrap gap-1.5">
 					{orderedQuestions.map((question, index) => {
-						const answered = isAnswered({
-							template: question.questionUiTemplate,
-							answer: answers[question.id],
-							content: { options: question.options, matchingPairs: question.matchingPairs },
-						})
+						const answered = isAnsweredQuestion(question)
 						const isCurrent = question.id === currentQuestionId
 						return (
 							<button
 								key={question.id}
 								type="button"
 								onClick={() => goToQuestion(index)}
+								aria-label={`Вопрос ${index + 1}, ${answered ? 'отвечен' : 'без ответа'}`}
+								aria-current={isCurrent ? 'step' : undefined}
 								className={cn(
-									'flex aspect-square items-center justify-center rounded text-xs font-medium transition-colors',
+									'flex size-10 items-center justify-center rounded-full border text-xs font-medium tab:size-8',
 									answered
-										? 'bg-green-500 text-white'
-										: 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
-									isCurrent && 'ring-2 ring-green-500 ring-offset-1'
+										? 'border-primary bg-primary text-primary-foreground'
+										: 'bg-card text-foreground hover:bg-accent',
+									isCurrent && 'ring-2 ring-ring ring-offset-2 ring-offset-card'
 								)}
 							>
 								{index + 1}
@@ -586,13 +611,20 @@ function AttemptRunner({
 					})}
 				</div>
 
-				<Button type="button" onClick={handleSubmit} disabled={submitting || interactionDisabled} className="w-full">
-					{submitting ? 'Отправка…' : 'Завершить'}
-				</Button>
+				{outcome === null ? (
+					<Button
+						type="button"
+						onClick={handleSubmit}
+						disabled={submitting || interactionDisabled}
+						className="hidden w-full tab:flex"
+					>
+						{submitting ? 'Отправка…' : 'Завершить'}
+					</Button>
+				) : null}
 			</section>
 
 			<AlertDialog open={snapshot.display.dialog === 'start'}>
-				<AlertDialogContent overlayClassName="bg-black/60 backdrop-blur-xl">
+				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Начать тест?</AlertDialogTitle>
 						<AlertDialogDescription>

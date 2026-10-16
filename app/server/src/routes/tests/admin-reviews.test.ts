@@ -5,7 +5,13 @@ import crypto from 'node:crypto'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 
 import { insertAttemptFixture } from '../../test-support/attempt-fixture.js'
-import { insertOpenQuestion, insertOpenSession } from '../../test-support/attempt-world.js'
+import {
+	insertOpenQuestion,
+	insertOpenSession,
+	startSession,
+	submitAttempt,
+	type AttemptWorld,
+} from '../../test-support/attempt-world.js'
 import { call, startAuthApp, type AuthApp, type Reply } from '../../test-support/auth-app.js'
 import { seedTeacherZoneWorld, type TeacherZoneWorld, type ZoneProfile } from '../../test-support/teacher-zone-world.js'
 
@@ -408,5 +414,125 @@ describe('таблица answer_reviews', () => {
 		const { loadLatestScores } = await import('../../services/answer-reviews/index.js')
 		const result = await reconcileOutcomes({ loadLatestScores })
 		assert.equal(result.mismatched.filter((item) => item.attemptId === attempt.attemptId).length, 0)
+	})
+})
+
+describe('событие «работа ждёт проверки»', () => {
+	async function pendingEvents(attemptId: string) {
+		const result = await ctx.pgPool.query<{
+			id: string
+			recipient_id: string
+			ref_seq: number
+			actor_id: string | null
+			params: Json
+		}>(
+			"SELECT id, recipient_id, ref_seq, actor_id, params FROM notification_events WHERE kind = 'attempt.review_pending' AND subject_id = $1 ORDER BY recipient_id",
+			[attemptId]
+		)
+		return result.rows
+	}
+
+	function recipientsOf(rows: Array<{ recipient_id: string }>): string[] {
+		return rows.map((row) => row.recipient_id).sort()
+	}
+
+	function ids(...profiles: ZoneProfile[]): string[] {
+		return profiles.map((profile) => zone.users[profile].id).sort()
+	}
+
+	async function runJob() {
+		return jobs.noAnswerReviewsJob().runOnce({ signal: new AbortController().signal })
+	}
+
+	test('учителю группы с темой в зоне и администраторам, один раз на попытку, не ученику', async () => {
+		const attempt = await buildAttempt({ student: 's1', answers: [{ text: 'ответ' }], uploadClosesAt: 'future' })
+		await ctx.pgPool.query('UPDATE test_sessions SET attempt_id = $2, submitted_at = now() WHERE id = $1', [
+			attempt.sessionId,
+			attempt.attemptId,
+		])
+		await ctx.pgPool.query('INSERT INTO test_assignments (test_id, user_id, assigned_by) VALUES ($1, $2, $3)', [
+			attempt.testId,
+			zone.users.s1.id,
+			zone.users.admin.id,
+		])
+		await runJob()
+		assert.equal((await pendingEvents(attempt.attemptId)).length, 0)
+
+		const done = await call(
+			ctx,
+			'POST',
+			`/api/tests/public/tests/${attempt.testId}/sessions/${attempt.sessionId}/uploads-done`,
+			{ cookies: zone.users.s1.cookie }
+		)
+		assert.equal(done.status, 200, JSON.stringify(done.body))
+		const events = await pendingEvents(attempt.attemptId)
+		assert.deepEqual(recipientsOf(events), ids('admin', 'readTestsAll', 'teacherA'))
+		assert.equal(events[0]!.actor_id, zone.users.s1.id)
+		assert.equal(typeof events[0]!.params.studentName, 'string')
+
+		await runJob()
+		await reviews.notifyReviewPending(attempt.attemptId)
+		const again = await pendingEvents(attempt.attemptId)
+		assert.deepEqual(
+			again.map((row) => row.ref_seq),
+			[1, 1, 1]
+		)
+
+		const teacherEvent = events.find((row) => row.recipient_id === zone.users.teacherA.id)!
+		const opened = await call(ctx, 'GET', `/api/notifications/${teacherEvent.id}/open`, {
+			cookies: zone.users.teacherA.cookie,
+		})
+		assert.equal(opened.status, 200, JSON.stringify(opened.body))
+		assert.equal(opened.body.href, `/admin/attempts/${attempt.attemptId}`)
+	})
+
+	test('обычная сдача без окна фото: событие учителю сразу, без ожидания задачи', async () => {
+		const test = await zone.freshTest('X')
+		await ctx.pgPool.query('UPDATE tests SET photo_upload_window_minutes = 0 WHERE id = $1', [test.id])
+		const openId = await insertOpenQuestion(ctx, test.id, { order: 10 })
+		await ctx.pgPool.query('INSERT INTO test_assignments (test_id, user_id, assigned_by) VALUES ($1, $2, $3)', [
+			test.id,
+			zone.users.s1.id,
+			zone.users.admin.id,
+		])
+		const world = { ctx } as AttemptWorld
+		const started = await startSession(world, zone.users.s1.cookie, test.id)
+		assert.equal(started.status, 200, JSON.stringify(started.body))
+		const clientAttemptId = crypto.randomUUID()
+		const body = { sessionId: started.body.sessionId, clientAttemptId, answers: { [openId]: 'мой ответ' } }
+		const submitted = await submitAttempt(world, zone.users.s1.cookie, test.id, body)
+		assert.equal(submitted.status, 200, JSON.stringify(submitted.body))
+		const attemptId = String(submitted.body.attemptId)
+
+		const events = await pendingEvents(attemptId)
+		assert.deepEqual(recipientsOf(events), ids('admin', 'readTestsAll', 'teacherA'))
+
+		const repeat = await submitAttempt(world, zone.users.s1.cookie, test.id, body)
+		assert.equal(repeat.status, 200, JSON.stringify(repeat.body))
+		assert.deepEqual(
+			(await pendingEvents(attemptId)).map((row) => row.ref_seq),
+			[1, 1, 1]
+		)
+	})
+
+	test('окно истекло само — событие приходит из фоновой задачи; без групп у ученика только администраторы', async () => {
+		const attempt = await buildAttempt({ student: 's2', answers: [{ text: 'ответ' }], uploadClosesAt: 'past' })
+		const report = await runJob()
+		assert.equal(report.failed, 0)
+		assert.deepEqual(recipientsOf(await pendingEvents(attempt.attemptId)), ids('admin', 'readTestsAll'))
+	})
+
+	test('авто-0 на все открытые вопросы и попытка без открытых — события нет', async () => {
+		const empty = await buildAttempt({ student: 's1', answers: [{ text: null }], uploadClosesAt: 'past' })
+		const mixed = await buildAttempt({
+			student: 's1',
+			answers: [{ text: null }, { text: 'есть ответ' }],
+			uploadClosesAt: 'past',
+		})
+		const auto = await buildAttempt({ student: 's1', answers: [], uploadClosesAt: 'past' })
+		await runJob()
+		assert.equal((await pendingEvents(empty.attemptId)).length, 0)
+		assert.equal((await pendingEvents(auto.attemptId)).length, 0)
+		assert.deepEqual(recipientsOf(await pendingEvents(mixed.attemptId)), ids('admin', 'readTestsAll', 'teacherA'))
 	})
 })

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const CSS = readFileSync(fileURLToPath(new URL('./globals.css', import.meta.url)), 'utf8')
 const AA_NORMAL = 4.5
+const AA_NON_TEXT = 3
 
 function rootTokens(css: string): Map<string, string> {
 	const start = css.indexOf(':root')
@@ -60,9 +61,24 @@ const PAIRS: ReadonlyArray<readonly [string, string]> = [
 	['primary', 'card'],
 	['destructive', 'background'],
 	['destructive', 'card'],
+	['destructive', 'destructive-soft'],
+	['destructive-foreground', 'destructive'],
+	['success', 'card'],
+	['success', 'success-soft'],
+	['warning', 'card'],
+	['warning', 'warning-soft'],
+	['foreground', 'highlight'],
 	['sidebar-foreground', 'sidebar'],
 	['sidebar-accent-foreground', 'sidebar-accent'],
 	['sidebar-primary-foreground', 'sidebar-primary'],
+]
+
+const NON_TEXT_PAIRS: ReadonlyArray<readonly [string, string]> = [
+	['ring', 'background'],
+	['ring', 'card'],
+	['ring', 'secondary'],
+	['ring', 'muted'],
+	['ring', 'accent'],
 ]
 
 describe('контраст токенов светлой темы', () => {
@@ -70,5 +86,9 @@ describe('контраст токенов светлой темы', () => {
 
 	it.each(PAIRS)('%s на %s — не ниже 4,5:1', (foreground, background) => {
 		expect(contrast(tokens, foreground, background)).toBeGreaterThanOrEqual(AA_NORMAL)
+	})
+
+	it.each(NON_TEXT_PAIRS)('%s на %s — не ниже 3:1', (foreground, background) => {
+		expect(contrast(tokens, foreground, background)).toBeGreaterThanOrEqual(AA_NON_TEXT)
 	})
 })

@@ -85,7 +85,7 @@ test.describe('ATT-04 и LIFE-05: повтор отправки даёт одн�
 			await page.getByRole('button', { name: 'Повторить' }).click()
 			expect((await retried).status()).toBe(200)
 			await expect(page.getByRole('heading', { name: 'Результат' })).toBeVisible()
-			await expect(page.getByText(`Баллы: 2 / 2`)).toBeVisible()
+			await expect(page.getByText('Баллы: 2 из 2')).toBeVisible()
 
 			expect(bodies).toHaveLength(2)
 			expect(bodies[1].clientAttemptId).toBe(bodies[0].clientAttemptId)

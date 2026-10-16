@@ -12,7 +12,7 @@ type Props = {
 export function DeadlinePanel({ state, onRetry }: Props) {
 	if (state === 'failed') {
 		return (
-			<section className="rounded-lg border border-rose-200 bg-rose-50 p-4">
+			<section className="rounded-3xl border border-destructive-border bg-destructive-soft p-4">
 				<h2 className="text-lg font-semibold">Время вышло</h2>
 				<p role="alert" className="mt-2 text-sm">
 					Нет связи с сервером. Ответы, которые успели сохраниться, будут приняты в любом случае. Остальное страница
@@ -26,7 +26,7 @@ export function DeadlinePanel({ state, onRetry }: Props) {
 		)
 	}
 	return (
-		<section role="status" className="rounded-lg border border-border bg-card p-4">
+		<section role="status" className="rounded-3xl border border-border bg-card p-4">
 			<h2 className="text-lg font-semibold">Время вышло</h2>
 			<p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
 				<Loader2 className="size-4 animate-spin" aria-hidden="true" />

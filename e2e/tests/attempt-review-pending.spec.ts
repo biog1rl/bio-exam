@@ -79,7 +79,6 @@ test('a student submits a test with an open question and sees «На прове�
 	await page.getByRole('button', { name: 'Завершить' }).first().click()
 
 	const panel = page.locator('section', { has: page.getByRole('heading', { level: 2, name: 'Результат' }) })
-	await page.getByRole('button', { name: 'Готово, фото загружены' }).click()
 	await expect(page.getByRole('button', { name: 'Готово, фото загружены' })).toHaveCount(0)
 	await expect(panel).toContainText('На проверке')
 	await expect(panel).toContainText('предварительно 1 из 1')
@@ -103,13 +102,13 @@ test('the student sees pending and graded attempts on the test page and the dash
 	await expect(page.getByRole('heading', { level: 1, name: pending.title })).toBeVisible()
 	const pendingRow = page.getByRole('row').filter({ hasText: 'На проверке' })
 	await expect(pendingRow).toHaveCount(1)
-	await expect(pendingRow).toContainText('предварительно 1 из 1')
+	await expect(pendingRow).toContainText('1 из 1')
 	await expect(pendingRow).not.toContainText('%')
 	await expectCleanLayout(page, 'страница теста на проверке')
 
 	await page.goto(testPath(graded))
 	await expect(page.getByRole('heading', { level: 1, name: graded.title })).toBeVisible()
-	const gradedRow = page.getByRole('row').filter({ hasText: 'проверено учителем' })
+	const gradedRow = page.getByRole('row').filter({ hasText: 'Проверено учителем' })
 	await expect(gradedRow).toHaveCount(1)
 	await expect(gradedRow).toContainText('75%')
 	await expect(gradedRow).not.toContainText('На проверке')
@@ -121,7 +120,7 @@ test('the student sees pending and graded attempts on the test page and the dash
 		.filter({ has: page.locator(`a[href$="/${pending.slug}"]`) })
 		.filter({ hasText: 'На проверке' })
 	await expect(pendingCard).toHaveCount(1)
-	await expect(pendingCard).toContainText('предварительно 1 из 1')
+	await expect(pendingCard).toContainText('1 из 1')
 	await expect(pendingCard).not.toContainText('%')
 	const gradedCard = page
 		.getByRole('row')
@@ -151,18 +150,18 @@ test('the list of attempts shows pending and graded rows and the review filter n
 	await expect(submitRow).toBeVisible()
 
 	await expect(pendingRow).toContainText('На проверке')
-	await expect(pendingRow).toContainText('авто 1 из 1')
+	await expect(pendingRow).toContainText('1 из 1')
 	await expect(pendingRow).not.toContainText('%')
 	await expect(pendingRow).not.toContainText('Пройден')
 	await expect(pendingRow).not.toContainText('Не пройден')
-	await expect(gradedRow).toContainText('проверено учителем')
+	await expect(gradedRow).toContainText('Проверено учителем')
 	await expect(gradedRow).toContainText('75%')
 	await expect(gradedRow).not.toContainText('На проверке')
 	await expectCleanLayout(page, 'список попыток')
 
 	await page.setViewportSize({ width: 1280, height: 900 })
-	const resultFilter = page.getByRole('button', { name: 'Фильтр по результату' })
-	await resultFilter.click()
+	const reviewFilter = page.getByRole('button', { name: 'Фильтр по проверке' })
+	await reviewFilter.click()
 	await page.getByRole('menuitemcheckbox', { name: 'На проверке' }).click()
 	await page.keyboard.press('Escape')
 	await expect(page).toHaveURL(/review=pending/)
@@ -170,7 +169,7 @@ test('the list of attempts shows pending and graded rows and the review filter n
 	await expect(submitRow).toBeVisible()
 	await expect(gradedRow).toHaveCount(0)
 
-	await resultFilter.click()
+	await reviewFilter.click()
 	await page.getByRole('menuitemcheckbox', { name: 'На проверке' }).click()
 	await page.getByRole('menuitemcheckbox', { name: 'Проверено учителем' }).click()
 	await page.keyboard.press('Escape')
@@ -179,13 +178,13 @@ test('the list of attempts shows pending and graded rows and the review filter n
 	await expect(pendingRow).toHaveCount(0)
 	await expect(submitRow).toHaveCount(0)
 
-	await resultFilter.click()
+	await reviewFilter.click()
 	await page.getByRole('menuitem', { name: 'Сбросить' }).click()
 	await expect(page).not.toHaveURL(/review=/)
 	await expect(pendingRow).toBeVisible()
 	await expect(gradedRow).toBeVisible()
 
-	const tile = page.getByRole('button', { name: /^\d+ на проверке$/ })
+	const tile = page.getByRole('button', { name: /^Только на проверке: \d+$/ })
 	await expect(tile).toHaveAttribute('aria-pressed', 'false')
 	await tile.click()
 	await expect(page).toHaveURL(/review=pending/)
@@ -218,7 +217,7 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 	await expect(page.getByRole('heading', { level: 1, name: 'Разбор результата' })).toBeVisible()
 	const hero = page.locator('section', { has: page.getByRole('heading', { level: 1 }) }).first()
 	await expect(hero).toContainText('На проверке')
-	await expect(hero).toContainText('авто 1 из 1')
+	await expect(hero).toContainText('1 из 1')
 	await expect(hero).toContainText('Процент и итог появятся после проверки.')
 	await expect(hero).toContainText('баллов автопроверки')
 	await expect(hero).not.toContainText('%')
@@ -230,7 +229,7 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 	await expect(page.getByRole('heading', { level: 1, name: 'Разбор результата' })).toBeVisible()
 	const gradedHero = page.locator('section', { has: page.getByRole('heading', { level: 1 }) }).first()
 	await expect(gradedHero).toContainText('75%')
-	await expect(gradedHero).toContainText('проверено учителем')
+	await expect(gradedHero).toContainText('Проверено учителем')
 	await expect(gradedHero).not.toContainText('Процент и итог появятся')
 	await expectCleanLayout(page, 'разбор проверенной попытки')
 
@@ -240,11 +239,11 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 	const gradedRow = rowWithLink(page, `/admin/attempts/${gradedId}`)
 	await expect(pendingRow).toBeVisible()
 	await expect(pendingRow).toContainText('На проверке')
-	await expect(pendingRow).toContainText('авто 1 из 1')
+	await expect(pendingRow).toContainText('1 из 1')
 	await expect(pendingRow).not.toContainText('%')
 	await expect(pendingRow).not.toContainText('Пройден')
 	await expect(pendingRow).not.toContainText('Не пройден')
-	await expect(gradedRow).toContainText('проверено учителем')
+	await expect(gradedRow).toContainText('Проверено учителем')
 	await expect(gradedRow).toContainText('75%')
 	await expectCleanLayout(page, 'профиль ученика')
 
@@ -254,7 +253,7 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 	for (const dashboardRow of await dashboardRows.all()) {
 		await expect(dashboardRow).toBeVisible()
 		await expect(dashboardRow).toContainText('На проверке')
-		await expect(dashboardRow).toContainText('авто 1 из 1')
+		await expect(dashboardRow).toContainText('1 из 1')
 		await expect(dashboardRow).not.toContainText('%')
 	}
 
@@ -284,7 +283,7 @@ test('the reviewer grades the open answer and the student sees the score and the
 	await expect(admin.getByText('Оценено: 2')).toBeVisible()
 	const hero = admin.locator('section', { has: admin.getByRole('heading', { level: 1 }) }).first()
 	await expect(hero).toContainText('75%')
-	await expect(hero).toContainText('проверено учителем')
+	await expect(hero).toContainText('Проверено учителем')
 	await expectCleanLayout(admin, 'проверка открытого ответа')
 
 	await student.goto(`${testPath(submit)}/attempts/${submitId}`)
@@ -293,4 +292,88 @@ test('the reviewer grades the open answer and the student sees the score and the
 	await expect(student.getByText(OPEN_ANSWER_TEXT)).toBeVisible()
 	await expect(student.getByText('75%').first()).toBeVisible()
 	await expectCleanLayout(student, 'результат проверки у ученика')
+})
+
+async function drawnJpeg(page: Page, label: string): Promise<Buffer> {
+	const base64 = await page.evaluate(async (text) => {
+		const canvas = document.createElement('canvas')
+		canvas.width = 640
+		canvas.height = 480
+		const context = canvas.getContext('2d')!
+		context.fillStyle = '#2a6'
+		context.fillRect(0, 0, 640, 480)
+		context.fillStyle = '#fff'
+		context.font = 'bold 64px sans-serif'
+		context.fillText(text, 40, 120)
+		const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+		const bytes = new Uint8Array(await blob!.arrayBuffer())
+		let binary = ''
+		for (const byte of bytes) binary += String.fromCharCode(byte)
+		return btoa(binary)
+	}, label)
+	return Buffer.from(base64, 'base64')
+}
+
+async function submitWithPhotos(student: Page, slug: string, photoCount: number): Promise<string> {
+	const listed = await student.request.get('/api/tests/public/tests')
+	expect(listed.ok()).toBe(true)
+	const testId = ((await listed.json()) as { tests: { id: string; slug: string }[] }).tests.find(
+		(item) => item.slug === slug
+	)?.id
+	if (!testId) throw new Error(`no test ${slug}`)
+	const detail = await student.request.get(`/api/tests/public/tests/${testId}`)
+	const questions = ((await detail.json()) as { questions: { id: string; type: string }[] }).questions
+	const radio = questions.find((item) => item.type === 'radio')
+	const open = questions.find((item) => item.type === 'open')
+	if (!radio || !open) throw new Error(`test ${slug} has no radio and open questions`)
+
+	const started = await student.request.post(`/api/tests/public/tests/${testId}/start`)
+	expect(started.ok()).toBe(true)
+	const sessionId = ((await started.json()) as { sessionId: string }).sessionId
+	for (let index = 0; index < photoCount; index++) {
+		const uploaded = await student.request.put(
+			`/api/tests/public/tests/${testId}/sessions/${sessionId}/questions/${open.id}/photos/${crypto.randomUUID()}`,
+			{
+				multipart: {
+					file: {
+						name: `photo-${index + 1}.jpg`,
+						mimeType: 'image/jpeg',
+						buffer: await drawnJpeg(student, `Фото ${index + 1}`),
+					},
+				},
+			}
+		)
+		expect(uploaded.status()).toBe(201)
+	}
+	const submitted = await student.request.post(`/api/tests/public/tests/${testId}/submit`, {
+		data: {
+			sessionId,
+			clientAttemptId: crypto.randomUUID(),
+			answers: { [radio.id]: '1', [open.id]: OPEN_ANSWER_TEXT },
+		},
+	})
+	expect(submitted.ok()).toBe(true)
+	return ((await submitted.json()) as { attemptId: string }).attemptId
+}
+
+test('the reviewer opens the answer photos in the viewer, moves to the second one and closes it with Esc', async ({
+	adminPage: admin,
+	reviewStudentPage: student,
+}, testInfo) => {
+	const { submit } = reviewTests(testInfo)
+	const attemptId = await submitWithPhotos(student, submit.slug, 2)
+
+	await admin.goto(`/admin/attempts/${attemptId}`)
+	const thumbnail = admin.getByRole('button', { name: 'Открыть фото 1' })
+	await thumbnail.click()
+
+	const viewer = admin.getByRole('dialog')
+	await expect(viewer.getByRole('heading', { name: 'Фото 1 из 2' })).toBeVisible()
+	await admin.keyboard.press('ArrowRight')
+	await expect(viewer.getByRole('heading', { name: 'Фото 2 из 2' })).toBeVisible()
+	await admin.keyboard.press('ArrowRight')
+	await expect(viewer.getByRole('heading', { name: 'Фото 2 из 2' })).toBeVisible()
+	await admin.keyboard.press('Escape')
+	await expect(viewer).toHaveCount(0)
+	await expect(thumbnail).toBeFocused()
 })

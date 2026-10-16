@@ -14,10 +14,11 @@ import { Router, type Response } from 'express'
 import { db } from '../../db/index.js'
 import { questions, testAttempts, tests, topics } from '../../db/schema.js'
 import { isTransientDbError } from '../../lib/db-errors.js'
+import { logger } from '../../lib/logger.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest, testScope } from '../../services/access-policy/index.js'
-import { readLatestReviews } from '../../services/answer-reviews/index.js'
+import { notifyReviewPending, readLatestReviews } from '../../services/answer-reviews/index.js'
 import {
 	checkAttemptAccess,
 	closeUploadWindow,
@@ -470,6 +471,11 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		if (!access.ok) return denyAttemptAccess(res, access.status)
 
 		const outcome = await submitSession({ test: access.test, userId }, parsed.data)
+		if (outcome.kind === 'accepted') {
+			await notifyReviewPending(outcome.attemptId).catch((error: unknown) =>
+				logger.error({ attemptId: outcome.attemptId, err: error }, 'review-pending notification failed')
+			)
+		}
 		return sendSessionOutcome(res, 'submit', outcome, studentViewer(access.test))
 	} catch (e) {
 		next(e)

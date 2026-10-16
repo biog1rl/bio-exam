@@ -64,7 +64,7 @@ export default function NotificationOpenClient({ id }: { id: string }) {
 	return (
 		<section
 			role="status"
-			className="flex items-center gap-2 rounded-4xl border border-border/80 bg-card/90 p-unit-mob text-sm text-muted-foreground tab-sm:p-unit"
+			className="flex items-center gap-2 rounded-3xl border border-border/80 bg-card/90 p-unit-mob text-sm text-muted-foreground tab-sm:p-unit"
 		>
 			<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 			Открываем уведомление…

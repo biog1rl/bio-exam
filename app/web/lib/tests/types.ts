@@ -47,6 +47,8 @@ export type PublicTestQuestion = {
 	points: number
 	options: TestOption[] | null
 	matchingPairs: MatchingPairs | null
+	allowPhotos: boolean
+	maxPhotos: number
 	promptText: string
 }
 

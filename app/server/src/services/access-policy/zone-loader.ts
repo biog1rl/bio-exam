@@ -1,6 +1,6 @@
 import { STUDENT_ROLE_KEY } from '@bio-exam/rbac'
 
-import { and, eq, inArray, sql, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
 import type { db as Database } from '../../db/index.js'
@@ -14,6 +14,7 @@ import {
 	tests,
 	userGroups,
 	userRoles,
+	users,
 } from '../../db/schema.js'
 import { isUuid } from '../../lib/uuid.js'
 
@@ -55,7 +56,27 @@ export function studentOnlySql(userIdExpr: string, values: unknown[]): string {
 	return `(exists (select 1 from user_roles sr where sr.user_id = ${userIdExpr} and sr.role_key = ${roleKey}) and not exists (select 1 from user_roles sr where sr.user_id = ${userIdExpr} and sr.role_key <> ${roleKey}) and not exists (select 1 from rbac_user_grants sg where sg.user_id = ${userIdExpr} and sg.allow = true))`
 }
 
-export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
+export type ZoneLoaderDb = Pick<typeof Database, 'select' | 'selectDistinct'>
+
+export async function studentOfAttempt(database: ZoneLoaderDb, attemptId: string): Promise<string | null> {
+	if (!isUuid(attemptId)) return null
+	const [row] = await database
+		.select({ userId: testAttempts.userId })
+		.from(testAttempts)
+		.where(eq(testAttempts.id, attemptId))
+		.limit(1)
+	return row?.userId ?? null
+}
+
+export async function activeNonStudentIds(database: ZoneLoaderDb, excludeUserId: string): Promise<string[]> {
+	const rows = await database
+		.select({ id: users.id })
+		.from(users)
+		.where(and(eq(users.isActive, true), ne(users.id, excludeUserId), sql`not ${studentOnlyFilter(users.id)}`))
+	return rows.map((row) => row.id)
+}
+
+export function createDrizzleZoneLoader(database: ZoneLoaderDb): ZoneLoader {
 	return {
 		async topicIdsOf(userId) {
 			if (!isUuid(userId)) return []

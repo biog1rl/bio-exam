@@ -1,9 +1,11 @@
 import {
+	ANSWER_PHOTO_FORBIDDEN_MESSAGE,
 	ANSWER_PHOTO_LIMIT_MESSAGE,
 	ANSWER_PHOTO_MAX_BYTES,
 	AnswerPhotoListResponseSchema,
 	AnswerPhotoUploadResponseSchema,
 	UPLOAD_WINDOW_ERROR_CODES,
+	answerPhotoLimitMessage,
 } from '@bio-exam/exam-core'
 
 import assert from 'node:assert/strict'
@@ -163,6 +165,30 @@ describe('PUT …/photos/:photoId: фото ответа', () => {
 		assert.equal(refused?.body.error, ANSWER_PHOTO_LIMIT_MESSAGE)
 		assert.equal(await photoRows(answer.sessionId), 5)
 		assert.equal(mem.keys(`answers/${answer.sessionId}`).length, 10)
+	})
+
+	test('лимит берётся из max_photos вопроса: третье фото при лимите 2 получает 409 с этим числом', async () => {
+		const answer = await answerOf(student)
+		await ctx.pgPool.query('UPDATE questions SET max_photos = 2 WHERE id = $1', [answer.questionId])
+		assert.equal((await put(student, answer, crypto.randomUUID())).status, 201)
+		assert.equal((await put(student, answer, crypto.randomUUID())).status, 201)
+		const refused = await put(student, answer, crypto.randomUUID())
+		assert.equal(refused.status, 409)
+		assert.equal(refused.body.error, answerPhotoLimitMessage(2))
+		assert.equal(await photoRows(answer.sessionId), 2)
+	})
+
+	test('при allow_photos = false загрузка отклоняется 409, строки и файлов нет, список пуст', async () => {
+		const answer = await answerOf(student)
+		await ctx.pgPool.query('UPDATE questions SET allow_photos = false WHERE id = $1', [answer.questionId])
+		const refused = await put(student, answer, crypto.randomUUID())
+		assert.equal(refused.status, 409)
+		assert.equal(refused.body.error, ANSWER_PHOTO_FORBIDDEN_MESSAGE)
+		assert.equal(await photoRows(answer.sessionId), 0)
+		assert.deepEqual(mem.keys(`answers/${answer.sessionId}`), [])
+		const list = await call(ctx, 'GET', answerPhotoPath(answer), { cookies: student.cookie })
+		assert.equal(list.status, 200)
+		assert.deepEqual(AnswerPhotoListResponseSchema.parse(list.body).photos, [])
 	})
 
 	test('после закрытия окна загрузка отклоняется 422, строки и файлов нет', async () => {

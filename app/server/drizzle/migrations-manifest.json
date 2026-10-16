@@ -264,6 +264,14 @@
       "sha256": "d0114edfbec5c61a84871069d0650fb67675df2434a28df6922f47f6ca20a0c5",
       "when": 1792158335474,
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "tag": "0033_question_photo_settings",
+      "file": "0033_question_photo_settings.sql",
+      "sha256": "cbe42d850320e59c84efdf90faee7907b14ce5a5f818eeae2fc1f92c6f62c3fd",
+      "when": 1792165213670,
+      "breakpoints": true
     }
   ]
 }

@@ -399,12 +399,15 @@ export const questions = pgTable(
 		promptPath: text('prompt_path'), // путь к prompt.md в Storage
 		explanationPath: text('explanation_path'), // путь к explanation.md в Storage
 		assetsIndexed: boolean('assets_indexed').notNull().default(false),
+		allowPhotos: boolean('allow_photos').notNull().default(true),
+		maxPhotos: integer('max_photos').notNull().default(5),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		updatedAt: timestamp('updated_at').notNull().defaultNow(),
 	},
 	(t) => ({
 		testIdIdx: index('questions_test_id_idx').on(t.testId),
 		orderIdx: index('questions_order_idx').on(t.order),
+		maxPhotosCheck: check('questions_max_photos_check', sql`${t.maxPhotos} BETWEEN 1 AND 10`),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

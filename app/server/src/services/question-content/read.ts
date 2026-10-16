@@ -37,6 +37,8 @@ export type AdminTestQuestion = {
 	matchingPairs: QuestionRow['matchingPairs']
 	promptText: string
 	explanationText: string
+	allowPhotos: boolean
+	maxPhotos: number
 	correct: unknown
 }
 
@@ -173,6 +175,8 @@ export async function readAdminTest(
 			matchingPairs: q.matchingPairs,
 			promptText,
 			explanationText,
+			allowPhotos: q.allowPhotos,
+			maxPhotos: q.maxPhotos,
 			correct,
 		}
 	})

@@ -11,11 +11,7 @@ import { UNSAVED_CHANGES_TEXT } from '@/lib/drafts/draft-ui'
 import { goBack } from '@/lib/navigation/go-back'
 import { type LeaveDecision, useUnsavedChanges } from '@/store/unsavedChanges.store'
 
-type Props = {
-	className?: string
-}
-
-export default function BackButton({ className }: Props) {
+export default function BackButton() {
 	const router = useRouter()
 	const pathname = usePathname() || '/'
 	const leave = useUnsavedChanges((s) => s.leave)
@@ -47,7 +43,7 @@ export default function BackButton({ className }: Props) {
 			<Button
 				size="icon"
 				variant="outline"
-				className={className ?? 'size-9 cursor-pointer'}
+				className="rounded-full bg-card hover:bg-accent"
 				onClick={() => void onClick()}
 				aria-label="Назад"
 				aria-busy={isLeaving}

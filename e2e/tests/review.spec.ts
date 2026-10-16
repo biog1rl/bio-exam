@@ -110,14 +110,14 @@ test.describe.serial('flow 3: review of a submitted attempt', () => {
 		attemptId = submitted.attemptId
 		expect(submitted.earnedPoints).toBe(MIXED_EARNED)
 
-		await expect(page.getByText(`Баллы: ${MIXED_EARNED} / ${MIXED_POINTS}`)).toBeVisible()
+		await expect(page.getByText(`Баллы: ${MIXED_EARNED} из ${MIXED_POINTS}`)).toBeVisible()
 		await expect(page.getByText('Процент: 63%')).toBeVisible()
-		await expect(page.getByText('Статус: пройден')).toBeVisible()
+		await expect(page.getByText('Пройден', { exact: true })).toBeVisible()
 
 		// Разбор по вопросам: после отправки номера вопросов остаются кнопками, а «Назад» и «Далее» заблокированы
 		const section = page.locator('section[id^="question-"]')
 		for (const [index, expected] of MIXED.entries()) {
-			await page.getByRole('button', { name: String(index + 1), exact: true }).click()
+			await page.getByRole('button', { name: new RegExp(`^Вопрос ${index + 1},`) }).click()
 			await expect(page.getByText(`${index + 1}.`, { exact: true })).toBeVisible()
 			await expect(section.getByText(expected.studentStatus, { exact: true }).first()).toBeVisible()
 			await expect(section.getByText(`${expected.earned} / ${expected.points} баллов`, { exact: true })).toBeVisible()

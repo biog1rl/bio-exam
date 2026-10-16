@@ -11,6 +11,7 @@ import useSWR from 'swr'
 
 import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLabels'
 import { UnsavedChangesDialog } from '@/components/Buttons/UnsavedChangesDialog'
+import { ToolbarButton, ToolbarTooltip } from '@/components/page/ToolbarButton'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,7 +43,7 @@ import {
 } from '../../../components/test-editor/test-editor-api'
 import { validateQuestion } from '../../../question-validation'
 import type { Question } from '../../../types'
-import { createDefaultQuestion, normalizeQuestionForSave } from '../../../types'
+import { createDefaultQuestion, isValidMaxPhotos, normalizeQuestionForSave } from '../../../types'
 import { questionFormKey, toQuestionDraftPayload } from './question-draft-payload'
 
 function loadFailureText(error: unknown): string {
@@ -95,6 +96,8 @@ function extractQuestionFromDraftPayload(payload: unknown, order: number): Quest
 			typeof candidate.explanationText === 'string' || candidate.explanationText === null
 				? candidate.explanationText
 				: null,
+		allowPhotos: typeof candidate.allowPhotos === 'boolean' ? candidate.allowPhotos : fallback.allowPhotos,
+		maxPhotos: isValidMaxPhotos(candidate.maxPhotos) ? candidate.maxPhotos : fallback.maxPhotos,
 		options: normalizeDraftOptions(candidate.options),
 		matchingPairs: normalizeDraftMatchingPairs(candidate.matchingPairs),
 		correct: normalizeKeyValue(candidate.correct),
@@ -461,7 +464,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (authPending || isLoading || (isDraftMode && !draftForm && !draftFailed && !testFailed)) {
 		return (
-			<div className="flex items-center justify-center rounded-4xl border border-border/80 bg-card/90 p-12 shadow-sm">
+			<div className="flex items-center justify-center rounded-3xl border border-border/80 bg-card/90 p-12 shadow-sm">
 				<Loader2 className="size-8 animate-spin text-primary" />
 			</div>
 		)
@@ -469,7 +472,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (loadFailure !== undefined || !testData) {
 		return (
-			<div className="rounded-4xl border border-border/80 bg-card/90 p-unit shadow-sm">
+			<div className="rounded-3xl border border-border/80 bg-card/90 p-unit shadow-sm">
 				<p className="text-sm text-red-600">{loadText || 'Не удалось загрузить данные'}</p>
 				<Button variant="outline" onClick={backToTestEditor} className="rounded-full">
 					Назад к тесту
@@ -480,7 +483,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 
 	if (!currentQuestion) {
 		return (
-			<div className="rounded-4xl border border-border/80 bg-card/90 p-unit shadow-sm">
+			<div className="rounded-3xl border border-border/80 bg-card/90 p-unit shadow-sm">
 				<p className="text-sm text-red-600">
 					{isEditingExistingQuestion ? 'Вопрос не найден' : 'Черновик вопроса не найден'}
 				</p>
@@ -503,10 +506,11 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 				onCancel={handleCancel}
 				headerActions={
 					isEditingExistingQuestion && questionId ? (
-						<Button variant="secondary" onClick={openMoveDialog} disabled={moving} className="rounded-full">
-							<ArrowRightLeft className="mr-2 size-4" />
-							Перенести
-						</Button>
+						<ToolbarTooltip label="Перенести вопрос">
+							<ToolbarButton label="Перенести вопрос" onClick={openMoveDialog} disabled={moving}>
+								<ArrowRightLeft className="size-4" aria-hidden="true" />
+							</ToolbarButton>
+						</ToolbarTooltip>
 					) : undefined
 				}
 				isSaving={isSaving}
@@ -541,7 +545,7 @@ export default function QuestionEditorPageClient({ topicSlug, testSlug, question
 			) : null}
 
 			<Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
-				<DialogContent className="rounded-4xl">
+				<DialogContent>
 					<DialogHeader>
 						<DialogTitle>Перенести вопрос</DialogTitle>
 						<DialogDescription>

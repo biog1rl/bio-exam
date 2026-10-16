@@ -10,17 +10,16 @@ import { SetBreadcrumbsLabels } from '@/components/Breadcrumbs/SetBreadcrumbsLab
 import { EmptyState } from '@/components/page/EmptyState'
 import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
-import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
 import { useRowLink } from '@/components/table/use-row-link'
 import { TestMissingState } from '@/components/tests/TestMissingState'
-import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
+import { AttemptResultCells, AttemptResultHeads } from '@/components/tests/attempt-result/AttemptResultColumns'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { failureOf } from '@/lib/http/errors'
 import { fetchMyTestAttempts, fetchPublicTestSummary } from '@/lib/tests/api'
-import { attemptResultView } from '@/lib/tests/attempt-result-view'
+import { attemptMetaLine, attemptResultView } from '@/lib/tests/attempt-result-view'
 import type { TestAttemptSummary } from '@/lib/tests/types'
 import { formatDateTime } from '@/lib/utils/dates'
 
@@ -115,47 +114,29 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 				{attemptsLoading ? (
 					<Skeleton className="h-48 rounded-3xl" aria-label="Загрузка истории попыток" />
 				) : total === 0 ? (
-					<EmptyState title="Ещё нет попыток" className="py-10" />
+					<EmptyState title="Ещё нет попыток" />
 				) : (
 					<TableCard>
 						<Table className="table-fixed">
 							<TableHeader>
 								<TableRow className="hover:bg-transparent">
 									<TableHead className="pl-4">Дата</TableHead>
-									<TableHead className="hidden w-28 text-right tab-sm:table-cell">Баллы</TableHead>
-									<TableHead className="w-40 text-right">Результат</TableHead>
-									<TableHead className="hidden w-36 pr-4 tab-sm:table-cell">Статус</TableHead>
+									<AttemptResultHeads />
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{allRows.map((row) => {
 									const view = attemptResultView(row)
-									const final = view.kind === 'final' ? view : null
+									const meta = attemptMetaLine([], view)
 									return (
 										<TableRow key={row.id} className="cursor-pointer" {...rowLink(attemptHref(row.id))}>
 											<TableCell className="py-3 pl-4">
 												<Link href={attemptHref(row.id)} className="font-medium tabular-nums hover:underline">
 													{formatDateTime(row.submittedAt)}
 												</Link>
-												{final ? (
-													<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
-														{final.points.earned} / {final.points.total} · {final.passed ? 'Пройден' : 'Не пройден'}
-													</p>
-												) : null}
+												{meta ? <p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">{meta}</p> : null}
 											</TableCell>
-											<TableCell className="hidden text-right whitespace-nowrap tabular-nums tab-sm:table-cell">
-												{final ? `${final.points.earned} / ${final.points.total}` : '—'}
-											</TableCell>
-											<TableCell className="py-3 text-right">
-												<AttemptScore view={view} audience="student" showPoints={false} />
-											</TableCell>
-											<TableCell className="hidden pr-4 tab-sm:table-cell">
-												{final ? (
-													<StatusBadge on={final.passed}>{final.passed ? 'Пройден' : 'Не пройден'}</StatusBadge>
-												) : (
-													<span className="text-muted-foreground">—</span>
-												)}
-											</TableCell>
+											<AttemptResultCells view={view} />
 										</TableRow>
 									)
 								})}

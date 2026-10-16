@@ -20,7 +20,7 @@ export function PageErrorState({ digest, onRetry }: PageErrorStateProps) {
 	}, [])
 
 	return (
-		<section className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
+		<section className="rounded-3xl border border-border/80 bg-card/90 p-unit-mob shadow-sm tab-sm:p-unit">
 			<CircleAlert className="size-7 text-destructive" aria-hidden="true" />
 			<p className="mt-4 font-mono text-xs tracking-[0.22em] text-muted-foreground uppercase">ошибка</p>
 			<h1 ref={headingRef} tabIndex={-1} className="mt-2 font-serif text-3xl leading-tight break-words outline-none">

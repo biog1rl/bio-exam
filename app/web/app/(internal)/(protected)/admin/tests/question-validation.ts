@@ -1,7 +1,7 @@
-import { toCanonicalKey, validateQuestionForSave } from '@bio-exam/exam-core'
+import { ANSWER_PHOTO_MAX_COUNT_LIMIT, toCanonicalKey, validateQuestionForSave } from '@bio-exam/exam-core'
 import type { TemplateConfig } from '@bio-exam/exam-core'
 
-import type { Question, QuestionTypeDefinition } from './types'
+import { isValidMaxPhotos, type Question, type QuestionTypeDefinition } from './types'
 
 function resolveTemplateConfig(question: Question, questionTypes: QuestionTypeDefinition[]): TemplateConfig | null {
 	const questionType = questionTypes.find((item) => item.key === question.type)
@@ -21,6 +21,9 @@ export function validateQuestion(
 ): string | null {
 	if (questionTypes === undefined) return null
 	const config = resolveTemplateConfig(question, questionTypes)
+	if (config?.uiTemplate === 'open' && question.allowPhotos && !isValidMaxPhotos(question.maxPhotos)) {
+		return `Максимум фото: целое число от 1 до ${ANSWER_PHOTO_MAX_COUNT_LIMIT}`
+	}
 	const key = config ? toCanonicalKey({ uiTemplate: config.uiTemplate, key: question.correct }) : question.correct
 	return validateQuestionForSave({
 		config,

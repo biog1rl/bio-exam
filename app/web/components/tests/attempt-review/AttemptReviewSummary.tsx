@@ -99,7 +99,7 @@ export function AttemptReviewSummary({
 			</div>
 
 			{telemetryStats ? (
-				<div className="rounded-4xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
+				<div className="rounded-3xl border border-border/80 bg-card/90 p-unit-mob tab-sm:p-unit">
 					<div className="grid gap-3 tab-sm:grid-cols-4">
 						<div className="rounded-3xl border border-border/70 bg-secondary/65 p-unit">
 							<Clock3 className="mb-4 size-5 text-primary" />

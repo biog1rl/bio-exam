@@ -1,7 +1,7 @@
 import {
-	ANSWER_PHOTO_LIMIT_MESSAGE,
 	ANSWER_PHOTO_MAX_COUNT,
 	UploadWindowRefusalSchema,
+	answerPhotoLimitMessage,
 	type AnswerPhoto,
 	type AnswerPhotoDeleteResponse,
 	type AnswerPhotoUploadResponse,
@@ -22,7 +22,7 @@ export type PhotoItem = {
 	limitRefusal: boolean
 }
 
-export type PhotoQueueState = { items: readonly PhotoItem[]; count: number; atLimit: boolean }
+export type PhotoQueueState = { items: readonly PhotoItem[]; count: number; atLimit: boolean; max: number }
 
 export type PreparedPhoto = { blob: Blob; fileName: string }
 
@@ -31,6 +31,7 @@ export type PhotoUploadQueueOptions = {
 	remove: (photoId: string) => Promise<RequestOutcome<AnswerPhotoDeleteResponse>>
 	prepare: (file: File) => Promise<PreparedPhoto>
 	randomId: () => string
+	maxCount?: number
 	clock?: SaveQueueClock
 	now?: () => number
 }
@@ -80,6 +81,7 @@ function isRefusal(failure: RequestFailure): boolean {
 
 export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoUploadQueue {
 	const { upload, remove, prepare, randomId } = options
+	const maxCount = options.maxCount ?? ANSWER_PHOTO_MAX_COUNT
 	const now = options.now ?? options.clock?.now ?? (() => Date.now())
 	const setTimer = options.clock?.setTimer ?? ((callback: () => void, ms: number) => setTimeout(callback, ms))
 	const clearTimer =
@@ -262,9 +264,9 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 			if (disposed || files.length === 0) return
 			let taken = occupied()
 			for (const file of files) {
-				if (taken >= ANSWER_PHOTO_MAX_COUNT) {
+				if (taken >= maxCount) {
 					const refused = createEntry(randomId(), 'refused')
-					refused.message = ANSWER_PHOTO_LIMIT_MESSAGE
+					refused.message = answerPhotoLimitMessage(maxCount)
 					refused.limitRefusal = true
 					entries.push(refused)
 					continue
@@ -330,7 +332,8 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 						limitRefusal,
 					})),
 					count,
-					atLimit: occupied() >= ANSWER_PHOTO_MAX_COUNT,
+					atLimit: occupied() >= maxCount,
+					max: maxCount,
 				}
 			}
 			return state

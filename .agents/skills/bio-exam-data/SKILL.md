@@ -8,7 +8,7 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 ## Схема и миграции
 
 - Схема: `app/server/src/db/schema.ts` (Drizzle, `drizzle-orm/pg-core`); клиент базы: `app/server/src/db/index.ts`.
-- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0032_answer_reviews.sql`.
+- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0033_question_photo_settings.sql`.
 - Применённая миграция не редактируется: изменение схемы идёт новым файлом из `yarn workspace @bio-exam/server drizzle:generate` после правки `schema.ts`.
 - `app/server/drizzle/migrations-manifest.json` фиксирует каждую миграцию: `idx`, `tag`, `file`, `sha256`, `when`, `breakpoints` (`checksumAlgorithm: sha256`). Новая миграция получает в нём новую запись, совпадающую с журналом и файлом.
 - `scripts/check-migrations.mjs` (шаг `migrations` в `yarn verify`) на временных базах сверяет манифест с журналом и файлами, цепочку с пустой базы против `schema.ts`, повторный прогон без изменений, отсутствие разницы у `drizzle-kit generate` и `drizzle-kit check`.
@@ -39,6 +39,7 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 - Таблица `answer_photos` (миграция `0031_answer_photos`): `id` - UUID клиента без значения по умолчанию, `session_id` → `test_sessions` `ON DELETE cascade`, `question_id` → `questions` `ON DELETE cascade`, `attempt_id` → `test_attempts` `ON DELETE set null` (заполняет сдача, фаза 14), `uploaded_at` ставит база (`DEFAULT now()`), `expires_at` пока никто не пишет. Индекс `idx_answer_photos_session_question` (сессия, вопрос), RLS с политикой `deny_direct_access`.
 - Пишет таблицу только `app/server/src/services/answer-photos`; кроме него строку читает загрузчик зоны (`answerPhotoSubject` в `app/server/src/services/access-policy/zone-loader.ts`) для `canReadAnswerPhoto`. Лимит и константы - `packages/exam-core/src/answer-photos.ts`.
 - Файлы фото: `answers/{sessionId}/{questionId}/{photoId}/full.webp` и `thumb.webp`. При удалении теста, вопроса или темы строки уходят каскадом, файлы `answers/` остаются до очистки сирот.
+- Миграция `0033_question_photo_settings`: `questions.allow_photos` (по умолчанию true) и `questions.max_photos` (по умолчанию 5, CHECK 1-10); значения нужны только вопросам типа `open`. Литералы 5 и 10 равны `ANSWER_PHOTO_MAX_COUNT` и `ANSWER_PHOTO_MAX_COUNT_LIMIT` из `@bio-exam/exam-core`. Загрузка фото читает оба столбца под блокировкой сессии (`uploadAnswerPhoto`).
 
 ## Проверки открытых ответов
 

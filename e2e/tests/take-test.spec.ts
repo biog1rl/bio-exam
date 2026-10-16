@@ -26,9 +26,9 @@ test.describe('flow 2: take a test with all five templates', () => {
 
 		// Экран результата: баллы, процент и статус как их показывает интерфейс
 		await expect(page.getByRole('heading', { level: 2, name: 'Результат' })).toBeVisible()
-		await expect(page.getByText(`Баллы: ${total} / ${total}`)).toBeVisible()
+		await expect(page.getByText(`Баллы: ${total} из ${total}`)).toBeVisible()
 		await expect(page.getByText('Процент: 100%')).toBeVisible()
-		await expect(page.getByText('Статус: пройден')).toBeVisible()
+		await expect(page.getByText('Пройден', { exact: true })).toBeVisible()
 
 		// То же число в ответе сервера: баллы считает сервер, а не страница
 		expect(submitted.earnedPoints).toBe(total)

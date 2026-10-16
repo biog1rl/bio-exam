@@ -380,7 +380,7 @@ export function MediaLibrary({ editor, onClose }: MediaLibraryProps) {
 							<AlertDialogAction
 								onClick={handleDeleteConfirm}
 								disabled={isDeleting}
-								className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+								className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 							>
 								Удалить
 							</AlertDialogAction>

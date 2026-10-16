@@ -85,7 +85,10 @@ export async function markRead(userId: string, id: string): Promise<boolean> {
 export async function openNotification(
 	userId: string,
 	id: string,
-	access: { canReadTest: (testId: string) => Promise<boolean> }
+	access: {
+		canReadTest: (testId: string) => Promise<boolean>
+		canReviewAttempt: (attemptId: string) => Promise<boolean>
+	}
 ): Promise<OpenResult> {
 	const event = await markOneRead(userId, id)
 	if (!event) return { ok: false }
@@ -96,6 +99,7 @@ export async function openNotification(
 		subjectType: event.subjectType,
 		subjectId: event.subjectId,
 		canReadTest: access.canReadTest,
+		canReviewAttempt: access.canReviewAttempt,
 	})
 	return href ? { ok: true, href } : { ok: false }
 }

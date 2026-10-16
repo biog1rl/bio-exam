@@ -75,6 +75,7 @@
 		"react-dom": "19.2.2",
 		"react-easy-crop": "^5.5.5",
 		"react-imask": "^7.6.1",
+		"react-zoom-pan-pinch": "4.2.0",
 		"recharts": "^2.15.3",
 		"rehype-raw": "^7.0.0",
 		"remark-gfm": "^4.0.1",

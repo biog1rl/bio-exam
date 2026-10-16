@@ -24,6 +24,10 @@ export function formatDateTime(value: DateInput): string {
 	return formatOr(value, 'dd.MM.yyyy, HH:mm')
 }
 
+export function formatShortDateTime(value: DateInput): string {
+	return formatOr(value, 'd MMM, HH:mm')
+}
+
 export function formatShortDay(value: DateInput): string {
 	return formatOr(value, 'd MMM')
 }

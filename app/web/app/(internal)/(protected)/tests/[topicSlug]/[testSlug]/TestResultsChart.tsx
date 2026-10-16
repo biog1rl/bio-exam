@@ -73,7 +73,7 @@ export function TestResultsChart({ test }: { test: TestMeta }) {
 				) : !data ? (
 					<Skeleton className="h-72 rounded-2xl" />
 				) : attempts.length === 0 ? (
-					<EmptyState size="sm" className="h-40 justify-center" description="Нет попыток за выбранный период" />
+					<EmptyState size="sm" description="Нет попыток за выбранный период" />
 				) : (
 					<AttemptChart attempts={attempts} config={config} />
 				)}

@@ -19,6 +19,8 @@ function choiceQuestion(): Question {
 		matchingPairs: null,
 		promptText: 'Как делится соматическая клетка?',
 		explanationText: null,
+		allowPhotos: true,
+		maxPhotos: 5,
 		correct: 'a',
 	}
 }

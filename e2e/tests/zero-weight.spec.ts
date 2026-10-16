@@ -54,10 +54,10 @@ test('SCORE-04: вопрос веса 0 показан «Без оценки» �
 		expect(payload.totalPoints).toBe(1)
 
 		const section = page.locator('section[id^="question-"]')
-		await page.getByRole('button', { name: '1', exact: true }).click()
+		await page.getByRole('button', { name: /^Вопрос 1,/ }).click()
 		await expect(section.getByText('Без оценки', { exact: true }).first()).toBeVisible()
 		await expect(section.getByText('Верно', { exact: true })).toHaveCount(0)
-		await page.getByRole('button', { name: '2', exact: true }).click()
+		await page.getByRole('button', { name: /^Вопрос 2,/ }).click()
 		await expect(section.getByText('Верно', { exact: true }).first()).toBeVisible()
 
 		await adminReviewSections(adminPage, payload.attemptId, 2)

@@ -8,9 +8,11 @@ const REQUIRED_FILES = ['index.js', 'index.cjs', 'index.d.ts', 'index.d.cts']
 
 const EXPECTED_EXPORTS = [
 	'ALLOWED_MISTAKE_METRICS_BY_TEMPLATE',
+	'ANSWER_PHOTO_FORBIDDEN_MESSAGE',
 	'ANSWER_PHOTO_LIMIT_MESSAGE',
 	'ANSWER_PHOTO_MAX_BYTES',
 	'ANSWER_PHOTO_MAX_COUNT',
+	'ANSWER_PHOTO_MAX_COUNT_LIMIT',
 	'ANSWER_PHOTO_MAX_SIDE',
 	'ANSWER_PHOTO_VARIANTS',
 	'ANSWER_VIOLATION_REASONS',
@@ -49,6 +51,7 @@ const EXPECTED_EXPORTS = [
 	'QUESTION_UI_TEMPLATES',
 	'QuestionIdValueSchema',
 	'QuestionKeyPayloadSchema',
+	'QuestionPhotoSettingsSchema',
 	'QuestionStatusSchema',
 	'QuestionTelemetrySchema',
 	'QuestionTypeDefinitionSchema',
@@ -75,6 +78,7 @@ const EXPECTED_EXPORTS = [
 	'UploadWindowRefusalSchema',
 	'allPartsCorrect',
 	'answerIdList',
+	'answerPhotoLimitMessage',
 	'computeAttemptOutcome',
 	'computeVerdicts',
 	'countMistakes',

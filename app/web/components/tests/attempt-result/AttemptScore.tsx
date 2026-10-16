@@ -1,44 +1,35 @@
-import { CircleCheck, CircleX } from 'lucide-react'
-
-import type { AttemptResultView } from '@/lib/tests/attempt-result-view'
-import { formatPercent, formatPoints } from '@/lib/tests/format'
+import { StatusBadge } from '@/components/table/StatusBadge'
+import { attemptPointsText, attemptVerdictText, type AttemptResultView } from '@/lib/tests/attempt-result-view'
+import { formatPercent } from '@/lib/tests/format'
 import { cn } from '@/lib/utils/cn'
 
-import { AttemptReviewLine, type AttemptReviewAudience } from './AttemptReviewLine'
-import { TeacherCheckedMark } from './TeacherCheckedMark'
+const DASH = <span className="text-muted-foreground">—</span>
 
-export function AttemptScore({
-	view,
-	audience,
-	showPoints = true,
-	className,
-}: {
-	view: AttemptResultView
-	audience: AttemptReviewAudience
-	showPoints?: boolean
-	className?: string
-}) {
-	if (view.kind === 'pending') {
-		return (
-			<span className={cn('inline-flex justify-end', className)}>
-				<AttemptReviewLine view={view} audience={audience} />
-			</span>
-		)
-	}
-	const Icon = view.passed ? CircleCheck : CircleX
+export function AttemptScore({ view, className }: { view: AttemptResultView; className?: string }) {
 	return (
-		<span className={cn('inline-flex flex-col items-end gap-1', className)}>
-			<span className="inline-flex items-center gap-1.5 font-medium whitespace-nowrap tabular-nums">
-				<Icon className={cn('size-4', view.passed ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
-				{formatPercent(view.percent)}
-				<span className="sr-only">{view.passed ? 'Пройден' : 'Не пройден'}</span>
-			</span>
-			{showPoints ? (
-				<span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-					{formatPoints(view.points)}
-				</span>
-			) : null}
-			{view.teacherChecked ? <TeacherCheckedMark /> : null}
+		<span className={cn('flex w-full justify-end font-medium whitespace-nowrap tabular-nums', className)}>
+			{view.kind === 'final' ? formatPercent(view.percent) : DASH}
 		</span>
 	)
+}
+
+export function AttemptPoints({ view, className }: { view: AttemptResultView; className?: string }) {
+	const text = attemptPointsText(view)
+	return (
+		<span
+			className={cn(
+				'flex w-full justify-end whitespace-nowrap tabular-nums',
+				view.kind === 'pending' && 'text-muted-foreground',
+				className
+			)}
+		>
+			{text ?? DASH}
+		</span>
+	)
+}
+
+export function AttemptVerdict({ view }: { view: AttemptResultView }) {
+	const text = attemptVerdictText(view)
+	if (view.kind === 'pending' || text === null) return DASH
+	return <StatusBadge on={view.passed}>{text}</StatusBadge>
 }

@@ -22,7 +22,7 @@ export function SortableHead({ label, direction, onSort, align = 'left', filter,
 			type="button"
 			onClick={onSort}
 			className={cn(
-				'-mx-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-2 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+				'-mx-2 inline-flex h-8 items-center gap-1.5 rounded-full px-2 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none',
 				align === 'right' && 'flex-row-reverse'
 			)}
 		>
