@@ -122,15 +122,16 @@ function SpeechToTextControl() {
 						setIsSpeechToText(!isSpeechToText)
 					}}
 					variant={isSpeechToText ? 'secondary' : 'ghost'}
-					title="Speech To Text"
-					aria-label={`${isSpeechToText ? 'Enable' : 'Disable'} speech to text`}
+					title="Голосовой ввод"
+					aria-label={isSpeechToText ? 'Остановить голосовой ввод' : 'Включить голосовой ввод'}
+					aria-pressed={isSpeechToText}
 					className="p-2"
 					size={'sm'}
 				>
 					<MicIcon className="size-4" />
 				</Button>
 			</TooltipTrigger>
-			<TooltipContent>Speech To Text</TooltipContent>
+			<TooltipContent>Голосовой ввод</TooltipContent>
 		</Tooltip>
 	)
 }

@@ -17,7 +17,7 @@ export default function NotFound() {
 
 	return (
 		<div className="flex min-h-[70dvh] flex-col items-center justify-center gap-unit-mob px-4 text-center tab-sm:gap-unit">
-			<Image src="/img/not-found.png" alt="" width={220} height={220} className="h-auto w-40 tab-sm:w-56" priority />
+			<Image src="/img/not-found.svg" alt="" width={220} height={220} className="h-auto w-40 tab-sm:w-56" priority />
 			<div className="max-w-xl">
 				<p className="font-mono text-[0.6875rem] tracking-[0.22em] text-muted-foreground uppercase">ошибка 404</p>
 				<h1 className="mt-2 font-serif text-4xl leading-tight text-balance text-foreground tab-sm:text-5xl">
