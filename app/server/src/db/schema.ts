@@ -578,6 +578,37 @@ export const testSessions = pgTable(
 	})
 ).enableRLS()
 
+export const answerPhotos = pgTable(
+	'answer_photos',
+	{
+		id: uuid('id').primaryKey(),
+		sessionId: uuid('session_id').notNull(),
+		questionId: uuid('question_id').notNull(),
+		attemptId: uuid('attempt_id'),
+		uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+		expiresAt: timestamp('expires_at', { withTimezone: true }),
+	},
+	(t) => ({
+		sessionIdFk: foreignKey({
+			name: 'answer_photos_session_id_fkey',
+			columns: [t.sessionId],
+			foreignColumns: [testSessions.id],
+		}).onDelete('cascade'),
+		questionIdFk: foreignKey({
+			name: 'answer_photos_question_id_fkey',
+			columns: [t.questionId],
+			foreignColumns: [questions.id],
+		}).onDelete('cascade'),
+		attemptIdFk: foreignKey({
+			name: 'answer_photos_attempt_id_fkey',
+			columns: [t.attemptId],
+			foreignColumns: [testAttempts.id],
+		}).onDelete('set null'),
+		sessionQuestionIdx: index('idx_answer_photos_session_question').on(t.sessionId, t.questionId),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
 /** Назначения тестов студентам (per-student access control) */
 export const testAssignments = pgTable(
 	'test_assignments',

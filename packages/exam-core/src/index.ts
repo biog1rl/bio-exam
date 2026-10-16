@@ -40,6 +40,24 @@ export {
 } from './answer-limits'
 export type { AnswerViolation, AnswerViolationReason } from './answer-limits'
 export {
+	ANSWER_PHOTO_LIMIT_MESSAGE,
+	ANSWER_PHOTO_MAX_BYTES,
+	ANSWER_PHOTO_MAX_COUNT,
+	ANSWER_PHOTO_MAX_SIDE,
+	ANSWER_PHOTO_VARIANTS,
+	AnswerPhotoDeleteResponseSchema,
+	AnswerPhotoListResponseSchema,
+	AnswerPhotoSchema,
+	AnswerPhotoUploadResponseSchema,
+} from './answer-photos'
+export type {
+	AnswerPhoto,
+	AnswerPhotoDeleteResponse,
+	AnswerPhotoListResponse,
+	AnswerPhotoUploadResponse,
+	AnswerPhotoVariant,
+} from './answer-photos'
+export {
 	AdminAttemptViewSchema,
 	AnswerValueSchema,
 	ATTEMPT_GRACE_PERIOD_MINUTES,

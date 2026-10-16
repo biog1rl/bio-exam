@@ -1,3 +1,5 @@
+import { ANSWER_PHOTO_MAX_SIDE } from '@bio-exam/exam-core'
+
 import { fileTypeFromBuffer } from 'file-type'
 import sharp, { type Metadata, type Sharp } from 'sharp'
 
@@ -81,7 +83,7 @@ export const IMAGE_PROFILES = {
 		typeMessage: ANSWER_PHOTO_TYPE_MESSAGE,
 		heicMessage: HEIC_MESSAGE,
 		maxPixels: IMAGE_MAX_PIXELS,
-		output: { format: 'webp', maxSide: 2560, quality: 82 },
+		output: { format: 'webp', maxSide: ANSWER_PHOTO_MAX_SIDE, quality: 82 },
 		thumb: { side: 400, quality: 75 },
 		rejectWhenBusy: true,
 	},
