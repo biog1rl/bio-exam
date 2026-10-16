@@ -51,7 +51,7 @@ export function createLinkPhotoHandle(token: string, maxCount: number): AnswerPh
 	return createPhotoHandle(linkPhotoTransport(token), maxCount)
 }
 
-async function listInto(handle: AnswerPhotoQueueHandle): Promise<RequestOutcome<unknown>> {
+export async function listInto(handle: AnswerPhotoQueueHandle): Promise<RequestOutcome<unknown>> {
 	const since = handle.queue.mark()
 	const outcome = await handle.transport.list()
 	if (outcome.ok) {

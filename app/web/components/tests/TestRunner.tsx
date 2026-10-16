@@ -12,8 +12,8 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { PhotoBlock } from '@/components/tests/answer-photos/PhotoBlock'
+import { PostSubmitPhotos } from '@/components/tests/answer-photos/PostSubmitPhotos'
 import { QrUploadDialog } from '@/components/tests/answer-photos/QrUploadDialog'
-import { SubmittedPhotos } from '@/components/tests/answer-photos/SubmittedPhotos'
 import { useAnswerPhotoCounts, useAnswerPhotoSession } from '@/components/tests/answer-photos/use-answer-photos'
 import { usePhotoSources } from '@/components/tests/answer-photos/use-photo-sources'
 import { usePointerKind } from '@/components/tests/answer-photos/use-pointer-kind'
@@ -177,6 +177,21 @@ function AttemptRunner({
 		[orderedQuestions, snapshot.photoSessionId]
 	)
 	const photoCounts = useAnswerPhotoCounts(photoSession, photoQuestionIds)
+	const postSubmitQuestions = useMemo(
+		() =>
+			orderedQuestions.flatMap((question, index) =>
+				question.questionUiTemplate === 'open' && question.allowPhotos
+					? [
+							{
+								id: question.id,
+								number: index + 1,
+								promptText: typeof question.promptText === 'string' ? question.promptText : '',
+							},
+						]
+					: []
+			),
+		[orderedQuestions]
+	)
 	const isAnsweredQuestion = (question: PublicTestQuestion) =>
 		isQuestionAnswered({ question, answer: answers[question.id], photoCount: photoCounts.get(question.id) ?? 0 })
 	const photoSources = usePhotoSources()
@@ -364,6 +379,21 @@ function AttemptRunner({
 					</section>
 				) : null}
 
+				{outcome?.kind === 'result' && submitResult && snapshot.photoSessionId && postSubmitQuestions.length > 0 ? (
+					<PostSubmitPhotos
+						key={uploadClosesAt}
+						target={{ testId: test.id, sessionId: snapshot.photoSessionId }}
+						photoSession={photoSession}
+						questions={postSubmitQuestions}
+						uploadClosesAt={uploadClosesAt}
+						serverOffsetMs={snapshot.serverOffsetMs}
+						sources={photoSources}
+						onUploadsDone={(closesAt) =>
+							setUploadsDone({ attemptId: submitResult.attemptId, uploadClosesAt: closesAt })
+						}
+					/>
+				) : null}
+
 				{outcome?.kind === 'accepted-without-result' ? (
 					<section className="rounded-3xl border bg-card p-4 tab-sm:p-5">
 						<h2 ref={outcomeHeadingRef} tabIndex={-1} className="mb-2 text-lg font-semibold outline-none">
@@ -478,31 +508,6 @@ function AttemptRunner({
 											/>
 										) : null}
 									</div>
-								) : null}
-								{questionResult &&
-								questionResult.status === 'pending' &&
-								question.questionUiTemplate === 'open' &&
-								question.allowPhotos &&
-								submitResult &&
-								snapshot.photoSessionId ? (
-									<SubmittedPhotos
-										key={uploadClosesAt}
-										photos={photoSession.photosFor(question.id)}
-										uploadClosesAt={uploadClosesAt}
-										serverOffsetMs={snapshot.serverOffsetMs}
-										sources={photoSources}
-										actions={
-											finePointer ? (
-												<QrUploadDialog
-													photos={photoSession.photosFor(question.id)}
-													questionNumber={currentIndex + 1}
-												/>
-											) : undefined
-										}
-										onUploadsDone={(closesAt) =>
-											setUploadsDone({ attemptId: submitResult.attemptId, uploadClosesAt: closesAt })
-										}
-									/>
 								) : null}
 							</div>
 

@@ -79,8 +79,16 @@ test('a student submits a test with an open question and sees «На прове�
 	await page.getByRole('button', { name: 'Завершить' }).first().click()
 
 	const panel = page.locator('section', { has: page.getByRole('heading', { level: 2, name: 'Результат' }) })
-	await page.getByRole('button', { name: 'Готово, фото загружены' }).click()
+	const photos = page.locator('section', {
+		has: page.getByRole('heading', { level: 2, name: 'Добавьте фото к ответам' }),
+	})
+	await expect(photos.getByText('Нет фото', { exact: true })).toBeVisible()
+	await photos.getByRole('button', { name: 'Готово, фото загружены' }).click()
+	const confirm = page.getByRole('alertdialog', { name: 'Отправить работу без части фото?' })
+	await expect(confirm).toContainText('Нет фото у 1 вопроса: 2.')
+	await confirm.getByRole('button', { name: 'Отправить' }).click()
 	await expect(page.getByRole('button', { name: 'Готово, фото загружены' })).toHaveCount(0)
+	await expect(page.getByRole('heading', { level: 2, name: 'Добавьте фото к ответам' })).toHaveCount(0)
 	await expect(panel).toContainText('На проверке')
 	await expect(panel).toContainText('предварительно 1 из 1')
 	await expect(panel).toContainText('Процент и итог появятся после проверки учителем.')
