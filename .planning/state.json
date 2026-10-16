@@ -21,7 +21,7 @@
     {
       "number": "12",
       "name": "Photos on session authentication",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "13",
@@ -66,8 +66,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 12 of 12 · 25% · executing"
+    "label": "Advance to the next step (plan phase 13)",
+    "reason": "Phase 13 of 12 — needs a plan"
   },
-  "updated_at": "2026-10-16T03:35:15.271Z"
+  "updated_at": "2026-10-16T13:15:55.906Z"
 }

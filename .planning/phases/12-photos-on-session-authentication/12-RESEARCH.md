@@ -557,7 +557,7 @@ const rotated = await sharp({ create: { width: 800, height: 400, channels: 3, ba
 | PostgreSQL 17 (initdb/pg_ctl) | тесты с базой, `yarn verify` | ✓ | `/opt/homebrew/opt/postgresql@17`, `with-test-db` поднимает сам | — |
 | sharp prebuilt (libvips 8.18.7) | обработка | ✓ | 0.35.5 | — |
 | Playwright Chromium | `yarn e2e` | ✓ | chromium-1243 в кэше | `yarn playwright install chromium` |
-| Docker / Linux-образ `node:24-slim` | спайк памяти на Linux | не проверялось | — | замер на сервере пользователем или на `192.168.1.2` |
+| Docker / Linux-образ `node:24-slim` | спайк памяти на Linux | не проверялось | — | замер на сервере пользователем или на домашнем сервере |
 | Реальные фото iPhone/Android (JPEG, HEIC) | спайк D-15 | ✗ | — | шаг пользователя; без них — синтетика с пометкой |
 
 **Missing dependencies with no fallback:** реальные снимки для решения по читаемости и HEIC (шаг пользователя по ROADMAP).

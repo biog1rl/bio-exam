@@ -38,12 +38,12 @@ Scope: Milestone v3.0 "Открытые задания с фото и ручно
 
 ### Photos
 
-- [ ] **PHOTO-01**: A student adds photos from the computer with a file picker, and on a phone with "Сделать фото" (camera) and "Выбрать из галереи"
-- [ ] **PHOTO-02**: Photos are downscaled in the browser before upload, sent one at a time with retries, and a retried upload never creates a duplicate
-- [ ] **PHOTO-03**: The server accepts JPEG, PNG and WebP (and iPhone photos from Safari), checks the type by file signature, fixes orientation, removes all metadata including GPS, and stores a WebP image and thumbnail; too large or unsupported files get a 4xx response with a readable message
-- [ ] **PHOTO-04**: Photo processing is bounded (pixel limit, concurrency, no cache) so uploads cannot exhaust the API container memory
-- [ ] **PHOTO-05**: Answer photos are served only to their owner and to reviewers allowed by the access policy, with `Cache-Control: private, no-store`; anyone else gets the same response as for a missing file; they never go through the shared question-image proxy
-- [ ] **PHOTO-06**: The student can remove a photo while the window is open and sees the counter "N из 5"
+- [x] **PHOTO-01**: A student adds photos from the computer with a file picker, and on a phone with "Сделать фото" (camera) and "Выбрать из галереи"
+- [x] **PHOTO-02**: Photos are downscaled in the browser before upload, sent one at a time with retries, and a retried upload never creates a duplicate
+- [x] **PHOTO-03**: The server accepts JPEG, PNG and WebP (and iPhone photos from Safari), checks the type by file signature, fixes orientation, removes all metadata including GPS, and stores a WebP image and thumbnail; too large or unsupported files get a 4xx response with a readable message
+- [x] **PHOTO-04**: Photo processing is bounded (pixel limit, concurrency, no cache) so uploads cannot exhaust the API container memory
+- [x] **PHOTO-05**: Answer photos are served only to their owner and to reviewers allowed by the access policy, with `Cache-Control: private, no-store`; anyone else gets the same response as for a missing file; they never go through the shared question-image proxy
+- [x] **PHOTO-06**: The student can remove a photo while the window is open and sees the counter "N из 5"
 
 ### Phone upload by QR
 
@@ -94,13 +94,13 @@ Scope: Milestone v3.0 "Открытые задания с фото и ручно
 
 ### Tech debt from v1.0
 
-- [ ] **DEBT-01**: Existing upload routes return 413/415/400 for size and type errors instead of 500
+- [x] **DEBT-01**: Existing upload routes return 413/415/400 for size and type errors instead of 500
 - [ ] **DEBT-02**: The 404 page shows its image, the protected area has one toaster, and `DashboardClient` has no unused variables
 - [ ] **DEBT-03**: A teacher can invite students, with the active-account check at invite time
 - [ ] **DEBT-04**: Admin test reading returns correct answers only to users allowed to see them, and the user directory endpoint is limited to users who need it
 - [ ] **DEBT-05**: The invite screen uses the typed request layer, shows clear texts for 400/404/409 and blocks double submit
 - [ ] **DEBT-06**: Known flaky tests (login throttle under load, answer-keys JSONB `57P01`) pass reliably
-- [ ] **DEBT-07**: ADR-0004 records who may read `images/` (any signed-in user, by design) and `answers/` (owner and reviewers only)
+- [x] **DEBT-07**: ADR-0004 records who may read `images/` (any signed-in user, by design) and `answers/` (owner and reviewers only)
 - [ ] **DEBT-08**: The remaining deferred review findings of v1.0 phases 06–08 (CR-03 bfcache, CR-05 repeated start, CR-09…CR-19, NQ-*) are each fixed or explicitly closed with a reason
 - [ ] **DEBT-09**: Small UI fixes: speech button label, focus after a topic reload retry, idempotent MDX table conversion, answer keys made of digits stored as strings
 
@@ -199,12 +199,12 @@ Which phases cover which requirements. Filled 2026-10-06 during roadmap creation
 | TIME-04 | Phase 11 | Complete |
 | TIME-05 | Phase 15 | Pending |
 | TIME-06 | Phase 11 | Complete |
-| PHOTO-01 | Phase 12 | Pending |
-| PHOTO-02 | Phase 12 | Pending |
-| PHOTO-03 | Phase 12 | Pending |
-| PHOTO-04 | Phase 12 | Pending |
-| PHOTO-05 | Phase 12 | Pending |
-| PHOTO-06 | Phase 12 | Pending |
+| PHOTO-01 | Phase 12 | Complete |
+| PHOTO-02 | Phase 12 | Complete |
+| PHOTO-03 | Phase 12 | Complete |
+| PHOTO-04 | Phase 12 | Complete |
+| PHOTO-05 | Phase 12 | Complete |
+| PHOTO-06 | Phase 12 | Complete |
 | QR-01 | Phase 13 | Pending |
 | QR-02 | Phase 13 | Pending |
 | QR-03 | Phase 13 | Pending |
@@ -237,13 +237,13 @@ Which phases cover which requirements. Filled 2026-10-06 during roadmap creation
 | PLAT-03 | Phase 11 | Complete |
 | PLAT-04 | Phase 11 | Complete |
 | PLAT-05 | Phase 9 | Complete |
-| DEBT-01 | Phase 12 | Pending |
+| DEBT-01 | Phase 12 | Complete |
 | DEBT-02 | Phase 13 | Pending |
 | DEBT-03 | Phase 18 | Pending |
 | DEBT-04 | Phase 18 | Pending |
 | DEBT-05 | Phase 18 | Pending |
 | DEBT-06 | Phase 18 | Pending |
-| DEBT-07 | Phase 12 | Pending |
+| DEBT-07 | Phase 12 | Complete |
 | DEBT-08 | Phase 18 | Pending |
 | DEBT-09 | Phase 18 | Pending |
 | DECOM-01 | Phase 19 | Pending |

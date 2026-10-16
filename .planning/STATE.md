@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v3.0
 milestone_name: Открытые задания с фото и ручной проверкой
-current_phase: 12
-current_phase_name: photos-on-session-authentication
-status: executing
-stopped_at: Phase 12 UI-SPEC approved, plans ready
-last_updated: "2026-10-16T04:13:48.279Z"
-last_activity: 2026-10-13
-last_activity_desc: Phase 11 complete, transitioned to Phase 12
-state_head: a6766c696bb2d2a9b6d560def63313bf1567ff76
+current_phase: 13
+current_phase_name: Token, QR and phone page
+status: planning
+stopped_at: Phase 12 complete, ready to plan Phase 13
+last_updated: "2026-10-16T13:15:55.888Z"
+last_activity: 2026-10-16
+last_activity_desc: Phase 12 complete, transitioned to Phase 13
+state_head: dcd0a5f57a90938a41b6d50c62f78230af1a4faa
 progress:
   total_phases: 12
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 60
-  completed_plans: 50
-  percent: 25
+  completed_plans: 60
+  percent: 33
 ---
 
 # Project State
@@ -29,17 +29,17 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 
 ## Current Position
 
-Phase: 12 (photos-on-session-authentication) — READY TO EXECUTE
+Phase: 13 — Token, QR and phone page
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-13 — Phase 11 complete, transitioned to Phase 12
+Status: Ready to plan
+Last activity: 2026-10-16 — Phase 12 complete, transitioned to Phase 13
 
-Progress: [███░░░░░░░] 25%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 192
+- Total plans completed: 202
 - Average duration: n/a
 - Total execution time: 0.0 hours
 
@@ -59,6 +59,7 @@ Progress: [███░░░░░░░] 25%
 | 9 | 19 | - | - |
 | 10 | 9 | - | - |
 | 11 | 22 | - | - |
+| 12 | 10 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: none yet
@@ -250,7 +251,7 @@ Items acknowledged and deferred at milestone close, most recent first. In v3.0 t
 ## Session Continuity
 
 Last session: 2026-10-16T04:13:48.168Z
-Stopped at: Phase 12 UI-SPEC approved, plans ready
+Stopped at: Phase 12 complete, ready to plan Phase 13
 Resume file: .planning/phases/12-photos-on-session-authentication/12-UI-SPEC.md
 
 ## Operator Next Steps
