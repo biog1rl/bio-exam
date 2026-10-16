@@ -19,7 +19,7 @@ import {
 } from './sections'
 
 const APP_DIR = fileURLToPath(new URL('../../app', import.meta.url))
-const NOT_LISTED = new Set(['/', '/login'])
+const NOT_LISTED = new Set(['/', '/login', '/photo-upload'])
 
 function rolePerms(role: keyof typeof ROLE_REGISTRY): Set<PermissionKey> {
 	const keys = new Set<PermissionKey>()

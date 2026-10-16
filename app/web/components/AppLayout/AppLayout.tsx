@@ -15,6 +15,7 @@ import NotificationBell from '@/components/notifications/NotificationBell'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { ANONYMOUS_PAGE_HEADER } from '@/lib/navigation/public-paths'
 import { SESSION_REFRESH_HEADER, SESSION_REFRESH_UNAVAILABLE } from '@/lib/session/proxy-refresh'
 import { getServerMe, type ServerMe } from '@/lib/session/server'
 
@@ -23,6 +24,9 @@ export default async function AppLayout({
 }: Readonly<{
 	children: React.ReactNode
 }>) {
+	const requestHeaders = await headers()
+	if (requestHeaders.has(ANONYMOUS_PAGE_HEADER)) return <>{children}</>
+
 	let me: ServerMe | null = null
 	let sessionError = false
 	try {
@@ -31,7 +35,7 @@ export default async function AppLayout({
 		unstable_rethrow(error)
 		sessionError = true
 	}
-	if (!me && (await headers()).get(SESSION_REFRESH_HEADER) === SESSION_REFRESH_UNAVAILABLE) {
+	if (!me && requestHeaders.get(SESSION_REFRESH_HEADER) === SESSION_REFRESH_UNAVAILABLE) {
 		sessionError = true
 	}
 
@@ -42,12 +46,12 @@ export default async function AppLayout({
 				<AuthProvider initialMe={me} sessionError={sessionError}>
 					<BreadcrumbsProvider>
 						<SidebarProvider className="items-center justify-center bg-background">
-							<AuthGuard>
+							<AuthGuard hideOnPublicPath>
 								<AppSidebar />
 							</AuthGuard>
 
 							<SidebarInset className="h-screen min-w-0 overflow-hidden bg-background">
-								<AuthGuard>
+								<AuthGuard hideOnPublicPath>
 									<header className="sticky top-0 z-10 flex min-w-0 items-center border-b border-border bg-background/90 p-unit-mob backdrop-blur-xl tab-sm:p-unit">
 										<div className="flex h-full shrink-0 items-center gap-2 tab-sm:gap-4">
 											<MobileMenuButton />
@@ -67,7 +71,7 @@ export default async function AppLayout({
 								</AuthGuard>
 
 								<MainScrollArea>
-									<AuthGuard redirectTo="/login" skipPaths={['/login']} skipPathPrefixes={['/invite']}>
+									<AuthGuard redirectTo="/login">
 										<div className="flex min-h-screen min-w-0 flex-col gap-4 overflow-x-clip p-unit-mob tab:p-unit">
 											{children}
 										</div>
@@ -75,7 +79,9 @@ export default async function AppLayout({
 								</MainScrollArea>
 							</SidebarInset>
 
-							<SearchDialog />
+							<AuthGuard hideOnPublicPath>
+								<SearchDialog />
+							</AuthGuard>
 						</SidebarProvider>
 					</BreadcrumbsProvider>
 				</AuthProvider>

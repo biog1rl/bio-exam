@@ -1,4 +1,6 @@
-import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test'
+import { expect, test, type APIRequestContext, type APIResponse, type BrowserContext } from '@playwright/test'
+
+import { newSessionContext } from '../fixtures/exam'
 
 const LOGIN_REDIRECT_STATUS = 307
 const NORMALIZE_REDIRECT_STATUS = 308
@@ -129,3 +131,37 @@ test('anonymous GET /invite/some-token is not redirected to /login @proxy', asyn
 	expect(res.status()).toBe(200)
 	expect(res.headers()['location']).toBeUndefined()
 })
+
+test('anonymous GET /photo-upload is not redirected to /login @proxy', async ({ request }) => {
+	const res = await request.get('/photo-upload', { maxRedirects: 0 })
+	expect(res.status()).toBeLessThan(500)
+	expect(res.headers()['location']).toBeUndefined()
+})
+
+test('anonymous GET /photo-upload-x redirects to /login @proxy', async ({ request, baseURL }) => {
+	const res = await request.get('/photo-upload-x', { maxRedirects: 0 })
+	expectLoginRedirect(res, baseURL, '/photo-upload-x')
+})
+
+for (const visitor of ['anonymous', 'student'] as const) {
+	test(`${visitor} /photo-upload renders without the app shell and without /api/auth/me @proxy`, async ({
+		browser,
+	}, testInfo) => {
+		const context: BrowserContext =
+			visitor === 'student'
+				? await newSessionContext(browser, testInfo, 'user')
+				: await browser.newContext({ baseURL: testInfo.project.use.baseURL })
+		const page = await context.newPage()
+		const meRequests: string[] = []
+		page.on('request', (request) => {
+			if (new URL(request.url()).pathname === '/api/auth/me') meRequests.push(request.url())
+		})
+		await page.goto('/photo-upload')
+		await page.waitForLoadState('networkidle')
+		await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+		await page.waitForLoadState('networkidle')
+		await expect(page.locator('[data-sidebar]')).toHaveCount(0)
+		expect(meRequests, 'browser /api/auth/me requests on /photo-upload').toEqual([])
+		await context.close()
+	})
+}

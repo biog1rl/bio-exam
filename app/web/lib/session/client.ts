@@ -1,4 +1,5 @@
 import { parseAuthMe, type AuthMe } from '@/lib/auth/authMePayload'
+import { isPublicPath } from '@/lib/navigation/public-paths'
 
 import { buildLoginRedirect } from './redirect'
 import { browserRefreshCoordinator, REFRESH_LOCK_TIMEOUT_MS, type RefreshCoordinator } from './refresh-coordinator'
@@ -35,13 +36,6 @@ export type SessionClient = {
 	loadMe(): Promise<LoadMeOutcome>
 	logout(): Promise<boolean>
 	redirectToLogin(): void
-}
-
-const AUTH_PAGE_PREFIXES = ['/login', '/invite']
-
-function isAuthPage(path: string): boolean {
-	const pathname = path.split(/[?#]/, 1)[0] ?? ''
-	return AUTH_PAGE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -103,7 +97,7 @@ export function createSessionClient({
 	function redirectToLogin(): void {
 		if (navigated) return
 		const path = currentPath()
-		if (isAuthPage(path)) return
+		if (isPublicPath(path)) return
 		navigated = true
 		navigate(buildLoginRedirect(path))
 	}
