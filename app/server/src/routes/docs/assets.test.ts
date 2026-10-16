@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { afterAll, beforeAll, beforeEach, describe, test, vi } from 'vitest'
 
@@ -447,6 +447,19 @@ describe('GET /api/docs/assets/proxy: только картинки в прос�
 	test('без cookie сессии ответ 401', async () => {
 		const reply = await call(ctx, 'GET', proxyPath('images/a.webp'))
 		assert.equal(reply.status, 401)
+	})
+})
+
+describe('GET /api/docs/assets: фото ответа не отдаётся общим прокси', () => {
+	test('файл answers/… лежит в хранилище, но proxy и signed отвечают 400', async () => {
+		const key = `answers/${randomUUID()}/${randomUUID()}/${randomUUID()}/full.webp`
+		mem.put(key, bytesOf('answer'), 'image/webp')
+		const served = await fetchRaw(proxyPath(key), jarOf('user'))
+		assert.equal(served.status, 400)
+		assert.ok(!served.bytes.equals(mem.get(key)?.data ?? Buffer.alloc(1)))
+		const signed = await call(ctx, 'GET', signedPath(key), { cookies: jarOf('user') })
+		assert.equal(signed.status, 400)
+		assert.equal(signed.body.error, 'Invalid path')
 	})
 })
 

@@ -30,9 +30,9 @@ const RULES = [
 	{ label: 'вызов process.cwd() в маршруте', scope: 'routes', pattern: /\bprocess\.cwd\s*\(/ },
 	{ label: 'getQuestionPath или getTestPath в маршруте', scope: 'routes', pattern: /\bget(?:Question|Test)Path\b/ },
 	{
-		label: 'литерал ключа хранилища topics/ или avatars/ в маршруте',
+		label: 'литерал ключа хранилища topics/, avatars/ или answers/ в маршруте',
 		scope: 'routes',
-		pattern: new RegExp(String.raw`${QUOTE}(?:topics|avatars)\/`),
+		pattern: new RegExp(String.raw`${QUOTE}(?:topics|avatars|answers)\/`),
 	},
 	{ label: 'путь web/public/uploads в маршруте', scope: 'routes', pattern: /web\/public\/uploads/ },
 	{
@@ -195,8 +195,15 @@ const VIOLATING = [
 		rule: 'вызов process.cwd() в маршруте',
 		text: `const dir = path.join(process.cwd(), ${q}../web/public/uploads${q})`,
 	},
-	{ rule: 'литерал ключа хранилища topics/ или avatars/ в маршруте', text: `const key = ${q}topics/${q} + slug` },
-	{ rule: 'литерал ключа хранилища topics/ или avatars/ в маршруте', text: 'const key = `avatars/${id}`' },
+	{
+		rule: 'литерал ключа хранилища topics/, avatars/ или answers/ в маршруте',
+		text: `const key = ${q}topics/${q} + slug`,
+	},
+	{ rule: 'литерал ключа хранилища topics/, avatars/ или answers/ в маршруте', text: 'const key = `avatars/${id}`' },
+	{
+		rule: 'литерал ключа хранилища topics/, avatars/ или answers/ в маршруте',
+		text: 'const key = `answers/${sessionId}/${questionId}`',
+	},
 	{ rule: 'getQuestionPath или getTestPath в маршруте', text: 'const dir = storageService.getQuestionPath(t, s, id)' },
 	{ rule: 'getQuestionPath или getTestPath в маршруте', text: 'const dir = getTestPath(t, s)' },
 	{
