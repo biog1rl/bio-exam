@@ -10,7 +10,7 @@ GET /healthz  <anonymous>
 GET /healthz/db  <anonymous>
 PATCH /api/users/profile  sessionRequired > <anonymous>
 POST /api/users/profile/password  rateLimiter(password-change,5/60000ms) > sessionRequired > <anonymous>
-POST /api/users/avatar  sessionRequired > multerMiddleware > <anonymous>
+POST /api/users/avatar  sessionRequired > singleFileUpload > <anonymous>
 DELETE /api/users/avatar  sessionRequired > <anonymous>
 POST /api/users/:id/sessions/revoke  validateUUID(id) > sessionRequired > <anonymous>
 DELETE /api/users/:id/login-throttle  validateUUID(id) > sessionRequired > <anonymous>
@@ -120,7 +120,7 @@ PATCH /api/groups/:groupId  validateUUID(groupId) > sessionRequired > <anonymous
 DELETE /api/groups/:groupId  validateUUID(groupId) > sessionRequired > <anonymous>
 GET /api/docs/assets  sessionRequired > requirePerm(tests.write) > <anonymous>
 DELETE /api/docs/assets  sessionRequired > requirePerm(tests.write) > <anonymous>
-POST /api/docs/assets  sessionRequired > requirePerm(tests.write) > multerMiddleware > <anonymous>
+POST /api/docs/assets  sessionRequired > requirePerm(tests.write) > singleFileUpload > <anonymous>
 GET /api/docs/assets/proxy  sessionRequired > <anonymous>
 GET /api/docs/assets/signed  sessionRequired > <anonymous>
 USE / errorHandler

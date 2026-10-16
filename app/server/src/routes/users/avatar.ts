@@ -1,26 +1,11 @@
 import { Router, type Request, type Response } from 'express'
-import multer from 'multer'
 
 import { ApiError, isApiError } from '../../lib/errors.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { singleFileUpload } from '../../middleware/upload.js'
 import { deleteAvatar, recropAvatar, saveAvatar, type AvatarCrop } from '../../services/assets/index.js'
 
 const router = Router()
-
-const upload = multer({
-	storage: multer.memoryStorage(),
-	limits: {
-		fileSize: 5 * 1024 * 1024,
-	},
-	fileFilter: (_req, file, cb) => {
-		const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-		if (allowedMimes.includes(file.mimetype)) {
-			cb(null, true)
-		} else {
-			cb(new Error('Недопустимый тип файла. Разрешены только изображения (JPEG, PNG, GIF, WebP)'))
-		}
-	},
-})
 
 const INVALID_CROP_MESSAGE = 'Некорректные параметры кропа'
 
@@ -55,21 +40,26 @@ function sendError(res: Response, error: unknown, fallback: string): void {
 	res.status(500).json({ error: fallback })
 }
 
-router.post('/', sessionRequired(), upload.single('avatar') as any, async (req: Request, res: Response) => {
-	try {
-		const userId = req.authUser?.id
-		if (!userId) {
-			return res.status(401).json({ error: 'Не авторизован' })
+router.post(
+	'/',
+	sessionRequired(),
+	singleFileUpload({ field: 'avatar', maxBytes: 5 * 1024 * 1024 }),
+	async (req: Request, res: Response) => {
+		try {
+			const userId = req.authUser?.id
+			if (!userId) {
+				return res.status(401).json({ error: 'Не авторизован' })
+			}
+			const crop = cropFromBody(req.body)
+			const result = req.file
+				? await saveAvatar({ userId, buffer: req.file.buffer, crop })
+				: await recropAvatar({ userId, crop })
+			res.json(result)
+		} catch (error) {
+			sendError(res, error, 'Ошибка при загрузке аватара')
 		}
-		const crop = cropFromBody(req.body)
-		const result = req.file
-			? await saveAvatar({ userId, buffer: req.file.buffer, crop })
-			: await recropAvatar({ userId, crop })
-		res.json(result)
-	} catch (error) {
-		sendError(res, error, 'Ошибка при загрузке аватара')
 	}
-})
+)
 
 router.delete('/', sessionRequired(), async (req: Request, res: Response) => {
 	try {

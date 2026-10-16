@@ -49,10 +49,6 @@ function invalidPath(): ApiError {
 	return new ApiError(400, 'Invalid path')
 }
 
-export function isAllowedImageMime(mime: string): boolean {
-	return IMAGE_PROFILES.mediaLibrary.types.has(mime)
-}
-
 export async function uploadImage(buffer: Buffer): Promise<{ path: string; filename: string }> {
 	const accepted = await acceptImage(buffer, IMAGE_PROFILES.mediaLibrary)
 	const filename = `${crypto.randomBytes(16).toString('hex')}.webp`

@@ -5,6 +5,8 @@ import http from 'node:http'
 import sharp from 'sharp'
 import { afterAll, beforeAll, beforeEach, describe, test, vi } from 'vitest'
 
+import { UPLOAD_READ_ERROR } from '../middleware/upload.js'
+import { AVATAR_TYPE_ERROR, IMAGE_TYPE_ERROR } from '../services/assets/image-intake.js'
 import type { MemoryStorageAdapter } from '../services/storage/adapters/memory.js'
 import { sessionCookieFor, startTestServer } from '../test-support/http.js'
 import { memoryStorage } from '../test-support/storage.js'
@@ -113,33 +115,30 @@ function textFile(type: string): UploadFile {
 	return { bytes: Buffer.from('это не картинка, а обычный текст'), type, name: 'note.png' }
 }
 
-const IMAGE_FILTER_ERROR = 'Недопустимый тип файла. Разрешены только изображения (JPEG, PNG, GIF, WebP)'
-const DOCS_FILTER_ERROR = 'Поддерживаются только JPEG, PNG и WebP'
-
 const ROUTES = [
 	{
 		name: 'users/avatar',
 		path: () => '/api/users/avatar',
 		field: 'avatar',
-		filterError: IMAGE_FILTER_ERROR,
+		typeError: AVATAR_TYPE_ERROR,
 		okStatus: 200,
 	},
-	{ name: 'docs/assets', path: () => '/api/docs/assets', field: 'file', filterError: DOCS_FILTER_ERROR, okStatus: 200 },
+	{ name: 'docs/assets', path: () => '/api/docs/assets', field: 'file', typeError: IMAGE_TYPE_ERROR, okStatus: 200 },
 ]
 
 for (const route of ROUTES) {
 	describe(`POST ${route.name}: отказы multer и сессии`, () => {
-		test('MIME text/plain отклоняется фильтром multer, в хранилище ничего не попадает', async () => {
+		test('текст с MIME text/plain отклоняется по сигнатуре: 400, в хранилище ничего не попадает', async () => {
 			const reply = await postFile(route.path(), route.field, textFile('text/plain'))
-			assert.equal(reply.status, 500)
-			assert.equal(reply.body.error, route.filterError)
+			assert.equal(reply.status, 400)
+			assert.equal(reply.body.error, route.typeError)
 			assert.deepEqual(mem.keys(), [])
 		})
 
-		test('файл больше 5 МБ отклоняется, в хранилище ничего не попадает', async () => {
+		test('файл больше 5 МБ: 413 с русским текстом, в хранилище ничего не попадает', async () => {
 			const reply = await postFile(route.path(), route.field, { bytes: oversize, type: 'image/png', name: 'big.png' })
-			assert.equal(reply.status, 500)
-			assert.equal(reply.body.error, 'File too large')
+			assert.equal(reply.status, 413)
+			assert.equal(reply.body.error, 'Файл больше 5 МБ')
 			assert.deepEqual(mem.keys(), [])
 		})
 
@@ -227,17 +226,20 @@ describe('POST /api/docs/assets', () => {
 		assert.equal(meta.height, 64)
 	})
 
-	test('image/gif отклоняется фильтром multer', async () => {
-		const reply = await postFile('/api/docs/assets', 'file', { bytes: tinyPng, type: 'image/gif', name: 'a.gif' })
-		assert.equal(reply.status, 500)
-		assert.equal(reply.body.error, DOCS_FILTER_ERROR)
+	test('настоящий GIF отклоняется по сигнатуре: 415, в хранилище ничего не попадает', async () => {
+		const gif = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 255, g: 0, b: 0 } } })
+			.gif()
+			.toBuffer()
+		const reply = await postFile('/api/docs/assets', 'file', { bytes: gif, type: 'image/gif', name: 'a.gif' })
+		assert.equal(reply.status, 415)
+		assert.equal(reply.body.error, IMAGE_TYPE_ERROR)
 		assert.deepEqual(mem.keys(), [])
 	})
 
 	test('текст с типом image/png отклоняется проверкой сигнатуры: 400, в хранилище ничего не попадает', async () => {
 		const reply = await postFile('/api/docs/assets', 'file', textFile('image/png'))
 		assert.equal(reply.status, 400)
-		assert.equal(reply.body.error, DOCS_FILTER_ERROR)
+		assert.equal(reply.body.error, IMAGE_TYPE_ERROR)
 		assert.deepEqual(mem.keys(), [])
 	})
 })
@@ -318,7 +320,7 @@ describe('POST /api/docs/assets: сломанный multipart', () => {
 	const boundary = '----bioexambroken'
 	const contentType = `multipart/form-data; boundary=${boundary}`
 
-	test('тело без закрывающей границы', async () => {
+	test('тело без закрывающей границы: 400', async () => {
 		const body = Buffer.concat([
 			Buffer.from(
 				`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\nContent-Type: image/png\r\n\r\n`
@@ -327,13 +329,13 @@ describe('POST /api/docs/assets: сломанный multipart', () => {
 			Buffer.from('\r\n'),
 		])
 		const reply = await postRaw('/api/docs/assets', contentType, body)
-		assert.equal(reply.status, 500)
-		assert.equal(reply.body.error, 'Unexpected end of form')
+		assert.equal(reply.status, 400)
+		assert.equal(reply.body.error, UPLOAD_READ_ERROR)
 		assert.deepEqual(mem.keys(), [])
 		assert.equal(await waitForHealthz(), 200)
 	})
 
-	test('часть с пустым name', async () => {
+	test('часть с пустым name: 400', async () => {
 		const body = Buffer.concat([
 			Buffer.from(
 				`--${boundary}\r\nContent-Disposition: form-data; name=""; filename="a.png"\r\nContent-Type: image/png\r\n\r\n`
@@ -342,8 +344,8 @@ describe('POST /api/docs/assets: сломанный multipart', () => {
 			Buffer.from(`\r\n--${boundary}--\r\n`),
 		])
 		const reply = await postRaw('/api/docs/assets', contentType, body)
-		assert.equal(reply.status, 500)
-		assert.equal(reply.body.error, 'Field name missing')
+		assert.equal(reply.status, 400)
+		assert.equal(reply.body.error, UPLOAD_READ_ERROR)
 		assert.deepEqual(mem.keys(), [])
 		assert.equal(await waitForHealthz(), 200)
 	})
