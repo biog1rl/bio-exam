@@ -2,7 +2,7 @@
 
 import { answerPhotoLimitMessage } from '@bio-exam/exam-core'
 
-import { useEffect, useId, useRef, useState, type ChangeEvent, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react'
 
 import { Camera, CircleAlert, ImageOff, ImagePlus, Images, Loader2, RotateCw, Trash2, X } from 'lucide-react'
 
@@ -10,9 +10,9 @@ import { LoadErrorAlert } from '@/components/feedback/LoadErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RequestError } from '@/lib/http/request'
-import { answerPhotoUrl } from '@/lib/tests/answer-photos-api'
 
 import { PhotoViewer } from './PhotoViewer'
+import type { PhotoThumbSource } from './transport'
 import type { PhotoItem } from './upload-queue'
 import { useAnswerPhotos, type AnswerPhotoQueueHandle } from './use-answer-photos'
 
@@ -22,6 +22,8 @@ type PhotoBlockProps = {
 	photos: AnswerPhotoQueueHandle
 	disabled: boolean
 	sources?: readonly PhotoSource[]
+	actions?: ReactNode
+	touch?: boolean
 }
 
 const DEFAULT_SOURCES: readonly PhotoSource[] = ['file']
@@ -42,18 +44,53 @@ const HINT_AT_LIMIT = 'Чтобы добавить другое фото, уда
 
 const ROW_BUTTON = 'h-11 tab:h-8'
 
-function Thumbnail({ photoId, alt }: { photoId: string; alt: string }) {
+const ROW_BUTTON_TOUCH = 'h-11'
+
+const SOURCE_BUTTON = 'h-11 w-full aria-disabled:pointer-events-none aria-disabled:opacity-50 mob:w-auto'
+
+function BrokenThumbnail({ alt }: { alt: string }) {
+	return <ImageOff role="img" aria-label={alt} className="size-5 text-muted-foreground" />
+}
+
+function UrlThumbnail({ src, alt }: { src: string; alt: string }) {
 	const [broken, setBroken] = useState(false)
-	if (broken) return <ImageOff role="img" aria-label={alt} className="size-5 text-muted-foreground" />
-	return (
-		<img
-			src={answerPhotoUrl(photoId, 'thumb')}
-			alt={alt}
-			decoding="async"
-			className="size-full object-cover"
-			onError={() => setBroken(true)}
-		/>
-	)
+	if (broken) return <BrokenThumbnail alt={alt} />
+	return <img src={src} alt={alt} decoding="async" className="size-full object-cover" onError={() => setBroken(true)} />
+}
+
+type ThumbLoader = (photoId: string, signal: AbortSignal) => Promise<Blob | null>
+
+function BlobThumbnail({ photoId, load, alt }: { photoId: string; load: ThumbLoader; alt: string }) {
+	const [view, setView] = useState<{ url: string | null; broken: boolean }>({ url: null, broken: false })
+	useEffect(() => {
+		const controller = new AbortController()
+		let objectUrl: string | null = null
+		load(photoId, controller.signal)
+			.then((blob) => {
+				if (controller.signal.aborted) return
+				if (!blob) {
+					setView({ url: null, broken: true })
+					return
+				}
+				objectUrl = URL.createObjectURL(blob)
+				setView({ url: objectUrl, broken: false })
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) setView({ url: null, broken: true })
+			})
+		return () => {
+			controller.abort()
+			if (objectUrl) URL.revokeObjectURL(objectUrl)
+		}
+	}, [photoId, load])
+	if (view.broken) return <BrokenThumbnail alt={alt} />
+	if (!view.url) return <Spinner />
+	return <UrlThumbnail src={view.url} alt={alt} />
+}
+
+function Thumbnail({ source, photoId, alt }: { source: PhotoThumbSource; photoId: string; alt: string }) {
+	if (source.kind === 'url') return <UrlThumbnail key={photoId} src={source.src(photoId)} alt={alt} />
+	return <BlobThumbnail key={photoId} photoId={photoId} load={source.load} alt={alt} />
 }
 
 function Spinner() {
@@ -68,12 +105,14 @@ type RowProps = {
 	item: PhotoItem
 	number: number
 	disabled: boolean
-	onOpen: () => void
+	thumb: PhotoThumbSource
+	rowButton: string
+	onOpen: (() => void) | null
 	onRetry: (photoId: string) => void
 	onRemove: (photoId: string) => void
 }
 
-function PhotoRow({ item, number, disabled, onOpen, onRetry, onRemove }: RowProps) {
+function PhotoRow({ item, number, disabled, thumb, rowButton, onOpen, onRetry, onRemove }: RowProps) {
 	const name = `Фото ${number}`
 	const busy = item.status === 'preparing' || item.status === 'uploading' || item.status === 'retrying'
 	const status =
@@ -81,15 +120,17 @@ function PhotoRow({ item, number, disabled, onOpen, onRetry, onRemove }: RowProp
 	return (
 		<li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
 			<div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
-				{item.status === 'done' && item.photo ? (
+				{item.status === 'done' && item.photo && onOpen ? (
 					<button
 						type="button"
 						onClick={onOpen}
 						aria-label={`Открыть фото ${number}`}
 						className="block size-full cursor-zoom-in outline-none focus-visible:ring-[0.1875rem] focus-visible:ring-ring/50"
 					>
-						<Thumbnail photoId={item.photo.id} alt={name} />
+						<Thumbnail source={thumb} photoId={item.photo.id} alt={name} />
 					</button>
+				) : item.status === 'done' && item.photo ? (
+					<Thumbnail source={thumb} photoId={item.photo.id} alt={name} />
 				) : busy ? (
 					<Spinner />
 				) : (
@@ -113,7 +154,7 @@ function PhotoRow({ item, number, disabled, onOpen, onRetry, onRemove }: RowProp
 						type="button"
 						variant="outline"
 						size="sm"
-						className={ROW_BUTTON}
+						className={rowButton}
 						disabled={disabled}
 						aria-label={`Повторить загрузку фото ${number}`}
 						onClick={() => onRetry(item.photoId)}
@@ -127,7 +168,7 @@ function PhotoRow({ item, number, disabled, onOpen, onRetry, onRemove }: RowProp
 						type="button"
 						variant="ghost"
 						size="sm"
-						className={ROW_BUTTON}
+						className={rowButton}
 						disabled={disabled}
 						aria-label={`Удалить фото ${number}`}
 						onClick={() => onRemove(item.photoId)}
@@ -141,7 +182,7 @@ function PhotoRow({ item, number, disabled, onOpen, onRetry, onRemove }: RowProp
 						type="button"
 						variant="ghost"
 						size="sm"
-						className={ROW_BUTTON}
+						className={rowButton}
 						disabled={disabled}
 						aria-label={`Убрать фото ${number}`}
 						onClick={() => onRemove(item.photoId)}
@@ -199,7 +240,7 @@ function SourceInput({
 	)
 }
 
-export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: PhotoBlockProps) {
+export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES, actions, touch = false }: PhotoBlockProps) {
 	const { state, listing, loadFailure, reload, add, retry, remove } = useAnswerPhotos(photos)
 	const titleId = useId()
 	const hintId = useId()
@@ -224,6 +265,8 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 	const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 	const ready = listing === 'ready'
 	const sourceDisabled = disabled || !ready
+	const fullView = photos.transport.fullView
+	const rowButton = touch ? ROW_BUTTON_TOUCH : ROW_BUTTON
 
 	useEffect(() => {
 		const pending = focusAfterRemoval.current
@@ -277,7 +320,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 							key={source}
 							type="button"
 							variant="outline"
-							className="h-11 w-full aria-disabled:pointer-events-none aria-disabled:opacity-50 mob:w-auto tab:h-8"
+							className={touch ? SOURCE_BUTTON : `${SOURCE_BUTTON} tab:h-8`}
 							disabled={sourceDisabled}
 							aria-disabled={atLimit ? true : undefined}
 							aria-describedby={hintId}
@@ -288,6 +331,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 						</Button>
 					)
 				})}
+				{actions}
 				{shownSources.map((source) => (
 					<SourceInput key={source} source={source} inputRef={inputRefs[source]} onFiles={add} />
 				))}
@@ -309,7 +353,11 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 							item={item}
 							number={index + 1}
 							disabled={disabled}
-							onOpen={() => setViewerIndex(viewable.findIndex((photo) => photo.id === item.photo?.id))}
+							thumb={photos.transport.thumb}
+							rowButton={rowButton}
+							onOpen={
+								fullView ? () => setViewerIndex(viewable.findIndex((photo) => photo.id === item.photo?.id)) : null
+							}
 							onRetry={retry}
 							onRemove={(photoId) => startRemoval([photoId], index)}
 						/>
@@ -332,7 +380,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 									type="button"
 									variant="ghost"
 									size="sm"
-									className={ROW_BUTTON}
+									className={rowButton}
 									disabled={disabled}
 									aria-label="Убрать сообщение о лишних фото"
 									onClick={() =>
@@ -350,7 +398,7 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 					) : null}
 				</ul>
 			) : null}
-			<PhotoViewer photos={viewable} openIndex={viewerIndex} onClose={() => setViewerIndex(null)} />
+			{fullView ? <PhotoViewer photos={viewable} openIndex={viewerIndex} onClose={() => setViewerIndex(null)} /> : null}
 		</div>
 	)
 }

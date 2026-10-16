@@ -1,5 +1,5 @@
 import {
-	ANSWER_PHOTO_LIMIT_MESSAGE,
+	answerPhotoLimitMessage,
 	type AnswerPhoto,
 	type AnswerPhotoDeleteResponse,
 	type AnswerPhotoUploadResponse,
@@ -16,6 +16,7 @@ import { createPhotoUploadQueue } from './upload-queue'
 const START = Date.parse('2026-10-16T10:00:00.000Z')
 const CLOSES_AT = new Date(START - 5 * 60_000).toISOString()
 const QUESTION_ID = '00000000-0000-4000-8000-000000000001'
+const MAX = 5
 const NETWORK_MESSAGE = 'Нет связи с сервером. Проверьте подключение и повторите попытку.'
 const BUSY_MESSAGE = 'Сервер занят обработкой фото. Повторите через несколько секунд'
 
@@ -53,7 +54,7 @@ function idOf(seq: number): string {
 
 const hang = (): Promise<UploadOutcome> => new Promise<UploadOutcome>(() => {})
 
-function setup(uploadSteps: UploadStep[] = [], removeSteps: DeleteStep[] = []) {
+function setup(uploadSteps: UploadStep[] = [], removeSteps: DeleteStep[] = [], maxCount = MAX) {
 	const steps = [...uploadSteps]
 	const removals = [...removeSteps]
 	let seq = 0
@@ -77,7 +78,7 @@ function setup(uploadSteps: UploadStep[] = [], removeSteps: DeleteStep[] = []) {
 		return next
 	})
 	const prepare = vi.fn(async (file: File) => ({ blob: file as Blob, fileName: file.name }))
-	const queue = createPhotoUploadQueue({ upload, remove, prepare, randomId })
+	const queue = createPhotoUploadQueue({ upload, remove, prepare, randomId, maxCount })
 	const item = (photoId: string) => queue.snapshot().items.find((entry) => entry.photoId === photoId)
 	const statuses = () => queue.snapshot().items.map((entry) => entry.status)
 	return { queue, upload, remove, prepare, randomId, item, statuses }
@@ -267,7 +268,7 @@ describe('лимит пяти фото', () => {
 		await vi.advanceTimersByTimeAsync(0)
 		const sixth = queue.snapshot().items[5]
 		assert.equal(sixth?.status, 'refused')
-		assert.equal(sixth?.message, ANSWER_PHOTO_LIMIT_MESSAGE)
+		assert.equal(sixth?.message, answerPhotoLimitMessage(MAX))
 		assert.equal(prepare.mock.calls.length, 5)
 		assert.equal(upload.mock.calls.length, 5)
 	})
@@ -297,7 +298,7 @@ describe('лимит пяти фото', () => {
 		queue.add(files(1))
 		const last = queue.snapshot().items.at(-1)
 		assert.equal(last?.status, 'refused')
-		assert.equal(last?.message, ANSWER_PHOTO_LIMIT_MESSAGE)
+		assert.equal(last?.message, answerPhotoLimitMessage(MAX))
 		await vi.advanceTimersByTimeAsync(0)
 		assert.equal(prepare.mock.calls.length, 3)
 		assert.equal(upload.mock.calls.length, 6)
@@ -407,4 +408,130 @@ test('снимок — новый объект после каждого пер�
 	assert.notEqual(second, first)
 	await vi.advanceTimersByTimeAsync(0)
 	assert.notEqual(queue.snapshot(), second)
+})
+
+test('лимит берётся из maxCount вопроса', async () => {
+	const { queue, statuses } = setup([], [], 2)
+	queue.add(files(3))
+	await vi.advanceTimersByTimeAsync(0)
+	assert.deepEqual(statuses(), ['done', 'done', 'refused'])
+	assert.equal(queue.snapshot().max, 2)
+	assert.equal(queue.snapshot().items[2]?.message, answerPhotoLimitMessage(2))
+})
+
+type Queue = ReturnType<typeof setup>
+
+type SyncCase = {
+	name: string
+	uploads?: UploadStep[]
+	removals?: DeleteStep[]
+	arrange: (ctx: Queue) => Promise<{ since: number; server: AnswerPhoto[] }>
+	ids: string[]
+	statuses: string[]
+	count: number
+}
+
+const syncCases: SyncCase[] = [
+	{
+		name: 'добавляет фото сервера, которых нет в очереди',
+		arrange: async ({ queue }) => {
+			queue.seed([photoOf(idOf(101))])
+			return { since: queue.mark(), server: [photoOf(idOf(101)), photoOf(idOf(102))] }
+		},
+		ids: [idOf(101), idOf(102)],
+		statuses: ['done', 'done'],
+		count: 2,
+	},
+	{
+		name: 'убирает готовые, которых нет на сервере',
+		arrange: async ({ queue }) => {
+			queue.seed([photoOf(idOf(101)), photoOf(idOf(102))])
+			return { since: queue.mark(), server: [photoOf(idOf(102))] }
+		},
+		ids: [idOf(102)],
+		statuses: ['done'],
+		count: 1,
+	},
+	{
+		name: 'не убирает фото, загруженное после старта запроса списка',
+		arrange: async ({ queue }) => {
+			queue.seed([photoOf(idOf(101))])
+			const since = queue.mark()
+			queue.add(files(1))
+			await vi.advanceTimersByTimeAsync(0)
+			return { since, server: [photoOf(idOf(101))] }
+		},
+		ids: [idOf(101), idOf(1)],
+		statuses: ['done', 'done'],
+		count: 2,
+	},
+	{
+		name: 'не возвращает фото, удалённое после старта запроса списка',
+		arrange: async ({ queue }) => {
+			queue.seed([photoOf(idOf(101)), photoOf(idOf(102))])
+			const since = queue.mark()
+			queue.remove(idOf(101))
+			await vi.advanceTimersByTimeAsync(0)
+			return { since, server: [photoOf(idOf(101)), photoOf(idOf(102))] }
+		},
+		ids: [idOf(102)],
+		statuses: ['done'],
+		count: 1,
+	},
+	{
+		name: 'не трогает идущие, сбойные, отклонённые и удаляемые',
+		uploads: [...repeat(failure('network'), 4), failure('http', 415, { error: 'Формат не поддерживается' }), hang],
+		removals: [new Promise<DeleteOutcome>(() => {}) as unknown as DeleteOutcome],
+		arrange: async ({ queue }) => {
+			queue.seed([photoOf(idOf(101))])
+			queue.add(files(1))
+			await vi.advanceTimersByTimeAsync(13_000)
+			queue.add(files(1))
+			await vi.advanceTimersByTimeAsync(0)
+			queue.add(files(2))
+			await vi.advanceTimersByTimeAsync(0)
+			queue.remove(idOf(101))
+			return { since: queue.mark(), server: [] }
+		},
+		ids: [idOf(101), idOf(1), idOf(2), idOf(3), idOf(4)],
+		statuses: ['done', 'failed', 'refused', 'uploading', 'preparing'],
+		count: 1,
+	},
+	{
+		name: 'не дублирует фото с photoId локальной загрузки',
+		arrange: async ({ queue }) => {
+			queue.add(files(1))
+			await vi.advanceTimersByTimeAsync(0)
+			return { since: queue.mark(), server: [photoOf(idOf(1))] }
+		},
+		ids: [idOf(1)],
+		statuses: ['done'],
+		count: 1,
+	},
+]
+
+describe('sync', () => {
+	test.each(syncCases)('$name', async ({ uploads, removals, arrange, ids, statuses, count }) => {
+		const ctx = setup(uploads, removals)
+		const { since, server } = await arrange(ctx)
+		ctx.queue.sync(server, since)
+		assert.deepEqual(
+			ctx.queue.snapshot().items.map((entry) => entry.photoId),
+			ids
+		)
+		assert.deepEqual(ctx.statuses(), statuses)
+		assert.equal(ctx.queue.snapshot().count, count)
+	})
+
+	test('тот же список не меняет снимок и не зовёт подписчиков', () => {
+		const { queue } = setup()
+		const server = [photoOf(idOf(101)), photoOf(idOf(102))]
+		queue.sync(server)
+		const before = queue.snapshot()
+		const listener = vi.fn()
+		queue.subscribe(listener)
+		queue.sync(server)
+		assert.equal(queue.snapshot(), before)
+		assert.equal(listener.mock.calls.length, 0)
+	})
 })

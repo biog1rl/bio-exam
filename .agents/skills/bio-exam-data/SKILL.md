@@ -8,7 +8,7 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 ## Схема и миграции
 
 - Схема: `app/server/src/db/schema.ts` (Drizzle, `drizzle-orm/pg-core`); клиент базы: `app/server/src/db/index.ts`.
-- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0033_question_photo_settings.sql`.
+- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0034_answer_upload_links.sql`.
 - Применённая миграция не редактируется: изменение схемы идёт новым файлом из `yarn workspace @bio-exam/server drizzle:generate` после правки `schema.ts`.
 - `app/server/drizzle/migrations-manifest.json` фиксирует каждую миграцию: `idx`, `tag`, `file`, `sha256`, `when`, `breakpoints` (`checksumAlgorithm: sha256`). Новая миграция получает в нём новую запись, совпадающую с журналом и файлом.
 - `scripts/check-migrations.mjs` (шаг `migrations` в `yarn verify`) на временных базах сверяет манифест с журналом и файлами, цепочку с пустой базы против `schema.ts`, повторный прогон без изменений, отсутствие разницы у `drizzle-kit generate` и `drizzle-kit check`.
@@ -39,7 +39,14 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 - Таблица `answer_photos` (миграция `0031_answer_photos`): `id` - UUID клиента без значения по умолчанию, `session_id` → `test_sessions` `ON DELETE cascade`, `question_id` → `questions` `ON DELETE cascade`, `attempt_id` → `test_attempts` `ON DELETE set null` (заполняет сдача, фаза 14), `uploaded_at` ставит база (`DEFAULT now()`), `expires_at` пока никто не пишет. Индекс `idx_answer_photos_session_question` (сессия, вопрос), RLS с политикой `deny_direct_access`.
 - Пишет таблицу только `app/server/src/services/answer-photos`; кроме него строку читает загрузчик зоны (`answerPhotoSubject` в `app/server/src/services/access-policy/zone-loader.ts`) для `canReadAnswerPhoto`. Лимит и константы - `packages/exam-core/src/answer-photos.ts`.
 - Файлы фото: `answers/{sessionId}/{questionId}/{photoId}/full.webp` и `thumb.webp`. При удалении теста, вопроса или темы строки уходят каскадом, файлы `answers/` остаются до очистки сирот.
+- `answer_photos.uploaded_via` (миграция `0034_answer_upload_links`): `text NOT NULL DEFAULT 'session'`, CHECK `answer_photos_uploaded_via_check` (`session` или `link`). Значение пишет `uploadAnswerPhoto` параметром источника: `session` у маршрутов под сессией входа, `link` у маршрутов ссылки загрузки.
 - Миграция `0033_question_photo_settings`: `questions.allow_photos` (по умолчанию true) и `questions.max_photos` (по умолчанию 5, CHECK 1-10); значения нужны только вопросам типа `open`. Литералы 5 и 10 равны `ANSWER_PHOTO_MAX_COUNT` и `ANSWER_PHOTO_MAX_COUNT_LIMIT` из `@bio-exam/exam-core`. Загрузка фото читает оба столбца под блокировкой сессии (`uploadAnswerPhoto`).
+
+## Ссылки загрузки фото
+
+- Таблица `answer_upload_links` (миграция `0034_answer_upload_links`): `id` uuid по умолчанию `gen_random_uuid()`, `session_id` → `test_sessions` и `question_id` → `questions` с `ON DELETE cascade`, `token_hash` (sha256 hex токена; сам токен не хранится и из хеша не восстанавливается), `created_at` ставит база, `revoked_at` и `last_used_at` допускают NULL. Уникальный индекс `answer_upload_links_token_uniq` по `token_hash`, частичный индекс активных ссылок слота `idx_answer_upload_links_active_slot` (`session_id`, `question_id`) `WHERE revoked_at IS NULL`, RLS с политикой `deny_direct_access`.
+- Ключа на `users` нет: ссылки уходят каскадом вместе с сессией ученика (ADR-0007, `user-deletion-rule.test.ts` без исключений). Колонки срока нет: потолок 24 часа считается от `created_at`.
+- Пишет таблицу только `app/server/src/services/upload-links`: выдача под `FOR UPDATE` сессии держит не больше трёх активных ссылок слота, лишние гасит `revoked_at = now()` начиная со старшей, строки физически не удаляются; `last_used_at` обновляется после ответа маршрута ссылки не чаще раза в 30 с.
 
 ## Проверки открытых ответов
 

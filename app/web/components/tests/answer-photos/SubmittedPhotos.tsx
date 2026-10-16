@@ -12,12 +12,12 @@ import { failureMessage } from '@/lib/http/errors'
 import { completeAnswerUploads } from '@/lib/tests/answer-photos-api'
 
 import { PhotoBlock, type PhotoSource } from './PhotoBlock'
-import type { AnswerPhotoQueueHandle } from './use-answer-photos'
+import type { SessionPhotoHandle } from './use-answer-photos'
 
 const DONE_FAILED_TEXT = 'Не удалось завершить загрузку. Повторите попытку.'
 
 type Props = {
-	photos: AnswerPhotoQueueHandle
+	photos: SessionPhotoHandle
 	uploadClosesAt: string | null
 	serverOffsetMs: number
 	sources: readonly PhotoSource[]

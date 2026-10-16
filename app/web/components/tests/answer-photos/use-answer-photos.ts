@@ -2,43 +2,43 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
-import type { RequestFailure } from '@/lib/http/request'
-import {
-	deleteAnswerPhoto,
-	listAnswerPhotos,
-	uploadAnswerPhoto,
-	type AnswerPhotoTarget,
-} from '@/lib/tests/answer-photos-api'
+import useSWR from 'swr'
+
+import type { RequestFailure, RequestOutcome } from '@/lib/http/request'
+import type { AnswerPhotoTarget } from '@/lib/tests/answer-photos-api'
 
 import { prepareForUpload } from './resize'
+import { linkPhotoTransport, sessionPhotoTransport, type PhotoTransport } from './transport'
 import { createPhotoUploadQueue, type PhotoQueueState, type PhotoUploadQueue } from './upload-queue'
 
 export type AnswerPhotoQueueHandle = {
-	target: AnswerPhotoTarget
+	transport: PhotoTransport
 	queue: PhotoUploadQueue
 	listed(): boolean
 	markListed(): void
 }
 
+export type SessionPhotoHandle = AnswerPhotoQueueHandle & { target: AnswerPhotoTarget }
+
 export type AnswerPhotoSession = {
-	photosFor(questionId: string): AnswerPhotoQueueHandle
+	photosFor(questionId: string): SessionPhotoHandle
 }
 
 type MaxCountOf = (questionId: string) => number
 
 type SessionRegistry = AnswerPhotoSession & { retain(): void; release(): void }
 
-function createQueueHandle(target: AnswerPhotoTarget, maxCount: number | undefined): AnswerPhotoQueueHandle {
+function createQueueHandle(transport: PhotoTransport, maxCount: number): AnswerPhotoQueueHandle {
 	let listed = false
 	const queue = createPhotoUploadQueue({
 		maxCount,
-		upload: (photoId, blob, fileName) => uploadAnswerPhoto(target, photoId, blob, fileName),
-		remove: (photoId) => deleteAnswerPhoto(target, photoId),
+		upload: transport.upload,
+		remove: transport.remove,
 		prepare: prepareForUpload,
 		randomId: () => crypto.randomUUID(),
 	})
 	return {
-		target,
+		transport,
 		queue,
 		listed: () => listed,
 		markListed() {
@@ -47,12 +47,22 @@ function createQueueHandle(target: AnswerPhotoTarget, maxCount: number | undefin
 	}
 }
 
-function createSessionRegistry(
-	testId: string,
-	sessionId: string | null,
-	maxCountOf: MaxCountOf | undefined
-): SessionRegistry {
-	const handles = new Map<string, AnswerPhotoQueueHandle>()
+export function createLinkPhotoHandle(token: string, maxCount: number): AnswerPhotoQueueHandle {
+	return createQueueHandle(linkPhotoTransport(token), maxCount)
+}
+
+async function listInto(handle: AnswerPhotoQueueHandle): Promise<RequestOutcome<unknown>> {
+	const since = handle.queue.mark()
+	const outcome = await handle.transport.list()
+	if (outcome.ok) {
+		handle.queue.sync(outcome.data.photos, since)
+		handle.markListed()
+	}
+	return outcome
+}
+
+function createSessionRegistry(testId: string, sessionId: string | null, maxCountOf: MaxCountOf): SessionRegistry {
+	const handles = new Map<string, SessionPhotoHandle>()
 	let pendingRelease: ReturnType<typeof setTimeout> | null = null
 
 	function dispose(): void {
@@ -64,7 +74,8 @@ function createSessionRegistry(
 		photosFor(questionId) {
 			const existing = handles.get(questionId)
 			if (existing) return existing
-			const handle = createQueueHandle({ testId, sessionId: sessionId ?? '', questionId }, maxCountOf?.(questionId))
+			const target = { testId, sessionId: sessionId ?? '', questionId }
+			const handle = { ...createQueueHandle(sessionPhotoTransport(target), maxCountOf(questionId)), target }
 			handles.set(questionId, handle)
 			return handle
 		},
@@ -85,7 +96,7 @@ function createSessionRegistry(
 export function useAnswerPhotoSession(ids: {
 	testId: string
 	sessionId: string | null
-	maxCountOf?: MaxCountOf
+	maxCountOf: MaxCountOf
 }): AnswerPhotoSession {
 	const { testId, sessionId, maxCountOf } = ids
 	const registry = useMemo(() => createSessionRegistry(testId, sessionId, maxCountOf), [testId, sessionId, maxCountOf])
@@ -109,18 +120,16 @@ export type AnswerPhotosView = {
 }
 
 export function useAnswerPhotos(handle: AnswerPhotoQueueHandle): AnswerPhotosView {
-	const { queue, target } = handle
+	const { queue } = handle
 	const state = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot)
 	const [listing, setListing] = useState<AnswerPhotoListing>(() => (handle.listed() ? 'ready' : 'loading'))
 	const [loadFailure, setLoadFailure] = useState<RequestFailure | null>(null)
 	const mountedRef = useRef(true)
 
 	const fetchList = useCallback(() => {
-		void listAnswerPhotos(target).then((outcome) => {
+		void listInto(handle).then((outcome) => {
 			if (!mountedRef.current) return
 			if (outcome.ok) {
-				queue.seed(outcome.data.photos)
-				handle.markListed()
 				setLoadFailure(null)
 				setListing('ready')
 				return
@@ -128,7 +137,7 @@ export function useAnswerPhotos(handle: AnswerPhotoQueueHandle): AnswerPhotosVie
 			setLoadFailure(outcome)
 			setListing('failed')
 		})
-	}, [handle, queue, target])
+	}, [handle])
 
 	useEffect(() => {
 		mountedRef.current = true
@@ -157,11 +166,7 @@ export function useAnswerPhotos(handle: AnswerPhotoQueueHandle): AnswerPhotosVie
 
 function primeListing(handle: AnswerPhotoQueueHandle): void {
 	if (handle.listed()) return
-	void listAnswerPhotos(handle.target).then((outcome) => {
-		if (!outcome.ok || handle.listed()) return
-		handle.queue.seed(outcome.data.photos)
-		handle.markListed()
-	})
+	void listInto(handle)
 }
 
 function createCountStore(session: AnswerPhotoSession, questionIds: readonly string[]) {
@@ -197,4 +202,35 @@ export function useAnswerPhotoCounts(
 ): ReadonlyMap<string, number> {
 	const store = useMemo(() => createCountStore(session, questionIds), [session, questionIds])
 	return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot)
+}
+
+export type PhotoListSync = { failures: number; lastFailure: RequestFailure | null }
+
+const LIST_NETWORK_FAILURE: RequestFailure = { ok: false, kind: 'network', message: '' }
+
+async function pollList(handle: AnswerPhotoQueueHandle): Promise<RequestOutcome<unknown>> {
+	try {
+		return await listInto(handle)
+	} catch {
+		return LIST_NETWORK_FAILURE
+	}
+}
+
+export function usePhotoListSync(
+	handle: AnswerPhotoQueueHandle,
+	{ intervalMs, enabled }: { intervalMs: number; enabled: boolean }
+): PhotoListSync {
+	const [sync, setSync] = useState<PhotoListSync>({ failures: 0, lastFailure: null })
+	useSWR(enabled ? handle.transport.key : null, () => pollList(handle), {
+		refreshInterval: intervalMs,
+		refreshWhenHidden: false,
+		revalidateOnReconnect: true,
+		shouldRetryOnError: false,
+		onSuccess: (outcome) =>
+			setSync((current) => {
+				if (outcome.ok) return current.failures === 0 ? current : { failures: 0, lastFailure: null }
+				return { failures: current.failures + 1, lastFailure: outcome }
+			}),
+	})
+	return sync
 }

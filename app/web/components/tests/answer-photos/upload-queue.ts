@@ -1,5 +1,4 @@
 import {
-	ANSWER_PHOTO_MAX_COUNT,
 	UploadWindowRefusalSchema,
 	answerPhotoLimitMessage,
 	type AnswerPhoto,
@@ -31,7 +30,7 @@ export type PhotoUploadQueueOptions = {
 	remove: (photoId: string) => Promise<RequestOutcome<AnswerPhotoDeleteResponse>>
 	prepare: (file: File) => Promise<PreparedPhoto>
 	randomId: () => string
-	maxCount?: number
+	maxCount: number
 	clock?: SaveQueueClock
 	now?: () => number
 }
@@ -40,7 +39,9 @@ export type PhotoUploadQueue = {
 	add(files: readonly File[]): void
 	retry(photoId: string): void
 	remove(photoId: string): void
-	seed(photos: readonly AnswerPhoto[]): void
+	seed(photos: readonly AnswerPhoto[], since?: number): void
+	sync(photos: readonly AnswerPhoto[], since?: number): void
+	mark(): number
 	snapshot(): PhotoQueueState
 	subscribe(listener: () => void): () => void
 	dispose(): void
@@ -66,6 +67,7 @@ type Entry = {
 	timer: unknown
 	removing: boolean
 	limitRefusal: boolean
+	settledMark: number
 }
 
 function isRetryable(failure: RequestFailure): boolean {
@@ -80,8 +82,7 @@ function isRefusal(failure: RequestFailure): boolean {
 }
 
 export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoUploadQueue {
-	const { upload, remove, prepare, randomId } = options
-	const maxCount = options.maxCount ?? ANSWER_PHOTO_MAX_COUNT
+	const { upload, remove, prepare, randomId, maxCount } = options
 	const now = options.now ?? options.clock?.now ?? (() => Date.now())
 	const setTimer = options.clock?.setTimer ?? ((callback: () => void, ms: number) => setTimeout(callback, ms))
 	const clearTimer =
@@ -93,6 +94,13 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 	let active: Entry | null = null
 	let disposed = false
 	let state: PhotoQueueState | null = null
+	let currentMark = 0
+	const removedMarks = new Map<string, number>()
+
+	function tick(): number {
+		currentMark += 1
+		return currentMark
+	}
 
 	function notify(): void {
 		state = null
@@ -116,7 +124,41 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 			timer: null,
 			removing: false,
 			limitRefusal: false,
+			settledMark: 0,
 		}
+	}
+
+	function doneCount(): number {
+		return entries.filter((entry) => entry.status === 'done').length
+	}
+
+	function forget(entry: Entry): void {
+		drop(entry)
+		removedMarks.set(entry.photoId, tick())
+	}
+
+	function sync(photos: readonly AnswerPhoto[], since: number = currentMark): void {
+		if (disposed) return
+		const onServer = new Set(photos.map((photo) => photo.id))
+		const stale = entries.filter(
+			(entry) =>
+				entry.status === 'done' && !entry.removing && !onServer.has(entry.photoId) && entry.settledMark <= since
+		)
+		for (const entry of stale) forget(entry)
+		const added = photos
+			.filter((photo) => !entryOf(photo.id) && (removedMarks.get(photo.id) ?? 0) <= since)
+			.map((photo) => {
+				const entry = createEntry(photo.id, 'done')
+				entry.photo = photo
+				entry.settledMark = tick()
+				return entry
+			})
+		const firstPending = entries.findIndex((entry) => entry.status !== 'done')
+		entries.splice(firstPending < 0 ? entries.length : firstPending, 0, ...added)
+		const nextCount = doneCount()
+		if (stale.length === 0 && added.length === 0 && nextCount === count) return
+		count = nextCount
+		notify()
 	}
 
 	function drop(entry: Entry): void {
@@ -182,6 +224,7 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 			entry.photo = outcome.data.photo
 			entry.prepared = null
 			entry.attempts = 0
+			entry.settledMark = tick()
 			count = outcome.data.count
 			finish()
 			return
@@ -243,11 +286,11 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 		if (disposed || !entries.includes(entry)) return
 		entry.removing = false
 		if (outcome.ok) {
-			drop(entry)
+			forget(entry)
 			count = outcome.data.count
 		} else if (outcome.kind === 'http' && outcome.status === 404) {
-			drop(entry)
-			count = entries.filter((item) => item.status === 'done').length
+			forget(entry)
+			count = doneCount()
 		} else {
 			entry.message = messageFor(outcome, 'remove')
 			if (entry.status === 'retrying') entry.status = 'failed'
@@ -308,18 +351,10 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 			pump()
 			void safeRemove(photoId).then((outcome) => settleRemove(entry, outcome))
 		},
-		seed(photos) {
-			if (disposed) return
-			const seeded = photos
-				.filter((photo) => !entryOf(photo.id))
-				.map((photo) => {
-					const entry = createEntry(photo.id, 'done')
-					entry.photo = photo
-					return entry
-				})
-			entries.unshift(...seeded)
-			count = photos.length
-			notify()
+		seed: sync,
+		sync,
+		mark() {
+			return currentMark
 		},
 		snapshot() {
 			if (!state) {
