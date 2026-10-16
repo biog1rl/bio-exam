@@ -116,7 +116,11 @@ describe('POST /api/users/avatar', () => {
 		const original = keys.find((key) => !key.includes('_cropped'))
 		const cropped = keys.find((key) => key.includes('_cropped'))
 		assert.ok(original && cropped)
-		assert.ok(mem.get(original)?.data.equals(tinyPng))
+		const source = await sharp(mem.get(original)?.data).metadata()
+		assert.equal(source.format, 'png')
+		assert.equal(source.width, 64)
+		assert.equal(source.height, 64)
+		assert.equal(source.exif, undefined)
 		const meta = await sharp(mem.get(cropped)?.data).metadata()
 		assert.equal(meta.width, 256)
 		assert.equal(meta.height, 256)
@@ -128,6 +132,32 @@ describe('POST /api/users/avatar', () => {
 		assert.equal(row.avatar_cropped, cropped)
 		assert.equal(reply.body.avatarUrl, `/api/docs/assets/proxy?path=${encodeURIComponent(original)}`)
 		assert.equal(reply.body.avatarCroppedUrl, `/api/docs/assets/proxy?path=${encodeURIComponent(cropped)}`)
+	})
+
+	test('JPEG с Orientation 6 и GPS: исходник в хранилище вертикальный и без EXIF', async () => {
+		const user = await account()
+		const rotated = await sharp({
+			create: { width: 80, height: 40, channels: 3, background: { r: 200, g: 100, b: 50 } },
+		})
+			.jpeg()
+			.withMetadata({
+				orientation: 6,
+				exif: { IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '55/1 45/1 0/1' } },
+			})
+			.toBuffer()
+		const reply = await postAvatar(user.jar, CROP, { bytes: rotated, type: 'image/jpeg', name: 'photo.jpg' })
+		assert.equal(reply.status, 200)
+		const original = mem.keys(`avatars/${user.id}`).find((key) => !key.includes('_cropped'))
+		assert.ok(original)
+		assert.ok(original.endsWith('.jpg'))
+		const stored = mem.get(original)
+		assert.ok(stored)
+		assert.equal(stored.contentType, 'image/jpeg')
+		const meta = await sharp(stored.data).metadata()
+		assert.equal(meta.width, 40)
+		assert.equal(meta.height, 80)
+		assert.equal(meta.exif, undefined)
+		assert.equal(meta.orientation, undefined)
 	})
 
 	test('без файла у пользователя без аватара: 400 и текст про отсутствие аватара', async () => {

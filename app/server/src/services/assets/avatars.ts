@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm'
-import { fileTypeFromBuffer } from 'file-type'
 import crypto from 'node:crypto'
 import sharp from 'sharp'
 
@@ -8,20 +7,14 @@ import { users } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { storage } from '../storage/index.js'
 import { avatarUrl, ownStorageKey } from '../storage/links.js'
+import { acceptImage, IMAGE_PROFILES } from './image-intake.js'
 
-export const AVATAR_TYPE_ERROR =
-	'Недопустимый тип файла. Файл не является допустимым изображением (JPEG, PNG, GIF, WebP)'
+export { AVATAR_TYPE_ERROR } from './image-intake.js'
 export const NO_AVATAR_ERROR = 'Нет загруженного аватара для редактирования'
 
 const AVATAR_PREFIX = 'avatars'
 const OUTPUT_SIZE = 256
 const TRANSPARENT = { r: 255, g: 255, b: 255, alpha: 0 }
-const AVATAR_TYPES = new Map<string, string>([
-	['image/jpeg', 'jpg'],
-	['image/png', 'png'],
-	['image/webp', 'webp'],
-	['image/gif', 'gif'],
-])
 
 export type AvatarCrop = {
 	x: number | null
@@ -142,20 +135,18 @@ async function removeQuietly(keys: string[]): Promise<void> {
 
 export async function saveAvatar(input: { userId: string; buffer: Buffer; crop: AvatarCrop }): Promise<AvatarResult> {
 	const { userId, buffer, crop } = input
-	const detected = await fileTypeFromBuffer(buffer)
-	const ext = detected ? AVATAR_TYPES.get(detected.mime) : undefined
-	if (!detected || !ext) throw new ApiError(400, AVATAR_TYPE_ERROR)
+	const accepted = await acceptImage(buffer, IMAGE_PROFILES.avatar)
 
 	const previous = await currentAvatar(userId)
 	const box = cropBox(crop)
-	const key = `${userPrefix(userId)}${newName()}.${ext}`
+	const key = `${userPrefix(userId)}${newName()}.${accepted.ext}`
 	const written: string[] = []
 	let croppedKey: string | null = null
 	try {
-		await storage().write(key, buffer, { contentType: detected.mime, upsert: false })
+		await storage().write(key, accepted.full, { contentType: accepted.mime, upsert: false })
 		written.push(key)
 		if (box) {
-			croppedKey = await writeCrop(userId, buffer, box)
+			croppedKey = await writeCrop(userId, accepted.full, box)
 			written.push(croppedKey)
 		}
 		await db

@@ -232,7 +232,7 @@ describe('POST /api/users/avatar', () => {
 		const keys = mem.keys()
 		assert.equal(keys.length, 2)
 		for (const key of keys) assert.ok(key.startsWith(`avatars/${adminId}/`))
-		const originalKey = keys.find((key) => mem.get(key)?.data.equals(tinyPng))
+		const originalKey = keys.find((key) => !key.includes('_cropped'))
 		const croppedKey = keys.find((key) => key !== originalKey)
 		assert.ok(originalKey && croppedKey)
 		const original = mem.get(originalKey)

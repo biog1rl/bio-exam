@@ -17,6 +17,7 @@ const nextConfig: NextConfig = withMdx({
 	experimental: {
 		scrollRestoration: true,
 		turbopackFileSystemCacheForDev: true,
+		proxyClientMaxBodySize: '12mb',
 	},
 
 	async rewrites() {
