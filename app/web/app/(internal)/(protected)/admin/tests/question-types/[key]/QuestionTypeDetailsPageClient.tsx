@@ -429,11 +429,8 @@ export default function QuestionTypeDetailsPageClient({ typeKey }: { typeKey: st
 				<SwitchRow
 					id="type-active"
 					title="Тип доступен"
-					hint={
-						isOpenType ? 'Открытые вопросы пока недоступны.' : 'Если выключить, тип нельзя выбрать в новых вопросах.'
-					}
+					hint="Если выключить, тип нельзя выбрать в новых вопросах."
 					checked={globalForm.isActive}
-					disabled={isOpenType}
 					onCheckedChange={(checked) => setGlobalForm((prev) => (prev ? { ...prev, isActive: checked } : prev))}
 				/>
 			</Panel>

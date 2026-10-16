@@ -33,7 +33,6 @@ import {
 
 const router = Router()
 
-const OPEN_TYPE_UNAVAILABLE_MESSAGE = 'Открытые вопросы пока недоступны'
 const OPEN_TYPE_SCORING_FIXED_MESSAGE = 'Баллы за открытый вопрос выставляет учитель: от 0 до 3'
 const OPEN_TYPE_SYSTEM_ONLY_MESSAGE = 'Открытый тип вопроса создаётся системой'
 
@@ -221,9 +220,6 @@ router.patch('/question-types/:key', sessionRequired(), async (req, res, next) =
 			return res.status(400).json({ error: ERROR_MESSAGES.BAD_REQUEST, details: parsedNextRule.error.flatten() })
 		}
 		if (!isAutoScoredTemplate(nextUiTemplate)) {
-			if (parsed.data.isActive === true) {
-				return res.status(400).json({ error: OPEN_TYPE_UNAVAILABLE_MESSAGE })
-			}
 			const builtinRule = getBuiltinQuestionTypeByKey(existing.key)?.scoringRule
 			const builtinParsed = QuestionTypeScoringRuleSchema.safeParse(builtinRule)
 			if (!builtinParsed.success || !isDeepStrictEqual(parsedNextRule.data, builtinParsed.data)) {

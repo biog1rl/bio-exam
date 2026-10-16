@@ -56,10 +56,20 @@ describe('тип open в админских настройках', () => {
 		assert.equal(type.isActive, false)
 	})
 
-	test('включение открытого типа прямым PATCH отклонено и тип остаётся выключенным', async () => {
-		const reply = await patchType('open', { isActive: true })
-		assert.equal(reply.status, 400, JSON.stringify(reply.body))
-		assert.equal(reply.body.error, 'Открытые вопросы пока недоступны')
+	test('включённый открытый тип доступен для нового вопроса, выключение возвращает запрет', async () => {
+		const enabled = await patchType('open', { isActive: true })
+		assert.equal(enabled.status, 200, JSON.stringify(enabled.body))
+		assert.equal((await openRow()).is_active, true)
+
+		const testId = await createAttemptTest(world, { slug: 'opentype-enabled' })
+		const created = await call(ctx, 'POST', `/api/tests/${testId}/questions`, {
+			cookies: world.adminCookie,
+			body: { ...ATTEMPT_QUESTIONS.short_answer, type: 'open' },
+		})
+		assert.equal(created.status, 201, JSON.stringify(created.body))
+
+		const disabled = await patchType('open', { isActive: false })
+		assert.equal(disabled.status, 200, JSON.stringify(disabled.body))
 		assert.equal((await openRow()).is_active, false)
 	})
 
