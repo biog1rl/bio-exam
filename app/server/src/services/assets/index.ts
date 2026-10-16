@@ -10,6 +10,9 @@ export {
 } from './avatars.js'
 export {
 	acceptImage,
+	IMAGE_BUSY_MESSAGE,
+	IMAGE_INTAKE_CONCURRENCY,
+	IMAGE_INTAKE_QUEUE_LIMIT,
 	IMAGE_PROFILES,
 	ImageRejectedError,
 	type AcceptedImage,

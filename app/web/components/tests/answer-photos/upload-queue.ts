@@ -14,9 +14,15 @@ import { uploadWindowRefusalText, type UploadWindowAction } from '@/lib/tests/up
 
 export type PhotoItemStatus = 'preparing' | 'uploading' | 'retrying' | 'done' | 'failed' | 'refused'
 
-export type PhotoItem = { photoId: string; status: PhotoItemStatus; message: string | null; photo: AnswerPhoto | null }
+export type PhotoItem = {
+	photoId: string
+	status: PhotoItemStatus
+	message: string | null
+	photo: AnswerPhoto | null
+	limitRefusal: boolean
+}
 
-export type PhotoQueueState = { items: readonly PhotoItem[]; count: number }
+export type PhotoQueueState = { items: readonly PhotoItem[]; count: number; atLimit: boolean }
 
 export type PreparedPhoto = { blob: Blob; fileName: string }
 
@@ -58,6 +64,7 @@ type Entry = {
 	attempts: number
 	timer: unknown
 	removing: boolean
+	limitRefusal: boolean
 }
 
 function isRetryable(failure: RequestFailure): boolean {
@@ -106,6 +113,7 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 			attempts: 0,
 			timer: null,
 			removing: false,
+			limitRefusal: false,
 		}
 	}
 
@@ -257,6 +265,7 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 				if (taken >= ANSWER_PHOTO_MAX_COUNT) {
 					const refused = createEntry(randomId(), 'refused')
 					refused.message = ANSWER_PHOTO_LIMIT_MESSAGE
+					refused.limitRefusal = true
 					entries.push(refused)
 					continue
 				}
@@ -313,8 +322,15 @@ export function createPhotoUploadQueue(options: PhotoUploadQueueOptions): PhotoU
 		snapshot() {
 			if (!state) {
 				state = {
-					items: entries.map(({ photoId, status, message, photo }) => ({ photoId, status, message, photo })),
+					items: entries.map(({ photoId, status, message, photo, limitRefusal }) => ({
+						photoId,
+						status,
+						message,
+						photo,
+						limitRefusal,
+					})),
 					count,
+					atLimit: occupied() >= ANSWER_PHOTO_MAX_COUNT,
 				}
 			}
 			return state

@@ -190,15 +190,9 @@ async function processImage(buffer: Buffer, mime: string, ext: string, profile: 
 						.webp({ quality: output.quality })
 				: encodeAsSource(pipeline, mime)
 		const { data, info } = await encoded.toBuffer({ resolveWithObject: true })
-		const thumb = profile.thumb
-			? await sharp(data)
-					.resize(profile.thumb.side, profile.thumb.side, { fit: 'inside', withoutEnlargement: true })
-					.webp({ quality: profile.thumb.quality })
-					.toBuffer()
-			: null
 		return {
 			full: data,
-			thumb,
+			thumb: null,
 			mime: output.format === 'webp' ? 'image/webp' : mime,
 			ext: output.format === 'webp' ? 'webp' : ext,
 			width: info.width,
@@ -207,6 +201,13 @@ async function processImage(buffer: Buffer, mime: string, ext: string, profile: 
 	} catch (error) {
 		throw decodeFailure(error)
 	}
+}
+
+async function makeThumb(data: Buffer, thumb: NonNullable<ImageProfile['thumb']>): Promise<Buffer> {
+	return sharp(data)
+		.resize(thumb.side, thumb.side, { fit: 'inside', withoutEnlargement: true })
+		.webp({ quality: thumb.quality })
+		.toBuffer()
 }
 
 export function createImageIntake(options: { concurrency: number; queueLimit: number }): ImageIntake {
@@ -221,7 +222,13 @@ export function createImageIntake(options: { concurrency: number; queueLimit: nu
 			throw new ImageRejectedError(415, message)
 		}
 		if ((await readPixels(buffer)) > profile.maxPixels) throw new ImageRejectedError(413, IMAGE_TOO_LARGE_MESSAGE)
-		return limiter.run(() => processImage(buffer, mime, ext, profile), { rejectWhenBusy: profile.rejectWhenBusy })
+		return limiter.run(
+			async () => {
+				const image = await processImage(buffer, mime, ext, profile)
+				return profile.thumb ? { ...image, thumb: await makeThumb(image.full, profile.thumb) } : image
+			},
+			{ rejectWhenBusy: profile.rejectWhenBusy }
+		)
 	}
 
 	return { acceptImage }

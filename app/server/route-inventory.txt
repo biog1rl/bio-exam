@@ -108,7 +108,7 @@ POST /api/tests/public/tests/:id/start  validateUUID(id) > sessionRequired > <an
 GET /api/tests/public/tests/:id/sessions/:sessionId  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 POST /api/tests/public/tests/:id/submit  validateUUID(id) > sessionRequired > <anonymous>
-PUT /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > singleFileUpload > <anonymous>
+PUT /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > photoBodyGate > singleFileUpload > <anonymous>
 DELETE /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > <anonymous>
 GET /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > sessionRequired > answerPhotoTarget > <anonymous>
 GET /api/answer-photos/:photoId/:variant  validateUUID(photoId) > sessionRequired > <anonymous>

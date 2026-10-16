@@ -29,6 +29,8 @@ export async function prepareForUpload(file: File): Promise<PreparedPhoto> {
 		canvas.height = Math.max(1, Math.round(bitmap.height * scale))
 		const context = canvas.getContext('2d')
 		if (!context) return original
+		context.fillStyle = '#fff'
+		context.fillRect(0, 0, canvas.width, canvas.height)
 		context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
 		const blob = await toJpeg(canvas)
 		if (!blob) return original

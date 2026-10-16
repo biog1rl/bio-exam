@@ -142,6 +142,15 @@ describe('PUT …/photos/:photoId: фото ответа', () => {
 		assert.equal(mem.keys(`answers/${answer.sessionId}`).length, 2)
 	})
 
+	test('photoId заглавными буквами ложится по ключу в нижнем регистре', async () => {
+		const answer = await answerOf(student)
+		const photoId = crypto.randomUUID()
+		const reply = await put(student, answer, photoId.toUpperCase())
+		assert.equal(reply.status, 201, JSON.stringify(reply.body))
+		assert.equal(AnswerPhotoUploadResponseSchema.parse(reply.body).photo.id, photoId)
+		assert.equal(mem.keys(`answers/${answer.sessionId}/${answer.questionId}/${photoId}`).length, 2)
+	})
+
 	test('шесть одновременных загрузок дают ровно пять фото и отказ шестому', async () => {
 		const answer = await answerOf(student)
 		const small = await sharp({ create: { width: 64, height: 48, channels: 3, background: '#336699' } })

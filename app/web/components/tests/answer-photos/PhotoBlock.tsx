@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { RequestError } from '@/lib/http/request'
 import { answerPhotoUrl } from '@/lib/tests/answer-photos-api'
 
-import type { PhotoItem, PhotoItemStatus } from './upload-queue'
+import type { PhotoItem } from './upload-queue'
 import { useAnswerPhotos, type AnswerPhotoQueueHandle } from './use-answer-photos'
 
 export type PhotoSource = 'file' | 'camera' | 'gallery'
@@ -33,16 +33,10 @@ const SOURCE_VIEW: Record<PhotoSource, { label: string; Icon: typeof ImagePlus }
 	gallery: { label: 'Выбрать из галереи', Icon: Images },
 }
 
-const OCCUPYING: ReadonlySet<PhotoItemStatus> = new Set(['done', 'preparing', 'uploading', 'retrying', 'failed'])
-
 const HINT = `До ${ANSWER_PHOTO_MAX_COUNT} фото в форматах JPEG, PNG или WebP.`
 const HINT_AT_LIMIT = 'Чтобы добавить другое фото, удалите одно из прикреплённых.'
 
 const ROW_BUTTON = 'h-11 tab:h-8'
-
-function isLimitRefusal(item: PhotoItem): boolean {
-	return item.status === 'refused' && item.message === ANSWER_PHOTO_LIMIT_MESSAGE
-}
 
 function Thumbnail({ photoId, alt }: { photoId: string; alt: string }) {
 	const [broken, setBroken] = useState(false)
@@ -211,9 +205,9 @@ export function PhotoBlock({ photos, disabled, sources = DEFAULT_SOURCES }: Phot
 	}
 
 	const shownSources = SOURCE_ORDER.filter((source) => sources.includes(source))
-	const rows = state.items.filter((item) => !isLimitRefusal(item))
-	const limitRefusals = state.items.filter(isLimitRefusal)
-	const atLimit = state.items.filter((item) => OCCUPYING.has(item.status)).length >= ANSWER_PHOTO_MAX_COUNT
+	const rows = state.items.filter((item) => !item.limitRefusal)
+	const limitRefusals = state.items.filter((item) => item.limitRefusal)
+	const atLimit = state.atLimit
 	const ready = listing === 'ready'
 	const sourceDisabled = disabled || !ready
 

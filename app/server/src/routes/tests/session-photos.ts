@@ -3,6 +3,7 @@ import { ANSWER_PHOTO_LIMIT_MESSAGE, ANSWER_PHOTO_MAX_BYTES } from '@bio-exam/ex
 import { Router, type NextFunction, type Request, type Response } from 'express'
 
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { inFlightGate } from '../../middleware/in-flight-gate.js'
 import { singleFileUpload } from '../../middleware/upload.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest } from '../../services/access-policy/index.js'
@@ -19,14 +20,25 @@ import {
 	type DeleteOutcome,
 	type UploadOutcome,
 } from '../../services/answer-photos/index.js'
-import { ImageRejectedError } from '../../services/assets/index.js'
+import {
+	IMAGE_BUSY_MESSAGE,
+	IMAGE_INTAKE_CONCURRENCY,
+	IMAGE_INTAKE_QUEUE_LIMIT,
+	ImageRejectedError,
+} from '../../services/assets/index.js'
 import { checkAttemptAccess } from '../../services/attempt-sessions/index.js'
 
 const router = Router()
 
 const PHOTOS_PATH = '/tests/:id/sessions/:sessionId/questions/:questionId/photos'
 const PHOTO_PATH = `${PHOTOS_PATH}/:photoId`
-const BUSY_RETRY_AFTER_SECONDS = '5'
+const BUSY_RETRY_AFTER_SECONDS = 5
+
+const photoBodyGate = inFlightGate({
+	limit: IMAGE_INTAKE_CONCURRENCY + IMAGE_INTAKE_QUEUE_LIMIT,
+	retryAfterSeconds: BUSY_RETRY_AFTER_SECONDS,
+	message: IMAGE_BUSY_MESSAGE,
+})
 
 function placeOf(req: Request): AnswerPhotoPlace {
 	return {
@@ -92,6 +104,7 @@ router.put(
 	validateUUID('photoId'),
 	sessionRequired(),
 	answerPhotoTarget,
+	photoBodyGate,
 	singleFileUpload({ field: 'file', maxBytes: ANSWER_PHOTO_MAX_BYTES }),
 	async (req, res, next) => {
 		try {
@@ -100,7 +113,7 @@ router.put(
 			return sendUploadOutcome(res, outcome)
 		} catch (e) {
 			if (e instanceof ImageRejectedError && e.statusCode === 503) {
-				res.setHeader('Retry-After', BUSY_RETRY_AFTER_SECONDS)
+				res.setHeader('Retry-After', String(BUSY_RETRY_AFTER_SECONDS))
 				return res.status(503).json({ error: e.message })
 			}
 			return next(e)
