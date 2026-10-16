@@ -29,6 +29,7 @@ export {
 } from './open-answer-rule.js'
 export {
 	placeOfSession,
+	readPhotoRule,
 	readPhotoSlot,
 	type AnswerPhotoOwner,
 	type AnswerPhotoPlace,
@@ -53,7 +54,13 @@ export type UploadOutcome =
 	| { kind: 'conflict' }
 	| { kind: 'missing' }
 
-export type DeleteOutcome = { kind: 'deleted'; count: number } | WindowRefused | { kind: 'missing' }
+export type DeleteOutcome =
+	| { kind: 'deleted'; count: number }
+	| WindowRefused
+	| { kind: 'refused' }
+	| { kind: 'absent'; count: number }
+
+export type PhotoSlotKey = { sessionId: string; questionId: string }
 
 type PhotoRow = { id: string; sessionId: string; questionId: string; uploadedAt: Date }
 
@@ -79,7 +86,7 @@ function toPhoto(row: PhotoRow): AnswerPhoto {
 	return { id: row.id, questionId: row.questionId, uploadedAt: row.uploadedAt.toISOString() }
 }
 
-function sameAnswer(row: PhotoRow, place: AnswerPhotoPlace): boolean {
+function sameAnswer(row: PhotoRow, place: PhotoSlotKey): boolean {
 	return row.sessionId === place.sessionId && row.questionId === place.questionId
 }
 
@@ -199,14 +206,14 @@ export async function listAnswerPhotos(place: AnswerPhotoPlace): Promise<AnswerP
 }
 
 export async function deleteAnswerPhoto(place: AnswerPhotoPlace, photoId: string): Promise<DeleteOutcome> {
-	if ((await readPhotoSlot(db, place)).kind !== 'slot') return { kind: 'missing' }
+	if ((await readPhotoSlot(db, place)).kind !== 'slot') return { kind: 'refused' }
 	const outcome = await db.transaction(async (tx): Promise<DeleteOutcome & { row?: PhotoRow }> => {
 		const [session] = await tx
 			.select({ id: testSessions.id })
 			.from(testSessions)
 			.where(sessionFilter({ sessionId: place.sessionId, owner: place.owner }))
 			.for('update')
-		if (!session) return { kind: 'missing' }
+		if (!session) return { kind: 'refused' }
 		const refused = await windowRefused(tx, place.sessionId)
 		if (refused) return refused
 		const [deleted] = await tx
@@ -219,7 +226,7 @@ export async function deleteAnswerPhoto(place: AnswerPhotoPlace, photoId: string
 				)
 			)
 			.returning(PHOTO_COLUMNS)
-		if (!deleted) return { kind: 'missing' }
+		if (!deleted) return { kind: 'absent', count: await countPhotos(tx, place) }
 		return { kind: 'deleted', count: await countPhotos(tx, place), row: deleted }
 	})
 	if (outcome.kind !== 'deleted') return outcome
@@ -227,9 +234,14 @@ export async function deleteAnswerPhoto(place: AnswerPhotoPlace, photoId: string
 	return { kind: 'deleted', count: outcome.count }
 }
 
-export async function readAnswerPhotoFile(photoId: string, variant: AnswerPhotoVariant): Promise<Buffer | null> {
+export async function readAnswerPhotoFile(
+	photoId: string,
+	variant: AnswerPhotoVariant,
+	slot?: PhotoSlotKey
+): Promise<Buffer | null> {
 	const row = await findPhotoRow(db, photoId)
 	if (!row) return null
+	if (slot && !sameAnswer(row, slot)) return null
 	const file = await storage().read(answerPhotoKey(row, variant))
 	return file?.data ?? null
 }

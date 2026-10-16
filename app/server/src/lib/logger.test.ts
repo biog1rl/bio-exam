@@ -9,6 +9,7 @@ import { createHttpLogger, createLogger } from './logger.js'
 const ACCESS_VALUE = 'eyJhbGciOiJIUzI1NiJ9.access-secret.signature'
 const REFRESH_VALUE = 'refresh-secret-ed56b5e875f825e4552824e8b4f8e5c8'
 const BEARER_VALUE = 'Bearer bearer-secret-token'
+const UPLOAD_TOKEN_VALUE = 'Qm9vay1vZi1waG90by11cGxvYWQtdG9rZW4tdmFsdWUx'
 
 function captureStream(): { stream: Writable; lines: () => Record<string, unknown>[]; raw: () => string } {
 	const chunks: string[] = []
@@ -66,5 +67,30 @@ describe('логгер: redact', () => {
 		assert.ok(withRes, 'no response line')
 		const resHeaders = (withRes.res as { headers: Record<string, unknown> }).headers
 		assert.equal(resHeaders['set-cookie'], '[redacted]')
+	})
+
+	test('заголовок X-Upload-Token в строке журнала скрыт', async () => {
+		const capture = captureStream()
+		const app = express()
+		app.use(createHttpLogger(createLogger(capture.stream)))
+		app.get('/api/upload/context', (req, res) => {
+			req.log.warn({ event: 'upload_link_probe' }, 'upload link request')
+			res.status(404).json({ error: 'invalid' })
+		})
+		const server = await startTestServer(app)
+		try {
+			const response = await fetch(`${server.baseUrl}/api/upload/context`, {
+				headers: { 'x-upload-token': UPLOAD_TOKEN_VALUE },
+			})
+			await response.text()
+		} finally {
+			await server.close()
+		}
+
+		assert.equal(capture.raw().includes(UPLOAD_TOKEN_VALUE), false, 'log contains upload token')
+		const line = capture.lines().find((item) => item.event === 'upload_link_probe')
+		assert.ok(line, 'no upload_link_probe line')
+		const headers = (line.req as { headers: Record<string, unknown> }).headers
+		assert.equal(headers['x-upload-token'], '[redacted]')
 	})
 })

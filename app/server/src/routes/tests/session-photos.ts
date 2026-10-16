@@ -1,15 +1,13 @@
-import { ANSWER_PHOTO_FORBIDDEN_MESSAGE, ANSWER_PHOTO_MAX_BYTES, answerPhotoLimitMessage } from '@bio-exam/exam-core'
+import { ANSWER_PHOTO_FORBIDDEN_MESSAGE, ANSWER_PHOTO_MAX_BYTES } from '@bio-exam/exam-core'
 
 import { Router, type NextFunction, type Request, type Response } from 'express'
 
 import { db } from '../../db/index.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
-import { inFlightGate } from '../../middleware/in-flight-gate.js'
+import { rateLimiter } from '../../middleware/rateLimiter.js'
 import { singleFileUpload } from '../../middleware/upload.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import {
-	ANSWER_PHOTO_CONFLICT,
-	ANSWER_PHOTO_NOT_FOUND,
 	ANSWER_PHOTO_TARGET_MISSING,
 	deleteAnswerPhoto,
 	FILE_MISSING,
@@ -17,27 +15,17 @@ import {
 	readPhotoSlot,
 	uploadAnswerPhoto,
 	type AnswerPhotoPlace,
-	type DeleteOutcome,
-	type UploadOutcome,
+	type PhotoSlotRefusal,
 } from '../../services/answer-photos/index.js'
-import {
-	IMAGE_BUSY_MESSAGE,
-	IMAGE_INTAKE_CONCURRENCY,
-	IMAGE_INTAKE_QUEUE_LIMIT,
-	ImageRejectedError,
-} from '../../services/assets/index.js'
+import { issueUploadLink } from '../../services/upload-links/index.js'
+import { photoBodyGate, sendDeleteOutcome, sendIntakeBusy, sendUploadOutcome } from '../answer-photo-intake.js'
 
 const router = Router()
 
-const PHOTOS_PATH = '/tests/:id/sessions/:sessionId/questions/:questionId/photos'
+const ANSWER_PATH = '/tests/:id/sessions/:sessionId/questions/:questionId'
+const PHOTOS_PATH = `${ANSWER_PATH}/photos`
 const PHOTO_PATH = `${PHOTOS_PATH}/:photoId`
-const BUSY_RETRY_AFTER_SECONDS = 5
-
-const photoBodyGate = inFlightGate({
-	limit: IMAGE_INTAKE_CONCURRENCY + IMAGE_INTAKE_QUEUE_LIMIT,
-	retryAfterSeconds: BUSY_RETRY_AFTER_SECONDS,
-	message: IMAGE_BUSY_MESSAGE,
-})
+const UPLOAD_LINK_PATH = `${ANSWER_PATH}/upload-link`
 
 function placeOf(req: Request): AnswerPhotoPlace {
 	return {
@@ -47,51 +35,25 @@ function placeOf(req: Request): AnswerPhotoPlace {
 	}
 }
 
-async function answerPhotoTarget(req: Request, res: Response, next: NextFunction) {
-	try {
-		const slot = await readPhotoSlot(db, placeOf(req))
-		if (slot.kind === 'slot') return next()
-		switch (slot.reason) {
-			case 'test_missing':
-				return res.status(404).json({ error: 'Test not found' })
-			case 'not_assigned':
-				return res.status(403).json({ error: 'Тест не назначен' })
-			case 'slot_missing':
-			case 'user_inactive':
-				return res.status(404).json({ error: ANSWER_PHOTO_TARGET_MISSING })
-		}
-	} catch (e) {
-		return next(e)
-	}
-}
-
-function sendUploadOutcome(res: Response, outcome: UploadOutcome) {
-	switch (outcome.kind) {
-		case 'created':
-			return res.status(201).json({ photo: outcome.photo, count: outcome.count })
-		case 'existing':
-			return res.status(200).json({ photo: outcome.photo, count: outcome.count })
-		case 'window':
-			return res.status(outcome.status).json(outcome.body)
-		case 'limit':
-			return res.status(409).json({ error: answerPhotoLimitMessage(outcome.max) })
-		case 'forbidden':
-			return res.status(409).json({ error: ANSWER_PHOTO_FORBIDDEN_MESSAGE })
-		case 'conflict':
-			return res.status(409).json({ error: ANSWER_PHOTO_CONFLICT })
-		case 'missing':
+function sendSlotRefusal(res: Response, reason: PhotoSlotRefusal) {
+	switch (reason) {
+		case 'test_missing':
+			return res.status(404).json({ error: 'Test not found' })
+		case 'not_assigned':
+			return res.status(403).json({ error: 'Тест не назначен' })
+		case 'slot_missing':
+		case 'user_inactive':
 			return res.status(404).json({ error: ANSWER_PHOTO_TARGET_MISSING })
 	}
 }
 
-function sendDeleteOutcome(res: Response, outcome: DeleteOutcome) {
-	switch (outcome.kind) {
-		case 'deleted':
-			return res.status(200).json({ count: outcome.count })
-		case 'window':
-			return res.status(outcome.status).json(outcome.body)
-		case 'missing':
-			return res.status(404).json({ error: ANSWER_PHOTO_NOT_FOUND })
+async function answerPhotoTarget(req: Request, res: Response, next: NextFunction) {
+	try {
+		const slot = await readPhotoSlot(db, placeOf(req))
+		if (slot.kind === 'slot') return next()
+		return sendSlotRefusal(res, slot.reason)
+	} catch (e) {
+		return next(e)
 	}
 }
 
@@ -111,10 +73,7 @@ router.put(
 			const outcome = await uploadAnswerPhoto(placeOf(req), req.params.photoId as string, req.file.buffer, 'session')
 			return sendUploadOutcome(res, outcome)
 		} catch (e) {
-			if (e instanceof ImageRejectedError && e.statusCode === 503) {
-				res.setHeader('Retry-After', String(BUSY_RETRY_AFTER_SECONDS))
-				return res.status(503).json({ error: e.message })
-			}
+			if (sendIntakeBusy(res, e)) return
 			return next(e)
 		}
 	}
@@ -150,6 +109,38 @@ router.get(
 			const photos = await listAnswerPhotos(placeOf(req))
 			if (photos === null) return res.status(404).json({ error: ANSWER_PHOTO_TARGET_MISSING })
 			return res.json({ photos })
+		} catch (e) {
+			return next(e)
+		}
+	}
+)
+
+router.post(
+	UPLOAD_LINK_PATH,
+	validateUUID('id'),
+	validateUUID('sessionId'),
+	validateUUID('questionId'),
+	sessionRequired(),
+	rateLimiter({
+		keyPrefix: 'upload-link-issue',
+		maxAttempts: 10,
+		windowMs: 60_000,
+		clientKey: (req) => req.authUser?.id,
+	}),
+	async (req, res, next) => {
+		try {
+			const outcome = await issueUploadLink(placeOf(req))
+			switch (outcome.kind) {
+				case 'issued':
+					res.setHeader('Cache-Control', 'no-store')
+					return res.status(201).json(outcome.link)
+				case 'refused':
+					return sendSlotRefusal(res, outcome.reason)
+				case 'window':
+					return res.status(outcome.status).json(outcome.body)
+				case 'forbidden':
+					return res.status(409).json({ error: ANSWER_PHOTO_FORBIDDEN_MESSAGE })
+			}
 		} catch (e) {
 			return next(e)
 		}
