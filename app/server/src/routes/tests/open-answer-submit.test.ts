@@ -51,7 +51,7 @@ afterAll(async () => {
 })
 
 async function prepare(
-	options: { openCount?: number; timeLimitMinutes?: number | null; windowMinutes?: number } = {}
+	options: { openCount?: number; timeLimitMinutes?: number | null; windowMinutes?: number; allowPhotos?: boolean } = {}
 ): Promise<Prepared> {
 	counter += 1
 	const owner = await seedStudent(world, `oas_student_${counter}`)
@@ -68,7 +68,7 @@ async function prepare(
 	const shortId = await addQuestion(world, testId, 'short_answer')
 	const openIds: string[] = []
 	for (let index = 0; index < (options.openCount ?? 1); index++) {
-		openIds.push(await insertOpenQuestion(ctx, testId, { order: index + 1 }))
+		openIds.push(await insertOpenQuestion(ctx, testId, { order: index + 1, allowPhotos: options.allowPhotos }))
 	}
 	await assignTest(world, testId, owner.id)
 	const started = await startSession(world, owner.cookie, testId)
@@ -114,6 +114,14 @@ async function attemptCount(sessionId: string): Promise<number> {
 	return Number(result.rows[0]?.count ?? 0)
 }
 
+async function reviewPendingEvents(attemptId: string): Promise<number> {
+	const result = await ctx.pgPool.query<{ count: string }>(
+		"SELECT count(*) FROM notification_events WHERE kind = 'attempt.review_pending' AND subject_id = $1",
+		[attemptId]
+	)
+	return Number(result.rows[0]?.count ?? 0)
+}
+
 async function expire(prepared: Prepared): Promise<Reply> {
 	await shiftStartedAt(ctx, prepared.sessionId, '12 minutes')
 	return call(ctx, 'GET', `/api/tests/public/tests/${prepared.testId}/sessions/${prepared.sessionId}`, {
@@ -142,13 +150,13 @@ async function submittedByDeadline(
 	return { ...prepared, attemptId: fate.body.attemptId as string }
 }
 
-describe('сдача: открытый вопрос без текста и фото', () => {
+describe('сдача: открытый вопрос без текста и фото, фото запрещены', () => {
 	test.each([
 		{ name: 'нет ответа', text: undefined },
 		{ name: 'пустая строка', text: '' },
 		{ name: 'только пробелы и перевод строки', text: '  \n\t ' },
 	])('$name: 422 OPEN_ANSWER_EMPTY, попытки нет, сессия открыта', async ({ text }) => {
-		const prepared = await prepare()
+		const prepared = await prepare({ allowPhotos: false })
 		const [openId] = prepared.openIds
 		assert.ok(openId)
 		const answers: Record<string, string> = { [prepared.shortId]: 'ответ' }
@@ -197,6 +205,7 @@ describe('сдача: открытый вопрос без текста и фо�
 		const prepared = await prepare({ openCount: 3 })
 		const [withText, withPhoto, empty] = prepared.openIds
 		assert.ok(withText && withPhoto && empty)
+		await ctx.pgPool.query('UPDATE questions SET allow_photos = false WHERE id = $1', [empty])
 		assert.equal((await attachPhoto(prepared, withPhoto)).status, 201)
 
 		const reply = await submit(prepared, { [withText]: 'есть текст', [withPhoto]: ' ' })
@@ -223,13 +232,91 @@ describe('сдача: открытый вопрос без текста и фо�
 		)
 	})
 
-	test('обычная сдача не открывает окно фото: upload_closes_at пуст, фото после неё отклоняются', async () => {
+	test('у теста нет окна фото: пустой ответ даже при разрешённых фото даёт 422', async () => {
+		const prepared = await prepare({ windowMinutes: 0 })
+		const [openId] = prepared.openIds
+		assert.ok(openId)
+
+		const reply = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: '' })
+
+		assert.equal(reply.status, 422, JSON.stringify(reply.body))
+		assert.deepEqual(reply.body, { error: SUBMIT_ERROR_CODES.openAnswerEmpty, questionIds: [openId] })
+	})
+})
+
+describe('обычная сдача и окно для фото', () => {
+	test('вопрос с фото без фото: окно открыто, не в очереди, уведомления нет до закрытия окна', async () => {
 		const prepared = await prepare()
 		const [openId] = prepared.openIds
 		assert.ok(openId)
-		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
-		assert.equal(sent.status, 200, JSON.stringify(sent.body))
 
+		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
+
+		assert.equal(sent.status, 200, JSON.stringify(sent.body))
+		const attemptId = sent.body.attemptId as string
+		const row = await attemptRowOf(ctx, attemptId)
+		assert.ok(row.uploadClosesAt && row.uploadClosesAt.getTime() > Date.now())
+		const queue = await attemptsList('?limit=100')
+		const queued = (queue.body.rows as Array<{ attemptId: string; reviewReady: boolean }>).find(
+			(item) => item.attemptId === attemptId
+		)
+		assert.equal(queued?.reviewReady, false)
+		assert.equal(await reviewPendingEvents(attemptId), 0)
+		assert.equal((await attachPhoto(prepared, openId)).status, 201)
+		assert.equal((await uploadsDone(prepared)).status, 200)
+		assert.equal(await reviewPendingEvents(attemptId), 1)
+	})
+
+	test('пустой ответ у вопроса с разрешёнными фото принимается, окно открыто', async () => {
+		const prepared = await prepare()
+		const [openId] = prepared.openIds
+		assert.ok(openId)
+
+		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: '' })
+
+		assert.equal(sent.status, 200, JSON.stringify(sent.body))
+		const row = await attemptRowOf(ctx, sent.body.attemptId as string)
+		assert.ok(row.uploadClosesAt && row.uploadClosesAt.getTime() > Date.now())
+	})
+
+	test('фото есть у каждого вопроса: окна нет, попытка сразу в очереди', async () => {
+		const prepared = await prepare({ openCount: 2 })
+		const [first, second] = prepared.openIds
+		assert.ok(first && second)
+		assert.equal((await attachPhoto(prepared, first)).status, 201)
+		assert.equal((await attachPhoto(prepared, second)).status, 201)
+
+		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [first]: '', [second]: 'текст' })
+
+		assert.equal(sent.status, 200, JSON.stringify(sent.body))
+		const attemptId = sent.body.attemptId as string
+		assert.equal((await attemptRowOf(ctx, attemptId)).uploadClosesAt, null)
+		const queue = await attemptsList('?review=pending&limit=100')
+		const queued = (queue.body.rows as Array<{ attemptId: string; reviewReady: boolean }>).find(
+			(item) => item.attemptId === attemptId
+		)
+		assert.equal(queued?.reviewReady, true)
+	})
+
+	test('фото запрещены, текст есть: окна нет', async () => {
+		const prepared = await prepare({ allowPhotos: false })
+		const [openId] = prepared.openIds
+		assert.ok(openId)
+
+		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
+
+		assert.equal(sent.status, 200, JSON.stringify(sent.body))
+		assert.equal((await attemptRowOf(ctx, sent.body.attemptId as string)).uploadClosesAt, null)
+	})
+
+	test('у теста нет окна фото: окна нет, фото после сдачи отклоняются', async () => {
+		const prepared = await prepare({ windowMinutes: 0 })
+		const [openId] = prepared.openIds
+		assert.ok(openId)
+
+		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })
+
+		assert.equal(sent.status, 200, JSON.stringify(sent.body))
 		assert.equal((await attemptRowOf(ctx, sent.body.attemptId as string)).uploadClosesAt, null)
 		assert.equal((await attachPhoto(prepared, openId)).status, 422)
 	})
@@ -392,8 +479,8 @@ describe('очередь проверки: только попытки с зак
 		assert.equal((detailAfter.body.attempt as { reviewReady: boolean }).reviewReady, true)
 	})
 
-	test('обычная сдача на проверке сразу в очереди', async () => {
-		const prepared = await prepare()
+	test('обычная сдача без открытых вопросов с фото сразу в очереди', async () => {
+		const prepared = await prepare({ allowPhotos: false })
 		const [openId] = prepared.openIds
 		assert.ok(openId)
 		const sent = await submit(prepared, { [prepared.shortId]: 'ответ', [openId]: 'текст' })

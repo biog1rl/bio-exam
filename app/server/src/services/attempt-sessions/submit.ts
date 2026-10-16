@@ -10,7 +10,7 @@ import { and, eq, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
 import { answerPhotos, testAttempts, testSessions } from '../../db/schema.js'
-import { emptyOpenQuestionIds } from '../answer-photos/open-answer-rule.js'
+import { clientSubmitOpenRule } from '../answer-photos/open-answer-rule.js'
 import type { ScoreSubmissionResult } from '../scored-attempt/index.js'
 import { classifySubmitted, type SessionOutcomeOf, type SessionOwner, type SessionTest } from './outcome.js'
 import { closeSessionsAsExpired, sessionExpired, sessionFilter } from './sessions.js'
@@ -69,9 +69,12 @@ function uploadClosesAtOf(params: {
 	timeLimitMinutes: number | null
 	uploadWindowMinutes: number
 	hasOpenQuestion: boolean
+	photosMissing: boolean
 }): SQL | null {
-	const { source, submittedAt, startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion } = params
-	if (source !== 'deadline' || !hasOpenQuestion || uploadWindowMinutes <= 0) return null
+	const { source, submittedAt, startedAt, timeLimitMinutes, uploadWindowMinutes, hasOpenQuestion, photosMissing } =
+		params
+	if (!hasOpenQuestion || uploadWindowMinutes <= 0) return null
+	if (source === 'client' && !photosMissing) return null
 	return sql`LEAST(${submittedAt}, (${timerEndsAtOf(startedAt, timeLimitMinutes)})::timestamptz) + make_interval(mins => ${uploadWindowMinutes}::int)`
 }
 
@@ -170,13 +173,16 @@ export async function submitAttempt({
 
 			if (!session.draftMatches) return { kind: 'draft_changed' }
 
+			let photosMissing = false
 			if (source === 'client') {
 				const openIds = scored.facts.filter((fact) => fact.template === 'open').map((fact) => fact.questionId)
-				const questionIds = await emptyOpenQuestionIds(tx, {
+				const rule = await clientSubmitOpenRule(tx, {
 					sessionId,
+					windowMinutes: photoUploadWindowMinutes,
 					answers: Object.fromEntries(openIds.map((id) => [id, answers[id]])),
 				})
-				if (questionIds.length > 0) return { kind: 'open_answer_empty', questionIds }
+				if (rule.emptyQuestionIds.length > 0) return { kind: 'open_answer_empty', questionIds: rule.emptyQuestionIds }
+				photosMissing = rule.needsWindow
 			}
 
 			const submittedAt = submittedAtOf(source, session.startedAt, timeLimitMinutes)
@@ -206,6 +212,7 @@ export async function submitAttempt({
 						timeLimitMinutes,
 						uploadWindowMinutes: photoUploadWindowMinutes,
 						hasOpenQuestion: scored.facts.some((fact) => fact.template === 'open'),
+						photosMissing,
 					}),
 					gradedAt: null,
 					telemetry: Object.keys(mergedTelemetry).length > 0 ? mergedTelemetry : null,

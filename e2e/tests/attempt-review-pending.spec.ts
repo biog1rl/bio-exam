@@ -79,6 +79,7 @@ test('a student submits a test with an open question and sees «На прове�
 	await page.getByRole('button', { name: 'Завершить' }).first().click()
 
 	const panel = page.locator('section', { has: page.getByRole('heading', { level: 2, name: 'Результат' }) })
+	await page.getByRole('button', { name: 'Готово, фото загружены' }).click()
 	await expect(page.getByRole('button', { name: 'Готово, фото загружены' })).toHaveCount(0)
 	await expect(panel).toContainText('На проверке')
 	await expect(panel).toContainText('предварительно 1 из 1')

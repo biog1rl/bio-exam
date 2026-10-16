@@ -3,7 +3,7 @@ import { isAnswered } from '@bio-exam/exam-core'
 import { and, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 
 import type { DB } from '../../db/index.js'
-import { answerPhotos } from '../../db/schema.js'
+import { answerPhotos, questions } from '../../db/schema.js'
 
 type Executor = Pick<DB, 'select' | 'selectDistinct'>
 
@@ -51,6 +51,31 @@ export async function emptyOpenQuestionIds(
 	if (textless.length === 0) return []
 	const photographed = await photographedQuestionIds(executor, input, textless)
 	return textless.filter((questionId) => !photographed.has(questionId))
+}
+
+export async function clientSubmitOpenRule(
+	executor: Executor,
+	input: { sessionId: string; windowMinutes: number; answers: Readonly<Record<string, unknown>> }
+): Promise<{ emptyQuestionIds: string[]; needsWindow: boolean }> {
+	const questionIds = Object.keys(input.answers)
+	if (questionIds.length === 0) return { emptyQuestionIds: [], needsWindow: false }
+	const rows = await executor
+		.select({ id: questions.id, allowPhotos: questions.allowPhotos })
+		.from(questions)
+		.where(inArray(questions.id, questionIds))
+	const allowed = new Map(rows.map((row) => [row.id, row.allowPhotos]))
+	const photographed = await photographedQuestionIds(executor, { sessionId: input.sessionId }, questionIds)
+	const emptyQuestionIds: string[] = []
+	let needsWindow = false
+	for (const questionId of questionIds) {
+		const canAddPhotos = input.windowMinutes > 0 && allowed.get(questionId) === true
+		const hasPhoto = photographed.has(questionId)
+		if (!hasPhoto && !isAnswered({ template: 'open', answer: input.answers[questionId] }) && !canAddPhotos) {
+			emptyQuestionIds.push(questionId)
+		}
+		if (canAddPhotos && !hasPhoto) needsWindow = true
+	}
+	return { emptyQuestionIds, needsWindow }
 }
 
 export const OPEN_TEXT_BLANK_SQL: SQL = sql`(jsonb_typeof(f.item -> 'userAnswer') is distinct from 'string' or (f.item ->> 'userAnswer') ~ ${BLANK_TEXT_PATTERN})`

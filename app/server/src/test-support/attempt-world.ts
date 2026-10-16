@@ -182,11 +182,22 @@ export async function shiftStartedAt(ctx: AuthApp, sessionId: string, interval: 
 	])
 }
 
-export async function insertOpenQuestion(ctx: AuthApp, testId: string, options: { order: number }): Promise<string> {
+export async function insertOpenQuestion(
+	ctx: AuthApp,
+	testId: string,
+	options: { order: number; allowPhotos?: boolean }
+): Promise<string> {
 	const { db, schema } = ctx
 	const [question] = await db
 		.insert(schema.questions)
-		.values({ testId, type: 'open', order: options.order, points: 3, promptPath: null })
+		.values({
+			testId,
+			type: 'open',
+			order: options.order,
+			points: 3,
+			promptPath: null,
+			allowPhotos: options.allowPhotos ?? true,
+		})
 		.returning({ id: schema.questions.id })
 	assert.ok(question, 'insertOpenQuestion: question was not created')
 	return question.id

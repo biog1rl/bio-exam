@@ -403,6 +403,7 @@
 				},
 				{
 					"slug": "review-pending-desktop",
+					"photoUploadWindowMinutes": 0,
 					"title": "Открытый ответ ожидает проверки (desktop)",
 					"topic": "e2e-review",
 					"published": true,
@@ -1053,6 +1054,7 @@
 				},
 				{
 					"slug": "review-pending-mobile",
+					"photoUploadWindowMinutes": 0,
 					"title": "Открытый ответ ожидает проверки (mobile)",
 					"topic": "e2e-review",
 					"published": true,
