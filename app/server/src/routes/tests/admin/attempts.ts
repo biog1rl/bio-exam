@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { db } from '../../../db/index.js'
 import { questions, testAttempts, tests, topics, userRoles, users } from '../../../db/schema.js'
+import { activityTimeZoneSql } from '../../../lib/activity-time-zone.js'
 import { escapeLike } from '../../../lib/sql-like.js'
 import { getQuestionTypeMapForTest } from '../../../lib/tests/question-type-resolver.js'
 import { requirePerm } from '../../../middleware/auth/requirePerm.js'
@@ -110,18 +111,6 @@ function attemptsOrder(scope: TestScope, query: AttemptsQuery): SQL[] {
 	return order
 }
 
-const TIME_ZONE = /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/
-
-function activityTimeZone(value: unknown): string {
-	if (typeof value !== 'string' || !TIME_ZONE.test(value)) return 'UTC'
-	try {
-		new Intl.DateTimeFormat('en-US', { timeZone: value })
-		return value
-	} catch {
-		return 'UTC'
-	}
-}
-
 router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), async (req, res, next) => {
 	try {
 		const scope = await testScope(req)
@@ -169,7 +158,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 			.orderBy(desc(testAttempts.submittedAt))
 			.limit(8)
 
-		const timeZone = activityTimeZone(req.query.tz)
+		const timeZone = await activityTimeZoneSql(req.query.tz)
 		const dailyActivity = await db
 			.select({
 				date: sql<string>`to_char(date_trunc('day', ${testAttempts.submittedAt} at time zone ${timeZone}), 'YYYY-MM-DD')`,
