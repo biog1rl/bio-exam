@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { ANONYMOUS_PAGE_HEADER, isAnonymousPage, isPublicPath } from '@/lib/navigation/public-paths'
 import { needsRefresh } from '@/lib/session/access-token'
 import { expiredSessionCookies, readSessionCookieValue, REFRESH_COOKIE_NAME } from '@/lib/session/cookies'
 import { refreshForProxy, SESSION_REFRESH_HEADER, SESSION_REFRESH_UNAVAILABLE } from '@/lib/session/proxy-refresh'
 import { buildLoginRedirect } from '@/lib/session/redirect'
-
-const PUBLIC_PATHS = new Set(['/login'])
-const PUBLIC_PREFIXES = ['/invite']
-
-function isPublicPath(pathname: string): boolean {
-	if (PUBLIC_PATHS.has(pathname)) return true
-	return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
-}
 
 function loginRedirect(req: NextRequest): NextResponse {
 	const { pathname, search } = req.nextUrl
@@ -27,16 +20,25 @@ function clearSessionCookies(response: NextResponse): void {
 function forwardedHeaders(req: NextRequest, sessionRefresh?: string): Headers {
 	const headers = new Headers(req.headers)
 	headers.delete(SESSION_REFRESH_HEADER)
+	headers.delete(ANONYMOUS_PAGE_HEADER)
 	if (sessionRefresh) headers.set(SESSION_REFRESH_HEADER, sessionRefresh)
 	return headers
 }
 
 function passThrough(req: NextRequest): NextResponse {
-	if (!req.headers.has(SESSION_REFRESH_HEADER)) return NextResponse.next()
+	if (!req.headers.has(SESSION_REFRESH_HEADER) && !req.headers.has(ANONYMOUS_PAGE_HEADER)) return NextResponse.next()
 	return NextResponse.next({ request: { headers: forwardedHeaders(req) } })
 }
 
+function anonymousPage(req: NextRequest): NextResponse {
+	const headers = forwardedHeaders(req)
+	headers.set(ANONYMOUS_PAGE_HEADER, '1')
+	return NextResponse.next({ request: { headers } })
+}
+
 export async function proxy(req: NextRequest) {
+	if (isAnonymousPage(req.nextUrl.pathname)) return anonymousPage(req)
+
 	const isPublic = isPublicPath(req.nextUrl.pathname)
 	const accessToken = readSessionCookieValue(req.cookies, process.env.SESSION_COOKIE_NAME)
 	const hasRefresh = Boolean(req.cookies.get(REFRESH_COOKIE_NAME)?.value)

@@ -37,7 +37,7 @@ function countdownOf(state: 'open' | 'closing' | 'last-minute', minutes: number)
 	return 'закроется меньше чем через минуту'
 }
 
-function closedMoment(closes: Date, nowMs: number): string {
+export function closedMoment(closes: Date, nowMs: number): string {
 	const time = format(closes, 'HH:mm')
 	if (isSameDay(closes, new Date(nowMs))) return `в ${time}`
 	return `${format(closes, 'd MMM', { locale: ru })} в ${time}`

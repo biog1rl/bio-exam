@@ -6,6 +6,7 @@ import { sessionRequired } from '../middleware/auth/session.js'
 import { validateUUID } from '../middleware/validateParams.js'
 import { canReadAnswerPhoto } from '../services/access-policy/index.js'
 import { ANSWER_PHOTO_NOT_FOUND, readAnswerPhotoFile } from '../services/answer-photos/index.js'
+import { sendAnswerPhotoFile } from './answer-photo-intake.js'
 
 const router = Router()
 
@@ -25,13 +26,7 @@ router.get('/:photoId/:variant', validateUUID('photoId'), sessionRequired(), asy
 		if (!isAnswerPhotoVariant(variant)) return photoNotFound(res)
 		const data = await readAnswerPhotoFile(photoId, variant)
 		if (data === null) return photoNotFound(res)
-		res.setHeader('Content-Type', 'image/webp')
-		res.setHeader('Content-Length', String(data.length))
-		res.setHeader('Cache-Control', 'private, no-store')
-		res.setHeader('X-Content-Type-Options', 'nosniff')
-		res.setHeader('Cross-Origin-Resource-Policy', 'same-origin')
-		res.setHeader('Content-Disposition', 'inline')
-		return res.send(data)
+		return sendAnswerPhotoFile(res, data)
 	} catch (e) {
 		return next(e)
 	}

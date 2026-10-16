@@ -55,9 +55,11 @@ export {
 	canReadTest,
 	canReadUser,
 	canReviewAttempt,
+	canUserReadTest,
 	canWriteTest,
 	canWriteTopic,
 	createAccessScope,
+	createUserTestRead,
 	groupScope,
 	hasGlobalZone,
 	testScope,
@@ -68,7 +70,9 @@ export {
 	type GroupScope,
 	type PermissionCheck,
 	type TestScope,
+	type UserPermissionCheck,
 	type UserScope,
+	type UserTestRead,
 	type ZoneLoader,
 } from './scope.js'
 export { createDrizzleZoneLoader, createInMemoryZoneLoader, type ZoneSnapshot } from './zone-loader.js'

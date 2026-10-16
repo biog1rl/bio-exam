@@ -176,7 +176,7 @@ describe('submitSession', () => {
 		assert.equal((await attemptsOf(prepared.sessionId)).length, 0)
 	})
 
-	test('тест с открытым вопросом: accepted, окно фото при ручной сдаче не открывается', async () => {
+	test('тест с открытым вопросом без фото: accepted, окно фото открывается от момента сдачи', async () => {
 		const prepared = await prepareSession({ timeLimitMinutes: null })
 		const openId = await insertOpenQuestion(ctx, prepared.testId, { order: 1 })
 		const test = await attemptSessions.findVisibleTest(prepared.testId)
@@ -195,7 +195,8 @@ describe('submitSession', () => {
 		assert.equal(outcome.kind, 'accepted', JSON.stringify(outcome))
 		const [attempt] = await attemptsOf(prepared.sessionId)
 		assert.ok(attempt)
-		assert.equal(attempt.upload_closes_at, null)
+		assert.ok(attempt.upload_closes_at)
+		assert.ok(Math.abs(attempt.upload_closes_at.getTime() - (Date.now() + 15 * 60_000)) <= 10_000)
 	})
 
 	test('гонка трёх путей финализации без HTTP: пять раундов, одна попытка deadline', async () => {

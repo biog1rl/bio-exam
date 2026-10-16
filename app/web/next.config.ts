@@ -20,6 +20,19 @@ const nextConfig: NextConfig = withMdx({
 		proxyClientMaxBodySize: '12mb',
 	},
 
+	async headers() {
+		const phoneUploadHeaders = [
+			{ key: 'Referrer-Policy', value: 'no-referrer' },
+			{ key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+			{ key: 'X-Frame-Options', value: 'DENY' },
+			{ key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+		]
+		return [
+			{ source: '/photo-upload', headers: phoneUploadHeaders },
+			{ source: '/photo-upload/:path*', headers: phoneUploadHeaders },
+		]
+	},
+
 	async rewrites() {
 		const API_ORIGIN = process.env.API_ORIGIN
 		console.log('[next.config] API_ORIGIN:', API_ORIGIN)

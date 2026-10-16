@@ -135,18 +135,20 @@ describe('serverNow у /start', () => {
 })
 
 describe('окно для фото при ручной сдаче', () => {
-	test('ручная сдача теста с открытым вопросом окна не открывает: upload_closes_at пуст, ответ и разбор это отдают', async () => {
+	test('ручная сдача теста с открытым вопросом без фото открывает окно от момента сдачи, ответ и разбор его отдают', async () => {
 		const prepared = await prepareWindowTest('deadline-window-tracer', { timeLimitMinutes: 10, withOpen: true })
 		const sessionId = await startOk(prepared.testId)
 		const body = await submitOk(prepared, sessionId)
 
 		assert.equal(body.submitSource, 'client')
-		assert.equal(body.uploadClosesAt, null)
+		assert.equal(typeof body.uploadClosesAt, 'string')
+		const expected = (await databaseNowMs()) + 15 * MINUTE_MS
+		assert.ok(Math.abs(Date.parse(body.uploadClosesAt as string) - expected) <= 10_000)
 		const attemptId = body.attemptId as string
-		assert.equal((await attemptRowOf(ctx, attemptId)).uploadClosesAt, null)
+		assert.equal((await attemptRowOf(ctx, attemptId)).uploadClosesAt?.toISOString(), body.uploadClosesAt)
 		const review = await adminReview(world, attemptId)
 		assert.equal(review.status, 200, JSON.stringify(review.body))
-		assert.equal((review.body.attempt as Record<string, unknown>).uploadClosesAt, null)
+		assert.equal((review.body.attempt as Record<string, unknown>).uploadClosesAt, body.uploadClosesAt)
 	})
 })
 

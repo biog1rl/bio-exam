@@ -31,6 +31,7 @@
 		"@lexical/table": "^0.38.1",
 		"@lexical/text": "^0.38.1",
 		"@lexical/utils": "^0.38.1",
+		"@lglab/react-qr-code": "1.7.3",
 		"@mdx-js/loader": "^3.1.0",
 		"@mdx-js/react": "^3.1.0",
 		"@next/mdx": "^16.3.8",

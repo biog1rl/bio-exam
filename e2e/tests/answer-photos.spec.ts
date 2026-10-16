@@ -50,6 +50,7 @@ function fileInput() {
 function pickButton(testInfo: TestInfo) {
 	return photoBlock().getByRole('button', {
 		name: projectKey(testInfo) === 'mobile' ? 'Сделать фото' : 'Добавить фото',
+		exact: true,
 	})
 }
 

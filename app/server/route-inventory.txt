@@ -113,8 +113,14 @@ POST /api/tests/public/tests/:id/sessions/:sessionId/uploads-done  validateUUID(
 PUT /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > photoBodyGate > singleFileUpload > <anonymous>
 DELETE /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > <anonymous>
 GET /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > sessionRequired > answerPhotoTarget > <anonymous>
+POST /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/upload-link  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > sessionRequired > rateLimiter(upload-link-issue,10/60000ms) > <anonymous>
 GET /api/tests/public/attempts/:attemptId  validateUUID(attemptId) > sessionRequired > <anonymous>
 GET /api/answer-photos/:photoId/:variant  validateUUID(photoId) > sessionRequired > <anonymous>
+GET /api/upload/context  uploadTokenRequired > <anonymous>
+GET /api/upload/photos  uploadTokenRequired > <anonymous>
+PUT /api/upload/photos/:photoId  validateUUID(photoId) > uploadTokenRequired > photoBodyGate > singleFileUpload > <anonymous>
+DELETE /api/upload/photos/:photoId  validateUUID(photoId) > uploadTokenRequired > <anonymous>
+GET /api/upload/photos/:photoId/thumb  validateUUID(photoId) > uploadTokenRequired > <anonymous>
 GET /api/settings/charts  sessionRequired > <anonymous>
 PUT /api/settings/charts  sessionRequired > requirePerm(settings.manage) > <anonymous>
 GET /api/groups/my  sessionRequired > <anonymous>

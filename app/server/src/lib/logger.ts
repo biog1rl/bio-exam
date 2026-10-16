@@ -4,7 +4,12 @@ import pinoHttp from 'pino-http'
 
 const level = process.env.LOG_LEVEL ?? 'info'
 
-export const LOG_REDACT_PATHS = ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]']
+export const LOG_REDACT_PATHS = [
+	'req.headers.cookie',
+	'req.headers.authorization',
+	'req.headers["x-upload-token"]',
+	'res.headers["set-cookie"]',
+]
 
 export function createLogger(destination?: DestinationStream): Logger {
 	const options = { level, redact: { paths: LOG_REDACT_PATHS, censor: '[redacted]' } }

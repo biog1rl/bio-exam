@@ -8,35 +8,24 @@ import { useEffect, useMemo, useRef } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { useAuth } from '@/components/providers/AuthProvider'
+import { isPublicPath } from '@/lib/navigation/public-paths'
 import { buildLoginRedirect } from '@/lib/session/redirect'
 
 type AuthGuardProps = {
 	children: ReactNode
 	fallback?: ReactNode
 	redirectTo?: string
-	skipPaths?: string[]
-	skipPathPrefixes?: string[]
+	hideOnPublicPath?: boolean
 }
 
-export default function AuthGuard({
-	children,
-	fallback = null,
-	redirectTo,
-	skipPaths,
-	skipPathPrefixes,
-}: AuthGuardProps) {
+export default function AuthGuard({ children, fallback = null, redirectTo, hideOnPublicPath = false }: AuthGuardProps) {
 	const { me, loading, sessionError, perms } = useAuth()
 	const router = useRouter()
 	const pathname = usePathname()
 	const searchParams = useSearchParams()
 	const refreshedFor = useRef<string | null>(null)
 
-	const isSkipped = useMemo(() => {
-		if (!pathname) return false
-		if (Array.isArray(skipPaths) && skipPaths.includes(pathname)) return true
-		if (Array.isArray(skipPathPrefixes) && skipPathPrefixes.some((prefix) => pathname.startsWith(prefix))) return true
-		return false
-	}, [pathname, skipPaths, skipPathPrefixes])
+	const isSkipped = Boolean(pathname && isPublicPath(pathname))
 
 	const permsKey = useMemo(() => [...perms].sort().join(','), [perms])
 	const section = redirectTo && pathname ? sectionForPath(pathname) : null
@@ -56,7 +45,7 @@ export default function AuthGuard({
 		router.refresh()
 	}, [sectionDenied, isSkipped, loading, permsKey, router])
 
-	if (isSkipped) return <>{children}</>
+	if (isSkipped) return <>{hideOnPublicPath ? fallback : children}</>
 
 	if (loading) return null
 	if (!me) {

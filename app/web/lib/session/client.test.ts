@@ -178,7 +178,7 @@ describe('fetchWithSession', () => {
 		})
 	}
 
-	for (const path of ['/login', '/login?callbackUrl=%2Fdashboard', '/invite/abc']) {
+	for (const path of ['/login', '/login?callbackUrl=%2Fdashboard', '/invite/abc', '/photo-upload']) {
 		test(`на ${path} навигации нет, AuthExpiredError бросается`, async () => {
 			const { client, navigate } = scenario({ path, request: [status(401)], refresh: [status(401)] })
 			const result = await settle(client.fetchWithSession('/a'))
@@ -186,6 +186,13 @@ describe('fetchWithSession', () => {
 			assert.equal(navigate.mock.calls.length, 0)
 		})
 	}
+
+	test('на /photo-upload-x 401 уводит на /login', async () => {
+		const { client, navigate } = scenario({ path: '/photo-upload-x', request: [status(401)], refresh: [status(401)] })
+		const result = await settle(client.fetchWithSession('/a'))
+		assert.ok(result.error instanceof AuthExpiredError)
+		assert.deepEqual(navigate.mock.calls, [['/login?callbackUrl=%2Fphoto-upload-x']])
+	})
 
 	test('после завершения refresh следующий 401 запускает новый refresh', async () => {
 		const { client, calls } = scenario({ request: [status(401), status(200), status(401), status(200)] })

@@ -77,6 +77,23 @@ export async function newAccountContext(browser: Browser, testInfo: TestInfo, lo
 	})
 }
 
+export async function newPhoneContext(
+	browser: Browser,
+	testInfo: TestInfo,
+	userAgent?: string
+): Promise<BrowserContext> {
+	const use = testInfo.project.use
+	const mobile = projectKey(testInfo) === 'mobile'
+	return browser.newContext({
+		baseURL: use.baseURL,
+		viewport: mobile ? (use.viewport ?? undefined) : { width: 375, height: 812 },
+		userAgent: userAgent ?? (mobile ? use.userAgent : undefined),
+		deviceScaleFactor: mobile ? use.deviceScaleFactor : undefined,
+		isMobile: true,
+		hasTouch: true,
+	})
+}
+
 /** Тест со страницами студента и администратора своего проекта */
 export const test = base.extend<{ studentPage: Page; adminPage: Page; teacherPage: Page }>({
 	studentPage: async ({ browser }, use, testInfo) => {
@@ -272,6 +289,23 @@ export async function closeOpenSession(page: Page, testId: string): Promise<void
 		data: { sessionId, clientAttemptId: crypto.randomUUID(), answers: {} },
 	})
 	expect(submitted.ok(), `cleanup: submit open session ${sessionId}`).toBe(true)
+}
+
+export async function openExpiredSeedSession(
+	page: Page,
+	seeded: { topic: string; slug: string; sessionId: string; startedMinutesAgo: number }
+): Promise<string> {
+	const summary = await page.request.get(`/api/tests/public/topics/${seeded.topic}/tests/${seeded.slug}?view=summary`)
+	expect(summary.ok(), `read test ${seeded.slug}`).toBe(true)
+	const testId = ((await summary.json()) as { test: { id: string } }).test.id
+	const userId = await currentUserId(page)
+	const startedAt = new Date(Date.now() - seeded.startedMinutesAgo * 60_000).toISOString()
+	await page.addInitScript(([storageKey, value]) => window.localStorage.setItem(storageKey, value), [
+		`test-session-${testId}-${userId}`,
+		JSON.stringify({ sessionId: seeded.sessionId, startedAt }),
+	] as const)
+	await page.goto(`/tests/${seeded.topic}/${seeded.slug}/start`)
+	return testId
 }
 
 export function isSubmitRequest(url: string, method: string): boolean {

@@ -35,6 +35,7 @@ function request(
 }
 
 const SESSION_REFRESH_HEADER = 'x-session-refresh'
+const ANONYMOUS_PAGE_HEADER = 'x-bio-anonymous-page'
 
 function overriddenHeaderNames(response: Response): string[] {
 	return (response.headers.get('x-middleware-override-headers') ?? '').split(',').filter(Boolean)
@@ -42,6 +43,10 @@ function overriddenHeaderNames(response: Response): string[] {
 
 function forwardedSessionRefresh(response: Response): string | null {
 	return response.headers.get(`x-middleware-request-${SESSION_REFRESH_HEADER}`)
+}
+
+function forwardedAnonymousPage(response: Response): string | null {
+	return response.headers.get(`x-middleware-request-${ANONYMOUS_PAGE_HEADER}`)
 }
 
 type Call = { url: string; init: RequestInit }
@@ -274,7 +279,7 @@ describe('proxy: входящий x-session-refresh вырезается', () =>
 		assertStripped(response)
 	})
 
-	test.each(['/login', '/invite/token'])('%s без cookie', async (path) => {
+	test.each(['/login', '/invite/token', '/photo-upload'])('%s без cookie', async (path) => {
 		const response = await proxy(request(path, {}, { accept: 'text/html', [SESSION_REFRESH_HEADER]: 'unavailable' }))
 		assertStripped(response)
 	})
@@ -284,4 +289,41 @@ describe('proxy: входящий x-session-refresh вырезается', () =>
 		assert.ok(isPassThrough(response))
 		assert.equal(response.headers.get('x-middleware-override-headers'), null)
 	})
+})
+
+describe('proxy: анонимная страница /photo-upload', () => {
+	test('access истёк, refresh_token есть: refresh не вызывается, cookie не трогаются, layout получает заголовок', async () => {
+		const calls = stubFetch(() => refreshResponse(ROTATED_SET_COOKIES))
+		const response = await proxy(request('/photo-upload', { [ACCESS]: accessToken(-10), [REFRESH]: 'old-refresh' }))
+		assert.equal(calls.length, 0)
+		assert.ok(isPassThrough(response))
+		assert.deepEqual(response.headers.getSetCookie(), [])
+		assert.equal(forwardedAnonymousPage(response), '1')
+	})
+
+	test('подложенное значение заголовка заменяется значением proxy', async () => {
+		const response = await proxy(request('/photo-upload', {}, { [ANONYMOUS_PAGE_HEADER]: 'spoofed' }))
+		assert.ok(isPassThrough(response))
+		assert.equal(forwardedAnonymousPage(response), '1')
+	})
+
+	test.each<[string, Record<string, string>]>([
+		['/dashboard', { [ACCESS]: accessToken(600), [REFRESH]: 'r' }],
+		['/login', {}],
+	])('подложенный заголовок на %s до layout не доходит', async (path, cookies) => {
+		const response = await proxy(request(path, cookies, { accept: 'text/html', [ANONYMOUS_PAGE_HEADER]: '1' }))
+		assert.ok(isPassThrough(response))
+		assert.ok(overriddenHeaderNames(response).length > 0, 'request headers are not overridden')
+		assert.equal(overriddenHeaderNames(response).includes(ANONYMOUS_PAGE_HEADER), false)
+		assert.equal(forwardedAnonymousPage(response), null)
+	})
+
+	test.each(['/invites', '/users', '/photo-upload-x', '/photo-upload/abc', '/loginx'])(
+		'%s без cookie закрыт: 307 на /login',
+		async (path) => {
+			const response = await proxy(request(path))
+			assert.equal(response.status, 307)
+			assert.equal(new URL(response.headers.get('location') ?? '').pathname, '/login')
+		}
+	)
 })
