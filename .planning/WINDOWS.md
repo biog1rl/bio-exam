@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
-waived_count: 4
+open_count: 0
+waived_count: 8
 fixed_count: 4
 total_count: 12
-last_updated: 2026-10-16T13:22:55.856Z
+last_updated: 2026-10-16T13:24:26.153Z
 ---
 
 # Broken Windows Ledger
@@ -18,10 +18,10 @@ last_updated: 2026-10-16T13:22:55.856Z
 | 1 | 04 | deviation | app/server/src/lib/logger.ts |  | Заголовок Cookie (bio_exam_session, refresh_token) попадает в лог ошибок запроса: pinoHttp без redact; найдено в 04-06, см. deferred-items.md | fixed |  | 2026-10-04T07:23:28.334Z | 2026-10-06T15:46:11.767Z |
 | 2 | 04 | deviation | app/web/components/AppLayout/AppLayout.tsx |  | Два Toaster (root layout и AppLayout): каждый тост показывается дважды | fixed |  | 2026-10-04T09:06:52.366Z | 2026-10-06T15:46:11.856Z |
 | 3 | 12 | deviation | app/web/components/editor/plugins/images-plugin/MediaLibrary.tsx |  | Клиент MediaLibrary дублирует лимит и список MIME из-за 500: отложено, см. 12-ARCH-REVIEW.md | waived | D-05: клиент MediaLibrary в фазе 12 не переделывается; после 12-04 сервер отвечает на размер и тип русскими 413/415/400, дубли лимита 5 МБ и списка типов на клиенте исход не меняют, решает сервер | 2026-10-13T16:09:50.109Z | 2026-10-16T11:31:50.429Z |
-| 4 | 12 | deviation | app/server/src/routes/tests/session-photos.ts |  | Охрана попытки у входа фото повторяет denyAttemptAccess из public.ts: отложено после исполнения, см. 12-ARCH-REVIEW.md (F2) | open |  | 2026-10-16T12:50:55.859Z |  |
-| 5 | 12 | deviation | app/web/components/tests/answer-photos/PhotoBlock.tsx |  | Список форматов, тексты типа и литерал 422 фото ответа не из exam-core: отложено после исполнения, см. 12-ARCH-REVIEW.md (F3) | open |  | 2026-10-16T12:50:55.948Z |  |
-| 6 | 12 | deviation | app/server/src/services/assets/image-intake.ts |  | Размер файла не в профиле приёма, литералы 5 МБ в маршрутах: отложено после исполнения, см. 12-ARCH-REVIEW.md (F4) | open |  | 2026-10-16T12:50:56.036Z |  |
-| 7 | 12 | deviation | app/server/src/services/answer-photos/index.ts |  | Компенсация записанных объектов скопирована в пятый раз: отложено до фазы 16, см. 12-ARCH-REVIEW.md (F5) | open |  | 2026-10-16T12:50:56.127Z |  |
+| 4 | 12 | deviation | app/server/src/routes/tests/session-photos.ts |  | Охрана попытки у входа фото повторяет denyAttemptAccess из public.ts: отложено после исполнения, см. 12-ARCH-REVIEW.md (F2) | waived | Дубль без расхождения поведения, HTTP-тесты есть; свернуть в общий хелпер вместе с фазой 14 | 2026-10-16T12:50:55.859Z | 2026-10-16T13:24:25.870Z |
+| 5 | 12 | deviation | app/web/components/tests/answer-photos/PhotoBlock.tsx |  | Список форматов, тексты типа и литерал 422 фото ответа не из exam-core: отложено после исполнения, см. 12-ARCH-REVIEW.md (F3) | waived | Форматы фото и литерал 422 совпадают с сервером; перенести в exam-core вместе с фазой 14 | 2026-10-16T12:50:55.948Z | 2026-10-16T13:24:25.962Z |
+| 6 | 12 | deviation | app/server/src/services/assets/image-intake.ts |  | Размер файла не в профиле приёма, литералы 5 МБ в маршрутах: отложено после исполнения, см. 12-ARCH-REVIEW.md (F4) | waived | Значения совпадают с ADR-0004; вынести maxBytes в профиль приёма при следующей правке маршрутов загрузки | 2026-10-16T12:50:56.036Z | 2026-10-16T13:24:26.059Z |
+| 7 | 12 | deviation | app/server/src/services/answer-photos/index.ts |  | Компенсация записанных объектов скопирована в пятый раз: отложено до фазы 16, см. 12-ARCH-REVIEW.md (F5) | waived | Компенсация записанных объектов собирается одним хелпером вместе с очисткой сирот в фазе 16 | 2026-10-16T12:50:56.127Z | 2026-10-16T13:24:26.153Z |
 | 8 | 12 | deviation | app/server/src/services/assets/avatars.ts |  | Кроп аватара (renderCrop, recropAvatar) вне ограничителя памяти sharp, rotate любым числом: отложено, см. 12-SECURITY.md флаг 2 | fixed |  | 2026-10-16T12:50:56.216Z | 2026-10-16T13:22:55.562Z |
 | 9 | 12 | deviation | app/server/src/routes/tests/session-photos.ts |  | Число одновременных PUT фото не ограничено до очереди sharp, N x 10 МБ в памяти (WR-01): отложено, поправить строку ADR-0004 про 80 МБ, см. 12-REVIEW.md | fixed |  | 2026-10-16T12:50:56.305Z | 2026-10-16T13:12:11.624Z |
 | 10 | 12 | deviation | app/web/components/tests/answer-photos/upload-queue.ts |  | DELETE 404 у записи failed во время работы сервера над PUT оставляет фото (WR-02): отложено, см. 12-REVIEW.md | waived | Недостижимо, пока тип open неактивен (D-19); узкая гонка через состояние failed; вернуться до включения типа open в фазе 17 | 2026-10-16T12:50:56.394Z | 2026-10-16T13:22:55.656Z |
@@ -76,10 +76,10 @@ last_updated: 2026-10-16T13:22:55.856Z
     "file": "app/server/src/routes/tests/session-photos.ts",
     "line": null,
     "description": "Охрана попытки у входа фото повторяет denyAttemptAccess из public.ts: отложено после исполнения, см. 12-ARCH-REVIEW.md (F2)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Дубль без расхождения поведения, HTTP-тесты есть; свернуть в общий хелпер вместе с фазой 14",
     "recorded_at": "2026-10-16T12:50:55.859Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:24:25.870Z",
     "milestone": "v3.0"
   },
   {
@@ -89,10 +89,10 @@ last_updated: 2026-10-16T13:22:55.856Z
     "file": "app/web/components/tests/answer-photos/PhotoBlock.tsx",
     "line": null,
     "description": "Список форматов, тексты типа и литерал 422 фото ответа не из exam-core: отложено после исполнения, см. 12-ARCH-REVIEW.md (F3)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Форматы фото и литерал 422 совпадают с сервером; перенести в exam-core вместе с фазой 14",
     "recorded_at": "2026-10-16T12:50:55.948Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:24:25.962Z",
     "milestone": "v3.0"
   },
   {
@@ -102,10 +102,10 @@ last_updated: 2026-10-16T13:22:55.856Z
     "file": "app/server/src/services/assets/image-intake.ts",
     "line": null,
     "description": "Размер файла не в профиле приёма, литералы 5 МБ в маршрутах: отложено после исполнения, см. 12-ARCH-REVIEW.md (F4)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Значения совпадают с ADR-0004; вынести maxBytes в профиль приёма при следующей правке маршрутов загрузки",
     "recorded_at": "2026-10-16T12:50:56.036Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:24:26.059Z",
     "milestone": "v3.0"
   },
   {
@@ -115,10 +115,10 @@ last_updated: 2026-10-16T13:22:55.856Z
     "file": "app/server/src/services/answer-photos/index.ts",
     "line": null,
     "description": "Компенсация записанных объектов скопирована в пятый раз: отложено до фазы 16, см. 12-ARCH-REVIEW.md (F5)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "Компенсация записанных объектов собирается одним хелпером вместе с очисткой сирот в фазе 16",
     "recorded_at": "2026-10-16T12:50:56.127Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-16T13:24:26.153Z",
     "milestone": "v3.0"
   },
   {
