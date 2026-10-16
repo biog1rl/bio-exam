@@ -255,7 +255,7 @@ export function BankExplorer({ topicSlug }: { topicSlug?: string }) {
 										<>
 											<DropdownMenuItem onSelect={() => openTopicDialog(topic)}>
 												<Edit className="size-4" aria-hidden="true" />
-												Изменить тему
+												Редактировать
 											</DropdownMenuItem>
 											<DropdownMenuSeparator />
 										</>
