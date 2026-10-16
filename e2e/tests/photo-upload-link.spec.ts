@@ -1,0 +1,215 @@
+import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test'
+
+import { seedTest, sessionAccountByPrefix } from '../fixtures/accounts'
+import { expect, newAccountContext, projectKey, test } from '../fixtures/exam'
+import { horizontalOverflow, lowContrastTexts } from '../fixtures/page-checks'
+
+const JPEG = Buffer.from(
+	'/9j/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAAMABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAwb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCYAFNP/9k=',
+	'base64'
+)
+
+const TELEGRAM_UA =
+	'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36 Telegram-Android/11.2.3'
+
+test.describe.configure({ mode: 'serial' })
+
+let student: BrowserContext
+let studentPage: Page
+type IssuedLink = { testId: string; sessionId: string; questionId: string; token: string }
+const links = new Map<string, IssuedLink>()
+
+test.beforeAll(async ({ browser }, testInfo) => {
+	const login = sessionAccountByPrefix(projectKey(testInfo), 'photo-link-student').login
+	student = await newAccountContext(browser, testInfo, login)
+	studentPage = await student.newPage()
+})
+
+test.afterAll(async () => {
+	await student?.close()
+})
+
+async function issuedLink(testInfo: TestInfo): Promise<IssuedLink> {
+	const cached = links.get(projectKey(testInfo))
+	if (cached) return cached
+	const item = seedTest(projectKey(testInfo), 'photo-link')
+	const read = await studentPage.request.get(`/api/tests/public/topics/${item.topic}/tests/${item.slug}`)
+	expect(read.ok(), `read test ${item.slug}`).toBe(true)
+	const body = (await read.json()) as {
+		test: { id: string }
+		questions: { id: string; questionUiTemplate: string }[]
+	}
+	const questionId = body.questions.find((question) => question.questionUiTemplate === 'open')?.id
+	if (!questionId) throw new Error(`no open question in ${item.slug}`)
+	const started = await studentPage.request.post(`/api/tests/public/tests/${body.test.id}/start`)
+	expect(started.ok(), `start ${item.slug}`).toBe(true)
+	const { sessionId } = (await started.json()) as { sessionId: string }
+	const issued = await studentPage.request.post(
+		`/api/tests/public/tests/${body.test.id}/sessions/${sessionId}/questions/${questionId}/upload-link`
+	)
+	expect(issued.status(), 'issue upload link').toBe(201)
+	const { token } = (await issued.json()) as { token: string }
+	const link = { testId: body.test.id, sessionId, questionId, token }
+	links.set(projectKey(testInfo), link)
+	return link
+}
+
+async function phoneContext(browser: Browser, testInfo: TestInfo, userAgent?: string): Promise<BrowserContext> {
+	return browser.newContext({
+		baseURL: testInfo.project.use.baseURL,
+		viewport: { width: 375, height: 812 },
+		hasTouch: true,
+		...(userAgent ? { userAgent } : {}),
+	})
+}
+
+function photoBlock(page: Page) {
+	return page.getByRole('group', { name: 'Фото к ответу' })
+}
+
+function desktopOnly(testInfo: TestInfo): void {
+	test.skip(projectKey(testInfo) === 'mobile', 'один прогон на desktop-проекте')
+}
+
+test('телефон без входа открывает ссылку, видит вопрос и добавляет фото; фрагмент в адресе остаётся', async ({
+	browser,
+}, testInfo) => {
+	const { testId, sessionId, questionId, token } = await issuedLink(testInfo)
+	const phone = await phoneContext(browser, testInfo)
+	const page = await phone.newPage()
+	const authRequests: string[] = []
+	page.on('request', (request) => {
+		if (new URL(request.url()).pathname.startsWith('/api/auth/')) authRequests.push(new URL(request.url()).pathname)
+	})
+	try {
+		await page.goto(`/photo-upload#${token}`)
+		await expect(page.getByRole('heading', { level: 1, name: 'Вопрос 1' })).toBeVisible()
+		await expect(page.getByText(`Фото по ссылке (${projectKey(testInfo)})`, { exact: true })).toBeVisible()
+		await expect(page.getByRole('region', { name: 'Текст вопроса' })).toContainText(
+			'Сфотографируйте схему фотосинтеза из тетради'
+		)
+		await expect(photoBlock(page).getByText('0 из 5', { exact: true })).toBeVisible()
+		await expect(photoBlock(page).getByRole('button', { name: 'Сделать фото' })).toBeVisible()
+		await expect(photoBlock(page).getByRole('button', { name: 'Выбрать из галереи' })).toBeVisible()
+		await expect(page.locator('[data-sidebar]')).toHaveCount(0)
+
+		await photoBlock(page)
+			.locator('input[type="file"][data-photo-source="gallery"]')
+			.setInputFiles({ name: 'phone.jpg', mimeType: 'image/jpeg', buffer: JPEG })
+		await expect(photoBlock(page).getByText('1 из 5', { exact: true })).toBeVisible()
+		await expect(photoBlock(page).getByRole('img', { name: 'Фото 1' })).toBeVisible()
+
+		const listed = await studentPage.request.get(
+			`/api/tests/public/tests/${testId}/sessions/${sessionId}/questions/${questionId}/photos`
+		)
+		expect(listed.ok()).toBe(true)
+		expect(((await listed.json()) as { photos: unknown[] }).photos).toHaveLength(1)
+
+		expect(new URL(page.url()).hash).toBe(`#${token}`)
+		await page.waitForLoadState('networkidle')
+		expect(authRequests, 'phone context requests to /api/auth/').toEqual([])
+	} finally {
+		await phone.close()
+	}
+})
+
+test('неизвестный токен и пустой фрагмент — «Ссылка недействительна»', async ({ browser }, testInfo) => {
+	desktopOnly(testInfo)
+	const phone = await phoneContext(browser, testInfo)
+	try {
+		const unknown = await phone.newPage()
+		await unknown.goto(`/photo-upload#${'A'.repeat(43)}`)
+		await expect(unknown.getByRole('heading', { level: 1, name: 'Ссылка недействительна' })).toBeVisible()
+		await expect(unknown.getByRole('heading', { level: 1, name: 'Ссылка недействительна' })).toBeFocused()
+
+		const empty = await phone.newPage()
+		await empty.goto('/photo-upload')
+		await expect(empty.getByRole('heading', { level: 1, name: 'Ссылка недействительна' })).toBeVisible()
+		await expect(empty.getByText('Эта ссылка больше не работает или скопирована не полностью.')).toBeVisible()
+	} finally {
+		await phone.close()
+	}
+})
+
+test('ответ страницы: no-referrer, noindex, без встраивания во фрейм', async ({ browser }, testInfo) => {
+	desktopOnly(testInfo)
+	const phone = await phoneContext(browser, testInfo)
+	try {
+		const response = await phone.request.get('/photo-upload')
+		expect(response.status()).toBe(200)
+		const headers = response.headers()
+		expect(headers['referrer-policy']).toBe('no-referrer')
+		expect(headers['x-robots-tag']).toContain('noindex')
+		expect(headers['x-frame-options']).toBe('DENY')
+		expect(headers['content-security-policy']).toContain("frame-ancestors 'none'")
+		const page = await phone.newPage()
+		await page.goto('/photo-upload')
+		await expect(page.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer')
+	} finally {
+		await phone.close()
+	}
+})
+
+test('рабочий экран на 375 px без горизонтальной прокрутки и с контрастным текстом', async ({ browser }, testInfo) => {
+	desktopOnly(testInfo)
+	const { token } = await issuedLink(testInfo)
+	const phone = await phoneContext(browser, testInfo)
+	try {
+		const page = await phone.newPage()
+		await page.goto(`/photo-upload#${token}`)
+		await expect(photoBlock(page).getByRole('button', { name: 'Сделать фото' })).toBeVisible()
+		expect(await horizontalOverflow(page), 'horizontal overflow at 375px').toEqual([])
+		expect(await lowContrastTexts(page), 'low contrast texts').toEqual([])
+	} finally {
+		await phone.close()
+	}
+})
+
+test('контекст с allowPhotos = false — экран «Фото к этому вопросу не принимаются» без блока фото', async ({
+	browser,
+}, testInfo) => {
+	desktopOnly(testInfo)
+	const { token } = await issuedLink(testInfo)
+	const phone = await phoneContext(browser, testInfo)
+	try {
+		const page = await phone.newPage()
+		await page.route('**/api/upload/context', async (route) => {
+			const response = await route.fetch()
+			const body = (await response.json()) as Record<string, unknown>
+			await route.fulfill({ response, json: { ...body, allowPhotos: false } })
+		})
+		await page.goto(`/photo-upload#${token}`)
+		await expect(page.getByRole('heading', { level: 1, name: 'Фото к этому вопросу не принимаются' })).toBeVisible()
+		await expect(page.getByText('К ответу на этот вопрос нельзя прикрепить фото.', { exact: true })).toBeVisible()
+		await expect(photoBlock(page)).toHaveCount(0)
+		await expect(page.getByRole('button', { name: 'Сделать фото' })).toHaveCount(0)
+		await expect(page.getByText(/из 5$/)).toHaveCount(0)
+	} finally {
+		await phone.close()
+	}
+})
+
+test('встроенный браузер Telegram — подсказка и «Скопировать ссылку» сразу, в обычном браузере подсказки нет', async ({
+	browser,
+}, testInfo) => {
+	desktopOnly(testInfo)
+	const { token } = await issuedLink(testInfo)
+	const telegram = await phoneContext(browser, testInfo, TELEGRAM_UA)
+	const regular = await phoneContext(browser, testInfo)
+	try {
+		const inApp = await telegram.newPage()
+		await inApp.goto(`/photo-upload#${token}`)
+		await expect(photoBlock(inApp).getByRole('button', { name: 'Сделать фото' })).toBeVisible()
+		await expect(inApp.getByText('Откройте страницу в браузере', { exact: true })).toBeVisible()
+		await expect(inApp.getByRole('button', { name: 'Скопировать ссылку' })).toBeVisible()
+
+		const plain = await regular.newPage()
+		await plain.goto(`/photo-upload#${token}`)
+		await expect(photoBlock(plain).getByRole('button', { name: 'Сделать фото' })).toBeVisible()
+		await expect(plain.getByText('Откройте страницу в браузере', { exact: true })).toHaveCount(0)
+		await expect(plain.getByRole('button', { name: 'Скопировать ссылку' })).toHaveCount(0)
+	} finally {
+		await telegram.close()
+		await regular.close()
+	}
+})

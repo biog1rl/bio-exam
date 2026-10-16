@@ -118,6 +118,12 @@
 					"role": "user",
 					"name": "Ученик фото desktop",
 					"storageState": true
+				},
+				{
+					"login": "photo-link-student-desktop",
+					"role": "user",
+					"name": "Ученик ссылки фото desktop",
+					"storageState": true
 				}
 			],
 			"tests": [
@@ -597,6 +603,21 @@
 					]
 				},
 				{
+					"slug": "photo-link-desktop",
+					"title": "Фото по ссылке (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"assignedTo": ["photo-link-student-desktop"],
+					"questions": [
+						{
+							"key": "pl-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте схему фотосинтеза из тетради"
+						}
+					]
+				},
+				{
 					"slug": "answer-photos-desktop",
 					"title": "Фото к ответу (desktop)",
 					"topic": "e2e-deadline",
@@ -768,6 +789,12 @@
 					"login": "photo-student-mobile",
 					"role": "user",
 					"name": "Ученик фото mobile",
+					"storageState": true
+				},
+				{
+					"login": "photo-link-student-mobile",
+					"role": "user",
+					"name": "Ученик ссылки фото mobile",
 					"storageState": true
 				}
 			],
@@ -1244,6 +1271,21 @@
 							"template": "open",
 							"type": "open",
 							"prompt": "Опишите, как свет превращается в химическую энергию."
+						}
+					]
+				},
+				{
+					"slug": "photo-link-mobile",
+					"title": "Фото по ссылке (mobile)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"assignedTo": ["photo-link-student-mobile"],
+					"questions": [
+						{
+							"key": "pl-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте схему фотосинтеза из тетради"
 						}
 					]
 				},

@@ -28,7 +28,7 @@ type MaxCountOf = (questionId: string) => number
 
 type SessionRegistry = AnswerPhotoSession & { retain(): void; release(): void }
 
-function createQueueHandle(transport: PhotoTransport, maxCount: number): AnswerPhotoQueueHandle {
+export function createPhotoHandle(transport: PhotoTransport, maxCount: number): AnswerPhotoQueueHandle {
 	let listed = false
 	const queue = createPhotoUploadQueue({
 		maxCount,
@@ -48,7 +48,7 @@ function createQueueHandle(transport: PhotoTransport, maxCount: number): AnswerP
 }
 
 export function createLinkPhotoHandle(token: string, maxCount: number): AnswerPhotoQueueHandle {
-	return createQueueHandle(linkPhotoTransport(token), maxCount)
+	return createPhotoHandle(linkPhotoTransport(token), maxCount)
 }
 
 async function listInto(handle: AnswerPhotoQueueHandle): Promise<RequestOutcome<unknown>> {
@@ -75,7 +75,7 @@ function createSessionRegistry(testId: string, sessionId: string | null, maxCoun
 			const existing = handles.get(questionId)
 			if (existing) return existing
 			const target = { testId, sessionId: sessionId ?? '', questionId }
-			const handle = { ...createQueueHandle(sessionPhotoTransport(target), maxCountOf(questionId)), target }
+			const handle = { ...createPhotoHandle(sessionPhotoTransport(target), maxCountOf(questionId)), target }
 			handles.set(questionId, handle)
 			return handle
 		},
