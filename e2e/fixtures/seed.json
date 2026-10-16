@@ -45,7 +45,11 @@
 			"description": "Тема для сквозной проверки дедлайна и окна для фото"
 		}
 	],
-	"bulkUsers": { "prefix": "bulk-user", "count": 110, "name": "Массовый пользователь" },
+	"bulkUsers": {
+		"prefix": "bulk-user",
+		"count": 110,
+		"name": "Массовый пользователь"
+	},
 	"projects": {
 		"desktop": {
 			"accounts": [
@@ -107,6 +111,12 @@
 					"login": "deadline-student-desktop",
 					"role": "user",
 					"name": "Ученик дедлайна desktop",
+					"storageState": true
+				},
+				{
+					"login": "photo-student-desktop",
+					"role": "user",
+					"name": "Ученик фото desktop",
 					"storageState": true
 				}
 			],
@@ -584,6 +594,38 @@
 							"prompt": "Опишите, как свет превращается в химическую энергию."
 						}
 					]
+				},
+				{
+					"slug": "answer-photos-desktop",
+					"title": "Фото к ответу (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"assignedTo": ["photo-student-desktop"],
+					"questions": [
+						{
+							"key": "ap-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "ap-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте решение задачи в тетради"
+						}
+					]
 				}
 			],
 			"groups": [
@@ -717,6 +759,12 @@
 					"login": "deadline-student-mobile",
 					"role": "user",
 					"name": "Ученик дедлайна mobile",
+					"storageState": true
+				},
+				{
+					"login": "photo-student-mobile",
+					"role": "user",
+					"name": "Ученик фото mobile",
 					"storageState": true
 				}
 			],
@@ -1192,6 +1240,38 @@
 							"template": "open",
 							"type": "open",
 							"prompt": "Опишите, как свет превращается в химическую энергию."
+						}
+					]
+				},
+				{
+					"slug": "answer-photos-mobile",
+					"title": "Фото к ответу (mobile)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"assignedTo": ["photo-student-mobile"],
+					"questions": [
+						{
+							"key": "ap-choice",
+							"template": "single_choice",
+							"type": "radio",
+							"prompt": "Какая органелла есть только в растительной клетке?",
+							"options": [
+								{
+									"id": "1",
+									"text": "Хлоропласт"
+								},
+								{
+									"id": "2",
+									"text": "Митохондрия"
+								}
+							],
+							"correct": "1"
+						},
+						{
+							"key": "ap-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте решение задачи в тетради"
 						}
 					]
 				}

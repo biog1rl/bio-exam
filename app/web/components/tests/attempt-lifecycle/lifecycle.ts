@@ -82,6 +82,7 @@ export type AttemptSnapshot = {
 	submitRejection: SubmitRejection | null
 	answers: Readonly<Record<string, AnswerValue>>
 	currentQuestionId: string | null
+	sessionId: string | null
 	startedAt: string | null
 	secondsLeft: number | null
 	result: AttemptView | null
@@ -1009,6 +1010,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			submitRejection,
 			answers,
 			currentQuestionId: position,
+			sessionId: session?.sessionId ?? null,
 			startedAt: session?.startedAt ?? null,
 			secondsLeft: left,
 			result,

@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
+import { PhotoBlock } from '@/components/tests/answer-photos/PhotoBlock'
+import { useAnswerPhotoSession } from '@/components/tests/answer-photos/use-answer-photos'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
@@ -149,6 +151,7 @@ function AttemptRunner({
 	const interactionDisabled = snapshot.interactionDisabled
 	const deadlinePassed = snapshot.deadlinePassed
 	const navigationDisabled = interactionDisabled && !deadlinePassed
+	const photoSession = useAnswerPhotoSession({ testId: test.id, sessionId: snapshot.sessionId })
 	const outcome = snapshot.display.outcome
 	const outcomeKey =
 		outcome === null ? null : outcome.kind === 'result' ? (submitResult?.attemptId ?? null) : 'accepted'
@@ -395,6 +398,12 @@ function AttemptRunner({
 										onToggleCheckbox={onToggleCheckbox}
 										onInputTextAnswer={onInputTextAnswer}
 										onSelectMatching={onSelectMatching}
+									/>
+								) : null}
+								{!questionResult && question.questionUiTemplate === 'open' && snapshot.sessionId ? (
+									<PhotoBlock
+										photos={photoSession.photosFor(question.id)}
+										disabled={interactionDisabled && !deadlinePassed}
 									/>
 								) : null}
 								{template == null ? (
