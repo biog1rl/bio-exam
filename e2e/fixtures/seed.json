@@ -124,6 +124,24 @@
 					"role": "user",
 					"name": "Ученик ссылки фото desktop",
 					"storageState": true
+				},
+				{
+					"login": "photo-flow-student-desktop",
+					"role": "user",
+					"name": "Ученик сценария фото desktop",
+					"storageState": true
+				},
+				{
+					"login": "photo-revoke-student-desktop",
+					"role": "user",
+					"name": "Ученик отзыва ссылки desktop",
+					"storageState": true
+				},
+				{
+					"login": "photo-deadline-student-desktop",
+					"role": "user",
+					"name": "Ученик дедлайна фото desktop",
+					"storageState": true
 				}
 			],
 			"tests": [
@@ -603,6 +621,99 @@
 					]
 				},
 				{
+					"slug": "photo-single-desktop",
+					"title": "Фото одного вопроса (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"photoUploadWindowMinutes": 120,
+					"assignedTo": ["photo-flow-student-desktop"],
+					"questions": [
+						{
+							"key": "ps-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте схему клетки из тетради"
+						}
+					]
+				},
+				{
+					"slug": "photo-many-desktop",
+					"title": "Фото к трём вопросам (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"photoUploadWindowMinutes": 120,
+					"assignedTo": ["photo-flow-student-desktop"],
+					"questions": [
+						{
+							"key": "pm-open-1",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте схему митоза"
+						},
+						{
+							"key": "pm-open-2",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте схему мейоза"
+						},
+						{
+							"key": "pm-open-3",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте схему фотосинтеза"
+						}
+					]
+				},
+				{
+					"slug": "photo-revoke-desktop",
+					"title": "Отзыв ссылки фото (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"photoUploadWindowMinutes": 120,
+					"assignedTo": ["photo-revoke-student-desktop"],
+					"questions": [
+						{
+							"key": "pr-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте таблицу наследования"
+						}
+					]
+				},
+				{
+					"slug": "photo-none-desktop",
+					"title": "Фото без окна после сдачи (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"photoUploadWindowMinutes": 0,
+					"assignedTo": ["photo-revoke-student-desktop"],
+					"questions": [
+						{
+							"key": "pn-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте решение задачи"
+						}
+					]
+				},
+				{
+					"slug": "photo-deadline-desktop",
+					"title": "Фото после дедлайна (desktop)",
+					"topic": "e2e-deadline",
+					"published": true,
+					"timeLimitMinutes": 5,
+					"photoUploadWindowMinutes": 120,
+					"assignedTo": ["photo-deadline-student-desktop"],
+					"questions": [
+						{
+							"key": "pd-open",
+							"template": "open",
+							"type": "open",
+							"prompt": "Сфотографируйте опыт с листом"
+						}
+					]
+				},
+				{
 					"slug": "photo-link-desktop",
 					"title": "Фото по ссылке (desktop)",
 					"topic": "e2e-deadline",
@@ -687,6 +798,15 @@
 					"draft": {
 						"dt-text": "хлоропласт",
 						"dt-open": "Свет поглощает хлорофилл, и энергия уходит в синтез АТФ."
+					}
+				},
+				{
+					"id": "3f1d9c52-7a40-4b6e-9d21-5c8e0a7b1d03",
+					"test": "photo-deadline-desktop",
+					"student": "photo-deadline-student-desktop",
+					"startedMinutesAgo": 10,
+					"draft": {
+						"pd-open": "Лист на свету выделяет кислород."
 					}
 				}
 			],

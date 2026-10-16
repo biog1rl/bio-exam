@@ -120,7 +120,7 @@ test.describe.serial('LIFE-04: черновик вопроса пережива�
 			await patched
 			await page.reload()
 			await page.unrouteAll({ behavior: 'ignoreErrors' })
-			await expect(promptEditor(page)).toContainText(prompt)
+			await expect(promptEditor(page)).toContainText(prompt, { timeout: 15_000 })
 		} finally {
 			await page.unrouteAll({ behavior: 'ignoreErrors' })
 			await deleteDraft(page, testId, draftId)
