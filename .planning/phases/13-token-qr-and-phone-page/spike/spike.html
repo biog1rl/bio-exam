@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="referrer" content="no-referrer" />
+		<meta name="robots" content="noindex, nofollow" />
+		<title>Спайк фазы 13</title>
+		<style>
+			:root {
+				color-scheme: light;
+				font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+				background: #fffdf2;
+				color: #182610;
+			}
+			body {
+				margin: 0;
+				padding: 16px;
+				font-size: 15px;
+				line-height: 1.4;
+			}
+			h1 {
+				font-size: 18px;
+				margin: 0 0 12px;
+			}
+			h2 {
+				font-size: 16px;
+				margin: 20px 0 8px;
+			}
+			dl {
+				display: grid;
+				grid-template-columns: max-content 1fr;
+				gap: 4px 12px;
+				margin: 0;
+			}
+			dt {
+				color: #4b6b38;
+			}
+			dd {
+				margin: 0;
+				overflow-wrap: anywhere;
+				font-variant-numeric: tabular-nums;
+			}
+			.ok {
+				color: #1d6b2a;
+				font-weight: 600;
+			}
+			.bad {
+				color: #a32020;
+				font-weight: 600;
+			}
+			.actions {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+			}
+			button {
+				font: inherit;
+				padding: 10px 16px;
+				border-radius: 999px;
+				border: 1px solid #4b6b38;
+				background: #fffdf2;
+				color: #182610;
+			}
+			button:active {
+				background: #e9eedc;
+			}
+			input[type='file'] {
+				display: none;
+			}
+			.file {
+				margin-top: 12px;
+				padding: 8px;
+				border: 1px solid #d6dcc4;
+				border-radius: 8px;
+			}
+			.file canvas {
+				display: block;
+				margin-top: 8px;
+				max-width: 160px;
+				max-height: 160px;
+				border-radius: 4px;
+			}
+			#log {
+				margin: 0;
+				padding: 8px;
+				background: #f3f1e4;
+				border-radius: 8px;
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 12px;
+				white-space: pre-wrap;
+				overflow-wrap: anywhere;
+				min-height: 4em;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Спайк фазы 13: фрагмент, хранилище, камера</h1>
+
+		<h2>Среда</h2>
+		<dl>
+			<dt>userAgent</dt>
+			<dd id="ua"></dd>
+			<dt>isSecureContext</dt>
+			<dd id="secure"></dd>
+			<dt>протокол</dt>
+			<dd id="protocol"></dd>
+			<dt>загрузка в вкладке</dt>
+			<dd id="loads"></dd>
+			<dt>navigator.onLine</dt>
+			<dd id="online"></dd>
+			<dt>pageshow.persisted</dt>
+			<dd id="persisted">ждём pageshow</dd>
+		</dl>
+
+		<h2>Фрагмент и sessionStorage</h2>
+		<dl>
+			<dt>длина location.hash</dt>
+			<dd id="hash-length"></dd>
+			<dt>начало токена</dt>
+			<dd id="hash-head"></dd>
+			<dt>фрагмент цел</dt>
+			<dd id="hash-intact"></dd>
+			<dt>копия до записи</dt>
+			<dd id="stored-before"></dd>
+			<dt>запись и чтение</dt>
+			<dd id="stored-roundtrip"></dd>
+			<dt>итог</dt>
+			<dd id="token-verdict"></dd>
+		</dl>
+		<div class="actions" style="margin-top: 12px">
+			<button type="button" id="reload">Перезагрузить страницу</button>
+		</div>
+
+		<h2>Камера и галерея</h2>
+		<div class="actions">
+			<button type="button" id="camera-button">Сделать фото</button>
+			<button type="button" id="gallery-button">Выбрать из галереи</button>
+			<input type="file" id="camera-input" accept="image/*" capture="environment" />
+			<input type="file" id="gallery-input" accept="image/*" multiple />
+		</div>
+		<div id="files"></div>
+
+		<h2>Копирование ссылки</h2>
+		<div class="actions">
+			<button type="button" id="copy">Скопировать ссылку</button>
+		</div>
+		<dl style="margin-top: 8px">
+			<dt>итог</dt>
+			<dd id="copy-result">не нажато</dd>
+		</dl>
+
+		<h2>Журнал</h2>
+		<pre id="log"></pre>
+
+		<script>
+			const EXPECTED_TOKEN = 'Spike13-Token_ABCDEFGHIJKLMNOPQRSTUVWXYZabc'
+			const STORAGE_KEY = 'spike-token'
+			const LOADS_KEY = 'spike-loads'
+
+			const $ = (id) => document.getElementById(id)
+			const logBox = $('log')
+
+			function stamp() {
+				const now = new Date()
+				const pad = (value, size = 2) => String(value).padStart(size, '0')
+				return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}`
+			}
+
+			function log(message) {
+				logBox.textContent = `${stamp()} ${message}\n` + logBox.textContent
+			}
+
+			function mark(element, ok, text) {
+				element.textContent = text
+				element.className = ok ? 'ok' : 'bad'
+			}
+
+			function head(token) {
+				return token ? token.slice(0, 6) : '—'
+			}
+
+			function readStorage(key) {
+				try {
+					return { ok: true, value: sessionStorage.getItem(key) }
+				} catch (error) {
+					return { ok: false, error: String(error) }
+				}
+			}
+
+			function writeStorage(key, value) {
+				try {
+					sessionStorage.setItem(key, value)
+					return { ok: true }
+				} catch (error) {
+					return { ok: false, error: String(error) }
+				}
+			}
+
+			function showEnvironment() {
+				$('ua').textContent = navigator.userAgent
+				mark($('secure'), window.isSecureContext, String(window.isSecureContext))
+				$('protocol').textContent = location.protocol
+				$('online').textContent = String(navigator.onLine)
+				const loads = readStorage(LOADS_KEY)
+				const count = loads.ok ? Number(loads.value || '0') + 1 : 1
+				if (loads.ok) writeStorage(LOADS_KEY, String(count))
+				$('loads').textContent = loads.ok ? `№${count}` : `sessionStorage недоступен: ${loads.error}`
+			}
+
+			function showToken() {
+				const fromHash = location.hash.startsWith('#') ? location.hash.slice(1) : ''
+				$('hash-length').textContent = `${location.hash.length} (ожидается 44 вместе с #)`
+				$('hash-head').textContent = head(fromHash)
+				const intact = fromHash === EXPECTED_TOKEN
+				mark($('hash-intact'), intact, intact ? 'да, совпадает с эталоном' : fromHash ? 'нет, фрагмент изменён' : 'нет, фрагмента нет')
+
+				const before = readStorage(STORAGE_KEY)
+				if (!before.ok) {
+					mark($('stored-before'), false, `ошибка: ${before.error}`)
+				} else if (before.value) {
+					mark($('stored-before'), before.value === EXPECTED_TOKEN, `есть, начало ${head(before.value)}`)
+				} else {
+					$('stored-before').textContent = 'нет (первая загрузка вкладки)'
+				}
+
+				if (fromHash) {
+					const written = writeStorage(STORAGE_KEY, fromHash)
+					const after = readStorage(STORAGE_KEY)
+					const ok = written.ok && after.ok && after.value === fromHash
+					mark($('stored-roundtrip'), ok, ok ? 'записано и прочитано' : `ошибка: ${written.error || after.error || 'значение не совпало'}`)
+				} else {
+					$('stored-roundtrip').textContent = 'пропущено: во фрагменте нет токена'
+				}
+
+				const stored = readStorage(STORAGE_KEY)
+				const copy = stored.ok ? stored.value : null
+				if (intact && copy === EXPECTED_TOKEN) {
+					mark($('token-verdict'), true, 'фрагмент на месте, копия в sessionStorage на месте')
+				} else if (!intact && copy === EXPECTED_TOKEN) {
+					mark($('token-verdict'), false, 'фрагмент потерян, токен восстановлен из sessionStorage')
+				} else if (intact) {
+					mark($('token-verdict'), false, 'фрагмент на месте, копии в sessionStorage нет')
+				} else {
+					mark($('token-verdict'), false, 'токена нет ни во фрагменте, ни в sessionStorage')
+				}
+				log(`загрузка: hash ${location.hash.length}, начало ${head(fromHash)}, копия ${head(copy)}`)
+			}
+
+			const PENDING_KEY = 'spike-pending-pick'
+			const NO_CHANGE_MS = 30000
+
+			function randomId() {
+				const bytes = new Uint8Array(4)
+				crypto.getRandomValues(bytes)
+				return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+			}
+
+			function formatSize(bytes) {
+				return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(2)} МБ` : `${(bytes / 1024).toFixed(1)} КБ`
+			}
+
+			async function bitmapOf(file, orientation) {
+				if (typeof createImageBitmap !== 'function') return { text: 'createImageBitmap недоступен', bitmap: null }
+				try {
+					const bitmap = await createImageBitmap(file, { imageOrientation: orientation })
+					return { text: `${bitmap.width}×${bitmap.height}`, bitmap }
+				} catch (error) {
+					return { text: `ошибка ${error.name}: ${error.message}`, bitmap: null }
+				}
+			}
+
+			function preview(bitmap) {
+				const canvas = document.createElement('canvas')
+				const scale = Math.min(1, 160 / Math.max(bitmap.width, bitmap.height))
+				canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+				canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+				const context = canvas.getContext('2d')
+				if (context) context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+				return canvas
+			}
+
+			async function describeFile(kind, pickId, file) {
+				const fromImage = await bitmapOf(file, 'from-image')
+				const none = await bitmapOf(file, 'none')
+				const box = document.createElement('div')
+				box.className = 'file'
+				const list = document.createElement('dl')
+				const rows = [
+					['источник', `${kind}, выбор ${pickId}`],
+					['имя', file.name || '—'],
+					['type', file.type || '(пусто)'],
+					['размер', formatSize(file.size)],
+					['from-image', fromImage.text],
+					['none', none.text],
+				]
+				for (const [label, value] of rows) {
+					const term = document.createElement('dt')
+					term.textContent = label
+					const detail = document.createElement('dd')
+					detail.textContent = value
+					list.append(term, detail)
+				}
+				box.append(list)
+				if (fromImage.bitmap) box.append(preview(fromImage.bitmap))
+				fromImage.bitmap?.close()
+				none.bitmap?.close()
+				$('files').prepend(box)
+				log(`${kind} ${pickId}: ${file.name || '—'}, ${file.type || '(пусто)'}, ${formatSize(file.size)}, from-image ${fromImage.text}, none ${none.text}`)
+			}
+
+			function setupPicker(kind, button, input) {
+				let pickId = ''
+				let pressedAt = 0
+				let timer = 0
+				const elapsed = () => Math.round(performance.now() - pressedAt)
+				const finish = () => {
+					clearTimeout(timer)
+					try {
+						sessionStorage.removeItem(PENDING_KEY)
+					} catch {}
+				}
+				button.addEventListener('click', () => {
+					pickId = randomId()
+					pressedAt = performance.now()
+					clearTimeout(timer)
+					timer = setTimeout(() => log(`${kind} ${pickId}: ${NO_CHANGE_MS / 1000} с без change`), NO_CHANGE_MS)
+					writeStorage(PENDING_KEY, `${kind} ${pickId}`)
+					log(`${kind} ${pickId}: нажатие`)
+					input.value = ''
+					input.click()
+				})
+				input.addEventListener('cancel', () => {
+					finish()
+					log(`${kind} ${pickId}: cancel через ${elapsed()} мс`)
+				})
+				input.addEventListener('change', async () => {
+					finish()
+					const files = Array.from(input.files || [])
+					log(`${kind} ${pickId}: change через ${elapsed()} мс, файлов ${files.length}`)
+					for (const file of files) await describeFile(kind, pickId, file)
+				})
+			}
+
+			function currentToken() {
+				const fromHash = location.hash.startsWith('#') ? location.hash.slice(1) : ''
+				if (fromHash) return fromHash
+				const stored = readStorage(STORAGE_KEY)
+				return stored.ok && stored.value ? stored.value : ''
+			}
+
+			function copyWithSelection(text) {
+				const area = document.createElement('textarea')
+				area.value = text
+				area.setAttribute('readonly', '')
+				area.style.position = 'fixed'
+				area.style.top = '0'
+				area.style.left = '0'
+				area.style.opacity = '0'
+				document.body.append(area)
+				area.focus()
+				area.select()
+				area.setSelectionRange(0, text.length)
+				let ok = false
+				try {
+					ok = document.execCommand('copy')
+				} catch (error) {
+					log(`execCommand copy: ошибка ${error.name}`)
+				}
+				area.remove()
+				return ok
+			}
+
+			async function copyLink() {
+				const link = `${location.origin}${location.pathname}#${currentToken()}`
+				const result = $('copy-result')
+				if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+					try {
+						await navigator.clipboard.writeText(link)
+						mark(result, true, 'скопировано: navigator.clipboard.writeText')
+						log('копирование: clipboard.writeText прошёл')
+						return
+					} catch (error) {
+						log(`копирование: clipboard.writeText отказ ${error.name}`)
+					}
+				} else {
+					log('копирование: navigator.clipboard недоступен')
+				}
+				const ok = copyWithSelection(link)
+				mark(result, ok, ok ? 'скопировано: textarea.select + execCommand' : 'не скопировано ни одним способом')
+				log(`копирование: execCommand ${ok ? 'прошёл' : 'не прошёл'}`)
+			}
+
+			function reportPendingPick() {
+				const pending = readStorage(PENDING_KEY)
+				if (pending.ok && pending.value) {
+					log(`страница загружена заново во время выбора файла: ${pending.value}`)
+					try {
+						sessionStorage.removeItem(PENDING_KEY)
+					} catch {}
+				}
+			}
+
+			setupPicker('камера', $('camera-button'), $('camera-input'))
+			setupPicker('галерея', $('gallery-button'), $('gallery-input'))
+			$('copy').addEventListener('click', copyLink)
+
+			window.addEventListener('pageshow', (event) => {
+				$('persisted').textContent = String(event.persisted)
+				log(`pageshow persisted=${event.persisted}`)
+			})
+			window.addEventListener('pagehide', (event) => log(`pagehide persisted=${event.persisted}`))
+			document.addEventListener('visibilitychange', () => log(`visibilitychange ${document.visibilityState}`))
+			window.addEventListener('online', () => {
+				$('online').textContent = String(navigator.onLine)
+				log('online')
+			})
+			window.addEventListener('offline', () => {
+				$('online').textContent = String(navigator.onLine)
+				log('offline')
+			})
+			window.addEventListener('hashchange', () => log(`hashchange, длина ${location.hash.length}`))
+			$('reload').addEventListener('click', () => location.reload())
+
+			showEnvironment()
+			showToken()
+			reportPendingPick()
+		</script>
+	</body>
+</html>
