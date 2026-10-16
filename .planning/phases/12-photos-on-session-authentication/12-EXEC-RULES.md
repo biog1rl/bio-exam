@@ -4,15 +4,15 @@
 
 ## Корень и ветка (режим worktree)
 - Твой корень — worktree, в котором ты запущен: `git rev-parse --show-toplevel`. Он лежит в `/Users/kdvornichenko/bio-exam/.claude/worktrees/` и не равен `/Users/kdvornichenko/bio-exam`. Перед первой правкой и перед возвратом проверь `test "$(git rev-parse --show-toplevel)" != /Users/kdvornichenko/bio-exam`. Не меняй файлы основного checkout и других worktree.
-- Harness создаёт worktree от `origin/HEAD` (`master`), а не от `dev`. Шаг 0 первого плана, до всего остального: если `git status --short` пуст и `git rev-parse HEAD` не равен `git rev-parse dev`, выполни один раз `git reset --hard dev`. Это единственное разрешённое исключение из запрета на изменяющие git-команды. Если дерево не пусто — верни `## PLAN BLOCKED`.
-- Каждый следующий план линии: перед ним ведущая сессия сама приводит твой worktree к `dev` (результат прошлого плана уже закоммичен там). В начале плана проверь `git status --short`: он должен быть пуст, а `git rev-parse HEAD` равен `git rev-parse dev`. Иначе верни `## PLAN BLOCKED`. После смены `yarn.lock` или `package.json` — снова `yarn install --immutable`.
+- Worktree создаётся от HEAD ведущей сессии (`worktree.baseRef: "head"` в `.claude/settings.local.json`), то есть от `dev` с коммитами предыдущих планов. Исключений из запрета на изменяющие git-команды нет.
+- Шаг 0 каждого плана, до всего остального: `git status --short` пуст и `git rev-parse HEAD` равен `git rev-parse dev`. Иначе верни `## PLAN BLOCKED` с выводом обеих команд и ничего не правь. Перед вторым и следующими планами линии ведущая сессия сама приводит твой worktree к `dev` (результат прошлого плана к этому моменту закоммичен там). После смены `yarn.lock` или `package.json` — снова `yarn install --immutable`.
 - Первый план линии: `yarn install --immutable`, затем `yarn workspace @bio-exam/rbac build && yarn workspace @bio-exam/exam-core build`. После плана, который меняет `packages/exam-core` или `packages/rbac`, пересобери их перед проверками.
 - `.planning` в worktree есть (он в git после шага 0): план, CONTEXT и остальное читай оттуда. SUMMARY пиши в `.planning/phases/12-photos-on-session-authentication/12-NN-SUMMARY.md` своего worktree.
 - Файлов `.env` в worktree нет, не копируй их: `with-test-db`, `yarn verify` и `yarn e2e` сами создают изолированное окружение, порты и базу. Если шаг требует `.env`, верни `## PLAN BLOCKED`.
 - Параллельно работает исполнитель другой линии. Перед `yarn verify` и `yarn e2e` посмотри `uptime`; при падении по таймауту или на unhandled 57P01 под нагрузкой повтори один раз.
 
 ## Коммиты — ПЕРЕОПРЕДЕЛЕНИЕ инструкций execute-plan
-- **Не запускай `git commit`, `git add`, `git stash`, `git reset`, `git checkout -- …` и другие изменяющие git-команды** (исключение — шаг 0 выше). Коммитит только ведущая сессия, один коммит на план после проверки. Оставь все изменения (код, тесты, SUMMARY) в рабочем дереве worktree. Удаляй файлы обычным `rm`.
+- **Не запускай `git commit`, `git add`, `git stash`, `git reset`, `git checkout -- …` и другие изменяющие git-команды** . Коммитит только ведущая сессия, один коммит на план после проверки. Оставь все изменения (код, тесты, SUMMARY) в рабочем дереве worktree. Удаляй файлы обычным `rm`.
 - Там, где execute-plan.md велит коммитить задачу или SUMMARY, — пропусти коммит, остальное делай. В SUMMARY поля коммитов пиши «не закоммичено».
 - Не обновляй `.planning/STATE.md` и `.planning/ROADMAP.md`, не запускай `gsd-tools` для записи состояния: это делает ведущая сессия.
 - Не запускай `12-plan-files`-подобных проверок: список файлов плана сверяет ведущая сессия.
