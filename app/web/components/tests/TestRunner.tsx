@@ -12,9 +12,11 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import MdxRenderer from '@/components/tests/MdxRenderer'
 import { QuestionInput } from '@/components/tests/QuestionInput'
 import { PhotoBlock } from '@/components/tests/answer-photos/PhotoBlock'
+import { QrUploadDialog } from '@/components/tests/answer-photos/QrUploadDialog'
 import { SubmittedPhotos } from '@/components/tests/answer-photos/SubmittedPhotos'
 import { useAnswerPhotoCounts, useAnswerPhotoSession } from '@/components/tests/answer-photos/use-answer-photos'
 import { usePhotoSources } from '@/components/tests/answer-photos/use-photo-sources'
+import { usePointerKind } from '@/components/tests/answer-photos/use-pointer-kind'
 import { AttemptReviewLine } from '@/components/tests/attempt-result/AttemptReviewLine'
 import { DeadlinePanel } from '@/components/tests/attempt-result/DeadlinePanel'
 import { TeacherCheckedMark } from '@/components/tests/attempt-result/TeacherCheckedMark'
@@ -178,6 +180,7 @@ function AttemptRunner({
 	const isAnsweredQuestion = (question: PublicTestQuestion) =>
 		isQuestionAnswered({ question, answer: answers[question.id], photoCount: photoCounts.get(question.id) ?? 0 })
 	const photoSources = usePhotoSources()
+	const finePointer = usePointerKind() === 'fine'
 	const [uploadsDone, setUploadsDone] = useState<{ attemptId: string; uploadClosesAt: string | null } | null>(null)
 	const uploadClosesAt =
 		uploadsDone && uploadsDone.attemptId === submitResult?.attemptId
@@ -441,6 +444,14 @@ function AttemptRunner({
 										photos={photoSession.photosFor(question.id)}
 										disabled={interactionDisabled && !deadlinePassed}
 										sources={photoSources}
+										actions={
+											finePointer && !(interactionDisabled && !deadlinePassed) ? (
+												<QrUploadDialog
+													photos={photoSession.photosFor(question.id)}
+													questionNumber={currentIndex + 1}
+												/>
+											) : undefined
+										}
 									/>
 								) : null}
 								{template == null ? (
@@ -480,6 +491,14 @@ function AttemptRunner({
 										uploadClosesAt={uploadClosesAt}
 										serverOffsetMs={snapshot.serverOffsetMs}
 										sources={photoSources}
+										actions={
+											finePointer ? (
+												<QrUploadDialog
+													photos={photoSession.photosFor(question.id)}
+													questionNumber={currentIndex + 1}
+												/>
+											) : undefined
+										}
 										onUploadsDone={(closesAt) =>
 											setUploadsDone({ attemptId: submitResult.attemptId, uploadClosesAt: closesAt })
 										}

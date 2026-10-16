@@ -213,3 +213,154 @@ test('встроенный браузер Telegram — подсказка и «�
 		await regular.close()
 	}
 })
+
+function runnerBlock() {
+	return studentPage.getByRole('group', { name: 'Фото к ответу' })
+}
+
+function qrDialog() {
+	return studentPage.getByRole('dialog', { name: 'Добавить фото с телефона' })
+}
+
+async function openRunner(testInfo: TestInfo): Promise<number> {
+	const item = seedTest(projectKey(testInfo), 'photo-link')
+	await studentPage.goto(`/tests/${item.topic}/${item.slug}/start`)
+	const counter = runnerBlock().getByText(/^\d+ из 5$/)
+	await expect(counter).toBeVisible()
+	return Number((await counter.innerText()).split(' ')[0])
+}
+
+async function openQrDialog(): Promise<string> {
+	await runnerBlock().getByRole('button', { name: 'Добавить фото с телефона' }).click()
+	await expect(qrDialog()).toBeVisible()
+	const field = qrDialog().getByTestId('upload-link')
+	await expect(field).toHaveValue(/\/photo-upload#[A-Za-z0-9_-]{43}$/)
+	return field.inputValue()
+}
+
+async function closeQrDialog(): Promise<void> {
+	await studentPage.keyboard.press('Escape')
+	await expect(qrDialog()).toHaveCount(0)
+	await expect(runnerBlock().getByRole('button', { name: 'Добавить фото с телефона' })).toBeFocused()
+}
+
+async function openQuestionId(): Promise<string> {
+	return studentPage
+		.locator('section[id^="question-"]')
+		.first()
+		.evaluate((element) => element.id.replace(/^question-/, ''))
+}
+
+async function cachedLinkKey(questionId: string): Promise<string> {
+	const key = await studentPage.evaluate(
+		(suffix) => Object.keys(window.sessionStorage).find((item) => item.endsWith(`:${suffix}`)) ?? null,
+		questionId
+	)
+	if (!key) throw new Error('no cached upload link')
+	return key
+}
+
+let dialogUrl = ''
+
+test('«С телефона» на компьютере: ссылка из диалога, фото с телефона появляется в блоке без перезагрузки', async ({
+	browser,
+}, testInfo) => {
+	desktopOnly(testInfo)
+	const before = await openRunner(testInfo)
+	dialogUrl = await openQrDialog()
+	await expect(qrDialog().getByRole('img', { name: 'QR-код для загрузки фото с телефона' })).toBeVisible()
+	await expect(qrDialog().getByText(`${before} из 5 фото`, { exact: true })).toBeVisible()
+
+	const phone = await phoneContext(browser, testInfo)
+	try {
+		const page = await phone.newPage()
+		await page.goto(dialogUrl)
+		await photoBlock(page)
+			.locator('input[type="file"][data-photo-source="gallery"]')
+			.setInputFiles({ name: 'desk.jpg', mimeType: 'image/jpeg', buffer: JPEG })
+		await expect(photoBlock(page).getByText(`${before + 1} из 5`, { exact: true })).toBeVisible()
+	} finally {
+		await phone.close()
+	}
+
+	await expect(qrDialog().getByText(`${before + 1} из 5 фото`, { exact: true })).toBeVisible({ timeout: 10_000 })
+	await closeQrDialog()
+	await expect(runnerBlock().getByText(`${before + 1} из 5`, { exact: true })).toBeVisible()
+	await expect(runnerBlock().getByRole('img', { name: `Фото ${before + 1}` })).toBeVisible()
+})
+
+test('после перезагрузки раннера адрес в диалоге тот же, открытая страница телефона работает; 375 px без прокрутки', async ({
+	browser,
+}, testInfo) => {
+	desktopOnly(testInfo)
+	const phone = await phoneContext(browser, testInfo)
+	try {
+		const page = await phone.newPage()
+		await page.goto(dialogUrl)
+		const phoneCounter = photoBlock(page).getByText(/^\d+ из 5$/)
+		await expect(phoneCounter).toBeVisible()
+		const onPhone = Number((await phoneCounter.innerText()).split(' ')[0])
+
+		await studentPage.reload()
+		await openRunner(testInfo)
+		expect(await openQrDialog()).toBe(dialogUrl)
+
+		await photoBlock(page)
+			.locator('input[type="file"][data-photo-source="gallery"]')
+			.setInputFiles({ name: 'again.jpg', mimeType: 'image/jpeg', buffer: JPEG })
+		await expect(photoBlock(page).getByText(`${onPhone + 1} из 5`, { exact: true })).toBeVisible()
+		await expect(page.getByRole('heading', { level: 1, name: 'Ссылка недействительна' })).toHaveCount(0)
+
+		await studentPage.setViewportSize({ width: 375, height: 812 })
+		await expect(qrDialog()).toBeVisible()
+		expect(await horizontalOverflow(studentPage), 'horizontal overflow at 375px').toEqual([])
+		await studentPage.setViewportSize({ width: 1280, height: 720 })
+		await closeQrDialog()
+	} finally {
+		await phone.close()
+	}
+})
+
+test('погашенная ссылка в кэше молча заменяется новой выдачей', async ({}, testInfo) => {
+	desktopOnly(testInfo)
+	await openRunner(testInfo)
+	const key = await cachedLinkKey(await openQuestionId())
+	const stale = `${new URL(studentPage.url()).origin}/photo-upload#${'B'.repeat(43)}`
+	await studentPage.evaluate(([storageKey, value]) => window.sessionStorage.setItem(storageKey, value), [
+		key,
+		stale,
+	] as const)
+
+	const url = await openQrDialog()
+	expect(url).not.toBe(stale)
+	await expect(qrDialog().getByText('Не удалось создать ссылку')).toHaveCount(0)
+	await closeQrDialog()
+})
+
+test('отказ выдачи 403 и выключенные фото показаны в диалоге по контракту', async ({}, testInfo) => {
+	desktopOnly(testInfo)
+	await openRunner(testInfo)
+	const key = await cachedLinkKey(await openQuestionId())
+	const issue = /\/questions\/[^/]+\/upload-link$/
+
+	await studentPage.evaluate((storageKey) => window.sessionStorage.removeItem(storageKey), key)
+	await studentPage.route(issue, (route) => route.fulfill({ status: 403, json: { error: 'Forbidden' } }))
+	await runnerBlock().getByRole('button', { name: 'Добавить фото с телефона' }).click()
+	await expect(qrDialog().getByText('Не удалось создать ссылку')).toBeVisible()
+	await expect(qrDialog().getByText('Недостаточно прав для этого действия. Обратитесь к администратору.')).toBeVisible()
+	await expect(qrDialog().getByRole('button', { name: 'Повторить' })).toHaveCount(0)
+	await expect(qrDialog().getByTestId('upload-link')).toHaveCount(0)
+	await closeQrDialog()
+	await studentPage.unroute(issue)
+
+	await studentPage.evaluate((storageKey) => window.sessionStorage.removeItem(storageKey), key)
+	await studentPage.route(issue, (route) =>
+		route.fulfill({ status: 409, json: { error: 'К ответу на этот вопрос нельзя прикрепить фото' } })
+	)
+	await runnerBlock().getByRole('button', { name: 'Добавить фото с телефона' }).click()
+	await expect(qrDialog().getByText('К ответу на этот вопрос нельзя прикрепить фото. QR-код не нужен.')).toBeVisible()
+	await expect(qrDialog().getByTestId('upload-link')).toHaveCount(0)
+	await expect(qrDialog().getByText(/из 5 фото$/)).toBeVisible()
+	await closeQrDialog()
+	await studentPage.unroute(issue)
+})

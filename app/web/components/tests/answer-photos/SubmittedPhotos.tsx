@@ -2,7 +2,7 @@
 
 import { UploadWindowRefusalSchema } from '@bio-exam/exam-core'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore, type ReactNode } from 'react'
 
 import { Loader2 } from 'lucide-react'
 
@@ -21,10 +21,11 @@ type Props = {
 	uploadClosesAt: string | null
 	serverOffsetMs: number
 	sources: readonly PhotoSource[]
+	actions?: ReactNode
 	onUploadsDone: (uploadClosesAt: string | null) => void
 }
 
-export function SubmittedPhotos({ photos, uploadClosesAt, serverOffsetMs, sources, onUploadsDone }: Props) {
+export function SubmittedPhotos({ photos, uploadClosesAt, serverOffsetMs, sources, actions, onUploadsDone }: Props) {
 	const { queue, target } = photos
 	const view = useUploadWindowView(uploadClosesAt, serverOffsetMs)
 	const state = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot)
@@ -55,7 +56,7 @@ export function SubmittedPhotos({ photos, uploadClosesAt, serverOffsetMs, source
 
 	return (
 		<div className="space-y-3">
-			<PhotoBlock photos={photos} disabled={saving} sources={sources} />
+			<PhotoBlock photos={photos} disabled={saving} sources={sources} actions={actions} />
 			<div className="flex flex-wrap items-center gap-x-4 gap-y-2">
 				<Button type="button" className="h-11 w-full mob:w-auto tab:h-9" disabled={busy || saving} onClick={finish}>
 					{saving ? <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : null}
