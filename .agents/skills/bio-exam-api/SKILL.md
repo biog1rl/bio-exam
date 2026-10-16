@@ -57,6 +57,13 @@ Express владеет данными и политикой доступа (`doc
 - `testAttempts.results` читается только в `app/server/src/services/scored-attempt`; маршруты попытки не читают `answer_keys` и назначения напрямую: это держит `scripts/attempt-integrity-guards.test.mjs`.
 - Маршруты: `app/server/src/routes/tests/public.ts` (ученик); дашборд, список попыток и разбор попытки у персонала - `app/server/src/routes/tests/admin/attempts.ts`.
 
+## Проверка открытых ответов
+
+- Служба `app/server/src/services/answer-reviews`: `saveAnswerReview` (оценка учителя) и `recordNoAnswerReviews` (оценка 0 «нет ответа» без проверяющего). Обе в одной транзакции под `FOR UPDATE` попытки (`lockAttemptForReview` поверх `lockAttemptFacts` из `scored-attempt`, чтение `testAttempts.results` остаётся там) вставляют строки `answer_reviews`, собирают последние оценки, вызывают `materializeAttemptOutcome` и при итоге `graded` пишут уведомление `attempt.graded` (`recordAttemptGraded`, ключ дедупликации на попытку).
+- `POST /api/tests/admin/attempts/:attemptId/questions/:questionId/review` (`app/server/src/routes/tests/admin/reviews.ts`), тело `OpenReviewRequestSchema` из `@bio-exam/exam-core`, ответ `OpenReviewResponseSchema`. Порядок отказов: `canReviewAttempt` 403, схема тела 400, нет попытки 404, своя попытка 403 `OWN_ATTEMPT`, окно открыто 409 `REVIEW_NOT_READY`, вопрос не открытый вопрос этой попытки 404.
+- Чтение: `readAdminAttemptView` кладёт в каждый открытый вопрос `open` (`text`, `photos`, `review`, `referenceText`); `readAttemptView` для ученика после `graded` отдаёт `review` и `referenceText`, до итога `explanationText` открытого вопроса скрыт. Фото попытки читает `listAttemptAnswerPhotos` (`services/answer-photos/attempt-photos.ts`) по `attempt_id` или сессии попытки.
+- Задача `no-answer-reviews` (раз в 60 с, батч 50 попыток): `findNoAnswerCandidates` находит открытые вопросы `pending`-попыток с закрытым окном без текста, фото и оценки; повторный прогон ничего не меняет.
+
 ## Уведомления
 
 - Модуль `app/server/src/services/notifications`, вход `index.ts`; про `Request` не знает: права на объект ему передаёт маршрут.
@@ -72,7 +79,7 @@ Express владеет данными и политикой доступа (`doc
 
 - Модуль `app/server/src/services/background-jobs`: `createBackgroundJobs({ log })` отдаёт `register`, `start`, `stop`, `runNow`, `names`. Прогон держит замок `pg_try_advisory_xact_lock(11011, hashtext(имя))` в отдельной транзакции, работа идёт другими соединениями пула; занятый замок - отчёт `{ skipped: 'locked' }`.
 - Стартуют задачи только из `app/server/src/index.ts`, в колбэке `listen`; тест или скрипт запускает задачу через `runNow` или `yarn workspace @bio-exam/server jobs:run <имя>` (код 75 - замок занят, 1 - неизвестное имя).
-- Задачи (`jobs.ts`): `finalize-deadlines` раз в 30 с, батч 50, запас 60 с после льготы, давность 24 ч, предел прогона 20 с, память сбоев 10 мин; отчёт `{ stale, due, finalized, expired, other, failed, timeBounded }`. `reconcile-outcomes` только по `runNow`, чинит проекцию попыток со статусом `none`.
+- Задачи (`jobs.ts`): `finalize-deadlines` раз в 30 с, батч 50, запас 60 с после льготы, давность 24 ч, предел прогона 20 с, память сбоев 10 мин; отчёт `{ stale, due, finalized, expired, other, failed, timeBounded }`. `reconcile-outcomes` только по `runNow`, чинит проекцию попыток со статусом `none`, оценки берёт из `loadLatestScores`; `no-answer-reviews` раз в 60 с, отчёт `{ candidates, reviewed, graded, failed }`.
 - Остановка: `createShutdown` в `app/server/src/lib/shutdown.ts` - прекращает приём соединений, ждёт запросы и задачи до `SHUTDOWN_DRAIN_MS` (25 с), затем закрывает пул; повторный сигнал завершает процесс кодом 1.
 
 ## Маршруты тестов

@@ -240,6 +240,14 @@ describe('читатели результата: none, pending и graded', () =>
 	})
 
 	test('список попыток админа: pending без процента, сводка без неё, фильтр review', async () => {
+		const stored = await ctx.pgPool.query<{ upload_closes_at: Date | null }>(
+			'SELECT upload_closes_at FROM test_attempts WHERE id = $1',
+			[realAttemptId]
+		)
+		const windowBefore = stored.rows[0]?.upload_closes_at
+		await ctx.pgPool.query("UPDATE test_attempts SET upload_closes_at = now() - interval '1 second' WHERE id = $1", [
+			realAttemptId,
+		])
 		const reply = ok(await call(ctx, 'GET', '/api/tests/admin/attempts', { cookies: world.adminCookie }))
 		const rows = reply.body.rows
 		expectNone(byKey(rows, 'attemptId', none, 'список N'), 'список N')
@@ -258,6 +266,10 @@ describe('читатели результата: none, pending и graded', () =>
 			(onlyPending.body.rows as Json[]).map((row) => row.attemptId).sort(),
 			[pending, realAttemptId].sort()
 		)
+		await ctx.pgPool.query('UPDATE test_attempts SET upload_closes_at = $2 WHERE id = $1', [
+			realAttemptId,
+			windowBefore,
+		])
 	})
 
 	test('дашборд админа: pending считается в попытках, но не в среднем и «пройдено»', async () => {
@@ -302,7 +314,11 @@ describe('читатели результата: none, pending и graded', () =>
 		assert.equal(results.find((item) => item.status === 'correct')?.earnedPoints, 1)
 
 		const { readAttemptView } = await import('../../services/scored-attempt/read.js')
-		const stored = await readAttemptView(realAttemptId, { kind: 'student', showCorrectAnswer: true })
+		const stored = await readAttemptView(
+			realAttemptId,
+			{ kind: 'student', showCorrectAnswer: true },
+			async () => new Map()
+		)
 		assert.deepEqual(body, JSON.parse(JSON.stringify(stored)))
 	})
 })

@@ -178,7 +178,7 @@ describe('submitSession', () => {
 
 	test('тест с открытым вопросом: accepted, upload_closes_at через 15 минут после сдачи', async () => {
 		const prepared = await prepareSession({ timeLimitMinutes: null })
-		await insertOpenQuestion(ctx, prepared.testId, { order: 1 })
+		const openId = await insertOpenQuestion(ctx, prepared.testId, { order: 1 })
 		const test = await attemptSessions.findVisibleTest(prepared.testId)
 		assert.ok(test)
 		assert.equal(test.photoUploadWindowMinutes, 15)
@@ -188,7 +188,7 @@ describe('submitSession', () => {
 			{
 				sessionId: prepared.sessionId,
 				clientAttemptId: crypto.randomUUID(),
-				answers: { [prepared.questionId]: 'Митоз' },
+				answers: { [prepared.questionId]: 'Митоз', [openId]: 'Развёрнутый ответ' },
 			}
 		)
 

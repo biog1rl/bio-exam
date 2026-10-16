@@ -12,7 +12,7 @@ type Props = {
 	serverOffsetMs: number
 }
 
-export function UploadWindowLine({ uploadClosesAt, serverOffsetMs }: Props) {
+export function useUploadWindowView(uploadClosesAt: string | null, serverOffsetMs: number) {
 	const [nowMs, setNowMs] = useState(() => Date.now() + serverOffsetMs)
 	const view = uploadWindowView(uploadClosesAt, nowMs)
 	const nextUpdateInMs = view.nextUpdateInMs
@@ -31,6 +31,11 @@ export function UploadWindowLine({ uploadClosesAt, serverOffsetMs }: Props) {
 		return () => document.removeEventListener('visibilitychange', onVisibilityChange)
 	}, [serverOffsetMs])
 
+	return view
+}
+
+export function UploadWindowLine({ uploadClosesAt, serverOffsetMs }: Props) {
+	const view = useUploadWindowView(uploadClosesAt, serverOffsetMs)
 	if (view.state === 'none') return null
 	const soon = view.state === 'closing' || view.state === 'last-minute'
 

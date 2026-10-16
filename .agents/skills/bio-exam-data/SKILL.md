@@ -8,7 +8,7 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 ## Схема и миграции
 
 - Схема: `app/server/src/db/schema.ts` (Drizzle, `drizzle-orm/pg-core`); клиент базы: `app/server/src/db/index.ts`.
-- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0030_attempt_upload_window.sql`.
+- Миграции лежат в `app/server/drizzle` файлами `NNNN_имя.sql` с журналом `app/server/drizzle/meta/_journal.json` и снимками; последняя - `app/server/drizzle/0032_answer_reviews.sql`.
 - Применённая миграция не редактируется: изменение схемы идёт новым файлом из `yarn workspace @bio-exam/server drizzle:generate` после правки `schema.ts`.
 - `app/server/drizzle/migrations-manifest.json` фиксирует каждую миграцию: `idx`, `tag`, `file`, `sha256`, `when`, `breakpoints` (`checksumAlgorithm: sha256`). Новая миграция получает в нём новую запись, совпадающую с журналом и файлом.
 - `scripts/check-migrations.mjs` (шаг `migrations` в `yarn verify`) на временных базах сверяет манифест с журналом и файлами, цепочку с пустой базы против `schema.ts`, повторный прогон без изменений, отсутствие разницы у `drizzle-kit generate` и `drizzle-kit check`.
@@ -39,6 +39,11 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 - Таблица `answer_photos` (миграция `0031_answer_photos`): `id` - UUID клиента без значения по умолчанию, `session_id` → `test_sessions` `ON DELETE cascade`, `question_id` → `questions` `ON DELETE cascade`, `attempt_id` → `test_attempts` `ON DELETE set null` (заполняет сдача, фаза 14), `uploaded_at` ставит база (`DEFAULT now()`), `expires_at` пока никто не пишет. Индекс `idx_answer_photos_session_question` (сессия, вопрос), RLS с политикой `deny_direct_access`.
 - Пишет таблицу только `app/server/src/services/answer-photos`; кроме него строку читает загрузчик зоны (`answerPhotoSubject` в `app/server/src/services/access-policy/zone-loader.ts`) для `canReadAnswerPhoto`. Лимит и константы - `packages/exam-core/src/answer-photos.ts`.
 - Файлы фото: `answers/{sessionId}/{questionId}/{photoId}/full.webp` и `thumb.webp`. При удалении теста, вопроса или темы строки уходят каскадом, файлы `answers/` остаются до очистки сирот.
+
+## Проверки открытых ответов
+
+- Таблица `answer_reviews` (миграция `0032_answer_reviews`): `attempt_id` → `test_attempts` и `question_id` → `questions` `ON DELETE cascade`, `reviewer_id` → `users` `ON DELETE set null` (NULL у оценки «нет ответа» и у удалённого проверяющего), `score` smallint с CHECK 0-3 (литерал равен `OPEN_QUESTION_MAX_POINTS`), `comment` до 2000 знаков, `created_at` ставит служба через `clock_timestamp()` под `FOR UPDATE` попытки. Оценок на вопрос может быть несколько: действует последняя (`created_at DESC, id DESC`). Индекс `idx_answer_reviews_attempt_question`, RLS с политикой `deny_direct_access`.
+- Пишет и читает таблицу только `app/server/src/services/answer-reviews` (`loadLatestScores`, `readLatestReviews`, `findNoAnswerCandidates`); `scored-attempt` её не знает и получает загрузчик оценок параметром (`LoadAttemptReviews`, `LoadLatestScores`).
 
 ## Журнал уведомлений
 

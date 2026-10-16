@@ -5,6 +5,7 @@ import { and, asc, eq, exists, isNotNull, isNull, not, notInArray, sql } from 'd
 import { db } from '../../db/index.js'
 import { testAttempts, testSessions, tests, topics } from '../../db/schema.js'
 import { logger } from '../../lib/logger.js'
+import { sessionHasPhotos } from '../answer-photos/open-answer-rule.js'
 import { scoreSubmission } from '../scored-attempt/index.js'
 import { draftAnswerRule } from './draft-answers.js'
 import { explanationReaderFor } from './explanations.js'
@@ -78,7 +79,7 @@ async function scorableAnswers(
 
 async function finalizeDraft(sessionId: string, session: DeadlineSession): Promise<SettledOutcome | DraftChanged> {
 	const answers = await scorableAnswers(sessionId, session.testId, session.draftAnswers)
-	if (Object.keys(answers).length === 0) {
+	if (Object.keys(answers).length === 0 && !(await sessionHasPhotos(db, sessionId))) {
 		await closeSessionAsExpired(sessionId)
 		return { kind: 'expired' }
 	}
@@ -108,6 +109,8 @@ async function finalizeDraft(sessionId: string, session: DeadlineSession): Promi
 		expectedDraft: session.draftAnswers,
 	})
 	if (outcome.kind === 'accepted') return { kind: 'finalized', attemptId: outcome.attemptId }
+	if (outcome.kind === 'open_answer_empty')
+		throw new Error('finalizeDraft: deadline source cannot refuse empty answers')
 	return outcome
 }
 

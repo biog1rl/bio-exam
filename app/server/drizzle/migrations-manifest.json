@@ -256,6 +256,14 @@
       "sha256": "5e45048a31ddf941225c2bb2a1c6a37bd6faac1e9e6610102769e5d2dbffadad",
       "when": 1792149370263,
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "tag": "0032_answer_reviews",
+      "file": "0032_answer_reviews.sql",
+      "sha256": "d0114edfbec5c61a84871069d0650fb67675df2434a28df6922f47f6ca20a0c5",
+      "when": 1792158335474,
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { exportRouter } from './admin/export.js'
 import { questionDraftsRouter } from './admin/question-drafts.js'
 import { questionTypesRouter } from './admin/question-types.js'
 import { questionsRouter } from './admin/questions.js'
+import { reviewsRouter } from './admin/reviews.js'
 import { scoringRulesRouter } from './admin/scoring-rules.js'
 import { testsBySlugRouter } from './admin/tests-by-slug.js'
 import { testsCoreRouter } from './admin/tests-core.js'
@@ -33,5 +34,6 @@ router.use(exportRouter)
 router.use('/:testId/assignments', assignmentsRouter)
 
 router.use(attemptsRouter)
+router.use(reviewsRouter)
 
 export default router

@@ -90,6 +90,10 @@ export default function QuestionEditor({
 		setForm((prev) => ({ ...prev, promptText: mdx }))
 	}, [])
 
+	const handleExplanationMdxChange = useCallback((mdx: string) => {
+		setForm((prev) => ({ ...prev, explanationText: mdx }))
+	}, [])
+
 	const handleTypeChange = (type: QuestionType) => {
 		const selectedType = questionTypes.find((item) => item.key === type)
 		if (!selectedType) return
@@ -300,6 +304,21 @@ export default function QuestionEditor({
 							<Plus className="size-4" />
 							Добавить вариант
 						</Button>
+					</div>
+				) : activeTemplate === 'open' ? (
+					<div className="flex flex-col gap-2">
+						<Label>Эталонный ответ и критерии</Label>
+						<p className="text-xs text-muted-foreground">
+							Ученик увидит этот текст после проверки работы. Опишите образцовый ответ и за что ставится каждый балл от
+							0 до 3.
+						</p>
+						<Editor
+							initialMdxContent={question.explanationText ?? ''}
+							onMdxChange={handleExplanationMdxChange}
+							placeholder="Образцовый ответ и критерии оценки..."
+							preset="full"
+							docPath={docPath}
+						/>
 					</div>
 				) : (
 					<div className="flex flex-col gap-2">

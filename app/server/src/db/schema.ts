@@ -609,6 +609,40 @@ export const answerPhotos = pgTable(
 	})
 ).enableRLS()
 
+export const answerReviews = pgTable(
+	'answer_reviews',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		attemptId: uuid('attempt_id').notNull(),
+		questionId: uuid('question_id').notNull(),
+		score: smallint('score').notNull(),
+		comment: text('comment'),
+		reviewerId: uuid('reviewer_id'),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		attemptIdFk: foreignKey({
+			name: 'answer_reviews_attempt_id_fkey',
+			columns: [t.attemptId],
+			foreignColumns: [testAttempts.id],
+		}).onDelete('cascade'),
+		questionIdFk: foreignKey({
+			name: 'answer_reviews_question_id_fkey',
+			columns: [t.questionId],
+			foreignColumns: [questions.id],
+		}).onDelete('cascade'),
+		reviewerIdFk: foreignKey({
+			name: 'answer_reviews_reviewer_id_fkey',
+			columns: [t.reviewerId],
+			foreignColumns: [users.id],
+		}).onDelete('set null'),
+		scoreCheck: check('answer_reviews_score_check', sql`${t.score} BETWEEN 0 AND 3`),
+		commentCheck: check('answer_reviews_comment_check', sql`char_length(${t.comment}) <= 2000`),
+		attemptQuestionIdx: index('idx_answer_reviews_attempt_question').on(t.attemptId, t.questionId, t.createdAt),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
 /** Назначения тестов студентам (per-student access control) */
 export const testAssignments = pgTable(
 	'test_assignments',

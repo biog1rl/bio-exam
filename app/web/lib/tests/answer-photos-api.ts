@@ -50,3 +50,19 @@ export function deleteAnswerPhoto(
 export function answerPhotoUrl(photoId: string, variant: AnswerPhotoVariant): string {
 	return `/api/answer-photos/${segment(photoId)}/${segment(variant)}`
 }
+
+export type AnswerUploadsDone = { uploadClosesAt: string }
+
+export function completeAnswerUploads({
+	testId,
+	sessionId,
+}: Pick<AnswerPhotoTarget, 'testId' | 'sessionId'>): Promise<RequestOutcome<AnswerUploadsDone>> {
+	return request(`/api/tests/public/tests/${segment(testId)}/sessions/${segment(sessionId)}/uploads-done`, {
+		method: 'POST',
+		parse: (body) => {
+			const value = (body as { uploadClosesAt?: unknown } | null)?.uploadClosesAt
+			if (typeof value !== 'string') throw new Error('uploadClosesAt expected')
+			return { uploadClosesAt: value }
+		},
+	})
+}

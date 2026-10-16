@@ -22,9 +22,14 @@ export type SubmitFailure =
 	| { kind: 'not-assigned' }
 	| { kind: 'not-found' }
 	| { kind: 'answers-invalid'; reason: AnswerViolationReason; limit: number | null }
+	| { kind: 'open-answer-empty'; questionIds: readonly string[] }
 	| { kind: 'retry' }
 
-export type SubmitRejection = { reason: AnswerViolationReason; limit: number | null }
+export type SubmitRejection =
+	| { reason: AnswerViolationReason; limit: number | null }
+	| { reason: typeof OPEN_ANSWER_EMPTY_REASON; positions: readonly number[] }
+
+export const OPEN_ANSWER_EMPTY_REASON = 'open_answer_empty'
 
 export type StartFailure = 'not-assigned' | 'failed'
 
@@ -107,6 +112,9 @@ export function classifySubmitFailure(error: unknown): SubmitFailure {
 		const reason = ANSWER_VIOLATION_REASONS.find((known) => known === error.reason)
 		if (reason) return { kind: 'answers-invalid', reason, limit: error.limit }
 	}
+	if (error.status === 422 && error.code === SUBMIT_ERROR_CODES.openAnswerEmpty) {
+		return { kind: 'open-answer-empty', questionIds: error.questionIds }
+	}
 	return { kind: 'retry' }
 }
 
@@ -120,5 +128,14 @@ export function bannerFor(banner: AttemptBanner): AttemptBannerView {
 }
 
 export function answersInvalidBanner(rejection: SubmitRejection): AttemptBannerView {
+	if (rejection.reason === OPEN_ANSWER_EMPTY_REASON)
+		return { message: openAnswerEmptyMessage(rejection.positions), action: null }
 	return ANSWERS_INVALID_BANNERS[rejection.reason]
+}
+
+function openAnswerEmptyMessage(positions: readonly number[]): string {
+	const base = 'Добавьте текст или фото к ответу на открытый вопрос'
+	if (positions.length === 0) return `${base}.`
+	if (positions.length === 1) return `${base} ${positions[0]}.`
+	return `${base}: ${positions.join(', ')}.`
 }

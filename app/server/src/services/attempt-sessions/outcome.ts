@@ -23,6 +23,7 @@ export type SessionOutcome =
 	| { kind: 'not_found' }
 	| { kind: 'answers_invalid'; violation: AnswerViolation }
 	| { kind: 'no_questions' }
+	| { kind: 'open_answer_empty'; questionIds: string[] }
 
 export type SessionOutcomeOf<K extends SessionOutcome['kind']> = Extract<SessionOutcome, { kind: K }>
 

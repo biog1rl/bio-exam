@@ -15,6 +15,7 @@ import sidebarRouter from './sidebar/index.js'
 import testsRouter from './tests/index.js'
 import publicTestsRouter from './tests/public.js'
 import sessionPhotosRouter from './tests/session-photos.js'
+import studentAttemptRouter from './tests/student-attempt.js'
 import usersRouter from './users/index.js'
 
 const router = Router()
@@ -28,6 +29,7 @@ router.use('/sidebar', sidebarRouter)
 router.use('/tests', testsRouter)
 router.use('/tests/public', publicTestsRouter)
 router.use('/tests/public', sessionPhotosRouter)
+router.use('/tests/public', studentAttemptRouter)
 router.use('/answer-photos', answerPhotosRouter)
 router.use('/settings', settingsRouter)
 router.use('/groups', groupsRouter)

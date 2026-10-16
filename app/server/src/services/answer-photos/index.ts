@@ -21,6 +21,13 @@ import {
 } from '../attempt-sessions/index.js'
 import { storage } from '../storage/index.js'
 
+export {
+	OPEN_PHOTO_ABSENT_SQL,
+	OPEN_TEXT_BLANK_SQL,
+	emptyOpenQuestionIds,
+	sessionHasPhotos,
+} from './open-answer-rule.js'
+
 export const ANSWER_PHOTO_NOT_FOUND = 'Фото не найдено'
 export const ANSWER_PHOTO_TARGET_MISSING = 'Ответ для фото не найден'
 export const ANSWER_PHOTO_CONFLICT = 'Это фото уже прикреплено к другому ответу'
@@ -145,7 +152,7 @@ export async function uploadAnswerPhoto(
 		}
 		outcome = await db.transaction(async (tx): Promise<UploadOutcome> => {
 			const [session] = await tx
-				.select({ id: testSessions.id })
+				.select({ id: testSessions.id, attemptId: testSessions.attemptId })
 				.from(testSessions)
 				.where(sessionFilter({ sessionId: place.sessionId, owner: place.owner }))
 				.for('update')
@@ -161,7 +168,12 @@ export async function uploadAnswerPhoto(
 			if (current >= ANSWER_PHOTO_MAX_COUNT) return { kind: 'limit' }
 			const [inserted] = await tx
 				.insert(answerPhotos)
-				.values({ id: photoId, sessionId: place.sessionId, questionId: place.questionId })
+				.values({
+					id: photoId,
+					sessionId: place.sessionId,
+					questionId: place.questionId,
+					attemptId: session.attemptId,
+				})
 				.returning(PHOTO_COLUMNS)
 			if (!inserted) throw new Error('uploadAnswerPhoto: строка фото не вставлена')
 			return { kind: 'created', photo: toPhoto(inserted), count: current + 1 }

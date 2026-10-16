@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Route } from '@playwright/test'
+import type { BrowserContext, Page, Route, TestInfo } from '@playwright/test'
 
 import { seedTest, sessionAccountByPrefix } from '../fixtures/accounts'
 import { expect, newAccountContext, projectKey, test } from '../fixtures/exam'
@@ -42,7 +42,15 @@ function photoBlock() {
 }
 
 function fileInput() {
-	return photoBlock().locator('input[type="file"][data-photo-source="file"]')
+	return photoBlock().locator(
+		'input[type="file"][data-photo-source="file"], input[type="file"][data-photo-source="gallery"]'
+	)
+}
+
+function pickButton(testInfo: TestInfo) {
+	return photoBlock().getByRole('button', {
+		name: projectKey(testInfo) === 'mobile' ? 'Сделать фото' : 'Добавить фото',
+	})
 }
 
 function counter(text: string) {
@@ -85,7 +93,7 @@ test('ученик прикрепляет фото к открытому воп�
 	await page.goto(`/tests/${item.topic}/${item.slug}/start`)
 	await toOpenQuestion()
 	await expect(counter('0 из 5')).toBeVisible()
-	await expect(photoBlock().locator('input[type="file"]')).toHaveAttribute('accept', 'image/*')
+	await expect(fileInput()).toHaveAttribute('accept', 'image/*')
 
 	await fileInput().setInputFiles(jpegs(1))
 	await expect(photoBlock().getByRole('img', { name: 'Фото 1' })).toBeVisible()
@@ -97,11 +105,11 @@ test('ученик прикрепляет фото к открытому воп�
 	await expect(counter('1 из 5')).toBeVisible()
 })
 
-test('удаление готового фото: «0 из 5», фокус на кнопке выбора, Tab и Enter открывают выбор файла', async () => {
+test('удаление готового фото: «0 из 5», фокус на кнопке выбора, Tab и Enter открывают выбор файла', async ({}, testInfo) => {
 	await photoBlock().getByRole('button', { name: 'Удалить фото 1' }).click()
 	await expect(counter('0 из 5')).toBeVisible()
 	await expect(photoBlock().getByRole('img')).toHaveCount(0)
-	const addButton = photoBlock().getByRole('button', { name: 'Добавить фото' })
+	const addButton = pickButton(testInfo)
 	await expect(addButton).toBeFocused()
 	expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY')
 
@@ -110,17 +118,17 @@ test('удаление готового фото: «0 из 5», фокус на 
 	await expect(addButton).toBeFocused()
 	const chooser = page.waitForEvent('filechooser')
 	await page.keyboard.press('Enter')
-	expect((await chooser).isMultiple()).toBe(true)
+	expect((await chooser).isMultiple()).toBe(projectKey(testInfo) !== 'mobile')
 })
 
-test('файл не изображение: текст сервера, «Убрать», контраст в норме', async () => {
+test('файл не изображение: текст сервера, «Убрать», контраст в норме', async ({}, testInfo) => {
 	await fileInput().setInputFiles({ name: 'note.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('просто текст') })
 	await expect(photoBlock().getByText(TYPE_MESSAGE, { exact: true })).toBeVisible()
 	await expect(counter('0 из 5')).toBeVisible()
 	expect(await lowContrastTexts(page)).toEqual([])
 	await photoBlock().getByRole('button', { name: 'Убрать фото 1' }).click()
 	await expect(photoBlock().getByText(TYPE_MESSAGE, { exact: true })).toHaveCount(0)
-	await expect(photoBlock().getByRole('button', { name: 'Добавить фото' })).toBeFocused()
+	await expect(pickButton(testInfo)).toBeFocused()
 })
 
 test('сбой сети: три автоповтора, затем «Повторить» отправляет то же фото', async () => {
@@ -176,7 +184,7 @@ test('семь фото разом: пять готовых, лишние одн
 	await expect(photoBlock().getByText(LIMIT_MESSAGE, { exact: true })).toBeVisible()
 	await expect(photoBlock().getByText('Не добавлено фото: 2', { exact: true })).toBeVisible()
 	await expect(photoBlock().getByText('Чтобы добавить другое фото, удалите одно из прикреплённых.')).toBeVisible()
-	const addButton = photoBlock().getByRole('button', { name: 'Добавить фото' })
+	const addButton = pickButton(testInfo)
 	await expect(addButton).toHaveAttribute('aria-disabled', 'true')
 	expect(await lowContrastTexts(page)).toEqual([])
 	await photoBlock().screenshot({ path: testInfo.outputPath('photo-block.png') })

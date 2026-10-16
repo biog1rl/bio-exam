@@ -9,7 +9,8 @@ import {
 import { and, eq, sql, type SQL } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
-import { testAttempts, testSessions } from '../../db/schema.js'
+import { answerPhotos, testAttempts, testSessions } from '../../db/schema.js'
+import { emptyOpenQuestionIds } from '../answer-photos/open-answer-rule.js'
 import type { ScoreSubmissionResult } from '../scored-attempt/index.js'
 import { classifySubmitted, type SessionOutcomeOf, type SessionOwner, type SessionTest } from './outcome.js'
 import { closeSessionsAsExpired, sessionExpired, sessionFilter } from './sessions.js'
@@ -18,7 +19,9 @@ export type ScoredSubmission = Extract<ScoreSubmissionResult, { ok: true }>
 
 export type DraftChanged = { kind: 'draft_changed' }
 
-type SubmitOutcome = SessionOutcomeOf<'accepted' | 'finalized' | 'submitted' | 'expired' | 'superseded' | 'not_found'>
+type SubmitOutcome = SessionOutcomeOf<
+	'accepted' | 'finalized' | 'submitted' | 'expired' | 'superseded' | 'not_found' | 'open_answer_empty'
+>
 
 type PrecheckOutcome = { kind: 'writable' } | { kind: 'past_deadline' } | SubmitOutcome
 
@@ -166,6 +169,15 @@ export async function submitAttempt({
 
 			if (!session.draftMatches) return { kind: 'draft_changed' }
 
+			if (source === 'client') {
+				const openIds = scored.facts.filter((fact) => fact.template === 'open').map((fact) => fact.questionId)
+				const questionIds = await emptyOpenQuestionIds(tx, {
+					sessionId,
+					answers: Object.fromEntries(openIds.map((id) => [id, answers[id]])),
+				})
+				if (questionIds.length > 0) return { kind: 'open_answer_empty', questionIds }
+			}
+
 			const submittedAt = submittedAtOf(source, session.startedAt, timeLimitMinutes)
 			const mergedTelemetry = mergeTelemetryMaps(session.draftTelemetry, telemetry)
 			const [inserted] = await tx
@@ -222,6 +234,7 @@ export async function submitAttempt({
 					draftUpdatedAt: null,
 				})
 				.where(eq(testSessions.id, sessionId))
+			await tx.update(answerPhotos).set({ attemptId: inserted.id }).where(eq(answerPhotos.sessionId, sessionId))
 			return { kind: 'accepted', attemptId: inserted.id }
 		})
 	} catch (error) {

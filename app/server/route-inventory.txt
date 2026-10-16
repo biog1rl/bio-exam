@@ -97,6 +97,7 @@ DELETE /api/tests/:testId/assignments/:userId  validateUUID(testId) > validateUU
 GET /api/tests/admin/dashboard  sessionRequired > requirePerm(tests.read) > <anonymous>
 GET /api/tests/admin/attempts  sessionRequired > requirePerm(tests.read) > <anonymous>
 GET /api/tests/admin/attempts/:attemptId  validateUUID(attemptId) > sessionRequired > <anonymous>
+POST /api/tests/admin/attempts/:attemptId/questions/:questionId/review  validateUUID(attemptId) > validateUUID(questionId) > sessionRequired > <anonymous>
 GET /api/tests/public/topics  <anonymous>
 GET /api/tests/public/tests  sessionRequired > <anonymous>
 GET /api/tests/public/topics/:slug/tests  sessionRequired > <anonymous>
@@ -108,9 +109,11 @@ POST /api/tests/public/tests/:id/start  validateUUID(id) > sessionRequired > <an
 GET /api/tests/public/tests/:id/sessions/:sessionId  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 PATCH /api/tests/public/tests/:id/sessions/:sessionId/answers  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 POST /api/tests/public/tests/:id/submit  validateUUID(id) > sessionRequired > <anonymous>
+POST /api/tests/public/tests/:id/sessions/:sessionId/uploads-done  validateUUID(id) > validateUUID(sessionId) > sessionRequired > <anonymous>
 PUT /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > photoBodyGate > singleFileUpload > <anonymous>
 DELETE /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos/:photoId  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > validateUUID(photoId) > sessionRequired > answerPhotoTarget > <anonymous>
 GET /api/tests/public/tests/:id/sessions/:sessionId/questions/:questionId/photos  validateUUID(id) > validateUUID(sessionId) > validateUUID(questionId) > sessionRequired > answerPhotoTarget > <anonymous>
+GET /api/tests/public/attempts/:attemptId  validateUUID(attemptId) > sessionRequired > <anonymous>
 GET /api/answer-photos/:photoId/:variant  validateUUID(photoId) > sessionRequired > <anonymous>
 GET /api/settings/charts  sessionRequired > <anonymous>
 PUT /api/settings/charts  sessionRequired > requirePerm(settings.manage) > <anonymous>

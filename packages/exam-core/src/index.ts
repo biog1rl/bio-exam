@@ -88,6 +88,26 @@ export type {
 	SubmitAttemptError,
 	SubmitAttemptRequest,
 } from './attempt-result'
+export {
+	AdminOpenAnswerSchema,
+	OPEN_REVIEW_COMMENT_MAX_LENGTH,
+	OPEN_REVIEW_NO_ANSWER_COMMENT,
+	OpenAnswerPhotoSchema,
+	OpenReviewRequestSchema,
+	OpenReviewResponseSchema,
+	OpenReviewSchema,
+	REVIEW_ERROR_CODES,
+	SavedOpenReviewSchema,
+	StudentOpenReviewSchema,
+} from './answer-review'
+export type {
+	AdminOpenAnswer,
+	OpenReview,
+	OpenReviewRequest,
+	OpenReviewResponse,
+	SavedOpenReview,
+	StudentOpenReview,
+} from './answer-review'
 export { AttemptSessionSchema, SaveAttemptDraftRequestSchema, SessionFateSchema } from './attempt-session'
 export type { AttemptSession, SaveAttemptDraftRequest, SessionFate } from './attempt-session'
 export { MatchingPairsSchema, OptionSchema, QuestionIdValueSchema, QuestionKeyPayloadSchema } from './content'
@@ -110,6 +130,7 @@ export {
 	isAutoScoredTemplate,
 	isMistakeMetricAllowedForTemplate,
 	MISTAKE_METRICS,
+	OPEN_QUESTION_MAX_POINTS,
 	QUESTION_UI_TEMPLATES,
 	QuestionTypeDefinitionSchema,
 	QuestionTypeScoringRuleSchema,

@@ -5,7 +5,7 @@ import { test } from 'vitest'
 
 import { getCreateQuestionsValidationError } from './components/test-editor/test-editor-utils'
 import { validateQuestion } from './question-validation'
-import type { Question, QuestionTypeDefinition } from './types'
+import { normalizeQuestionForSave, type Question, type QuestionTypeDefinition } from './types'
 
 function typeOf(key: string): QuestionTypeDefinition {
 	const builtin = getBuiltinQuestionTypeByKey(key)
@@ -154,4 +154,20 @@ test('getCreateQuestionsValidationError: префикс номера вопро�
 		getCreateQuestionsValidationError([question], [typeOf('radio')]),
 		'Вопрос 1: добавьте минимум 2 варианта ответа'
 	)
+})
+
+test('открытый вопрос уходит в сохранение с пустым ключом, даже если сервер отдал null', () => {
+	const open = {
+		type: 'open',
+		questionUiTemplate: 'open',
+		questionTypeTitle: 'Открытый вопрос',
+		order: 0,
+		points: 3,
+		options: null,
+		matchingPairs: null,
+		promptText: 'Опишите',
+		explanationText: 'Эталон',
+		correct: null,
+	} as unknown as Question
+	assert.equal(normalizeQuestionForSave(open).correct, '')
 })

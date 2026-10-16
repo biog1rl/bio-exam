@@ -68,7 +68,7 @@ export function AttemptReviewHero({
 				)}
 				<StatChip label="вопросов" value={questions.length} />
 				<StatChip label="верно" value={correctCount} />
-				<StatChip label="время" value={telemetryStats ? formatDuration(telemetryStats.totalMs) : 'нет'} />
+				{telemetryStats ? <StatChip label="время" value={formatDuration(telemetryStats.totalMs)} /> : null}
 			</ul>
 			{view.kind === 'pending' ? (
 				<p className="text-sm text-muted-foreground">

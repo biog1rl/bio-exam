@@ -1,4 +1,4 @@
-import { SHORT_TEXT_MAX_LENGTH } from '@bio-exam/exam-core'
+import { OPEN_TEXT_MAX_LENGTH, SHORT_TEXT_MAX_LENGTH } from '@bio-exam/exam-core'
 
 import type { PublicTestQuestion, TestAnswerValue } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
@@ -8,6 +8,7 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Textarea } from '../ui/textarea'
 
 type Props = {
 	question: PublicTestQuestion
@@ -98,6 +99,32 @@ export function QuestionInput({
 				{template === 'sequence_digits' ? (
 					<p className="text-xs text-muted-foreground">Последовательность вводится цифрами без пробелов.</p>
 				) : null}
+			</div>
+		)
+	}
+
+	if (template === 'open') {
+		const value = typeof answer === 'string' ? answer : ''
+		const inputId = `q-${question.id}-open`
+		const counterId = `${inputId}-count`
+		return (
+			<div className="space-y-1">
+				<Textarea
+					id={inputId}
+					value={value}
+					onChange={(event) => onInputTextAnswer(question.id, event.target.value)}
+					placeholder={readOnly ? undefined : 'Введите развёрнутый ответ'}
+					maxLength={OPEN_TEXT_MAX_LENGTH}
+					readOnly={readOnly}
+					disabled={disabled && !readOnly}
+					rows={8}
+					aria-label="Развёрнутый ответ"
+					aria-describedby={counterId}
+					className={cn('min-h-40 bg-white', readOnly && 'read-only:bg-muted')}
+				/>
+				<p id={counterId} className="text-xs text-muted-foreground tabular-nums">
+					{value.length} из {OPEN_TEXT_MAX_LENGTH} знаков
+				</p>
 			</div>
 		)
 	}

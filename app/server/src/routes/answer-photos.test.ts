@@ -151,7 +151,7 @@ describe('GET /api/answer-photos/:photoId/:variant', () => {
 			[photo.photoId]
 		)
 		assert.ok(links.rows[0]?.session_attempt)
-		assert.equal(links.rows[0]?.photo_attempt, null)
+		assert.equal(links.rows[0]?.photo_attempt, links.rows[0]?.session_attempt)
 
 		const reviewed = await getPhoto(teacherOfTopic.cookie, photo.photoId, 'full')
 		assert.equal(reviewed.status, 200)

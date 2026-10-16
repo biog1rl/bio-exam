@@ -4,6 +4,7 @@ import MdxRenderer from '@/components/tests/MdxRenderer'
 import type { AttemptQuestionView, AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 import { cn } from '@/lib/utils/cn'
 
+import { OpenAnswerReview } from './OpenAnswerReview'
 import { QuestionAnswerReview } from './QuestionAnswerReview'
 import {
 	ADMIN_REVIEW_NOTES,
@@ -21,11 +22,13 @@ export function AttemptQuestionsList({
 	questions,
 	allQuestions,
 	results,
+	onReviewSaved,
 }: {
 	attempt: AttemptReviewData
 	questions: PublicTestQuestion[]
 	allQuestions: PublicTestQuestion[]
 	results: AttemptQuestionView[]
+	onReviewSaved: () => void
 }) {
 	if (questions.length === 0) {
 		return (
@@ -74,11 +77,15 @@ export function AttemptQuestionsList({
 							/>
 						</div>
 
-						<QuestionAnswerReview
-							question={question}
-							studentAnswer={studentAnswer}
-							view={view ?? emptyQuestionView(question.id)}
-						/>
+						{view?.open ? (
+							<OpenAnswerReview attempt={attempt} view={view} onSaved={onReviewSaved} />
+						) : (
+							<QuestionAnswerReview
+								question={question}
+								studentAnswer={studentAnswer}
+								view={view ?? emptyQuestionView(question.id)}
+							/>
+						)}
 
 						{note ? (
 							<p

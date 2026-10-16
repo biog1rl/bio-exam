@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { QuestionVerdicts } from './adapters/types'
 import { ANSWER_VIOLATION_REASONS } from './answer-limits'
+import { AdminOpenAnswerSchema, StudentOpenReviewSchema } from './answer-review'
 import { REVIEW_STATUSES } from './outcome'
 import { MISTAKE_METRICS, QUESTION_UI_TEMPLATES, type QuestionUiTemplate } from './registry'
 import { TelemetryMapSchema } from './telemetry'
@@ -14,6 +15,7 @@ export const SUBMIT_ERROR_CODES = {
 	alreadySubmitted: 'ATTEMPT_ALREADY_SUBMITTED',
 	timeExpired: 'TIME_EXPIRED',
 	answersInvalid: 'ANSWERS_INVALID',
+	openAnswerEmpty: 'OPEN_ANSWER_EMPTY',
 } as const
 
 export const ATTEMPT_SUBMIT_SOURCES = ['client', 'deadline'] as const
@@ -140,6 +142,9 @@ export const AttemptQuestionViewSchema = z.object({
 	keyVisible: z.boolean(),
 	mistakes: z.number().int().nonnegative().nullable(),
 	verdicts: QuestionVerdictsSchema.nullable(),
+	open: AdminOpenAnswerSchema.optional(),
+	review: StudentOpenReviewSchema.nullable().optional(),
+	referenceText: z.string().nullable().optional(),
 })
 
 const AttemptViewObjectSchema = z.object({
@@ -179,10 +184,12 @@ export const SubmitAttemptErrorSchema = z.object({
 		SUBMIT_ERROR_CODES.alreadySubmitted,
 		SUBMIT_ERROR_CODES.timeExpired,
 		SUBMIT_ERROR_CODES.answersInvalid,
+		SUBMIT_ERROR_CODES.openAnswerEmpty,
 	]),
 	attemptId: z.string().uuid().nullable().optional(),
 	reason: z.enum(ANSWER_VIOLATION_REASONS).optional(),
 	limit: z.number().int().positive().optional(),
+	questionIds: z.array(z.string().uuid()).optional(),
 	submitSource: z.enum(ATTEMPT_SUBMIT_SOURCES).optional(),
 	uploadClosesAt: z.string().nullable().optional(),
 	serverNow: z.string().optional(),
@@ -194,6 +201,7 @@ export const AdminAttemptViewSchema = AttemptViewObjectSchema.extend({
 	userId: z.string().uuid(),
 	answers: z.record(z.string(), z.unknown()),
 	telemetry: TelemetryMapSchema.nullable(),
+	reviewReady: z.boolean().optional(),
 }).superRefine(requireResultNullsOnlyWhenPending)
 
 export type AnswerValue = z.infer<typeof AnswerValueSchema>

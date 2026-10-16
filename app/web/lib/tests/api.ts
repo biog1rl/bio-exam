@@ -21,6 +21,7 @@ export type AttemptRequestErrorDetails = {
 	uploadClosesAt?: string | null
 	serverNow?: string | null
 	attempt?: AttemptView | null
+	questionIds?: readonly string[] | null
 }
 
 export class AttemptRequestError extends Error {
@@ -33,6 +34,7 @@ export class AttemptRequestError extends Error {
 	readonly uploadClosesAt: string | null
 	readonly serverNow: string | null
 	readonly attempt: AttemptView | null
+	readonly questionIds: readonly string[]
 
 	constructor(
 		status: number,
@@ -53,6 +55,7 @@ export class AttemptRequestError extends Error {
 		this.uploadClosesAt = details.uploadClosesAt ?? null
 		this.serverNow = details.serverNow ?? null
 		this.attempt = details.attempt ?? null
+		this.questionIds = details.questionIds ?? []
 	}
 }
 
@@ -71,6 +74,7 @@ const EMPTY_DETAILS: Required<AttemptRequestErrorDetails> = {
 	uploadClosesAt: null,
 	serverNow: null,
 	attempt: null,
+	questionIds: null,
 }
 
 function readAttemptErrorBody(body: unknown): AttemptErrorBody {
@@ -91,6 +95,7 @@ function readAttemptErrorBody(body: unknown): AttemptErrorBody {
 			uploadClosesAt: envelope?.uploadClosesAt ?? null,
 			serverNow: envelope?.serverNow ?? null,
 			attempt: attempt.success ? attempt.data : null,
+			questionIds: envelope?.questionIds ?? null,
 		},
 	}
 }

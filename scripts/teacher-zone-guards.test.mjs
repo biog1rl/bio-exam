@@ -29,6 +29,7 @@ const QUESTION_ROUTES = 'app/server/src/routes/tests/admin/questions.ts'
 const TESTS_DELETE_ROUTES = 'app/server/src/routes/tests/admin/tests-delete.ts'
 const EXPORT_ROUTES = 'app/server/src/routes/tests/admin/export.ts'
 const ATTEMPT_ROUTES = 'app/server/src/routes/tests/admin/attempts.ts'
+const REVIEW_ROUTES = 'app/server/src/routes/tests/admin/reviews.ts'
 const ASSIGNMENT_ROUTES = 'app/server/src/routes/tests/assignments.ts'
 const GROUP_ROUTES = 'app/server/src/routes/groups/index.ts'
 const USER_ROUTES = 'app/server/src/routes/users/index.ts'
@@ -48,6 +49,7 @@ const ROUTE_FILES = {
 	[TESTS_DELETE_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[EXPORT_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ATTEMPT_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[REVIEW_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ASSIGNMENT_ROUTES]: { router: 'assignmentsRouter', mount: '/api/tests/:testId/assignments' },
 	[GROUP_ROUTES]: { router: 'groupsRouter', mount: '/api/groups' },
 	[USER_ROUTES]: { router: 'router', mount: '/api/users' },
@@ -91,6 +93,9 @@ const INVENTORY = [
 		[QUESTION_DRAFT_ROUTES, 'delete', '/:testId/question-drafts/:draftId'],
 	].map(([file, method, routePath]) => route(file, method, routePath, OBJECT, ['canWriteTest('])),
 	route(ATTEMPT_ROUTES, 'get', '/admin/attempts/:attemptId', OBJECT, ['canReviewAttempt(']),
+	route(REVIEW_ROUTES, 'post', '/admin/attempts/:attemptId/questions/:questionId/review', OBJECT, [
+		'canReviewAttempt(',
+	]),
 	...[
 		[TOPIC_ROUTES, '/topics'],
 		[TESTS_LIST_ROUTES, '/'],
@@ -530,7 +535,7 @@ test('маршруты инвентаря D-14 решают доступ фун�
 		const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8')
 		assert.ok(registrations(source, config.router).length > 0, `${file}: нет регистраций ${config.router}`)
 	}
-	assert.equal(INVENTORY.length, 46)
+	assert.equal(INVENTORY.length, 47)
 	assert.deepEqual(inventoryViolations(REPO_ROOT), [])
 })
 
