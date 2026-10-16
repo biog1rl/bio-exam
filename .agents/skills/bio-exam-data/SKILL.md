@@ -34,6 +34,12 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 - Миграция `0030_attempt_upload_window`: `tests.photo_upload_window_minutes` (по умолчанию 15, CHECK 0-120) и `test_attempts.upload_closes_at`. Литералы окна в `schema.ts` равны константам `@bio-exam/exam-core`, равенство проверяет тест CHECK базы (23514).
 - `upload_closes_at` база считает в той же вставке, что попытку: `LEAST(момент сдачи, конец таймера)` плюс окно; `NULL` у попытки без открытого вопроса и при окне 0.
 
+## Фото ответа
+
+- Таблица `answer_photos` (миграция `0031_answer_photos`): `id` - UUID клиента без значения по умолчанию, `session_id` → `test_sessions` `ON DELETE cascade`, `question_id` → `questions` `ON DELETE cascade`, `attempt_id` → `test_attempts` `ON DELETE set null` (заполняет сдача, фаза 14), `uploaded_at` ставит база (`DEFAULT now()`), `expires_at` пока никто не пишет. Индекс `idx_answer_photos_session_question` (сессия, вопрос), RLS с политикой `deny_direct_access`.
+- Пишет таблицу только `app/server/src/services/answer-photos`; кроме него строку читает загрузчик зоны (`answerPhotoSubject` в `app/server/src/services/access-policy/zone-loader.ts`) для `canReadAnswerPhoto`. Лимит и константы - `packages/exam-core/src/answer-photos.ts`.
+- Файлы фото: `answers/{sessionId}/{questionId}/{photoId}/full.webp` и `thumb.webp`. При удалении теста, вопроса или темы строки уходят каскадом, файлы `answers/` остаются до очистки сирот.
+
 ## Журнал уведомлений
 
 - `notification_events`: событие получателя. `recipient_id` - `ON DELETE cascade`, `actor_id` - `ON DELETE set null` (ADR-0007), `kind` - текст без CHECK, `subject_type` и `subject_id` без внешнего ключа (объект может исчезнуть раньше события), `dedupe_key`, `collapse_key`, `params` (jsonb), `ref_seq`, `last_event_at`, `read_at`, `expires_at` (пока никто не пишет). Уникальность `(recipient_id, dedupe_key)`; индексы ленты `(recipient_id, last_event_at DESC, id DESC)` и непрочитанных (`recipient_id` где `read_at IS NULL`). RLS с политикой `deny_direct_access`.
@@ -42,7 +48,7 @@ description: Факты данных bio-exam (Drizzle, PostgreSQL 17, app/serve
 
 ## Удаление пользователя
 
-- Данные ученика (попытки, ответы, фото, проверки его ответов, уведомления) уходят вместе с ним: `ON DELETE cascade`; файлы хранилища сервис удаляет до строк.
+- Данные ученика (попытки, ответы, фото, проверки его ответов, уведомления) уходят вместе с ним: `ON DELETE cascade`; файлы хранилища сервис удаляет до строк (файлы фото ответа - `removeUserAnswerPhotos` из `app/server/src/services/answer-photos`).
 - Авторство для других (проверяющий, автор теста, назначивший, приглашавший, включая `users.created_by`) - `ON DELETE SET NULL`, столбец допускает NULL; сохранить историю можно только отключением пользователя.
 - Правило и причины: `docs/adr/0007-user-deletion-rule.md`. Тест-каталог `app/server/src/db/user-deletion-rule.test.ts` сам находит внешние ключи на `users` по `pg_constraint`; новая миграция держит его зелёным, исключения только в `LEGACY_EXCEPTIONS`.
 
