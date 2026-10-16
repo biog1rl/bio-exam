@@ -24,6 +24,7 @@ import { UnsentTextNote } from '@/components/tests/attempt-result/UnsentTextNote
 import { UploadWindowLine } from '@/components/tests/attempt-result/UploadWindowLine'
 import { QuestionAnswerReview } from '@/components/tests/attempt-review/QuestionAnswerReview'
 import { runnerResultCard } from '@/components/tests/runner-result-card'
+import { QueuedOpenAnswer } from '@/components/tests/student-attempt/QueuedOpenAnswer'
 import { prefetchSignedUrls, resolvesViaApi } from '@/lib/image-signed-url-cache'
 import { attemptResultView } from '@/lib/tests/attempt-result-view'
 import { formatPercent } from '@/lib/tests/format'
@@ -496,12 +497,16 @@ function AttemptRunner({
 												? `до ${questionResult.points} балл.`
 												: `${questionResult.earnedPoints} / ${questionResult.points} баллов`}
 										</p>
-										<QuestionAnswerReview
-											question={question}
-											studentAnswer={questionResult.userAnswer}
-											view={questionResult}
-										/>
-										{questionResult.explanationText ? (
+										{question.questionUiTemplate === 'open' ? (
+											<QueuedOpenAnswer handle={photoSession.photosFor(question.id)} view={questionResult} />
+										) : (
+											<QuestionAnswerReview
+												question={question}
+												studentAnswer={questionResult.userAnswer}
+												view={questionResult}
+											/>
+										)}
+										{question.questionUiTemplate !== 'open' && questionResult.explanationText ? (
 											<MdxRenderer
 												source={questionResult.explanationText}
 												className="prose mt-2 max-w-none text-sm whitespace-normal"
