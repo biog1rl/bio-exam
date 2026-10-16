@@ -52,6 +52,10 @@ export {
 	AnswerPhotoSchema,
 	AnswerPhotoUploadResponseSchema,
 	QuestionPhotoSettingsSchema,
+	UPLOAD_LINK_INVALID_MESSAGE,
+	UPLOAD_TOKEN_HEADER,
+	UploadLinkContextSchema,
+	UploadLinkIssueResponseSchema,
 	answerPhotoLimitMessage,
 } from './answer-photos'
 export type {
@@ -61,6 +65,8 @@ export type {
 	AnswerPhotoUploadResponse,
 	AnswerPhotoVariant,
 	QuestionPhotoSettings,
+	UploadLinkContext,
+	UploadLinkIssueResponse,
 } from './answer-photos'
 export {
 	AdminAttemptViewSchema,

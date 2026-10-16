@@ -590,8 +590,10 @@ export const answerPhotos = pgTable(
 		attemptId: uuid('attempt_id'),
 		uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
 		expiresAt: timestamp('expires_at', { withTimezone: true }),
+		uploadedVia: text('uploaded_via').notNull().default('session'),
 	},
 	(t) => ({
+		uploadedViaCheck: check('answer_photos_uploaded_via_check', sql`${t.uploadedVia} IN ('session', 'link')`),
 		sessionIdFk: foreignKey({
 			name: 'answer_photos_session_id_fkey',
 			columns: [t.sessionId],
@@ -608,6 +610,36 @@ export const answerPhotos = pgTable(
 			foreignColumns: [testAttempts.id],
 		}).onDelete('set null'),
 		sessionQuestionIdx: index('idx_answer_photos_session_question').on(t.sessionId, t.questionId),
+		denyDirectAccess: denyDirectAccessPolicy(),
+	})
+).enableRLS()
+
+export const answerUploadLinks = pgTable(
+	'answer_upload_links',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		sessionId: uuid('session_id').notNull(),
+		questionId: uuid('question_id').notNull(),
+		tokenHash: text('token_hash').notNull(),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		revokedAt: timestamp('revoked_at', { withTimezone: true }),
+		lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+	},
+	(t) => ({
+		sessionIdFk: foreignKey({
+			name: 'answer_upload_links_session_id_fkey',
+			columns: [t.sessionId],
+			foreignColumns: [testSessions.id],
+		}).onDelete('cascade'),
+		questionIdFk: foreignKey({
+			name: 'answer_upload_links_question_id_fkey',
+			columns: [t.questionId],
+			foreignColumns: [questions.id],
+		}).onDelete('cascade'),
+		tokenUniq: uniqueIndex('answer_upload_links_token_uniq').on(t.tokenHash),
+		activeSlotIdx: index('idx_answer_upload_links_active_slot')
+			.on(t.sessionId, t.questionId)
+			.where(sql`${t.revokedAt} IS NULL`),
 		denyDirectAccess: denyDirectAccessPolicy(),
 	})
 ).enableRLS()

@@ -6,6 +6,10 @@ import type { ZoneLoader } from './zone-loader.js'
 
 export type PermissionCheck = (req: Request, key: PermissionKey) => Promise<boolean>
 
+export type UserPermissionCheck = (userId: string, key: PermissionKey) => Promise<boolean>
+
+export type UserTestRead = (userId: string, testId: string) => Promise<boolean>
+
 export type TestScope = { all: true } | { all: false; topicIds: string[] }
 
 export type GroupScope = { all: true } | { all: false; groupIds: string[] }
@@ -37,6 +41,33 @@ type RequestZone = { userId: string; topicIds?: Promise<string[]>; groupIds?: Pr
 
 const DENY_ALL: AssignPredicate = () => false
 const ALLOW_ALL: AssignPredicate = () => true
+
+async function zonedFor(
+	userId: string | undefined,
+	has: (key: PermissionKey) => Promise<boolean>,
+	key: PermissionKey,
+	inZone: (userId: string) => Promise<boolean>
+): Promise<boolean> {
+	if (!userId) return false
+	if (!(await has(key))) return false
+	if (await has('zone.all')) return true
+	return inZone(userId)
+}
+
+async function topicListed(topicId: string | null, topicIds: () => Promise<string[]>): Promise<boolean> {
+	if (topicId === null) return false
+	return (await topicIds()).includes(topicId)
+}
+
+export function createUserTestRead(checkFor: UserPermissionCheck, zones: ZoneLoader): UserTestRead {
+	return (userId, testId) =>
+		zonedFor(
+			userId,
+			(key) => checkFor(userId, key),
+			'tests.read',
+			async (id) => topicListed(await zones.topicOfTest(testId), () => zones.topicIdsOf(id))
+		)
+}
 
 export function createAccessScope(check: PermissionCheck, zones: ZoneLoader): AccessScope {
 	const perRequest = new WeakMap<Request, RequestZone>()
@@ -100,21 +131,12 @@ export function createAccessScope(check: PermissionCheck, zones: ZoneLoader): Ac
 		}
 	}
 
-	async function topicInZone(req: Request, userId: string, topicId: string | null): Promise<boolean> {
-		if (topicId === null) return false
-		return (await myTopicIds(req, userId)).includes(topicId)
+	function topicInZone(req: Request, userId: string, topicId: string | null): Promise<boolean> {
+		return topicListed(topicId, () => myTopicIds(req, userId))
 	}
 
-	async function zoned(
-		req: Request,
-		key: PermissionKey,
-		inZone: (userId: string) => Promise<boolean>
-	): Promise<boolean> {
-		const userId = req.authUser?.id
-		if (!userId) return false
-		if (!(await check(req, key))) return false
-		if (await check(req, 'zone.all')) return true
-		return inZone(userId)
+	function zoned(req: Request, key: PermissionKey, inZone: (userId: string) => Promise<boolean>): Promise<boolean> {
+		return zonedFor(req.authUser?.id, (permission) => check(req, permission), key, inZone)
 	}
 
 	const canReadTest = (req: Request, testId: string) =>

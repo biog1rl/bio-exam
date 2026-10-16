@@ -8,17 +8,18 @@ import {
 import { and, asc, count, eq } from 'drizzle-orm'
 
 import { db } from '../../db/index.js'
-import { answerPhotos, questions, testSessions } from '../../db/schema.js'
+import { answerPhotos, testSessions } from '../../db/schema.js'
 import { isUniqueViolation } from '../../lib/db-errors.js'
-import { getQuestionTypeMapForTest } from '../../lib/tests/question-type-resolver.js'
 import { acceptImage, IMAGE_PROFILES } from '../assets/index.js'
 import {
 	photoUploadWindow,
 	sessionFilter,
 	uploadWindowRefusal,
 	type UploadWindowExecutor,
+	type UploadWindowState,
 } from '../attempt-sessions/index.js'
 import { storage } from '../storage/index.js'
+import { readPhotoRule, readPhotoSlot, type AnswerPhotoPlace } from './slot.js'
 
 export {
 	OPEN_PHOTO_ABSENT_SQL,
@@ -26,15 +27,21 @@ export {
 	emptyOpenQuestionIds,
 	sessionHasPhotos,
 } from './open-answer-rule.js'
+export {
+	placeOfSession,
+	readPhotoSlot,
+	type AnswerPhotoOwner,
+	type AnswerPhotoPlace,
+	type PhotoSlot,
+	type PhotoSlotRefusal,
+} from './slot.js'
 
 export const ANSWER_PHOTO_NOT_FOUND = 'Фото не найдено'
 export const ANSWER_PHOTO_TARGET_MISSING = 'Ответ для фото не найден'
 export const ANSWER_PHOTO_CONFLICT = 'Это фото уже прикреплено к другому ответу'
 export const FILE_MISSING = 'Файл не передан'
 
-export type AnswerPhotoOwner = { testId: string; userId: string }
-
-export type AnswerPhotoPlace = { owner: AnswerPhotoOwner; sessionId: string; questionId: string }
+export type AnswerPhotoSource = 'session' | 'link'
 
 type WindowRefused = { kind: 'window'; status: 422; body: UploadWindowRefusal }
 
@@ -85,27 +92,18 @@ async function removeQuietly(keys: string[]): Promise<void> {
 	}
 }
 
-async function windowRefused(executor: UploadWindowExecutor, sessionId: string): Promise<WindowRefused | null> {
-	const state = await photoUploadWindow(executor, { sessionId })
-	if (state === null) return null
+function refusedWindow(state: UploadWindowState): WindowRefused | null {
 	const refusal = uploadWindowRefusal(state)
 	return refusal ? { kind: 'window', ...refusal } : null
 }
 
-async function findPhotoRow(executor: UploadWindowExecutor, photoId: string): Promise<PhotoRow | null> {
-	const [row] = await executor.select(PHOTO_COLUMNS).from(answerPhotos).where(eq(answerPhotos.id, photoId)).limit(1)
-	return row ?? null
+async function windowRefused(executor: UploadWindowExecutor, sessionId: string): Promise<WindowRefused | null> {
+	const state = await photoUploadWindow(executor, { sessionId })
+	return state === null ? null : refusedWindow(state)
 }
 
-async function readPhotoRule(
-	executor: UploadWindowExecutor,
-	questionId: string
-): Promise<{ allowPhotos: boolean; maxPhotos: number } | null> {
-	const [row] = await executor
-		.select({ allowPhotos: questions.allowPhotos, maxPhotos: questions.maxPhotos })
-		.from(questions)
-		.where(eq(questions.id, questionId))
-		.limit(1)
+async function findPhotoRow(executor: UploadWindowExecutor, photoId: string): Promise<PhotoRow | null> {
+	const [row] = await executor.select(PHOTO_COLUMNS).from(answerPhotos).where(eq(answerPhotos.id, photoId)).limit(1)
 	return row ?? null
 }
 
@@ -117,38 +115,22 @@ async function countPhotos(executor: UploadWindowExecutor, place: AnswerPhotoPla
 	return row?.value ?? 0
 }
 
-export async function findPhotoTarget(place: AnswerPhotoPlace): Promise<boolean> {
-	const [session] = await db
-		.select({ id: testSessions.id })
-		.from(testSessions)
-		.where(sessionFilter({ sessionId: place.sessionId, owner: place.owner }))
-		.limit(1)
-	if (!session) return false
-	const [question] = await db
-		.select({ type: questions.type })
-		.from(questions)
-		.where(and(eq(questions.id, place.questionId), eq(questions.testId, place.owner.testId)))
-		.limit(1)
-	if (!question) return false
-	const typeMap = await getQuestionTypeMapForTest({ testId: place.owner.testId, includeInactive: true })
-	return typeMap[question.type]?.uiTemplate === 'open'
-}
-
 export async function uploadAnswerPhoto(
 	place: AnswerPhotoPlace,
 	photoId: string,
-	buffer: Buffer
+	buffer: Buffer,
+	via: AnswerPhotoSource
 ): Promise<UploadOutcome> {
 	const known = await findPhotoRow(db, photoId)
 	if (known) {
 		if (!sameAnswer(known, place)) return { kind: 'conflict' }
 		return { kind: 'existing', photo: toPhoto(known), count: await countPhotos(db, place) }
 	}
-	const early = await windowRefused(db, place.sessionId)
+	const slot = await readPhotoSlot(db, place)
+	if (slot.kind === 'refused') return { kind: 'missing' }
+	const early = refusedWindow(slot.window)
 	if (early) return early
-	const earlyRule = await readPhotoRule(db, place.questionId)
-	if (!earlyRule) return { kind: 'missing' }
-	if (!earlyRule.allowPhotos) return { kind: 'forbidden' }
+	if (!slot.rule.allowPhotos) return { kind: 'forbidden' }
 
 	const accepted = await acceptImage(buffer, IMAGE_PROFILES.answerPhoto)
 	const target = { sessionId: place.sessionId, questionId: place.questionId, id: photoId }
@@ -191,6 +173,7 @@ export async function uploadAnswerPhoto(
 					sessionId: place.sessionId,
 					questionId: place.questionId,
 					attemptId: session.attemptId,
+					uploadedVia: via,
 				})
 				.returning(PHOTO_COLUMNS)
 			if (!inserted) throw new Error('uploadAnswerPhoto: строка фото не вставлена')
@@ -206,7 +189,7 @@ export async function uploadAnswerPhoto(
 }
 
 export async function listAnswerPhotos(place: AnswerPhotoPlace): Promise<AnswerPhoto[] | null> {
-	if (!(await findPhotoTarget(place))) return null
+	if ((await readPhotoSlot(db, place)).kind !== 'slot') return null
 	const rows = await db
 		.select(PHOTO_COLUMNS)
 		.from(answerPhotos)
@@ -216,6 +199,7 @@ export async function listAnswerPhotos(place: AnswerPhotoPlace): Promise<AnswerP
 }
 
 export async function deleteAnswerPhoto(place: AnswerPhotoPlace, photoId: string): Promise<DeleteOutcome> {
+	if ((await readPhotoSlot(db, place)).kind !== 'slot') return { kind: 'missing' }
 	const outcome = await db.transaction(async (tx): Promise<DeleteOutcome & { row?: PhotoRow }> => {
 		const [session] = await tx
 			.select({ id: testSessions.id })

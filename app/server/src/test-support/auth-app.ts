@@ -145,17 +145,25 @@ export async function call(
 	ctx: AuthApp,
 	method: string,
 	path: string,
-	options: { cookies?: CookieJar | string; ip?: string; body?: unknown } = {}
+	options: {
+		cookies?: CookieJar | string
+		ip?: string
+		body?: unknown
+		headers?: Record<string, string>
+		form?: FormData
+	} = {}
 ): Promise<Reply> {
+	if (options.form && options.body !== undefined) throw new Error('call: body and form are mutually exclusive')
 	const headers: Record<string, string> = { 'x-forwarded-for': options.ip ?? nextIp() }
 	const cookie =
 		typeof options.cookies === 'string' ? options.cookies : options.cookies && cookieHeader(options.cookies)
 	if (cookie) headers.cookie = cookie
+	Object.assign(headers, options.headers)
 	if (options.body !== undefined) headers['content-type'] = 'application/json'
 	const response = await fetch(`${ctx.baseUrl}${path}`, {
 		method,
 		headers,
-		body: options.body === undefined ? undefined : JSON.stringify(options.body),
+		body: options.form ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
 	})
 	const text = await response.text()
 	let body: Record<string, unknown>

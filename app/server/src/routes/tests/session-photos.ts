@@ -2,19 +2,19 @@ import { ANSWER_PHOTO_FORBIDDEN_MESSAGE, ANSWER_PHOTO_MAX_BYTES, answerPhotoLimi
 
 import { Router, type NextFunction, type Request, type Response } from 'express'
 
+import { db } from '../../db/index.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { inFlightGate } from '../../middleware/in-flight-gate.js'
 import { singleFileUpload } from '../../middleware/upload.js'
 import { validateUUID } from '../../middleware/validateParams.js'
-import { canReadTest } from '../../services/access-policy/index.js'
 import {
 	ANSWER_PHOTO_CONFLICT,
 	ANSWER_PHOTO_NOT_FOUND,
 	ANSWER_PHOTO_TARGET_MISSING,
 	deleteAnswerPhoto,
 	FILE_MISSING,
-	findPhotoTarget,
 	listAnswerPhotos,
+	readPhotoSlot,
 	uploadAnswerPhoto,
 	type AnswerPhotoPlace,
 	type DeleteOutcome,
@@ -26,7 +26,6 @@ import {
 	IMAGE_INTAKE_QUEUE_LIMIT,
 	ImageRejectedError,
 } from '../../services/assets/index.js'
-import { checkAttemptAccess } from '../../services/attempt-sessions/index.js'
 
 const router = Router()
 
@@ -50,19 +49,17 @@ function placeOf(req: Request): AnswerPhotoPlace {
 
 async function answerPhotoTarget(req: Request, res: Response, next: NextFunction) {
 	try {
-		const place = placeOf(req)
-		const testId = place.owner.testId
-		const access = await checkAttemptAccess({
-			testId,
-			userId: place.owner.userId,
-			canReadTest: () => canReadTest(req, testId),
-		})
-		if (!access.ok) {
-			if (access.status === 404) return res.status(404).json({ error: 'Test not found' })
-			return res.status(403).json({ error: 'Тест не назначен' })
+		const slot = await readPhotoSlot(db, placeOf(req))
+		if (slot.kind === 'slot') return next()
+		switch (slot.reason) {
+			case 'test_missing':
+				return res.status(404).json({ error: 'Test not found' })
+			case 'not_assigned':
+				return res.status(403).json({ error: 'Тест не назначен' })
+			case 'slot_missing':
+			case 'user_inactive':
+				return res.status(404).json({ error: ANSWER_PHOTO_TARGET_MISSING })
 		}
-		if (!(await findPhotoTarget(place))) return res.status(404).json({ error: ANSWER_PHOTO_TARGET_MISSING })
-		return next()
 	} catch (e) {
 		return next(e)
 	}
@@ -111,7 +108,7 @@ router.put(
 	async (req, res, next) => {
 		try {
 			if (!req.file) return res.status(400).json({ error: FILE_MISSING })
-			const outcome = await uploadAnswerPhoto(placeOf(req), req.params.photoId as string, req.file.buffer)
+			const outcome = await uploadAnswerPhoto(placeOf(req), req.params.photoId as string, req.file.buffer, 'session')
 			return sendUploadOutcome(res, outcome)
 		} catch (e) {
 			if (e instanceof ImageRejectedError && e.statusCode === 503) {
