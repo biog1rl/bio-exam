@@ -95,7 +95,7 @@ Scope: Milestone v3.0 "Открытые задания с фото и ручно
 ### Tech debt from v1.0
 
 - [x] **DEBT-01**: Existing upload routes return 413/415/400 for size and type errors instead of 500
-- [ ] **DEBT-02**: The 404 page shows its image, the protected area has one toaster, and `DashboardClient` has no unused variables
+- [x] **DEBT-02**: The 404 page shows its image, the protected area has one toaster, and `DashboardClient` has no unused variables
 - [ ] **DEBT-03**: A teacher can invite students, with the active-account check at invite time
 - [ ] **DEBT-04**: Admin test reading returns correct answers only to users allowed to see them, and the user directory endpoint is limited to users who need it
 - [ ] **DEBT-05**: The invite screen uses the typed request layer, shows clear texts for 400/404/409 and blocks double submit
@@ -238,7 +238,7 @@ Which phases cover which requirements. Filled 2026-10-06 during roadmap creation
 | PLAT-04 | Phase 11 | Complete |
 | PLAT-05 | Phase 9 | Complete |
 | DEBT-01 | Phase 12 | Complete |
-| DEBT-02 | Phase 13 | Pending |
+| DEBT-02 | Phase 13 | Complete (сделано вне фазы, MVP 2026-10-16) |
 | DEBT-03 | Phase 18 | Pending |
 | DEBT-04 | Phase 18 | Pending |
 | DEBT-05 | Phase 18 | Pending |
