@@ -68,7 +68,6 @@ const SCOPED_ROUTES = [
 	['put', '/:id/questions/reorder'],
 	['post', '/:id/questions/:questionId/move'],
 	['delete', '/:id'],
-	['post', '/:id/assets'],
 	['get', '/:id/export'],
 	['get', '/topics/:slug/export'],
 ]

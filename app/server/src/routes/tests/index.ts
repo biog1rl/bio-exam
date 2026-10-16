@@ -3,7 +3,6 @@
  */
 import { Router } from 'express'
 
-import { assetsRouter } from './admin/assets.js'
 import { attemptsRouter } from './admin/attempts.js'
 import { exportRouter } from './admin/export.js'
 import { questionDraftsRouter } from './admin/question-drafts.js'
@@ -28,7 +27,6 @@ router.use(questionDraftsRouter)
 router.use(testsCoreRouter)
 router.use(questionsRouter)
 router.use(testsDeleteRouter)
-router.use(assetsRouter)
 router.use(exportRouter)
 
 // Admin: test-side assignment endpoints

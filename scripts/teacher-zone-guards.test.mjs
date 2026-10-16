@@ -27,7 +27,6 @@ const QUESTION_DRAFT_ROUTES = 'app/server/src/routes/tests/admin/question-drafts
 const TESTS_CORE_ROUTES = 'app/server/src/routes/tests/admin/tests-core.ts'
 const QUESTION_ROUTES = 'app/server/src/routes/tests/admin/questions.ts'
 const TESTS_DELETE_ROUTES = 'app/server/src/routes/tests/admin/tests-delete.ts'
-const ASSET_ROUTES = 'app/server/src/routes/tests/admin/assets.ts'
 const EXPORT_ROUTES = 'app/server/src/routes/tests/admin/export.ts'
 const ATTEMPT_ROUTES = 'app/server/src/routes/tests/admin/attempts.ts'
 const ASSIGNMENT_ROUTES = 'app/server/src/routes/tests/assignments.ts'
@@ -46,7 +45,6 @@ const ROUTE_FILES = {
 	[TESTS_CORE_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[QUESTION_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[TESTS_DELETE_ROUTES]: { router: 'router', mount: '/api/tests' },
-	[ASSET_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[EXPORT_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ATTEMPT_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ASSIGNMENT_ROUTES]: { router: 'assignmentsRouter', mount: '/api/tests/:testId/assignments' },

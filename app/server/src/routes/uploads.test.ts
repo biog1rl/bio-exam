@@ -29,9 +29,7 @@ let dbModule: DbModule
 let schema: SchemaModule
 let mem: MemoryStorageAdapter
 let adminId = ''
-let testId = ''
 let cookie = ''
-let studentCookie = ''
 let tinyPng: Buffer
 let oversize: Buffer
 
@@ -56,17 +54,6 @@ beforeAll(async () => {
 	assert.ok(admin)
 	adminId = admin.id
 	await db.insert(schema.userRoles).values({ userId: adminId, roleKey: 'admin' })
-	const [topic] = await db
-		.insert(schema.topics)
-		.values({ slug: 'biology', title: 'Биология' })
-		.returning({ id: schema.topics.id })
-	assert.ok(topic)
-	const [created] = await db
-		.insert(schema.tests)
-		.values({ topicId: topic.id, slug: 'cell', title: 'Клетка' })
-		.returning({ id: schema.tests.id })
-	assert.ok(created)
-	testId = created.id
 
 	tinyPng = await sharp({
 		create: { width: 64, height: 64, channels: 4, background: { r: 0, g: 128, b: 255, alpha: 1 } },
@@ -75,17 +62,8 @@ beforeAll(async () => {
 		.toBuffer()
 	oversize = Buffer.concat([tinyPng, Buffer.alloc(FIVE_MB + 1 - tinyPng.length)])
 
-	await db.insert(schema.roles).values({ key: 'user' }).onConflictDoNothing()
-	const [student] = await db
-		.insert(schema.users)
-		.values({ login: 'uploads_student', isActive: true })
-		.returning({ id: schema.users.id })
-	assert.ok(student)
-	await db.insert(schema.userRoles).values({ userId: student.id, roleKey: 'user' })
-
 	server = await startTestServer(app)
 	cookie = await sessionCookieFor({ id: adminId })
-	studentCookie = await sessionCookieFor({ id: student.id })
 }, 60_000)
 
 afterAll(async () => {
@@ -140,13 +118,6 @@ const DOCS_FILTER_ERROR = 'Поддерживаются только JPEG, PNG �
 
 const ROUTES = [
 	{
-		name: 'tests/assets',
-		path: () => `/api/tests/${testId}/assets`,
-		field: 'file',
-		filterError: IMAGE_FILTER_ERROR,
-		okStatus: 201,
-	},
-	{
 		name: 'users/avatar',
 		path: () => '/api/users/avatar',
 		field: 'avatar',
@@ -180,43 +151,6 @@ for (const route of ROUTES) {
 		})
 	})
 }
-
-describe('POST /api/tests/:id/assets', () => {
-	const route = () => `/api/tests/${testId}/assets`
-
-	test('PNG проходит через сервис ассетов: images/<hex>.webp в хранилище, ответ 201 с ключом', async () => {
-		const reply = await postFile(route(), 'file', png())
-		assert.equal(reply.status, 201)
-		const keys = mem.keys()
-		assert.equal(keys.length, 1)
-		const [key] = keys
-		assert.ok(key)
-		assert.match(key, /^images\/[0-9a-f]{32}\.webp$/)
-		assert.equal(reply.body.url, key)
-		const saved = mem.get(key)
-		assert.ok(saved)
-		assert.equal(saved.contentType, 'image/webp')
-		const meta = await sharp(saved.data).metadata()
-		assert.equal(meta.format, 'webp')
-		assert.deepEqual(mem.keys('topics/biology/cell'), [])
-	})
-
-	test('текст с типом image/png отклоняется проверкой сигнатуры: 400, в хранилище ничего не попадает', async () => {
-		const reply = await postFile(route(), 'file', textFile('image/png'))
-		assert.equal(reply.status, 400)
-		assert.equal(reply.body.error, DOCS_FILTER_ERROR)
-		assert.deepEqual(mem.keys(), [])
-	})
-
-	test('студент получает 403 до разбора файла', async () => {
-		for (const file of [png(), textFile('text/plain')]) {
-			const reply = await postFile(route(), 'file', file, {}, studentCookie)
-			assert.equal(reply.status, 403)
-			assert.equal(reply.body.error, 'Forbidden')
-		}
-		assert.deepEqual(mem.keys(), [])
-	})
-})
 
 describe('POST /api/users/avatar', () => {
 	test('PNG с параметрами кропа проходит через Sharp: оригинал и кроп 256x256 в хранилище, в users ключи, в ответе URL proxy', async () => {

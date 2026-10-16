@@ -221,7 +221,6 @@ const GUARD_ROWS: GuardRow[] = [
 		path: () => `/api/tests/${testId}/questions/reorder`,
 		denied: ['student'],
 	},
-	{ area: 'ассеты', method: 'POST', path: () => `/api/tests/${testId}/assets`, denied: ['student'] },
 	{ area: 'экспорт', method: 'GET', path: () => `/api/tests/${testId}/export`, denied: ['student'] },
 	{
 		area: 'дашборд',

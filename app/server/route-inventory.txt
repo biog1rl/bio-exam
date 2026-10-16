@@ -88,7 +88,6 @@ PUT /api/tests/:id/questions/reorder  validateUUID(id) > sessionRequired > <anon
 POST /api/tests/:id/questions/:questionId/move  validateUUID(id) > validateUUID(questionId) > sessionRequired > <anonymous>
 DELETE /api/tests/:id/questions/:questionId  validateUUID(id) > validateUUID(questionId) > sessionRequired > <anonymous>
 DELETE /api/tests/:id  validateUUID(id) > sessionRequired > <anonymous>
-POST /api/tests/:id/assets  validateUUID(id) > sessionRequired > requireTestWrite > multerMiddleware > <anonymous>
 GET /api/tests/:id/export  validateUUID(id) > sessionRequired > <anonymous>
 GET /api/tests/topics/:slug/export  sessionRequired > <anonymous>
 GET /api/tests/:testId/assignments  validateUUID(testId) > sessionRequired > <anonymous>
