@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>План фото ответов</title>
+<link rel="stylesheet" href="htmlplan.css">
+<script src="htmlplan.js" defer></script>
+<style data-mock-shared>
+  .ui { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1b19; background: #fff; border: 1px solid #ddd8cc; border-radius: 10px; overflow: hidden; }
+  .ui .hd { padding: 9px 14px; border-bottom: 1px solid #eee9dd; font-weight: 650; display: flex; gap: 8px; align-items: baseline; } .ui .hd small { color: #8a8578; font-weight: 400; }
+  .ui .body { padding: 12px 14px; color: #5f5a4f; }
+  .ui .grid { display: flex; gap: 8px; padding: 0 14px 10px; }
+  .ui .th { width: 64px; height: 64px; border-radius: 8px; background: #e6e0d2; border: 1px solid #ddd8cc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #5f5a4f; }
+  .ui .th.bad { background: #fbeae7; color: #b42318; }
+  .ui .ft { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-top: 1px solid #eee9dd; background: #faf8f3; }
+  .ui .btn { font-weight: 600; font-size: 13px; padding: 7px 12px; border-radius: 7px; border: 1px solid #ddd8cc; background: #fff; }
+  .ui .dim { color: #8a8578; }
+</style>
+<body>
+
+<header>
+  <h1>Фото ответов под сессией</h1>
+  <doc-changes new="14" changed="38" deleted="1"></doc-changes>
+  <details class="thread"><summary>Зачем · цель фазы 12 и решения</summary>
+    <doc-quote via="doc" from="ROADMAP, фаза 12">До 5 обработанных фото на открытый ответ с компьютера, приватная раздача, ограниченная память.</doc-quote>
+    <doc-quote via="doc" from="CONTEXT D-04">Мёртвый маршрут POST /api/tests/:id/assets удаляется.</doc-quote>
+    <doc-quote via="doc" from="CONTEXT D-17">Доступ проверяющего строится через сессию, а не через attempt_id фото.</doc-quote>
+    <doc-quote via="doc" from="CONTEXT D-20">Фото уходят по одному, три автоповтора, шестое отклоняется понятным текстом.</doc-quote>
+  </details>
+</header>
+
+<main>
+<doc-plan>
+
+<doc-claim>
+  <p>Ученик прикрепляет до пяти фото к открытому вопросу в раннере.</p>
+  <doc-mock frame="none" w="440"><template>
+<div class="ui">
+  <div class="hd">Фото к ответу <small data-ref="count">3 из 5</small></div>
+  <div class="grid"><span class="th">Фото 1</span><span class="th">Фото 2</span><span class="th bad" data-ref="failed">не ушло</span></div>
+  <div class="ft"><span class="btn">Добавить фото</span><span class="btn">Повторить</span><span class="dim">Фото 3: сеть недоступна</span></div>
+</div></template>
+    <doc-pin ref="count" title="Счётчик">Берётся из ответа сервера.</doc-pin>
+    <doc-pin ref="failed" anchor="tr" title="После трёх повторов">Показывает «Повторить».</doc-pin>
+  </doc-mock>
+  <doc-ask id="visible">
+    <p>Показывать блок фото после сдачи и дедлайна?</p>
+    <label><input type="radio" name="visible" value="open" checked> Только пока сессия открыта <small>экран после сдачи — фазы 13 и 14</small></label>
+    <label><input type="radio" name="visible" value="after"> Ещё и после «Ответ принят» <small>добавляет задачу в 12-09</small></label>
+  </doc-ask>
+
+  <doc-claim>
+    <p>Браузер уменьшает фото и отправляет по одному с тремя повторами.</p>
+    <doc-calls title="Очередь" caption="Паузы 1, 3 и 9 секунд. Повтор идёт с тем же photoId.">
+<script type="text/plain">
++ **createPhotoUploadQueue**(options)          @ app/web/components/tests/answer-photos/upload-queue.ts:1
++   **prepareForUpload**(file)                 @ app/web/components/tests/answer-photos/prepare-image.ts:1
++   **uploadAnswerPhoto**(target, photoId, file) @ app/web/lib/tests/answer-photos-api.ts:1
++   **uploadWindowRefusalText**(body)          @ app/web/lib/tests/upload-window.ts:1
+</script>
+    </doc-calls>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Смена вопроса во время загрузки не обрывает отправку.</p>
+    <doc-calls title="Очереди сессии" caption="Правка сквада: очереди живут в TestRunner, не в блоке.">
+<script type="text/plain">
+~ TestRunner                                   @ app/web/components/tests/TestRunner.tsx:368
++   **useAnswerPhotoSession**({ testId, sessionId })  @ app/web/components/tests/answer-photos/use-answer-photos.ts:1
++     photosFor(questionId)                    @ app/web/components/tests/answer-photos/use-answer-photos.ts:1
++   <**PhotoBlock**/>                          @ app/web/components/tests/answer-photos/PhotoBlock.tsx:1
+~ AttemptSnapshot.sessionId                    @ app/web/components/tests/attempt-lifecycle/lifecycle.ts:77
+</script>
+    </doc-calls>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Сервер хранит каждое фото один раз и не больше пяти на вопрос.</p>
+  <doc-calls title="Загрузка фото" caption="sharp работает вне транзакции. Лимит считается под блокировкой сессии.">
+<script type="text/plain">
++ PUT …/sessions/:sessionId/questions/:questionId/photos/:photoId  @ app/server/src/routes/tests/session-photos.ts:1
++   **uploadAnswerPhoto**(target, file)        @ app/server/src/services/answer-photos/index.ts:1
++     **acceptImage**(buffer, 'answerPhoto')   @ app/server/src/services/assets/image-intake.ts:1
++     photoUploadWindow(tx, { sessionId })     @ app/server/src/services/attempt-sessions/upload-window.ts:76
++     insert into answer_photos                @ app/server/src/services/answer-photos/index.ts:1
+</script>
+  </doc-calls>
+
+  <doc-claim>
+    <p>Повтор того же photoId возвращает ту же строку, дубля нет.</p>
+    <doc-schema id="table" lang="sql" title="0031_answer_photos.sql · эскиз" caption="Идентификатор задаёт клиент. Время ставит база.">
+<script type="text/plain">
+CREATE TABLE answer_photos (
+  id          uuid PRIMARY KEY,
+  session_id  uuid NOT NULL REFERENCES test_sessions(id) ON DELETE CASCADE,
+  question_id uuid NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  attempt_id  uuid REFERENCES test_attempts(id) ON DELETE SET NULL,
+  uploaded_at timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz
+);
+CREATE INDEX answer_photos_session_question ON answer_photos (session_id, question_id);
+</script>
+    </doc-schema>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Фото после закрытия окна получает отказ 422 с русским текстом.</p>
+    <doc-code title="upload-window.ts · существует" src="app/server/src/services/attempt-sessions/upload-window.ts" lines="76-91"></doc-code>
+    <doc-ask id="windowtext">
+      <p>Где строится текст отказа окна?</p>
+      <label><input type="radio" name="windowtext" value="web" checked> В web по коду и uploadClosesAt <small>время в поясе браузера, как в UI-SPEC фазы 11</small></label>
+      <label><input type="radio" name="windowtext" value="server"> Сервер кладёт готовый текст в поле message <small>время будет в поясе сервера</small></label>
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Удаление ученика удаляет его файлы фото до строки пользователя.</p>
+    <doc-calls title="Удаление пользователя" caption="Файлы после удаления теста или вопроса остаются сиротами до фазы 16.">
+<script type="text/plain">
+~ DELETE /api/users/:id                        @ app/server/src/routes/users.ts:1
++   **removeUserAnswerPhotos**(userId)         @ app/server/src/services/answer-photos/index.ts:1
+</script>
+    </doc-calls>
+    <doc-ask id="userdel">
+      <p>Чистить файлы фото при удалении пользователя уже в фазе 12?</p>
+      <label><input type="radio" name="userdel" value="now" checked> Да, ошибка хранилища прерывает удаление</label>
+      <label><input type="radio" name="userdel" value="later"> Нет, всё оставить очистке сирот фазы 16</label>
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Каждая загрузка картинки проходит один модуль приёма, память API ограничена.</p>
+  <doc-calls title="Модуль приёма" caption="Тип решает сигнатура. Один ограничитель на процесс.">
+<script type="text/plain">
++ **acceptImage**(buffer, profile)             @ app/server/src/services/assets/image-intake.ts:1
++   **IMAGE_PROFILES**                         @ app/server/src/services/assets/image-intake.ts:1
++   **createSlotLimiter**(concurrency, queue)  @ app/server/src/services/assets/image-intake.ts:1
+~ uploadImage (медиатека)                      @ app/server/src/services/assets/images.ts:1
+~ saveAvatar                                   @ app/server/src/services/assets/avatars.ts:1
++ **photo-memory-bench**                       @ app/server/src/scripts/photo-memory-bench.ts:1
+</script>
+  </doc-calls>
+  <doc-ask id="avatar">
+    <p>Что делать с исходником аватара?</p>
+    <label><input type="radio" name="avatar" value="recode" checked> Перекодировать в своём формате, снять метаданные <small>GPS ученика не лежит в avatars/; два побайтовых теста правятся</small></label>
+    <label><input type="radio" name="avatar" value="keep"> Хранить как есть, проверять только тип</label>
+  </doc-ask>
+
+  <doc-claim>
+    <p>Замер памяти на этой машине записан в ADR-0004, Linux-замер делает пользователь.</p>
+    <doc-calls title="Замер" caption="Числа macOS. Команда для образа API лежит в 12-10.">
+<script type="text/plain">
++ photo-memory-bench → таблица пика RSS         @ app/server/src/scripts/photo-memory-bench.ts:1
++ ADR-0004 «Обработка фото и память»           @ docs/adr/0004-storage-port-two-adapters.md:1
+</script>
+    </doc-calls>
+    <doc-ask id="pixels">
+        <p>Где действует лимит 50 млн пикселей?</p>
+        <label><input type="radio" name="pixels" value="all" checked> Во всех четырёх профилях <small>аватар теперь декодируется целиком</small></label>
+        <label><input type="radio" name="pixels" value="photo"> Только у фото ответа <small>медиатека и встроенные картинки как раньше</small></label>
+      </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Фото видит только владелец и проверяющий, остальные получают тот же 404.</p>
+  <doc-calls title="Раздача фото" caption="Заголовки private, no-store и CORP same-origin. Файл читает только этот маршрут.">
+<script type="text/plain">
++ GET /api/answer-photos/:photoId/:variant     @ app/server/src/routes/answer-photos.ts:1
++   **canReadAnswerPhoto**(req, photoId)       @ app/server/src/services/access-policy/scope.ts:1
+~     ZoneLoader.answerPhotoSubject            @ app/server/src/services/access-policy/zone-loader.ts:17
++   **NAMESPACE_READERS** (answers: владелец и проверяющие) @ app/server/src/services/storage/keys.ts:1
+~ /api/docs/assets/proxy и /signed             @ app/server/src/routes/docs/assets.ts:62
+</script>
+  </doc-calls>
+</doc-claim>
+
+<doc-claim>
+  <p>Загрузка аватара и медиатеки отвечает 413, 415 или 400 вместо 500.</p>
+  <doc-calls title="Отказы загрузки" caption="Один маршрут без вызывающих удаляется.">
+<script type="text/plain">
++ **singleFileUpload**({ field, maxBytes })     @ app/server/src/middleware/upload.ts:1
+- POST /api/tests/:id/assets                   @ app/server/src/routes/tests/admin/assets.ts:1   -- вызывающих нет
+~ POST /api/docs/assets                        @ app/server/src/routes/docs/assets.ts:62
+~ POST /api/users/avatar                       @ app/server/src/routes/avatar.ts:65
+</script>
+  </doc-calls>
+</doc-claim>
+
+<doc-claim aux="shared">
+  <p>Общее: контракт фото в exam-core и ворота фазы.</p>
+  <doc-calls title="Контракт и ворота" caption="Один источник для сервера и клиента.">
+<script type="text/plain">
++ ANSWER_PHOTO_MAX_COUNT = 5, ANSWER_PHOTO_MAX_BYTES, ANSWER_PHOTO_VARIANTS @ packages/exam-core/src/answer-photos.ts:1
++ e2e/tests/answer-photos.spec.ts              @ e2e/tests/answer-photos.spec.ts:1
+~ полный yarn e2e и yarn verify                @ package.json:1
+</script>
+  </doc-calls>
+</doc-claim>
+
+<doc-claim aux="scope">
+  <p>Не меняется: QR и страница телефона, редактор открытых вопросов, проверка учителем, срок хранения.</p>
+  <ul>
+    <li>Фаза 13: токен, QR, страница телефона без входа.</li>
+    <li>Фаза 14: редактор и сдача открытых вопросов, attempt_id у фото.</li>
+    <li>Фаза 16: срок хранения и очистка сирот, файлы при удалении теста и вопроса.</li>
+    <li>Клиент MediaLibrary.tsx и окно №3 в WINDOWS.md: waive с причиной (D-05).</li>
+    <li>Тип open остаётся скрытым от авторов до фазы 17.</li>
+  </ul>
+</doc-claim>
+
+</doc-plan>
+</main>
+</body>
+</html>

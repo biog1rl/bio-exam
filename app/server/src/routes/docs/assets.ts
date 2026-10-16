@@ -1,14 +1,12 @@
 import { Router, type Response } from 'express'
-import multer from 'multer'
 
 import { isApiError } from '../../lib/errors.js'
 import { requirePerm } from '../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
+import { singleFileUpload } from '../../middleware/upload.js'
 import { AssetInUseError } from '../../services/assets/images.js'
 import {
 	deleteImage,
-	IMAGE_TYPE_ERROR,
-	isAllowedImageMime,
 	listImages,
 	readServableImage,
 	resolveImageUrl,
@@ -16,20 +14,6 @@ import {
 } from '../../services/assets/index.js'
 
 const router = Router()
-
-const upload = multer({
-	storage: multer.memoryStorage(),
-	limits: {
-		fileSize: 5 * 1024 * 1024,
-	},
-	fileFilter: (_req, file, cb) => {
-		if (isAllowedImageMime(file.mimetype)) {
-			cb(null, true)
-		} else {
-			cb(new Error(IMAGE_TYPE_ERROR))
-		}
-	},
-})
 
 function replyError(res: Response, error: unknown, context: string, message: string) {
 	if (isApiError(error) && error.statusCode < 500) return res.status(error.statusCode).json({ error: error.message })
@@ -57,17 +41,23 @@ router.delete('/', sessionRequired(), requirePerm('tests', 'write'), async (req,
 	}
 })
 
-router.post('/', sessionRequired(), requirePerm('tests', 'write'), upload.single('file'), async (req, res) => {
-	try {
-		if (!req.file) {
-			return res.status(400).json({ error: 'Файл не передан' })
+router.post(
+	'/',
+	sessionRequired(),
+	requirePerm('tests', 'write'),
+	singleFileUpload({ field: 'file', maxBytes: 5 * 1024 * 1024 }),
+	async (req, res) => {
+		try {
+			if (!req.file) {
+				return res.status(400).json({ error: 'Файл не передан' })
+			}
+			const { path, filename } = await uploadImage(req.file.buffer)
+			return res.json({ success: true, path, filename })
+		} catch (error) {
+			return replyError(res, error, 'Error uploading image', 'Ошибка при загрузке изображения')
 		}
-		const { path, filename } = await uploadImage(req.file.buffer)
-		return res.json({ success: true, path, filename })
-	} catch (error) {
-		return replyError(res, error, 'Error uploading image', 'Ошибка при загрузке изображения')
 	}
-})
+)
 
 router.get('/proxy', sessionRequired(), async (req, res) => {
 	try {

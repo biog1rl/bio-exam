@@ -232,6 +232,7 @@ export function resolveQuestionTemplate(question: Pick<Question, 'questionUiTemp
 export function normalizeQuestionForSave(question: Question): Question {
 	const template = resolveQuestionTemplate(question)
 	if (!template) return question
+	if (template === 'open') return { ...question, correct: '' }
 	return {
 		...question,
 		correct: toCanonicalKey({ uiTemplate: template, key: question.correct }) as Question['correct'],

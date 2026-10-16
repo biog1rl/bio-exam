@@ -22,6 +22,7 @@ import {
 	classifyStartFailure,
 	classifySubmitFailure,
 	type SubmitFailure,
+	OPEN_ANSWER_EMPTY_REASON,
 	type SubmitRejection,
 } from '../attempt-submit-flow'
 import { resolveClientAttemptId, storedClientAttemptId, type ClientAttemptStorage } from '../client-attempt-id'
@@ -82,6 +83,8 @@ export type AttemptSnapshot = {
 	submitRejection: SubmitRejection | null
 	answers: Readonly<Record<string, AnswerValue>>
 	currentQuestionId: string | null
+	sessionId: string | null
+	photoSessionId: string | null
 	startedAt: string | null
 	secondsLeft: number | null
 	result: AttemptView | null
@@ -661,6 +664,18 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 		resolve()
 	}
 
+	function moveTo(questionId: string): void {
+		if (questionId !== position) {
+			closeSegment()
+			position = questionId
+			applyTelemetry(incrementQuestionVisit(telemetry, questionId))
+			openSegment()
+		}
+		recordPosition(storage, keys.wal, { sessionId: session?.sessionId ?? null, position })
+		queueTelemetry()
+		void queue?.flush()
+	}
+
 	function beginSubmit(auto: boolean): void {
 		leaveActive()
 		if (auto) autoFired = true
@@ -852,6 +867,19 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			emit()
 			return 'settled'
 		}
+		if (failure.kind === 'open-answer-empty') {
+			applyStorageEffects(storage, keys, 'submit-failed', { auto })
+			const positions = failure.questionIds
+				.map((id) => questionIds.indexOf(id) + 1)
+				.filter((number) => number > 0)
+				.sort((a, b) => a - b)
+			submitRejection = { reason: OPEN_ANSWER_EMPTY_REASON, positions }
+			enterActive(false)
+			const first = questionIds[(positions[0] ?? 0) - 1]
+			if (first) moveTo(first)
+			emit()
+			return 'settled'
+		}
 		if (failure.kind === 'finalized') {
 			applyAccepted(failure, current)
 			return 'settled'
@@ -1009,6 +1037,8 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 			submitRejection,
 			answers,
 			currentQuestionId: position,
+			sessionId: session?.sessionId ?? null,
+			photoSessionId: (session ?? closedSession)?.sessionId ?? null,
 			startedAt: session?.startedAt ?? null,
 			secondsLeft: left,
 			result,
@@ -1106,15 +1136,7 @@ export function createAttemptLifecycle(options: AttemptLifecycleOptions): Attemp
 				emit()
 				return
 			}
-			if (questionId !== position) {
-				closeSegment()
-				position = questionId
-				applyTelemetry(incrementQuestionVisit(telemetry, questionId))
-				openSegment()
-			}
-			recordPosition(storage, keys.wal, { sessionId: session?.sessionId ?? null, position })
-			queueTelemetry()
-			void queue?.flush()
+			moveTo(questionId)
 			emit()
 		},
 		setQuestionIds(ids, textIds) {

@@ -48,7 +48,15 @@ export async function submitSession(
 	request: SubmitAttemptRequest
 ): Promise<
 	SessionOutcomeOf<
-		'accepted' | 'finalized' | 'submitted' | 'expired' | 'superseded' | 'not_found' | 'answers_invalid' | 'no_questions'
+		| 'accepted'
+		| 'finalized'
+		| 'submitted'
+		| 'expired'
+		| 'superseded'
+		| 'not_found'
+		| 'answers_invalid'
+		| 'no_questions'
+		| 'open_answer_empty'
 	>
 > {
 	const owner = ownerOf(pair)

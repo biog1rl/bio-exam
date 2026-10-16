@@ -38,6 +38,7 @@ export function validateUUID(paramName = 'id') {
 			throw ApiError.badRequest(`${ERROR_MESSAGES.INVALID_UUID}: ${paramName}`)
 		}
 
+		req.params[paramName] = value.toLowerCase()
 		next()
 	}, `validateUUID(${paramName})`)
 }

@@ -155,6 +155,12 @@ test('getAdminReviewNote: ключ неизвестен, вердиктов не
 	assert.equal(getAdminReviewNote(view({ keyVisible: true, correctAnswer: '2314', verdicts })), null)
 	assert.equal(getAdminReviewNote(null), null)
 	assert.equal(
+		getAdminReviewNote(
+			view({ keyVisible: false, status: 'partial', open: { text: '', photos: [], review: null, referenceText: null } })
+		),
+		null
+	)
+	assert.equal(
 		ADMIN_REVIEW_NOTES['key-unknown'],
 		'Ключ на момент сдачи не сохранён. Показаны ответ студента и сохранённые баллы.'
 	)

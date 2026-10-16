@@ -26,6 +26,18 @@ export type ReadableFact = {
 
 export type AttemptViewer = { kind: 'admin' } | { kind: 'student'; showCorrectAnswer: boolean }
 
+export type OpenReviewRecord = {
+	score: number
+	comment: string | null
+	reviewedAt: Date
+	reviewerName: string | null
+}
+
+export type OpenAnswerContext = {
+	reviews: ReadonlyMap<string, OpenReviewRecord>
+	photos: ReadonlyMap<string, ReadonlyArray<{ id: string; uploadedAt: string }>>
+}
+
 export type AttemptSummary = {
 	id: string
 	submittedAt: string
@@ -63,7 +75,69 @@ function discloseKey(fact: ReadableFact, viewer: AttemptViewer): KeyDisclosure {
 	return { keyVisible: fact.key != null, correctAnswer: fact.key, verdicts: fact.verdicts, mistakes: fact.mistakes }
 }
 
-function buildQuestionView(fact: ReadableFact, viewer: AttemptViewer): AttemptQuestionView {
+function openAnswerText(fact: ReadableFact): string {
+	return typeof fact.userAnswer === 'string' ? fact.userAnswer : ''
+}
+
+function reviewedGrade(fact: ReadableFact, review: OpenReviewRecord) {
+	const isCorrect = review.score === fact.points
+	return {
+		isCorrect,
+		earnedPoints: review.score,
+		status: questionStatus({ points: fact.points, isCorrect, earnedPoints: review.score }),
+	}
+}
+
+function openAdminOverlay(fact: ReadableFact, open: OpenAnswerContext): Partial<AttemptQuestionView> {
+	const review = open.reviews.get(fact.questionId) ?? null
+	return {
+		...(review ? reviewedGrade(fact, review) : {}),
+		open: {
+			text: openAnswerText(fact),
+			photos: [...(open.photos.get(fact.questionId) ?? [])],
+			review: review
+				? {
+						score: review.score,
+						comment: review.comment,
+						reviewedAt: review.reviewedAt.toISOString(),
+						reviewerName: review.reviewerName,
+					}
+				: null,
+			referenceText: fact.explanationText,
+		},
+	}
+}
+
+function openStudentOverlay(
+	fact: ReadableFact,
+	graded: boolean,
+	open: OpenAnswerContext
+): Partial<AttemptQuestionView> {
+	if (!graded) return { explanationText: null, review: null, referenceText: null }
+	const review = open.reviews.get(fact.questionId) ?? null
+	return {
+		...(review ? reviewedGrade(fact, review) : {}),
+		review: review ? { score: review.score, comment: review.comment } : null,
+		referenceText: fact.explanationText,
+	}
+}
+
+function openOverlay(
+	fact: ReadableFact,
+	viewer: AttemptViewer,
+	graded: boolean,
+	open: OpenAnswerContext
+): Partial<AttemptQuestionView> {
+	if (fact.template !== 'open') return {}
+	return viewer.kind === 'student' ? openStudentOverlay(fact, graded, open) : openAdminOverlay(fact, open)
+}
+
+function buildQuestionView(
+	fact: ReadableFact,
+	viewer: AttemptViewer,
+	graded: boolean,
+	open: OpenAnswerContext
+): AttemptQuestionView {
 	return {
 		questionId: fact.questionId,
 		isCorrect: fact.isCorrect,
@@ -73,15 +147,21 @@ function buildQuestionView(fact: ReadableFact, viewer: AttemptViewer): AttemptQu
 		explanationText: fact.explanationText,
 		status: questionStatus(fact),
 		...discloseKey(fact, viewer),
+		...openOverlay(fact, viewer, graded, open),
 	}
 }
+
+const NO_OPEN_ANSWERS: OpenAnswerContext = { reviews: new Map(), photos: new Map() }
 
 export function buildAttemptView(params: {
 	attempt: AttemptSummary
 	facts: ReadonlyArray<ReadableFact>
 	viewer: AttemptViewer
+	open?: OpenAnswerContext
 }): AttemptView {
 	const { attempt, facts, viewer } = params
+	const open = params.open ?? NO_OPEN_ANSWERS
+	const graded = attempt.reviewStatus === 'graded'
 	return AttemptViewSchema.parse({
 		attemptId: attempt.id,
 		submittedAt: attempt.submittedAt,
@@ -94,6 +174,6 @@ export function buildAttemptView(params: {
 		autoTotalPoints: attempt.autoTotalPoints,
 		uploadClosesAt: attempt.uploadClosesAt ?? null,
 		submitSource: attempt.submitSource ?? 'client',
-		results: facts.map((fact) => buildQuestionView(fact, viewer)),
+		results: facts.map((fact) => buildQuestionView(fact, viewer, graded, open)),
 	})
 }

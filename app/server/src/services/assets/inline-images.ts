@@ -1,8 +1,7 @@
-import { fileTypeFromBuffer } from 'file-type'
 import crypto from 'node:crypto'
-import sharp from 'sharp'
 
 import { storage } from '../storage/index.js'
+import { acceptImage, IMAGE_PROFILES, ImageRejectedError } from './image-intake.js'
 
 export type StoredInlineImages = {
 	text: string
@@ -13,10 +12,7 @@ export type StoredInlineImages = {
 }
 
 const INLINE_IMAGE = /data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/]+=*/g
-const INLINE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const MEDIA_PREFIX = 'images'
-const MAX_DIMENSION = 1920
-const WEBP_QUALITY = 85
 
 export function hasInlineImages(text: string | null | undefined): boolean {
 	return typeof text === 'string' && text.search(INLINE_IMAGE) !== -1
@@ -28,17 +24,16 @@ export function inlineImageUris(text: string | null | undefined): string[] {
 
 async function storeImage(uri: string): Promise<string | null> {
 	const payload = Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64')
-	const detected = await fileTypeFromBuffer(payload)
-	if (!detected || !INLINE_IMAGE_TYPES.has(detected.mime)) return null
 	const digest = crypto.createHash('sha256').update(payload).digest('hex').slice(0, 32)
 	const key = `${MEDIA_PREFIX}/${digest}.webp`
 	const module = storage()
 	if (await module.exists(key)) return key
-	const processed = await sharp(payload, { animated: detected.mime === 'image/gif' })
-		.resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
-		.webp({ quality: WEBP_QUALITY })
-		.toBuffer()
-	await module.write(key, processed, { contentType: 'image/webp', cacheControl: '3600', upsert: true })
+	const accepted = await acceptImage(payload, IMAGE_PROFILES.inlineImage).catch((error: unknown) => {
+		if (error instanceof ImageRejectedError) return null
+		throw error
+	})
+	if (accepted === null) return null
+	await module.write(key, accepted.full, { contentType: accepted.mime, cacheControl: '3600', upsert: true })
 	return key
 }
 

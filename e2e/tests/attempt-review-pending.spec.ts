@@ -34,6 +34,9 @@ function reviewTests(testInfo: TestInfo) {
 
 const LABEL_TEXT = /проверк|авто|учителем|предварительно/
 
+const OPEN_ANSWER_TEXT = 'Хлоропласт поглощает свет и запускает синтез глюкозы.'
+const REVIEW_COMMENT = 'Верно, но не названы световая и темновая фазы.'
+
 async function expectCleanLayout(page: Page, label: string, options: { labelsOnly?: boolean } = {}): Promise<void> {
 	for (const width of WIDTHS) {
 		await page.setViewportSize({ width, height: 900 })
@@ -71,11 +74,13 @@ test('a student submits a test with an open question and sees «На прове�
 	await page.getByRole('radio', { name: 'Хлоропласт', exact: true }).click()
 	await expect(page.getByText('Отвечено: 1 / 2')).toBeVisible()
 	await page.getByRole('button', { name: 'Далее' }).click()
+	await page.getByRole('textbox', { name: 'Развёрнутый ответ' }).fill(OPEN_ANSWER_TEXT)
+	await expect(page.getByText('Отвечено: 2 / 2')).toBeVisible()
 	await page.getByRole('button', { name: 'Завершить' }).first().click()
-	await expect(page.getByText('1 вопр. остался без ответа. Всё равно завершить?')).toBeVisible()
-	await page.getByRole('button', { name: 'Всё равно завершить' }).click()
 
 	const panel = page.locator('section', { has: page.getByRole('heading', { level: 2, name: 'Результат' }) })
+	await page.getByRole('button', { name: 'Готово, фото загружены' }).click()
+	await expect(page.getByRole('button', { name: 'Готово, фото загружены' })).toHaveCount(0)
 	await expect(panel).toContainText('На проверке')
 	await expect(panel).toContainText('предварительно 1 из 1')
 	await expect(panel).toContainText('Процент и итог появятся после проверки учителем.')
@@ -261,4 +266,31 @@ test('the reviewer sees the labels in the attempt review, the profile, the dashb
 	const result = page.getByRole('option').filter({ hasText: pending.title }).filter({ hasText: 'На проверке' })
 	await expect(result).toHaveCount(1)
 	await expect(result).not.toContainText('%')
+})
+
+test('the reviewer grades the open answer and the student sees the score and the comment', async ({
+	adminPage: admin,
+	reviewStudentPage: student,
+}, testInfo) => {
+	const { submit } = reviewTests(testInfo)
+	const submitId = await attemptIdOf(admin, submit.title)
+
+	await admin.goto(`/admin/attempts/${submitId}`)
+	await expect(admin.getByRole('heading', { level: 1, name: 'Разбор результата' })).toBeVisible()
+	await expect(admin.getByText(OPEN_ANSWER_TEXT)).toBeVisible()
+	await admin.getByRole('radio', { name: '2', exact: true }).click()
+	await admin.getByRole('textbox', { name: 'Комментарий' }).fill(REVIEW_COMMENT)
+	await admin.getByRole('button', { name: 'Сохранить оценку' }).click()
+	await expect(admin.getByText('Оценено: 2')).toBeVisible()
+	const hero = admin.locator('section', { has: admin.getByRole('heading', { level: 1 }) }).first()
+	await expect(hero).toContainText('75%')
+	await expect(hero).toContainText('проверено учителем')
+	await expectCleanLayout(admin, 'проверка открытого ответа')
+
+	await student.goto(`${testPath(submit)}/attempts/${submitId}`)
+	await expect(student.getByText('Оценка: 2 из 3')).toBeVisible()
+	await expect(student.getByText(REVIEW_COMMENT)).toBeVisible()
+	await expect(student.getByText(OPEN_ANSWER_TEXT)).toBeVisible()
+	await expect(student.getByText('75%').first()).toBeVisible()
+	await expectCleanLayout(student, 'результат проверки у ученика')
 })

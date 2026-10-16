@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 
+import { storageUrl } from './index.js'
+import { isServableImageKey } from './keys.js'
 import { avatarUrl, ownStorageKey, parseStorageLink, resolveImageLink, storedAvatarValue } from './links.js'
 import { StorageKeyError } from './port.js'
 
@@ -156,6 +158,30 @@ describe('resolveImageLink', () => {
 		]) {
 			assert.throws(() => resolveImageLink(input), StorageKeyError, input)
 		}
+	})
+})
+
+describe('кто читает пространство', () => {
+	test.each([
+		['images/a.webp', true],
+		['avatars/u/a.png', true],
+		['topics/b/c/assets/x.png', true],
+		['topics/b/c/d.png', false],
+		['answers/s/q/p/full.webp', false],
+	])('isServableImageKey(%s) = %s', (key, servable) => {
+		assert.equal(isServableImageKey(key), servable)
+	})
+
+	test('storageUrl для answers/ бросает ошибку программиста', () => {
+		assert.throws(
+			() => storageUrl('answers/s/q/p/full.webp'),
+			(error: unknown) =>
+				error instanceof Error && !(error instanceof StorageKeyError) && error.message.includes('answers')
+		)
+	})
+
+	test('resolveImageLink для answers/ — StorageKeyError', () => {
+		assert.throws(() => resolveImageLink('answers/s/q/p/full.webp'), StorageKeyError)
 	})
 })
 

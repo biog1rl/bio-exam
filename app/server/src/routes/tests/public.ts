@@ -17,8 +17,10 @@ import { isTransientDbError } from '../../lib/db-errors.js'
 import { sessionRequired } from '../../middleware/auth/session.js'
 import { validateUUID } from '../../middleware/validateParams.js'
 import { canReadTest, testScope } from '../../services/access-policy/index.js'
+import { readLatestReviews } from '../../services/answer-reviews/index.js'
 import {
 	checkAttemptAccess,
+	closeUploadWindow,
 	databaseNow,
 	findVisibleTestBySlug,
 	finalizeSessionByDeadline,
@@ -62,7 +64,7 @@ function sessionNotFound(res: Response) {
 }
 
 async function submittedBody(attemptId: string, viewer: AttemptViewer) {
-	const view = await readAttemptView(attemptId, viewer)
+	const view = await readAttemptView(attemptId, viewer, readLatestReviews)
 	return {
 		attemptId,
 		submitSource: view.submitSource ?? 'client',
@@ -97,7 +99,7 @@ async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: S
 			if (route === 'draft') return res.json({ ok: true, serverNow: outcome.serverNow })
 			break
 		case 'accepted':
-			if (route === 'submit') return res.json(await readAttemptView(outcome.attemptId, viewer))
+			if (route === 'submit') return res.json(await readAttemptView(outcome.attemptId, viewer, readLatestReviews))
 			break
 		case 'finalized':
 		case 'submitted':
@@ -131,6 +133,11 @@ async function sendSessionOutcome(res: Response, route: OutcomeRoute, outcome: S
 			break
 		case 'no_questions':
 			if (route === 'submit') return res.status(404).json({ error: 'Questions not found' })
+			break
+		case 'open_answer_empty':
+			if (route === 'submit') {
+				return res.status(422).json({ error: SUBMIT_ERROR_CODES.openAnswerEmpty, questionIds: outcome.questionIds })
+			}
 			break
 	}
 	throw new Error(`sendSessionOutcome: outcome ${outcome.kind} is not expected on ${route}`)
@@ -468,5 +475,36 @@ router.post('/tests/:id/submit', validateUUID('id'), sessionRequired(), async (r
 		next(e)
 	}
 })
+
+router.post(
+	'/tests/:id/sessions/:sessionId/uploads-done',
+	validateUUID('id'),
+	validateUUID('sessionId'),
+	sessionRequired(),
+	async (req, res, next) => {
+		try {
+			const testId = req.params.id as string
+			const sessionId = req.params.sessionId as string
+			const userId = req.authUser!.id
+
+			const access = await checkAttemptAccess({ testId, userId, canReadTest: () => canReadTest(req, testId) })
+			if (!access.ok) return denyAttemptAccess(res, access.status)
+
+			const outcome = await closeUploadWindow({ testId, userId }, sessionId)
+			switch (outcome.kind) {
+				case 'closed':
+					return res.json({ uploadClosesAt: outcome.uploadClosesAt.toISOString() })
+				case 'window':
+					return res.status(outcome.status).json(outcome.body)
+				case 'not_submitted':
+					return res.status(409).json({ error: 'Попытка ещё не сдана' })
+				case 'not_found':
+					return sessionNotFound(res)
+			}
+		} catch (e) {
+			next(e)
+		}
+	}
+)
 
 export default router

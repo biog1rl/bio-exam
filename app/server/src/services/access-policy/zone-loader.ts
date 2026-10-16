@@ -5,10 +5,12 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
 import type { db as Database } from '../../db/index.js'
 import {
+	answerPhotos,
 	rbacUserGrants,
 	studentGroups,
 	teacherTopics,
 	testAttempts,
+	testSessions,
 	tests,
 	userGroups,
 	userRoles,
@@ -24,7 +26,10 @@ export interface ZoneLoader {
 	groupOwnerOf(groupId: string): Promise<{ ownerId: string | null } | null>
 	isMemberOfOwnedGroup(ownerId: string, userId: string): Promise<boolean>
 	studentIdsInOwnedGroups(ownerId: string, userIds: string[]): Promise<string[]>
+	answerPhotoSubject(photoId: string): Promise<AnswerPhotoSubject | null>
 }
+
+export type AnswerPhotoSubject = { ownerId: string; attemptId: string | null }
 
 export type ZoneSnapshot = {
 	teacherTopics?: Readonly<Record<string, ReadonlyArray<string>>>
@@ -33,6 +38,7 @@ export type ZoneSnapshot = {
 	attempts?: Readonly<Record<string, string>>
 	roleKeysByUser?: Readonly<Record<string, ReadonlyArray<string>>>
 	usersWithAllowGrants?: ReadonlyArray<string>
+	answerPhotos?: Readonly<Record<string, AnswerPhotoSubject>>
 }
 
 export function zoneIds(values: ReadonlyArray<string>): string[] {
@@ -130,6 +136,16 @@ export function createDrizzleZoneLoader(database: typeof Database): ZoneLoader {
 				)
 			return rows.map((row) => row.userId)
 		},
+		async answerPhotoSubject(photoId) {
+			if (!isUuid(photoId)) return null
+			const [row] = await database
+				.select({ ownerId: testSessions.userId, attemptId: testSessions.attemptId })
+				.from(answerPhotos)
+				.innerJoin(testSessions, eq(testSessions.id, answerPhotos.sessionId))
+				.where(eq(answerPhotos.id, photoId))
+				.limit(1)
+			return row ?? null
+		},
 	}
 }
 
@@ -179,6 +195,10 @@ export function createInMemoryZoneLoader(snapshot: ZoneSnapshot): ZoneLoader {
 		async studentIdsInOwnedGroups(ownerId, userIds) {
 			const members = new Set(ownedGroups(snapshot, ownerId).flatMap((group) => [...group.members]))
 			return [...new Set(userIds)].filter((userId) => members.has(userId) && isSnapshotStudent(snapshot, userId))
+		},
+		async answerPhotoSubject(photoId) {
+			const subject = snapshot.answerPhotos?.[photoId]
+			return subject ? { ...subject } : null
 		},
 	}
 }

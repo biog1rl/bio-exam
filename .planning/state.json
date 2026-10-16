@@ -16,12 +16,12 @@
     {
       "number": "11",
       "name": "Deadline finalisation, upload window and background jobs",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "12",
       "name": "Photos on session authentication",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "13",
@@ -31,6 +31,11 @@
     {
       "number": "14",
       "name": "Authoring and submitting open questions",
+      "status": "pending"
+    },
+    {
+      "number": "14.1",
+      "name": "Question type catalog: one module and one scoring rule",
       "status": "pending"
     },
     {
@@ -61,8 +66,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 11 of 12 · 17% · executing"
+    "label": "Advance to the next step (plan phase 13)",
+    "reason": "Phase 13 of 12 — needs a plan"
   },
-  "updated_at": "2026-10-06T15:34:38.347Z"
+  "updated_at": "2026-10-16T13:15:55.906Z"
 }

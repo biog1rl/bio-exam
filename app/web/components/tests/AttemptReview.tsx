@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 
+import { fetchAdminAttempt } from '@/lib/tests/open-review-api'
 import type { AttemptReviewData, PublicTestQuestion } from '@/lib/tests/types'
 
 import { AttemptQuestionsList } from './attempt-review/AttemptQuestionsList'
@@ -15,7 +16,8 @@ type Props = {
 	questions: PublicTestQuestion[]
 }
 
-export default function AttemptReview({ attempt, questions }: Props) {
+export default function AttemptReview({ attempt: initialAttempt, questions }: Props) {
+	const [attempt, setAttempt] = useState(initialAttempt)
 	const orderedQuestions = useMemo(() => [...questions].sort((a, b) => a.order - b.order), [questions])
 	const results = attempt.results
 	const [navFilter, setNavFilter] = useState<NavFilter>('all')
@@ -24,6 +26,12 @@ export default function AttemptReview({ attempt, questions }: Props) {
 		() => filterQuestionsByStatus(orderedQuestions, results, navFilter),
 		[navFilter, orderedQuestions, results]
 	)
+
+	const handleReviewSaved = () => {
+		void fetchAdminAttempt(attempt.attemptId).then((outcome) => {
+			if (outcome.ok) setAttempt(outcome.data.attempt)
+		})
+	}
 
 	return (
 		<div className="space-y-5">
@@ -36,6 +44,7 @@ export default function AttemptReview({ attempt, questions }: Props) {
 						questions={visibleQuestions}
 						allQuestions={orderedQuestions}
 						results={results}
+						onReviewSaved={handleReviewSaved}
 					/>
 					<AttemptReviewSummary attempt={attempt} questions={orderedQuestions} results={results} />
 				</div>

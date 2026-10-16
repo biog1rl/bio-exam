@@ -218,6 +218,20 @@
       "when": 1791292874244,
       "tag": "0030_attempt_upload_window",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792149370263,
+      "tag": "0031_answer_photos",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792158335474,
+      "tag": "0032_answer_reviews",
+      "breakpoints": true
     }
   ]
 }

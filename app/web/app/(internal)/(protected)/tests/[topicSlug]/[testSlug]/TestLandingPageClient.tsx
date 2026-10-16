@@ -12,6 +12,7 @@ import { LoadMoreButton } from '@/components/page/LoadMoreButton'
 import { PageHeader } from '@/components/page/PageHeader'
 import { StatusBadge } from '@/components/table/StatusBadge'
 import { TableCard } from '@/components/table/TableCard'
+import { useRowLink } from '@/components/table/use-row-link'
 import { TestMissingState } from '@/components/tests/TestMissingState'
 import { AttemptScore } from '@/components/tests/attempt-result/AttemptScore'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
+	const rowLink = useRowLink()
 	// --- Test resolution ---
 	const { data: testData, isLoading: testLoading } = useSWR(`test-summary/${topicSlug}/${testSlug}`, () =>
 		fetchPublicTestSummary(topicSlug, testSlug)
@@ -71,6 +73,8 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 			setLoadingMore(false)
 		}
 	}
+
+	const attemptHref = (attemptId: string) => `/tests/${topicSlug}/${testSlug}/attempts/${attemptId}`
 
 	// --- Render ---
 	if (testLoading) {
@@ -128,9 +132,11 @@ export function TestLandingPageClient({ topicSlug, testSlug }: Props) {
 									const view = attemptResultView(row)
 									const final = view.kind === 'final' ? view : null
 									return (
-										<TableRow key={row.id}>
+										<TableRow key={row.id} className="cursor-pointer" {...rowLink(attemptHref(row.id))}>
 											<TableCell className="py-3 pl-4">
-												<span className="font-medium tabular-nums">{formatDateTime(row.submittedAt)}</span>
+												<Link href={attemptHref(row.id)} className="font-medium tabular-nums hover:underline">
+													{formatDateTime(row.submittedAt)}
+												</Link>
 												{final ? (
 													<p className="mt-0.5 text-xs text-muted-foreground tab-sm:hidden">
 														{final.points.earned} / {final.points.total} · {final.passed ? 'Пройден' : 'Не пройден'}

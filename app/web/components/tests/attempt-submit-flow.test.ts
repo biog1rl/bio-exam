@@ -163,6 +163,28 @@ describe('answers-invalid', () => {
 		expect(answersInvalidBanner({ reason, limit: null })).toEqual({ message, action })
 	})
 
+	test('422 OPEN_ANSWER_EMPTY: вид отказа с id вопросов', () => {
+		const ids = ['11111111-1111-4111-8111-111111111111']
+		expect(
+			classifySubmitFailure(new AttemptRequestError(422, 'OPEN_ANSWER_EMPTY', null, null, null, { questionIds: ids }))
+		).toEqual({ kind: 'open-answer-empty', questionIds: ids })
+	})
+
+	test('422 OPEN_ANSWER_EMPTY без questionIds: пустой список', () => {
+		expect(classifySubmitFailure(new AttemptRequestError(422, 'OPEN_ANSWER_EMPTY', null))).toEqual({
+			kind: 'open-answer-empty',
+			questionIds: [],
+		})
+	})
+
+	test.each([
+		[[], 'Добавьте текст или фото к ответу на открытый вопрос.'],
+		[[3], 'Добавьте текст или фото к ответу на открытый вопрос 3.'],
+		[[2, 5], 'Добавьте текст или фото к ответу на открытый вопрос: 2, 5.'],
+	] as const)('баннер OPEN_ANSWER_EMPTY %j', (positions, message) => {
+		expect(answersInvalidBanner({ reason: 'open_answer_empty', positions })).toEqual({ message, action: null })
+	})
+
 	test('число 5 000 с неразрывным пробелом тысяч', () => {
 		expect(answersInvalidBanner({ reason: 'open_text_too_long', limit: 5000 }).message).toContain('5\u00a0000')
 	})

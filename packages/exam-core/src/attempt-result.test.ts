@@ -144,6 +144,7 @@ test('коды ошибок submit и льгота лимита', () => {
 		alreadySubmitted: 'ATTEMPT_ALREADY_SUBMITTED',
 		timeExpired: 'TIME_EXPIRED',
 		answersInvalid: 'ANSWERS_INVALID',
+		openAnswerEmpty: 'OPEN_ANSWER_EMPTY',
 	})
 	assert.equal(ATTEMPT_GRACE_PERIOD_MINUTES, 2)
 })

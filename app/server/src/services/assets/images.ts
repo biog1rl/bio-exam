@@ -1,6 +1,4 @@
-import { fileTypeFromBuffer } from 'file-type'
 import crypto from 'node:crypto'
-import sharp from 'sharp'
 
 import { db } from '../../db/index.js'
 import { ApiError } from '../../lib/errors.js'
@@ -14,17 +12,15 @@ import {
 	type StorageReadResult,
 } from '../storage/index.js'
 import { resolveImageLink } from '../storage/links.js'
+import { acceptImage, IMAGE_PROFILES } from './image-intake.js'
 
-export const IMAGE_TYPE_ERROR = 'Поддерживаются только JPEG, PNG и WebP'
+export { IMAGE_TYPE_ERROR } from './image-intake.js'
 
 export const ASSET_IN_USE_MESSAGE = 'Изображение используется в вопросах'
 
 export const ASSET_INDEX_INCOMPLETE_MESSAGE = 'Удаление недоступно: ссылки на изображения ещё не проиндексированы'
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MEDIA_PREFIX = 'images'
-const MAX_DIMENSION = 1920
-const WEBP_QUALITY = 85
 
 export type MediaAsset = {
 	filename: string
@@ -53,20 +49,11 @@ function invalidPath(): ApiError {
 	return new ApiError(400, 'Invalid path')
 }
 
-export function isAllowedImageMime(mime: string): boolean {
-	return ALLOWED_IMAGE_TYPES.has(mime)
-}
-
 export async function uploadImage(buffer: Buffer): Promise<{ path: string; filename: string }> {
-	const detected = await fileTypeFromBuffer(buffer)
-	if (!detected || !ALLOWED_IMAGE_TYPES.has(detected.mime)) throw new ApiError(400, IMAGE_TYPE_ERROR)
-	const processed = await sharp(buffer)
-		.resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
-		.webp({ quality: WEBP_QUALITY })
-		.toBuffer()
+	const accepted = await acceptImage(buffer, IMAGE_PROFILES.mediaLibrary)
 	const filename = `${crypto.randomBytes(16).toString('hex')}.webp`
 	const path = `${MEDIA_PREFIX}/${filename}`
-	await storage().write(path, processed, { contentType: 'image/webp', cacheControl: '3600', upsert: false })
+	await storage().write(path, accepted.full, { contentType: accepted.mime, cacheControl: '3600', upsert: false })
 	return { path, filename }
 }
 

@@ -5,6 +5,10 @@ import {
 	FINALIZE_FAILURE_COOLDOWN_MS,
 	FINALIZE_RUN_BUDGET_MS,
 	finalizeDeadlinesJob,
+	NO_ANSWER_REVIEWS_BATCH,
+	NO_ANSWER_REVIEWS_INTERVAL_MS,
+	NO_ANSWER_REVIEWS_JOB,
+	noAnswerReviewsJob,
 	RECONCILE_OUTCOMES_JOB,
 	reconcileOutcomesJob,
 } from './jobs.js'
@@ -13,6 +17,7 @@ import { createJobRunner, type JobRunner, type JobRunnerOptions } from './regist
 export function createBackgroundJobs(options: JobRunnerOptions): JobRunner {
 	const runner = createJobRunner(options)
 	runner.register(finalizeDeadlinesJob({ log: options.log }))
+	runner.register(noAnswerReviewsJob({ log: options.log }))
 	runner.register(reconcileOutcomesJob({ log: options.log }))
 	return runner
 }
@@ -25,6 +30,10 @@ export {
 	FINALIZE_FAILURE_COOLDOWN_MS,
 	FINALIZE_RUN_BUDGET_MS,
 	finalizeDeadlinesJob,
+	NO_ANSWER_REVIEWS_BATCH,
+	NO_ANSWER_REVIEWS_INTERVAL_MS,
+	NO_ANSWER_REVIEWS_JOB,
+	noAnswerReviewsJob,
 	RECONCILE_OUTCOMES_JOB,
 	reconcileOutcomesJob,
 }

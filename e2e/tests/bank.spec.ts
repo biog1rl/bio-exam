@@ -68,7 +68,7 @@ test.describe('question bank: topics on the side, tests in one table', () => {
 			`/admin/tests/new?topic=${TOPIC_SLUG}`
 		)
 		await page.getByRole('button', { name: 'Действия с темой' }).click()
-		await expect(page.getByRole('menuitem', { name: 'Изменить тему' })).toBeVisible()
+		await expect(page.getByRole('menuitem', { name: 'Редактировать' })).toBeVisible()
 		await expect(page.getByRole('menuitem', { name: 'Экспорт с ответами' })).toBeVisible()
 		await expect(page.getByRole('menuitem', { name: 'Удалить тему' })).toBeVisible()
 		await page.keyboard.press('Escape')

@@ -77,7 +77,7 @@ test('routes/tests/index.ts только собирает суброутеры',
 
 test('каждый суброутер routes/tests/admin смонтирован в точке сборки', () => {
 	const exported = adminRouterExports(REPO_ROOT)
-	assert.ok(exported.length >= 12, `${ADMIN_DIR}: суброутеров ${exported.length}`)
+	assert.ok(exported.length >= 11, `${ADMIN_DIR}: суброутеров ${exported.length}`)
 	assert.deepEqual(mountViolations(REPO_ROOT), [])
 })
 

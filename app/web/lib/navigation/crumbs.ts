@@ -27,6 +27,7 @@ export function waitsForAsyncLabel(href: string): boolean {
 
 const LABEL_PATTERNS: readonly LabelPattern[] = [
 	{ pattern: /^\/tests\/[^/]+\/[^/]+\/start$/, label: 'Прохождение' },
+	{ pattern: /^\/tests\/[^/]+\/[^/]+\/attempts\/[^/]+$/, label: 'Результат попытки' },
 	{ pattern: /^\/admin\/attempts\/[^/]+$/, label: 'Разбор попытки' },
 	{ pattern: /^\/admin\/users\/[^/]+$/, label: 'Пользователь' },
 	{ pattern: /^\/invite\/[^/]+$/, label: 'Приглашение' },

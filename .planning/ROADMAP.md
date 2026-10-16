@@ -44,8 +44,8 @@
 
 - [x] **Phase 9: Result foundation and readers** - Stored result = immutable auto facts + appended reviews; one shared function; every reader handles "на проверке" (completed 2026-10-06)
 - [x] **Phase 10: Notification journal and bell** - General notification-event journal, header bell with unread count and deep links, first real producer (completed 2026-10-06)
-- [ ] **Phase 11: Deadline finalisation, upload window and background jobs** - Server closes a timed attempt at the deadline without losing text; one rule for the photo window; background jobs, clean shutdown, one refresh per browser (research phase)
-- [ ] **Phase 12: Photos on session authentication** - Up to 5 processed photos per open answer from the computer, private delivery, bounded memory (research phase)
+- [x] **Phase 11: Deadline finalisation, upload window and background jobs** - Server closes a timed attempt at the deadline without losing text; one rule for the photo window; background jobs, clean shutdown, one refresh per browser (research phase) (completed 2026-10-13)
+- [x] **Phase 12: Photos on session authentication** - Up to 5 processed photos per open answer from the computer, private delivery, bounded memory (research phase) (completed 2026-10-16)
 - [ ] **Phase 13: Token, QR and phone page** - Sign-in-free phone upload page through a scoped link and a QR code in the runner (research phase)
 - [ ] **Phase 14: Authoring and submitting open questions** - Open question editor, text and photo answers, "на проверке" after submit
 - [ ] **Phase 14.1: Question type catalog: one module and one scoring rule** (INSERTED) - One server module owns the question type catalog and the per-test override; the unused second scoring rule is removed (ADR-0008)
@@ -172,12 +172,12 @@ Plans:
 
 **Folded-in work**: CR-03 (bfcache) and CR-05 (repeated start without a session) from the v1.0 deferred findings, because they touch the client attempt-lifecycle module changed here (part of DEBT-08, which is mapped to Phase 18). PLAT-04 is v1.0 SEC-02, a release precondition.
 **User steps (outside the repository)**: confirm on the server that the container stop timeout (Compose `stop_grace_period`; the Compose file is on the server) is at least the API's drain time; release this phase when no timed attempt is running (existing deploy protection).
-**Plans**: 20/22 plans executed in 10 waves
+**Plans**: 22/22 plans complete in 10 waves
 Plans:
 - [x] 11-19-PLAN.md
 - [x] 11-20-PLAN.md
 - [x] 11-21-PLAN.md
-- [ ] 11-22-PLAN.md
+- [x] 11-22-PLAN.md
 
 **Wave 1**
 - [x] 11-01-PLAN.md — exam-core contract: `serverNow`, optional `uploadClosesAt`/`submitSource`, 409 body, `SessionFateSchema`, upload-window codes; `serverNow` on `/start` (wave 1)
@@ -215,7 +215,7 @@ Plans:
 - [x] 11-17-PLAN.md — logout clears the user's draft keys (wave 9)
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 11-18-PLAN.md — e2e of criteria 1–3, docs and skills, user steps, phase gates (wave 10)
+- [x] 11-18-PLAN.md — e2e of criteria 1–3, docs and skills, user steps, phase gates (wave 10)
 
 **UI hint**: yes
 
@@ -234,7 +234,32 @@ Plans:
 
 **Folded-in work**: the shared photo component also offers "Сделать фото" (camera) and "Выбрать из галереи" for the phone page of Phase 13; real-device behaviour is checked in Phases 13 and 17. The runner shows the photo block for a seeded open question here; authoring, text answer and submit come in Phase 14.
 **User steps (outside the repository)**: supply real iPhone and Android photo samples (large JPEG, HEIC) for the spike; decide the API container memory limit from the measurement; check that the Caddy request-body limit (20 MB in the server profile) stays above the upload limit.
-**Plans**: TBD
+**Plans**: 10/10 plans complete in 7 waves (lanes api and web)
+
+**Wave 1**
+- [x] 12-01-PLAN.md — [api] one image-intake module (A1) and the memory spike through it (D-15), numbers and settings in ADR-0004
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 12-02-PLAN.md — [api] delete the dead `POST /api/tests/:id/assets` with its guard tests (A5, D-04)
+- [x] 12-03-PLAN.md — [api] migration 0031 `answer_photos` and the photo contract in exam-core
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 12-04-PLAN.md — [api] multer refusals as 413/415/400 in one wrapper (A2, DEBT-01), broken window #3 waived
+- [x] 12-05-PLAN.md — [api] who reads which storage space, `answers/` never through the shared proxy, ADR-0004 (A3, DEBT-07)
+- [x] 12-06-PLAN.md — [web] photo API client, upload queue with retries, browser downscale, window refusal text
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 12-07-PLAN.md — [api] photos under the session: upload, list, delete; photo files removed on user deletion
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 12-08-PLAN.md — [api] photo delivery to the owner and permitted reviewers (`canReadAnswerPhoto`)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 12-09-PLAN.md — [web] photo block in the runner for the seeded open question, e2e
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 12-10-PLAN.md — [web] phase gates (full e2e, verify, CI build), skills, user steps
+
 **UI hint**: yes
 
 ### Phase 13: Token, QR and phone page
@@ -385,8 +410,8 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14 → 14.1 �
 |-------|----------------|--------|-----------|
 | 9. Result foundation and readers | 19/19 | Complete    | 2026-10-06 |
 | 10. Notification journal and bell | 9/9 | Complete    | 2026-10-06 |
-| 11. Deadline finalisation, upload window and background jobs | 20/22 | In Progress|  |
-| 12. Photos on session authentication | 0/TBD | Not started | - |
+| 11. Deadline finalisation, upload window and background jobs | 22/22 | Complete    | 2026-10-13 |
+| 12. Photos on session authentication | 10/10 | Complete    | 2026-10-16 |
 | 13. Token, QR and phone page | 0/TBD | Not started | - |
 | 14. Authoring and submitting open questions | 0/TBD | Not started | - |
 | 14.1. Question type catalog: one module and one scoring rule | 0/TBD | Not started | - |

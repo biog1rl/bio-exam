@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm'
-import { fileTypeFromBuffer } from 'file-type'
 import crypto from 'node:crypto'
 import sharp from 'sharp'
 
@@ -8,20 +7,14 @@ import { users } from '../../db/schema.js'
 import { ApiError } from '../../lib/errors.js'
 import { storage } from '../storage/index.js'
 import { avatarUrl, ownStorageKey } from '../storage/links.js'
+import { acceptImage, IMAGE_MAX_PIXELS, IMAGE_PROFILES, runImageTask } from './image-intake.js'
 
-export const AVATAR_TYPE_ERROR =
-	'Недопустимый тип файла. Файл не является допустимым изображением (JPEG, PNG, GIF, WebP)'
+export { AVATAR_TYPE_ERROR } from './image-intake.js'
 export const NO_AVATAR_ERROR = 'Нет загруженного аватара для редактирования'
 
 const AVATAR_PREFIX = 'avatars'
 const OUTPUT_SIZE = 256
 const TRANSPARENT = { r: 255, g: 255, b: 255, alpha: 0 }
-const AVATAR_TYPES = new Map<string, string>([
-	['image/jpeg', 'jpg'],
-	['image/png', 'png'],
-	['image/webp', 'webp'],
-	['image/gif', 'gif'],
-])
 
 export type AvatarCrop = {
 	x: number | null
@@ -90,10 +83,11 @@ function cropColumns(crop: AvatarCrop) {
 }
 
 async function renderCrop(source: Buffer, box: CropBox): Promise<Buffer> {
-	let image = sharp(source)
-	if (box.rotation !== 0) {
-		const rotated = await image.rotate(box.rotation, { background: TRANSPARENT }).toBuffer()
-		image = sharp(rotated)
+	let image = sharp(source, { limitInputPixels: IMAGE_MAX_PIXELS })
+	const angle = box.rotation % 360
+	if (angle !== 0) {
+		const rotated = await image.rotate(angle, { background: TRANSPARENT }).toBuffer()
+		image = sharp(rotated, { limitInputPixels: IMAGE_MAX_PIXELS * 2 })
 	}
 	const metadata = await image.metadata()
 	if (!metadata.width || !metadata.height) throw new Error('Не удалось получить размеры изображения')
@@ -106,7 +100,7 @@ async function renderCrop(source: Buffer, box: CropBox): Promise<Buffer> {
 }
 
 async function writeCrop(userId: string, source: Buffer, box: CropBox): Promise<string> {
-	const cropped = await renderCrop(source, box)
+	const cropped = await runImageTask(() => renderCrop(source, box))
 	const key = `${userPrefix(userId)}${newName()}_cropped.png`
 	await storage().write(key, cropped, { contentType: 'image/png', upsert: false })
 	return key
@@ -142,20 +136,18 @@ async function removeQuietly(keys: string[]): Promise<void> {
 
 export async function saveAvatar(input: { userId: string; buffer: Buffer; crop: AvatarCrop }): Promise<AvatarResult> {
 	const { userId, buffer, crop } = input
-	const detected = await fileTypeFromBuffer(buffer)
-	const ext = detected ? AVATAR_TYPES.get(detected.mime) : undefined
-	if (!detected || !ext) throw new ApiError(400, AVATAR_TYPE_ERROR)
+	const accepted = await acceptImage(buffer, IMAGE_PROFILES.avatar)
 
 	const previous = await currentAvatar(userId)
 	const box = cropBox(crop)
-	const key = `${userPrefix(userId)}${newName()}.${ext}`
+	const key = `${userPrefix(userId)}${newName()}.${accepted.ext}`
 	const written: string[] = []
 	let croppedKey: string | null = null
 	try {
-		await storage().write(key, buffer, { contentType: detected.mime, upsert: false })
+		await storage().write(key, accepted.full, { contentType: accepted.mime, upsert: false })
 		written.push(key)
 		if (box) {
-			croppedKey = await writeCrop(userId, buffer, box)
+			croppedKey = await writeCrop(userId, accepted.full, box)
 			written.push(croppedKey)
 		}
 		await db

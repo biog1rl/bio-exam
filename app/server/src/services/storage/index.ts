@@ -6,7 +6,7 @@ import { isIsolatedEnv } from '../../config/test-database-url.js'
 import { createLocalAdapter } from './adapters/local.js'
 import { memoryStorage } from './adapters/memory.js'
 import { createSupabaseAdapter } from './adapters/supabase.js'
-import { normalizeKey, normalizePrefix } from './keys.js'
+import { namespaceReader, normalizeKey, normalizePrefix } from './keys.js'
 import {
 	StorageConfigError,
 	type StorageAdapter,
@@ -28,7 +28,17 @@ export {
 	type StorageReadResult,
 	type WriteOptions,
 } from './port.js'
-export { isMediaLibraryKey, isServableImageKey, normalizeKey, normalizePrefix, STORAGE_NAMESPACES } from './keys.js'
+export {
+	isMediaLibraryKey,
+	isServableImageKey,
+	NAMESPACE_READERS,
+	namespaceReader,
+	normalizeKey,
+	normalizePrefix,
+	STORAGE_NAMESPACES,
+	type NamespaceReader,
+	type StorageNamespace,
+} from './keys.js'
 
 export type StoragePage = { objects: StorageObject[]; total: number }
 
@@ -156,5 +166,9 @@ export function storage(): StorageModule {
 }
 
 export function storageUrl(key: string): string {
-	return `/api/docs/assets/proxy?path=${encodeURIComponent(normalizeKey(key))}`
+	const normalized = normalizeKey(key)
+	if (namespaceReader(normalized) === 'owner-and-reviewers') {
+		throw new Error(`storageUrl: пространство ${normalized.split('/')[0]} не отдаётся общим прокси`)
+	}
+	return `/api/docs/assets/proxy?path=${encodeURIComponent(normalized)}`
 }

@@ -130,6 +130,7 @@ async function main(): Promise<void> {
 	const { db, pgPool } = await import('../db/index.js')
 	const {
 		answerKeys,
+		answerReviews,
 		questions,
 		roles,
 		studentGroups,
@@ -374,6 +375,14 @@ async function main(): Promise<void> {
 				if (seedAttempt.grade) {
 					const latestScores = new Map(
 						Object.entries(seedAttempt.grade).map(([key, value]) => [questionIdOf(seedAttempt.test, key), value])
+					)
+					await db.insert(answerReviews).values(
+						[...latestScores].map(([questionId, score]) => ({
+							attemptId: submitted.attemptId,
+							questionId,
+							score,
+							comment: 'Ответ верный, но не хватает примера.',
+						}))
 					)
 					await db.transaction((tx) => materializeAttemptOutcome(tx, { attemptId: submitted.attemptId, latestScores }))
 				}

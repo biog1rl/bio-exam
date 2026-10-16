@@ -12,7 +12,7 @@ export {
 	type TestScope,
 	type UserScope,
 } from './scope-rules.js'
-export type { ZoneLoader } from './zone-loader.js'
+export type { AnswerPhotoSubject, ZoneLoader } from './zone-loader.js'
 
 const scope = createAccessScope((req, key) => hasPermission(req, key), createDrizzleZoneLoader(db))
 
@@ -21,6 +21,7 @@ export const canWriteTest = scope.canWriteTest
 export const canWriteTopic = scope.canWriteTopic
 export const canReadUser = scope.canReadUser
 export const canReviewAttempt = scope.canReviewAttempt
+export const canReadAnswerPhoto = scope.canReadAnswerPhoto
 export const testScope = scope.testScope
 export const canManageCatalog = scope.canManageCatalog
 export const canManageGroup = scope.canManageGroup

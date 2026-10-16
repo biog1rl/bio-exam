@@ -714,6 +714,21 @@ describe('строки таблицы «Поведение» фазы 5', () => 
 		}
 	)
 
+	test('422 OPEN_ANSWER_EMPTY: попытка открыта, отказ с номерами, переход на первый такой вопрос', async () => {
+		const { lifecycle, storage, fakeApi } = await activeWithAnswer()
+		fakeApi.queueSubmit(requestError(422, SUBMIT_ERROR_CODES.openAnswerEmpty, null, { questionIds: [Q2] }))
+		await lifecycle.submit()
+		const snapshot = lifecycle.getSnapshot()
+		assert.equal(snapshot.phase, 'active')
+		assert.equal(snapshot.interactionDisabled, false)
+		assert.deepEqual(snapshot.submitRejection, { reason: 'open_answer_empty', positions: [2] })
+		assert.equal(snapshot.currentQuestionId, Q2)
+		assert.deepEqual(snapshot.answers, { [Q1]: 'a' })
+		assert.deepEqual(presentKeys(storage), ['session', 'wal', 'clientAttemptId'])
+		lifecycle.answer(Q2, 'b')
+		assert.equal(lifecycle.getSnapshot().submitRejection, null)
+	})
+
 	test('отказ ANSWERS_INVALID снимается новым ответом', async () => {
 		const { lifecycle, fakeApi } = await activeWithAnswer()
 		fakeApi.queueSubmit(

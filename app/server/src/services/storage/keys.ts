@@ -1,8 +1,17 @@
 import { StorageKeyError } from './port.js'
 
-export const STORAGE_NAMESPACES = ['images', 'topics', 'avatars'] as const
+export const STORAGE_NAMESPACES = ['images', 'topics', 'avatars', 'answers'] as const
 
 export type StorageNamespace = (typeof STORAGE_NAMESPACES)[number]
+
+export type NamespaceReader = 'signed-in' | 'signed-in-assets-only' | 'owner-and-reviewers'
+
+export const NAMESPACE_READERS = {
+	images: 'signed-in',
+	avatars: 'signed-in',
+	topics: 'signed-in-assets-only',
+	answers: 'owner-and-reviewers',
+} as const satisfies Record<StorageNamespace, NamespaceReader>
 
 const MAX_DECODE_STEPS = 3
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
@@ -72,13 +81,23 @@ function extensionOf(key: string): string {
 	return dot <= 0 ? '' : name.slice(dot).toLowerCase()
 }
 
+export function namespaceReader(input: string): NamespaceReader {
+	const namespace = normalizeKey(input).split('/')[0]
+	if (!isNamespace(namespace)) throw new StorageKeyError()
+	return NAMESPACE_READERS[namespace]
+}
+
 export function isServableImageKey(input: string): boolean {
 	const key = tryNormalizeKey(input)
 	if (key === null) return false
 	if (!SERVABLE_IMAGE_EXTENSIONS.has(extensionOf(key))) return false
-	const segments = key.split('/')
-	if (segments[0] === 'images' || segments[0] === 'avatars') return true
-	return segments[0] === 'topics' && segments.length >= 5 && segments[3] === 'assets'
+	const reader = namespaceReader(key)
+	if (reader === 'signed-in') return true
+	if (reader === 'signed-in-assets-only') {
+		const segments = key.split('/')
+		return segments.length >= 5 && segments[3] === 'assets'
+	}
+	return false
 }
 
 export function isMediaLibraryKey(input: string): boolean {

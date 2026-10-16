@@ -1,4 +1,5 @@
 import { logger } from '../../lib/logger.js'
+import { findNoAnswerCandidates, loadLatestScores, recordNoAnswerReviews } from '../answer-reviews/index.js'
 import {
 	closeStaleOpenSessions,
 	finalizeSessionByDeadline,
@@ -9,9 +10,12 @@ import type { Job, JobLog } from './registry.js'
 
 export const FINALIZE_DEADLINES_JOB = 'finalize-deadlines'
 export const RECONCILE_OUTCOMES_JOB = 'reconcile-outcomes'
+export const NO_ANSWER_REVIEWS_JOB = 'no-answer-reviews'
 export const FINALIZE_DEADLINES_INTERVAL_MS = 30_000
 export const FINALIZE_DEADLINES_BATCH = 50
 export const FINALIZE_RUN_BUDGET_MS = 20_000
+export const NO_ANSWER_REVIEWS_INTERVAL_MS = 60_000
+export const NO_ANSWER_REVIEWS_BATCH = 50
 export const FINALIZE_FAILURE_COOLDOWN_MS = 600_000
 
 export type FinalizeDeadlinesDeps = {
@@ -73,7 +77,7 @@ export function reconcileOutcomesJob(deps: { log?: Pick<JobLog, 'warn'> } = {}):
 		intervalMs: null,
 		async runOnce() {
 			const result = await reconcileOutcomes({
-				loadLatestScores: async () => new Map(),
+				loadLatestScores,
 				repair: true,
 				repairOnly: 'none',
 			})
@@ -84,6 +88,39 @@ export function reconcileOutcomesJob(deps: { log?: Pick<JobLog, 'warn'> } = {}):
 				)
 			}
 			return { checked: result.checked, mismatched: result.mismatched.length, repaired: result.repaired }
+		},
+	}
+}
+
+export type NoAnswerReviewsDeps = {
+	find?: typeof findNoAnswerCandidates
+	record?: typeof recordNoAnswerReviews
+	log?: Pick<JobLog, 'error'>
+}
+
+export function noAnswerReviewsJob(deps: NoAnswerReviewsDeps = {}): Job {
+	const find = deps.find ?? findNoAnswerCandidates
+	const record = deps.record ?? recordNoAnswerReviews
+	const log = deps.log ?? logger
+	return {
+		name: NO_ANSWER_REVIEWS_JOB,
+		intervalMs: NO_ANSWER_REVIEWS_INTERVAL_MS,
+		async runOnce({ signal }) {
+			const report = { candidates: 0, reviewed: 0, graded: 0, failed: 0 }
+			const candidates = await find(NO_ANSWER_REVIEWS_BATCH)
+			report.candidates = candidates.length
+			for (const candidate of candidates) {
+				if (signal.aborted) break
+				try {
+					const outcome = await record(candidate.attemptId, candidate.questionIds)
+					report.reviewed += outcome.written
+					if (outcome.reviewStatus === 'graded') report.graded += 1
+				} catch (error) {
+					report.failed += 1
+					log.error({ attemptId: candidate.attemptId, err: error }, 'no-answer-reviews attempt failed')
+				}
+			}
+			return report
 		},
 	}
 }

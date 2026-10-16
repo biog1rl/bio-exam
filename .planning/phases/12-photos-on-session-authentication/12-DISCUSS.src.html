@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>Фаза 12: фото ответов</title>
+<link rel="stylesheet" href="htmlplan.css">
+<script src="htmlplan.js" defer></script>
+<body>
+
+<header>
+  <h1>Фаза 12: фото ответов</h1>
+  <details class="thread"><summary>Цель и что уже решено</summary>
+    <doc-quote via="doc" from="ROADMAP, фаза 12">Вошедший ученик прикрепляет до 5 обработанных фото к открытому ответу с компьютера, видят их только владелец и разрешённые проверяющие, а загрузки не могут исчерпать память контейнера API.</doc-quote>
+    <doc-quote via="doc" from="REQUIREMENTS">PHOTO-01…06, DEBT-01 (413/415/400 вместо 500), DEBT-07 (ADR-0004: кто читает images/ и answers/).</doc-quote>
+    <doc-quote via="doc" from="фаза 11, D-06…D-10">Окно загрузки считает одна серверная функция photoUploadWindow по времени базы; отказ — 422 с кодом UPLOAD_WINDOW_CLOSED или UPLOAD_WINDOW_NONE. Окно по умолчанию 15 минут.</doc-quote>
+    <doc-quote via="doc" from="решения вехи v3.0">Лимиты sharp по замеру (около 50 МП, concurrency 1–2, без кэша, семафор). Модерации фото нет. Тип open неактивен до фазы 17. Срок хранения фото — год.</doc-quote>
+  </details>
+</header>
+
+<main>
+<doc-plan>
+
+<doc-claim>
+  <p>Правило «что считается изображением» собирается в одном модуле, фото ответа становится его первым потребителем.</p>
+  <doc-code src="app/server/src/services/assets/images.ts" lines="24-71"></doc-code>
+  <doc-note tone="info"><strong>Почему важно</strong> Сейчас четыре списка типов, три места с multer и ни одного явного <code>autoOrient</code>. Фото ответа стало бы четвёртым вариантом. Подробности в 12-ARCH-REVIEW.md.</doc-note>
+
+  <doc-claim>
+    <p>Единый модуль приёма изображения (тип по сигнатуре, лимит пикселей, поворот, WebP, очистка метаданных) делается в этой фазе до планов, которые его трогают.</p>
+    <doc-ask id="arch-a1">
+      <p>Углубить приём изображений отдельным планом в этой фазе?</p>
+      <label><input type="radio" name="arch-a1" value="phase" checked> В этой фазе <small>фото ответа и медиатека идут через один модуль</small></label>
+      <label><input type="radio" name="arch-a1" value="defer"> Отложить <small>фото ответа получает свой конвейер</small></label>
+      <label><input type="radio" name="arch-a1" value="reject"> Отклонить</label>
+      <label><input type="radio" name="arch-a1" value="custom"> Свой вариант</label>
+      <input type="text" name="arch-a1-custom">
+    </doc-ask>
+    <div data-if="arch-a1=defer"><doc-note tone="warn">Четвёртая копия правила приёма; поворот фото в медиатеке остаётся неисправленным.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Отказы multer (размер, тип, обрыв формы) приводятся к 413/415/400 в одном месте, тесты, закрепляющие 500, переписываются.</p>
+    <doc-ask id="arch-a2">
+      <p>Закрыть DEBT-01 единым преобразованием ошибок multer в этой фазе?</p>
+      <label><input type="radio" name="arch-a2" value="phase" checked> В этой фазе <small>аватар, медиатека и фото отдают одни коды</small></label>
+      <label><input type="radio" name="arch-a2" value="defer"> Отложить <small>противоречит критерию 2 фазы</small></label>
+      <label><input type="radio" name="arch-a2" value="custom"> Свой вариант</label>
+      <input type="text" name="arch-a2-custom">
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Правило «кто читает какое пространство» (images/, avatars/, topics/, answers/) живёт в одном месте, а не в списке строк, предикате и шаблоне URL.</p>
+    <doc-code src="app/server/src/services/storage/keys.ts" lines="75-82"></doc-code>
+    <doc-ask id="arch-a3">
+      <p>Собрать правило доступа к пространствам в одном месте в этой фазе?</p>
+      <label><input type="radio" name="arch-a3" value="phase" checked> В этой фазе <small>ADR-0004 фиксирует то же самое (DEBT-07)</small></label>
+      <label><input type="radio" name="arch-a3" value="defer"> Отложить <small>answers/ закрывается точечно, ADR описывает как есть</small></label>
+      <label><input type="radio" name="arch-a3" value="custom"> Свой вариант</label>
+      <input type="text" name="arch-a3-custom">
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Две находки только читают код фазы: клиент подстраивается под 500, и маршрут <code>POST /api/tests/:id/assets</code>, вероятно, мёртв.</p>
+    <doc-ask id="arch-a45">
+      <p>Что делать с этими двумя находками?</p>
+      <label><input type="radio" name="arch-a45" value="defer" checked> Отложить обе <small>лежат в журнале «разбитых окон»</small></label>
+      <label><input type="radio" name="arch-a45" value="phase-a5"> Удалить мёртвый маршрут в этой фазе <small>после сверки с инвентарём маршрутов</small></label>
+      <label><input type="radio" name="arch-a45" value="custom"> Свой вариант</label>
+      <input type="text" name="arch-a45-custom">
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Фото принадлежит сессии и вопросу, пока попытки не существует, и привязывается к попытке при сдаче.</p>
+  <doc-code src="app/server/src/services/attempt-sessions/upload-window.ts" lines="43-71"></doc-code>
+  <doc-tree caption="Новое пространство хранилища.">
+<script type="text/plain">
+answers/
+  + {sessionId}/{questionId}/{photoId}/full.webp
+  + {sessionId}/{questionId}/{photoId}/thumb.webp
+</script>
+  </doc-tree>
+  <doc-note tone="info"><strong>Почему важно</strong> Попытка создаётся при сдаче, а <code>photoUploadWindow</code> уже принимает <code>sessionId</code>. Фото прикрепляют до сдачи, значит ключ строится от сессии. Исследование предлагало <code>{attemptId}</code>, это уточняем. Идентификатор фото <code>photoId</code> создаёт клиент (UUID), повтор не плодит дубль.</doc-note>
+
+  <doc-claim>
+    <p>Ключ и строка фото строятся от <code>sessionId</code>; при сдаче (фаза 14) строка получает <code>attemptId</code>, файл не переезжает.</p>
+    <doc-ask id="key-owner">
+      <p>От чего строить ключ и строку фото?</p>
+      <label><input type="radio" name="key-owner" value="session" checked> От сессии и вопроса <small>файл остаётся на месте после сдачи</small></label>
+      <label><input type="radio" name="key-owner" value="attempt"> Заранее создавать попытку <small>ломает модель «попытка есть только после сдачи»</small></label>
+      <label><input type="radio" name="key-owner" value="custom"> Свой вариант</label>
+      <input type="text" name="key-owner-custom">
+    </doc-ask>
+    <div data-if="key-owner=attempt"><doc-note tone="warn">Это выходит за фазу 12: меняет сдачу и фазу 14.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Удаление фото учеником убирает строку и оба файла сразу, пока окно открыто.</p>
+    <doc-ask id="delete-mode">
+      <p>Как удалять фото, когда ученик нажал «убрать»?</p>
+      <label><input type="radio" name="delete-mode" value="hard" checked> Сразу удалить строку и файлы <small>проще, окно закрыто — убрать нельзя</small></label>
+      <label><input type="radio" name="delete-mode" value="soft"> Пометить удалённым, чистит задача <small>можно вернуть, но копятся файлы</small></label>
+      <label><input type="radio" name="delete-mode" value="custom"> Свой вариант</label>
+      <input type="text" name="delete-mode-custom">
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Обработка ограничена по памяти и отказывает с понятным текстом; числа подтверждает первый план-замер.</p>
+  <doc-note tone="info"><strong>Старт до замера</strong> Файл до 10 МБ; лимит пикселей около 50 МП; поворот по EXIF, затем уменьшение до 2560 px по длинной стороне, WebP q82, миниатюра 400 px; sharp без кэша, один семафор на процесс (1 или 2 по замеру). Замер на 12 и 48 МП меняет числа, не структуру.</doc-note>
+
+  <doc-claim>
+    <p>HEIC с iPhone в основном приходит уже как JPEG, поэтому сервер его не принимает и отвечает 415 с понятным текстом.</p>
+    <doc-ask id="heic">
+      <p>Принимать ли HEIC на сервере?</p>
+      <label><input type="radio" name="heic" value="no" checked> Нет, 415 с текстом <small>сборка sharp не декодирует HEIC</small></label>
+      <label><input type="radio" name="heic" value="decode"> Да, через heic-decode <small>новая зависимость, LGPL, очередь по одному</small></label>
+      <label><input type="radio" name="heic" value="spike"> Решить по замеру на реальных фото <small>образцы даёте вы</small></label>
+      <label><input type="radio" name="heic" value="custom"> Свой вариант</label>
+      <input type="text" name="heic-custom">
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Фото больше предела по пикселям отклоняется с сообщением, а не уменьшается на лету.</p>
+    <doc-ask id="oversize">
+      <p>Что делать с фото выше лимита пикселей?</p>
+      <label><input type="radio" name="oversize" value="refuse" checked> Отказ 413 «слишком большое изображение» <small>клиент и так уменьшает до 2560 px</small></label>
+      <label><input type="radio" name="oversize" value="shrink"> Уменьшать при чтении (shrink-on-load) <small>принимает больше, дороже по памяти</small></label>
+      <label><input type="radio" name="oversize" value="custom"> Свой вариант</label>
+      <input type="text" name="oversize-custom">
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>Фото отдаёт отдельный маршрут: владельцу всегда, проверяющему после сдачи, остальным как отсутствующий файл.</p>
+  <doc-note tone="info"><strong>Уже решено в ROADMAP</strong> Заголовок <code>Cache-Control: private, no-store</code> (исследование предлагало immutable, критерий 3 важнее); общий прокси <code>/api/docs/assets/proxy</code> фото не отдаёт; чужой запрос получает тот же ответ, что и для несуществующего файла.</doc-note>
+
+  <doc-claim>
+    <p>Проверяющий (<code>canReviewAttempt</code>) видит фото только после сдачи, когда есть попытка; до сдачи — только владелец.</p>
+    <doc-ask id="reviewer-early">
+      <p>Видит ли учитель фото ученика до сдачи?</p>
+      <label><input type="radio" name="reviewer-early" value="no" checked> Нет, только владелец <small>проверка идёт после сдачи, попытки ещё нет</small></label>
+      <label><input type="radio" name="reviewer-early" value="yes"> Да, учитель в зоне ученика <small>новое правило доступа без попытки</small></label>
+      <label><input type="radio" name="reviewer-early" value="custom"> Свой вариант</label>
+      <input type="text" name="reviewer-early-custom">
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim>
+  <p>В раннере блок фото показывается для вопроса из сида, а ученик видит понятные состояния загрузки.</p>
+  <doc-mock frame="none" w="420"><template>
+<div style="font:14px/1.4 sans-serif;border:1px solid #ddd;border-radius:10px;padding:12px;background:#fff;color:#222">
+  <div style="font-weight:600">Фото решения <span style="color:#777;font-weight:400">· 2 из 5</span></div>
+  <div style="display:flex;gap:8px;margin:10px 0"><div data-ref="t1" style="width:64px;height:64px;background:#e6e6e6;border-radius:6px"></div><div style="width:64px;height:64px;background:#e6e6e6;border-radius:6px"></div><div data-ref="up" style="width:64px;height:64px;border:1px dashed #aaa;border-radius:6px;text-align:center;line-height:64px;color:#777">+</div></div>
+  <div style="color:#b42318;font-size:13px" data-ref="err">Не загрузилось. Повторить</div>
+</div></template>
+    <doc-pin ref="t1" title="Миниатюра">Кнопка убрать, пока окно открыто.</doc-pin>
+    <doc-pin ref="err" title="Ошибка" anchor="br">Текст приходит с сервера.</doc-pin>
+  </doc-mock>
+
+  <doc-claim>
+    <p>Блок фото включается для вопроса из сида и e2e; в интерфейсе авторов тип open остаётся скрытым до фазы 17.</p>
+    <doc-ask id="runner-seed">
+      <p>Как показать блок фото в раннере до фазы 14?</p>
+      <label><input type="radio" name="runner-seed" value="seed" checked> Только вопрос из сида/e2e <small>тип open неактивен в проде</small></label>
+      <label><input type="radio" name="runner-seed" value="flag"> Ещё и dev-флаг для ручной проверки <small>лишний переключатель</small></label>
+      <label><input type="radio" name="runner-seed" value="custom"> Свой вариант</label>
+      <input type="text" name="runner-seed-custom">
+    </doc-ask>
+  </doc-claim>
+
+  <doc-claim>
+    <p>Сбойная загрузка повторяется сама три раза с нарастающей паузой, затем остаётся кнопка «Повторить».</p>
+    <doc-ask id="retry">
+      <p>Как вести себя при сбое сети?</p>
+      <label><input type="radio" name="retry" value="auto3" checked> Три автоповтора, затем кнопка <small>тот же photoId, дубля нет</small></label>
+      <label><input type="radio" name="retry" value="manual"> Сразу кнопка «Повторить» <small>проще, больше кликов в классе</small></label>
+      <label><input type="radio" name="retry" value="custom"> Свой вариант</label>
+      <input type="text" name="retry-custom">
+    </doc-ask>
+    <div data-if="retry=manual"><doc-note tone="warn">PHOTO-02 просит повторы; кнопка без автоповтора слабее требования.</doc-note></div>
+  </doc-claim>
+</doc-claim>
+
+<doc-claim aux="scope">
+  <p>За рамками фазы 12.</p>
+  <ul>
+    <li>QR, токен и страница телефона: фаза 13 (компонент фото готовится для неё: «Сделать фото» и «Выбрать из галереи»).</li>
+    <li>Создание открытого вопроса, текст ответа, сдача и «Готово»: фаза 14.</li>
+    <li>Просмотр фото проверяющим, оценка: фаза 15. Срок хранения и очистка сирот: фаза 16.</li>
+    <li>Модерация содержимого фото: MODX-01, не в v3.0.</li>
+    <li>Неотслеживаемая папка фазы 14.1 в дереве: вне этой фазы.</li>
+  </ul>
+</doc-claim>
+
+</doc-plan>
+</main>
+</body>
+</html>

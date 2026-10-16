@@ -79,7 +79,7 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 		await page.goto(`/admin/tests/${topic.slug}`)
 		await expect(page.getByRole('heading', { level: 1, name: topic.title })).toBeVisible()
 		await page.getByRole('button', { name: 'Действия с темой', exact: true }).click()
-		await page.getByRole('menuitem', { name: 'Изменить тему', exact: true }).click()
+		await page.getByRole('menuitem', { name: 'Редактировать', exact: true }).click()
 
 		const dialog = page.getByRole('dialog', { name: 'Редактировать тему' })
 		await expect(dialog).toBeVisible()
@@ -98,7 +98,7 @@ test.describe.serial('D-31: teacher works only in his zone', () => {
 
 		await page.reload()
 		await page.getByRole('button', { name: 'Действия с темой', exact: true }).click()
-		await page.getByRole('menuitem', { name: 'Изменить тему', exact: true }).click()
+		await page.getByRole('menuitem', { name: 'Редактировать', exact: true }).click()
 		await expect(dialog.getByRole('button', { name: `Убрать ${name}` })).toBeVisible()
 		await page.keyboard.press('Escape')
 	})

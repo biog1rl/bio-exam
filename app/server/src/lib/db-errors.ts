@@ -30,6 +30,10 @@ function sqlStateOf(err: unknown): string | null {
 	return null
 }
 
+export function isUniqueViolation(err: unknown): boolean {
+	return sqlStateOf(err) === '23505'
+}
+
 export function isTransientDbError(err: unknown): boolean {
 	const sqlState = sqlStateOf(err)
 	if (sqlState && (TRANSIENT_SQLSTATE_CLASSES.has(sqlState.slice(0, 2)) || TRANSIENT_SQLSTATE_CODES.has(sqlState))) {

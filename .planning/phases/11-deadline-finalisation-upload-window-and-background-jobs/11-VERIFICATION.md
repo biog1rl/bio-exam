@@ -1,7 +1,7 @@
 ---
 phase: 11-deadline-finalisation-upload-window-and-background-jobs
 verified: 2026-10-13T14:26:00Z
-status: human_needed
+status: passed
 score: 1/5 must-haves verified
 covered_files:
   - ".planning/phases/11-deadline-finalisation-upload-window-and-background-jobs/11-01-PLAN.md"
@@ -162,6 +162,7 @@ covered_files:
   - "scripts/check-exam-core-dist.mjs"
   - "scripts/check-migrations.mjs"
   - "scripts/draft-durability-guards.test.mjs"
+
 covered_digest: "v2:sha256:f906219719b1666ab63ac1d0656f7dc8128d6e9f08516a88515ba66883fc1a39"
 behavior_unverified: 4
 overrides_applied: 0

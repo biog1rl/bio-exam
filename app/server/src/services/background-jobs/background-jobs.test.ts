@@ -265,24 +265,31 @@ describe('остановка', () => {
 })
 
 describe('расписание на подменных таймерах', () => {
-	test('start() ставит таймер только finalize-deadlines на 30 000 мс, stop() его снимает', async () => {
+	test('start() ставит таймеры finalize-deadlines на 30 000 мс и no-answer-reviews, stop() их снимает', async () => {
 		const timers = fakeTimers()
 		const jobs = jobsModule.createBackgroundJobs({
 			log: quietLog,
 			setTimer: timers.setTimer,
 			clearTimer: timers.clearTimer,
 		})
-		assert.deepEqual(jobs.names(), [jobsModule.FINALIZE_DEADLINES_JOB, jobsModule.RECONCILE_OUTCOMES_JOB])
+		assert.deepEqual(jobs.names(), [
+			jobsModule.FINALIZE_DEADLINES_JOB,
+			jobsModule.NO_ANSWER_REVIEWS_JOB,
+			jobsModule.RECONCILE_OUTCOMES_JOB,
+		])
 
 		jobs.start()
 		assert.deepEqual(
 			timers.calls.map((call) => call.ms),
-			[jobsModule.FINALIZE_DEADLINES_INTERVAL_MS]
+			[jobsModule.FINALIZE_DEADLINES_INTERVAL_MS, jobsModule.NO_ANSWER_REVIEWS_INTERVAL_MS]
 		)
 		assert.equal(jobsModule.FINALIZE_DEADLINES_INTERVAL_MS, 30_000)
 		await jobs.stop()
-		assert.deepEqual(timers.cleared, [timers.calls[0]!.handle])
-		assert.equal(timers.calls.length, 1)
+		assert.deepEqual(
+			timers.cleared,
+			timers.calls.map((call) => call.handle)
+		)
+		assert.equal(timers.calls.length, 2)
 	})
 
 	test('следующий таймер ставится после прогона, исключение уходит в log.error, после stop() таймеров нет', async () => {

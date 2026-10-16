@@ -36,7 +36,7 @@ const FULL_CONTROLS: ControlList = {
 		'button:Медиатека',
 	],
 	actions: [
-		'button:Disable speech to text',
+		'button:Включить голосовой ввод',
 		'button:Share Playground link to current editor state',
 		'button:Import editor state from JSON',
 		'button:Export editor state to JSON',

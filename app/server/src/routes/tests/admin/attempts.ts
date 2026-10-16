@@ -12,10 +12,13 @@ import { requirePerm } from '../../../middleware/auth/requirePerm.js'
 import { sessionRequired } from '../../../middleware/auth/session.js'
 import { validateUUID } from '../../../middleware/validateParams.js'
 import { canReviewAttempt, testScope, type TestScope } from '../../../services/access-policy/index.js'
+import { readLatestReviews } from '../../../services/answer-reviews/index.js'
 import { questionMarkdownCandidates, readQuestionTexts } from '../../../services/question-content/index.js'
-import { attemptResultColumns, readAdminAttemptView } from '../../../services/scored-attempt/index.js'
+import { attemptResultColumns, readAdminAttemptView, reviewReady } from '../../../services/scored-attempt/index.js'
 
 const router = Router()
+
+const reviewReadyColumn = sql<boolean>`${reviewReady}`
 
 function studentAttemptsInScope(scope: TestScope): SQL | undefined {
 	const notStaff = sql`not exists (select 1 from ${userRoles} where ${userRoles.userId} = ${testAttempts.userId} and ${inArray(userRoles.roleKey, [...STAFF_ROLE_KEYS])})`
@@ -78,6 +81,7 @@ function attemptFilters(scope: TestScope, query: AttemptsQuery): Array<SQL | und
 	if (query.to) filters.push(lte(testAttempts.submittedAt, new Date(query.to)))
 	if (query.status !== 'all') filters.push(eq(users.isActive, query.status === 'active'))
 	if (query.review !== 'all') filters.push(eq(testAttempts.reviewStatus, query.review))
+	if (query.review === 'pending') filters.push(reviewReady)
 	if (query.q) {
 		const pattern = `%${escapeLike(query.q)}%`
 		filters.push(
@@ -154,6 +158,7 @@ router.get('/admin/dashboard', sessionRequired(), requirePerm('tests', 'read'), 
 				studentId: users.id,
 				studentName: studentNameIn(scope),
 				submittedAt: testAttempts.submittedAt,
+				reviewReady: reviewReadyColumn,
 				...attemptResultColumns,
 			})
 			.from(testAttempts)
@@ -241,7 +246,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 		const [scopeCounts] = await db
 			.select({
 				total: sql<number>`count(*)::int`,
-				pendingTotal: sql<number>`count(*) filter (where ${testAttempts.reviewStatus} = 'pending')::int`,
+				pendingTotal: sql<number>`count(*) filter (where ${testAttempts.reviewStatus} = 'pending' and ${reviewReady})::int`,
 			})
 			.from(testAttempts)
 			.innerJoin(tests, eq(tests.id, testAttempts.testId))
@@ -259,6 +264,7 @@ router.get('/admin/attempts', sessionRequired(), requirePerm('tests', 'read'), a
 				studentIsActive: users.isActive,
 				studentName: studentNameIn(scope),
 				submittedAt: testAttempts.submittedAt,
+				reviewReady: reviewReadyColumn,
 				...attemptResultColumns,
 			})
 			.from(testAttempts)
@@ -316,11 +322,16 @@ router.get('/admin/attempts/:attemptId', validateUUID('attemptId'), sessionRequi
 			return res.status(403).json({ error: 'Forbidden' })
 		}
 
-		const review = await readAdminAttemptView(attemptId)
+		const review = await readAdminAttemptView(attemptId, readLatestReviews)
 
 		if (!review) {
 			return res.status(404).json({ error: 'Attempt not found' })
 		}
+
+		const [ready] = await db
+			.select({ reviewReady: reviewReadyColumn })
+			.from(testAttempts)
+			.where(eq(testAttempts.id, attemptId))
 
 		// Load questions for this attempt's test (same pattern as public test detail endpoint)
 		const questionRows = await db
@@ -378,7 +389,7 @@ router.get('/admin/attempts/:attemptId', validateUUID('attemptId'), sessionRequi
 			}
 		})
 
-		res.json({ attempt: review, questions: questionsWithTexts })
+		res.json({ attempt: { ...review, reviewReady: ready?.reviewReady ?? false }, questions: questionsWithTexts })
 	} catch (e) {
 		next(e)
 	}

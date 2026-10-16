@@ -6,6 +6,7 @@ export {
 	type NotificationSubject,
 	type NotificationTx,
 } from './record.js'
+export { ATTEMPT_GRADED_KIND, attemptGradedDedupeKey, recordAttemptGraded } from './producers/attempt-graded.js'
 export {
 	TEST_ASSIGNED_KIND,
 	recordTestAssigned,

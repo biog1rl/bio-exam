@@ -522,15 +522,6 @@ status([['teacherB', 403]], 'DELETE /api/tests/:freshX', async (p) => {
 	return send(p, 'DELETE', `/${fresh.id}`)
 })
 
-status(
-	[
-		['teacherA', 400],
-		['teacherB', 403],
-	],
-	'POST /api/tests/:tX/assets',
-	(p) => send(p, 'POST', `/${w.tests.tX.id}/assets`)
-)
-
 row(['teacherA'], 'GET /api/tests/:tX/export?withAnswers=true', '200 с answer_keys.json', async (p) => {
 	const reply = await download(p, `/${w.tests.tX.id}/export?withAnswers=true`)
 	expectStatus(reply, 200)

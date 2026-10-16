@@ -27,14 +27,15 @@ const QUESTION_DRAFT_ROUTES = 'app/server/src/routes/tests/admin/question-drafts
 const TESTS_CORE_ROUTES = 'app/server/src/routes/tests/admin/tests-core.ts'
 const QUESTION_ROUTES = 'app/server/src/routes/tests/admin/questions.ts'
 const TESTS_DELETE_ROUTES = 'app/server/src/routes/tests/admin/tests-delete.ts'
-const ASSET_ROUTES = 'app/server/src/routes/tests/admin/assets.ts'
 const EXPORT_ROUTES = 'app/server/src/routes/tests/admin/export.ts'
 const ATTEMPT_ROUTES = 'app/server/src/routes/tests/admin/attempts.ts'
+const REVIEW_ROUTES = 'app/server/src/routes/tests/admin/reviews.ts'
 const ASSIGNMENT_ROUTES = 'app/server/src/routes/tests/assignments.ts'
 const GROUP_ROUTES = 'app/server/src/routes/groups/index.ts'
 const USER_ROUTES = 'app/server/src/routes/users/index.ts'
 const SIGN_IN_ASSIST_ROUTES = 'app/server/src/routes/users/sign-in-assist.ts'
 const INVITE_ROUTES = 'app/server/src/routes/auth/invites.ts'
+const ANSWER_PHOTO_ROUTES = 'app/server/src/routes/answer-photos.ts'
 
 const ROUTE_FILES = {
 	[TOPIC_ROUTES]: { router: 'router', mount: '/api/tests' },
@@ -46,14 +47,15 @@ const ROUTE_FILES = {
 	[TESTS_CORE_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[QUESTION_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[TESTS_DELETE_ROUTES]: { router: 'router', mount: '/api/tests' },
-	[ASSET_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[EXPORT_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ATTEMPT_ROUTES]: { router: 'router', mount: '/api/tests' },
+	[REVIEW_ROUTES]: { router: 'router', mount: '/api/tests' },
 	[ASSIGNMENT_ROUTES]: { router: 'assignmentsRouter', mount: '/api/tests/:testId/assignments' },
 	[GROUP_ROUTES]: { router: 'groupsRouter', mount: '/api/groups' },
 	[USER_ROUTES]: { router: 'router', mount: '/api/users' },
 	[SIGN_IN_ASSIST_ROUTES]: { router: 'router', mount: '/api/users' },
 	[INVITE_ROUTES]: { router: 'router', mount: '/api/auth/invites' },
+	[ANSWER_PHOTO_ROUTES]: { router: 'router', mount: '/api/answer-photos' },
 }
 
 const OBJECT = 'объектный маршрут'
@@ -91,6 +93,9 @@ const INVENTORY = [
 		[QUESTION_DRAFT_ROUTES, 'delete', '/:testId/question-drafts/:draftId'],
 	].map(([file, method, routePath]) => route(file, method, routePath, OBJECT, ['canWriteTest('])),
 	route(ATTEMPT_ROUTES, 'get', '/admin/attempts/:attemptId', OBJECT, ['canReviewAttempt(']),
+	route(REVIEW_ROUTES, 'post', '/admin/attempts/:attemptId/questions/:questionId/review', OBJECT, [
+		'canReviewAttempt(',
+	]),
 	...[
 		[TOPIC_ROUTES, '/topics'],
 		[TESTS_LIST_ROUTES, '/'],
@@ -116,6 +121,7 @@ const INVENTORY = [
 	route(GROUP_ROUTES, 'post', '/', COARSE, ['hasGlobalZone(', 'setGroupOwner(']),
 	route(GROUP_ROUTES, 'get', '/candidates', COARSE, ['studentOnlyFilter(']),
 	route(GROUP_ROUTES, 'get', '/owner-options', COARSE, ['hasGlobalZone(', 'zoneOwnerCandidates(']),
+	route(ANSWER_PHOTO_ROUTES, 'get', '/:photoId/:variant', OBJECT, ['canReadAnswerPhoto(']),
 ]
 
 const TABLE_CHECKS = [
@@ -529,7 +535,7 @@ test('маршруты инвентаря D-14 решают доступ фун�
 		const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8')
 		assert.ok(registrations(source, config.router).length > 0, `${file}: нет регистраций ${config.router}`)
 	}
-	assert.equal(INVENTORY.length, 45)
+	assert.equal(INVENTORY.length, 47)
 	assert.deepEqual(inventoryViolations(REPO_ROOT), [])
 })
 

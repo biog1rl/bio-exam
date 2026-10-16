@@ -2,6 +2,7 @@ export const HOME_PATH = '/dashboard'
 
 const NON_PAGE_PATHS: readonly RegExp[] = [
 	/^\/tests\/[^/]+$/,
+	/^\/tests\/[^/]+\/[^/]+\/attempts$/,
 	/^\/invite$/,
 	/^\/notifications$/,
 	/^\/admin\/tests\/[^/]+\/[^/]+\/questions$/,

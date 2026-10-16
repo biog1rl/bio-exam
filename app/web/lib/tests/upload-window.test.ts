@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { uploadWindowView, type UploadWindowView } from './upload-window'
+import { uploadWindowRefusalText, uploadWindowView, type UploadWindowView } from './upload-window'
 
 function at(year: number, month: number, day: number, hour: number, minute: number, second = 0): number {
 	return new Date(year, month, day, hour, minute, second).getTime()
@@ -114,5 +114,75 @@ describe('uploadWindowView', () => {
 		},
 	])('$name', ({ closes, now, expected }) => {
 		expect(uploadWindowView(closes, now)).toEqual(expected)
+	})
+})
+
+describe('uploadWindowRefusalText', () => {
+	test.each([
+		{
+			name: 'загрузка, окно закрылось в тот же день',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: CLOSES },
+			now: at(2026, 9, 6, 14, 45),
+			action: 'upload',
+			expected: 'Время для добавления фото закончилось в 14:35. Фото не сохранено.',
+		},
+		{
+			name: 'загрузка, окно закрылось в другой день',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: CLOSES_NEXT_DAY },
+			now: at(2026, 9, 8, 10, 0),
+			action: 'upload',
+			expected: 'Время для добавления фото закончилось 7 окт. в 00:15. Фото не сохранено.',
+		},
+		{
+			name: 'загрузка, часы устройства отстают на 30 с',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: CLOSES },
+			now: at(2026, 9, 6, 14, 34, 30),
+			action: 'upload',
+			expected: 'Время для добавления фото закончилось в 14:35. Фото не сохранено.',
+		},
+		{
+			name: 'загрузка, окна нет',
+			refusal: { error: 'UPLOAD_WINDOW_NONE', uploadClosesAt: null },
+			now: at(2026, 9, 6, 14, 45),
+			action: 'upload',
+			expected: 'К этой попытке фото добавить нельзя.',
+		},
+		{
+			name: 'загрузка, закрыто без момента',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: null },
+			now: at(2026, 9, 6, 14, 45),
+			action: 'upload',
+			expected: 'К этой попытке фото добавить нельзя.',
+		},
+		{
+			name: 'удаление, окно закрылось в тот же день',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: CLOSES },
+			now: at(2026, 9, 6, 14, 45),
+			action: 'remove',
+			expected: 'Время для добавления фото закончилось в 14:35. Фото нельзя удалить.',
+		},
+		{
+			name: 'удаление, окно закрылось в другой день',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: CLOSES_NEXT_DAY },
+			now: at(2026, 9, 8, 10, 0),
+			action: 'remove',
+			expected: 'Время для добавления фото закончилось 7 окт. в 00:15. Фото нельзя удалить.',
+		},
+		{
+			name: 'удаление, окна нет',
+			refusal: { error: 'UPLOAD_WINDOW_NONE', uploadClosesAt: null },
+			now: at(2026, 9, 6, 14, 45),
+			action: 'remove',
+			expected: 'Фото этой попытки изменить нельзя.',
+		},
+		{
+			name: 'удаление, закрыто без момента',
+			refusal: { error: 'UPLOAD_WINDOW_CLOSED', uploadClosesAt: null },
+			now: at(2026, 9, 6, 14, 45),
+			action: 'remove',
+			expected: 'Фото этой попытки изменить нельзя.',
+		},
+	] as const)('$name', ({ refusal, now, action, expected }) => {
+		expect(uploadWindowRefusalText(refusal, now, action)).toBe(expected)
 	})
 })

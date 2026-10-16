@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { call, seedUser, type AuthApp, type Reply } from './auth-app.js'
+import { call, nextIp, seedUser, type AuthApp, type Reply } from './auth-app.js'
 import { sessionCookieFor } from './http.js'
 
 type Json = Record<string, unknown>
@@ -190,6 +190,41 @@ export async function insertOpenQuestion(ctx: AuthApp, testId: string, options: 
 		.returning({ id: schema.questions.id })
 	assert.ok(question, 'insertOpenQuestion: question was not created')
 	return question.id
+}
+
+export type AnswerPhotoUpload = {
+	testId: string
+	sessionId: string
+	questionId: string
+	photoId: string
+	bytes: Buffer | null
+	type?: string
+}
+
+export function answerPhotoPath(target: { testId: string; sessionId: string; questionId: string }): string {
+	return `/api/tests/public/tests/${target.testId}/sessions/${target.sessionId}/questions/${target.questionId}/photos`
+}
+
+export async function putAnswerPhoto(world: AttemptWorld, cookie: string, upload: AnswerPhotoUpload): Promise<Reply> {
+	const form = new FormData()
+	if (upload.bytes) {
+		form.append('file', new Blob([new Uint8Array(upload.bytes)], { type: upload.type ?? 'image/jpeg' }), 'photo.jpg')
+	} else {
+		form.append('note', 'без файла')
+	}
+	const response = await fetch(`${world.ctx.baseUrl}${answerPhotoPath(upload)}/${upload.photoId}`, {
+		method: 'PUT',
+		body: form,
+		headers: { cookie, 'x-forwarded-for': nextIp() },
+	})
+	const text = await response.text()
+	let body: Record<string, unknown>
+	try {
+		body = JSON.parse(text) as Record<string, unknown>
+	} catch {
+		body = { raw: text }
+	}
+	return { status: response.status, body, setCookies: new Map(), headers: response.headers }
 }
 
 export type AttemptRowFacts = {

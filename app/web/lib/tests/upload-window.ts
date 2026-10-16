@@ -1,7 +1,11 @@
+import { UPLOAD_WINDOW_ERROR_CODES, type UploadWindowRefusal } from '@bio-exam/exam-core'
+
 import { format, isSameDay } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
 export type UploadWindowState = 'none' | 'open' | 'closing' | 'last-minute' | 'closed'
+
+export type UploadWindowAction = 'upload' | 'remove'
 
 export type UploadWindowView = {
 	state: UploadWindowState
@@ -33,6 +37,35 @@ function countdownOf(state: 'open' | 'closing' | 'last-minute', minutes: number)
 	return 'закроется меньше чем через минуту'
 }
 
+function closedMoment(closes: Date, nowMs: number): string {
+	const time = format(closes, 'HH:mm')
+	if (isSameDay(closes, new Date(nowMs))) return `в ${time}`
+	return `${format(closes, 'd MMM', { locale: ru })} в ${time}`
+}
+
+const REFUSAL_TAIL: Record<UploadWindowAction, string> = {
+	upload: 'Фото не сохранено.',
+	remove: 'Фото нельзя удалить.',
+}
+
+const NO_WINDOW_REFUSAL: Record<UploadWindowAction, string> = {
+	upload: 'К этой попытке фото добавить нельзя.',
+	remove: 'Фото этой попытки изменить нельзя.',
+}
+
+export function uploadWindowRefusalText(
+	refusal: UploadWindowRefusal,
+	nowMs: number,
+	action: UploadWindowAction
+): string {
+	const closesMs =
+		refusal.error === UPLOAD_WINDOW_ERROR_CODES.closed && refusal.uploadClosesAt !== null
+			? Date.parse(refusal.uploadClosesAt)
+			: Number.NaN
+	if (Number.isNaN(closesMs)) return NO_WINDOW_REFUSAL[action]
+	return `Время для добавления фото закончилось ${closedMoment(new Date(closesMs), nowMs)}. ${REFUSAL_TAIL[action]}`
+}
+
 export function uploadWindowView(uploadClosesAt: string | null, nowMs: number): UploadWindowView {
 	if (uploadClosesAt === null) return NO_WINDOW
 	const closesMs = Date.parse(uploadClosesAt)
@@ -45,9 +78,7 @@ export function uploadWindowView(uploadClosesAt: string | null, nowMs: number): 
 		return {
 			...NO_WINDOW,
 			state: 'closed',
-			closedText: sameDay
-				? `Время для добавления фото закончилось в ${time}`
-				: `Время для добавления фото закончилось ${format(closes, 'd MMM', { locale: ru })} в ${time}`,
+			closedText: `Время для добавления фото закончилось ${closedMoment(closes, nowMs)}`,
 			liveText: 'Время для добавления фото закончилось.',
 		}
 	}
