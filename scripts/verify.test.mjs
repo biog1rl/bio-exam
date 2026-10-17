@@ -13,7 +13,7 @@ import { formatSummary, STEPS } from './verify.mjs'
 
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url))
 
-test('восемь шагов идут в заданном порядке', () => {
+test('девять шагов идут в заданном порядке', () => {
 	assert.deepEqual(
 		STEPS.map((step) => step.name),
 		[
@@ -23,6 +23,7 @@ test('восемь шагов идут в заданном порядке', () =
 			'ci-workflow',
 			'format-check',
 			'lint-typecheck-test',
+			'package-dist',
 			'migrations',
 			'script-tests',
 		]

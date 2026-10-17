@@ -22,7 +22,7 @@ Run everything from the repository root. Node 24 (`.nvmrc`), Yarn 4.12 through C
 
 - `yarn install`: install dependencies. `yarn.lock` is the only lockfile.
 - `yarn dev`: run web (`:3000`) and the Express API (`:4000`) through Turbo.
-- `yarn verify`: the single repository gate (steps `lockfile`, `env-contract`, `docs-commands`, `ci-workflow`, `format-check`, `lint-typecheck-test`, `migrations`, `script-tests`). It starts its own disposable PostgreSQL 17 and ends with `yarn verify: OK` or `yarn verify: FAILED at <step>`.
+- `yarn verify`: the single repository gate (steps `lockfile`, `env-contract`, `docs-commands`, `ci-workflow`, `format-check`, `lint-typecheck-test`, `package-dist`, `migrations`, `script-tests`). It starts its own disposable PostgreSQL 17 and ends with `yarn verify: OK` or `yarn verify: FAILED at <step>`.
 - `yarn e2e`: isolated Playwright run (first `yarn playwright install chromium`). It is not part of `yarn verify`.
 - `yarn editor:budget`: after `yarn workspace @bio-exam/web build`, checks the first-load JS of the question editor routes (raw and gzip) against `scripts/editor-bundle-budget.json` and that the emoji table is not in it. CI runs it after "Build web"; it is not part of `yarn verify`.
 - `yarn lint`, `yarn typecheck`, `yarn test`: the same Turbo tasks `yarn verify` runs, for a quicker loop.

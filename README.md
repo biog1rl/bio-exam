@@ -74,8 +74,9 @@ yarn verify
 4. `ci-workflow`: CI только читает репозиторий: без записи, секретов и публикации;
 5. `format-check`: `oxfmt --check .`, форматирование репозитория;
 6. `lint-typecheck-test`: `turbo run lint typecheck test` по `packages/rbac`, `packages/exam-core`, `app/server` и `app/web`;
-7. `migrations`: цепочка миграций Drizzle с нуля совпадает со схемой;
-8. `script-tests`: тесты корневых скриптов.
+7. `package-dist`: сборка `packages/rbac` и `packages/exam-core`, их `dist` экспортирует ожидаемый набор;
+8. `migrations`: цепочка миграций Drizzle с нуля совпадает со схемой;
+9. `script-tests`: тесты корневых скриптов.
 
 Успешный прогон заканчивается строкой `yarn verify: OK`, неуспешный строкой `yarn verify: FAILED at <шаг>`.
 Если PostgreSQL 17 не найден и `TEST_DATABASE_URL` не задан, команда падает с подсказкой, шаги с базой не пропускаются.

@@ -8,8 +8,9 @@
  *   4. ci-workflow          node scripts/check-ci-workflow.mjs (CI только читает: без записи, секретов и публикации)
  *   5. format-check         yarn format:check (oxfmt --check .)
  *   6. lint-typecheck-test  yarn turbo run lint typecheck test (все три воркспейса)
- *   7. migrations           node scripts/check-migrations.mjs
- *   8. script-tests         node --test scripts/**\/*.test.mjs
+ *   7. package-dist         сборка rbac и exam-core, затем scripts/check-rbac-dist.mjs и scripts/check-exam-core-dist.mjs
+ *   8. migrations           node scripts/check-migrations.mjs
+ *   9. script-tests         node --test scripts/**\/*.test.mjs
  * Новые шаги добавляются в массив STEPS, порядок задаётся только им.
  *
  * Все шаги работают с одноразовой PostgreSQL 17, которую поднимает withTestDatabase (или с
@@ -65,6 +66,14 @@ export const STEPS = [
 	{ name: 'ci-workflow', cmd: process.execPath, args: ['scripts/check-ci-workflow.mjs'] },
 	{ name: 'format-check', cmd: 'yarn', args: ['format:check'] },
 	{ name: 'lint-typecheck-test', cmd: 'yarn', args: ['turbo', 'run', 'lint', 'typecheck', 'test'] },
+	{
+		name: 'package-dist',
+		cmd: 'sh',
+		args: [
+			'-c',
+			'yarn workspace @bio-exam/rbac build && node scripts/check-rbac-dist.mjs && yarn workspace @bio-exam/exam-core build && node scripts/check-exam-core-dist.mjs',
+		],
+	},
 	{ name: 'migrations', cmd: process.execPath, args: ['scripts/check-migrations.mjs'] },
 	{
 		name: 'script-tests',
